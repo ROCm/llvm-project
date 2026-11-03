@@ -1549,6 +1549,69 @@ struct AMDGPUFunctionSummary {
 
 using AMDGPUSummaryMap = DenseMap<GlobalValue::GUID, AMDGPUFunctionSummary>;
 
+/// Data that a pass or a target attaches to the summaries of an index, under a
+/// name and a version. An entry holds integers and strings. Each entry belongs
+/// to one summary, that is, to the copy of a value in one module, like the
+/// other data of a summary. So the copies of a function in two modules (for
+/// example, a template instantiated in two translation units) can have
+/// different entries.
+///
+/// Only the users of an extension know what the integers and strings mean.
+/// Other code (bitcode, summary assembly, the per-backend index files, and the
+/// ThinLTO cache key) handles all extensions in the same way, so a new
+/// extension needs no change there.
+class SummaryExtension {
+public:
+  /// The data of one summary.
+  struct Entry {
+    SmallVector<uint64_t, 4> Ints;
+    SmallVector<std::string, 0> Strings;
+
+    bool operator==(const Entry &Other) const {
+      return Ints == Other.Ints && Strings == Other.Strings;
+    }
+  };
+
+  SummaryExtension(StringRef Name, uint64_t Version, bool Required)
+      : Name(Name), Version(Version), Required(Required) {}
+
+  StringRef getName() const { return Name; }
+
+  /// The version of the format of the entries. The users of the extension
+  /// define it.
+  uint64_t getVersion() const { return Version; }
+
+  /// Returns true if a ThinLTO backend must apply the data. A backend that
+  /// does not know a required extension must report an error.
+  bool isRequired() const { return Required; }
+  void setRequired(bool R) { Required = R; }
+
+  /// Returns the entry of the summary \p S, or null.
+  const Entry *getEntry(const GlobalValueSummary *S) const {
+    auto It = Entries.find(S);
+    return It == Entries.end() ? nullptr : &It->second;
+  }
+
+  /// Sets the entry of the summary \p S. \p S must be in the index that holds
+  /// this extension.
+  void setEntry(const GlobalValueSummary *S, Entry E) {
+    Entries[S] = std::move(E);
+  }
+
+  void eraseEntry(const GlobalValueSummary *S) { Entries.erase(S); }
+
+  bool empty() const { return Entries.empty(); }
+  size_t size() const { return Entries.size(); }
+
+private:
+  std::string Name;
+  uint64_t Version;
+  bool Required;
+  // Do not iterate over this map, as its order is not deterministic. Iterate
+  // over the summaries of the index instead.
+  DenseMap<const GlobalValueSummary *, Entry> Entries;
+};
+
 /// Encapsulate the names of CFI target functions. It interfaces with ThinLTO to
 /// determine efficiently which of the names need to be exported for a
 /// particular module.
@@ -1789,6 +1852,9 @@ private:
   // kernel occupancy constraints to device functions.
   AMDGPUSummaryMap AMDGPUSummaries;
 
+  // The summary extensions, by name and version.
+  std::map<std::pair<std::string, uint64_t>, SummaryExtension> Extensions;
+
   // The possible targets of indirect calls, for each call type identifier.
   // The FunctionSummary::indirect_calls() ranges refer to these lists.
   // Computed by resolveIndirectCalls().
@@ -1853,6 +1919,35 @@ public:
 
   AMDGPUSummaryMap &getAMDGPUSummaries() { return AMDGPUSummaries; }
   const AMDGPUSummaryMap &getAMDGPUSummaries() const { return AMDGPUSummaries; }
+
+  /// Returns the summary extension with \p Name and \p Version, or null.
+  /// Modules from different compilers can hold different versions of an
+  /// extension, so a user asks for the version that it knows.
+  SummaryExtension *getExtension(StringRef Name, uint64_t Version) {
+    auto It = Extensions.find({Name.str(), Version});
+    return It == Extensions.end() ? nullptr : &It->second;
+  }
+  const SummaryExtension *getExtension(StringRef Name, uint64_t Version) const {
+    return const_cast<ModuleSummaryIndex *>(this)->getExtension(Name, Version);
+  }
+
+  /// Returns the summary extension with \p Name and \p Version. Creates it if
+  /// it does not exist. Makes it required if \p Required is true.
+  SummaryExtension &getOrInsertExtension(StringRef Name, uint64_t Version,
+                                         bool Required) {
+    auto It =
+        Extensions.try_emplace({Name.str(), Version}, Name, Version, Required)
+            .first;
+    if (Required)
+      It->second.setRequired(true);
+    return It->second;
+  }
+
+  /// Returns the summary extensions, in the order of their names and versions.
+  const std::map<std::pair<std::string, uint64_t>, SummaryExtension> &
+  extensions() const {
+    return Extensions;
+  }
 
   /// Computes FunctionSummary::indirect_calls() for every function summary. An
   /// indirect call can reach every live function whose address can be taken

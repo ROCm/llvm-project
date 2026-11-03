@@ -3467,6 +3467,52 @@ void AssemblyWriter::printModuleSummaryIndex() {
     Out << ") ; guid = " << GUID << "\n";
   }
 
+  // Print the summary extensions. The entries are in the order of the
+  // summaries.
+  for (const auto &[Key, Ext] : TheIndex->extensions()) {
+    Out << "^" << NumSlots++ << " = extension: (name: \"";
+    printEscapedString(Ext.getName(), Out);
+    Out << "\", version: " << Ext.getVersion()
+        << ", required: " << (Ext.isRequired() ? 1 : 0);
+    ListSeparator EntrySep;
+    bool HasEntries = false;
+    for (const auto &GlobalList : SortedGVS) {
+      for (const auto &Summary : GlobalList.second.getSummaryList()) {
+        const SummaryExtension::Entry *E = Ext.getEntry(Summary.get());
+        if (!E)
+          continue;
+        if (!HasEntries) {
+          Out << ", entries: (";
+          HasEntries = true;
+        }
+        Out << EntrySep << "(gv: ^" << Machine.getGUIDSlot(GlobalList.first)
+            << ", module: ^"
+            << Machine.getModulePathSlot(Summary->modulePath());
+        if (!E->Ints.empty()) {
+          Out << ", ints: (";
+          ListSeparator IntSep;
+          for (uint64_t Int : E->Ints)
+            Out << IntSep << Int;
+          Out << ")";
+        }
+        if (!E->Strings.empty()) {
+          Out << ", strings: (";
+          ListSeparator StrSep;
+          for (const std::string &Str : E->Strings) {
+            Out << StrSep << "\"";
+            printEscapedString(Str, Out);
+            Out << "\"";
+          }
+          Out << ")";
+        }
+        Out << ")";
+      }
+    }
+    if (HasEntries)
+      Out << ")";
+    Out << ")\n";
+  }
+
   // Print the CFI function entries (the names of the functions with jump
   // table entries, with the GUIDs that ThinLTO uses for them).
   auto PrintCfiFunctions = [&](const CfiFunctionIndex &CfiIndex,

@@ -354,6 +354,9 @@ std::string llvm::computeLTOCacheKey(
   SmallVector<std::pair<GlobalValue::GUID, GlobalValueSummary *>>
       SortedDefinedGlobals(DefinedGlobals.begin(), DefinedGlobals.end());
   llvm::sort(SortedDefinedGlobals, llvm::less_first());
+  // The summaries that the backend uses, for the summary extensions.
+  SmallVector<std::pair<GlobalValue::GUID, const GlobalValueSummary *>>
+      UsedSummaries;
   for (auto &GS : SortedDefinedGlobals) {
     // Include the hash for the linkage type to reflect internalization and weak
     // resolution, and collect any used type identifier resolutions.
@@ -362,6 +365,7 @@ std::string llvm::computeLTOCacheKey(
         ArrayRef<uint8_t>((const uint8_t *)&Linkage, sizeof(Linkage)));
     AddUsedCfiGlobal(GS.first);
     AddUsedThings(GS.second);
+    UsedSummaries.emplace_back(GS.first, GS.second);
   }
 
   // Imported functions may introduce new uses of type identifier resolutions,
@@ -369,10 +373,40 @@ std::string llvm::computeLTOCacheKey(
   for (const auto &[FromModule, GUID, Type] : SortedImportList) {
     GlobalValueSummary *S = Index.findSummaryInModule(GUID, FromModule);
     AddUsedThings(S);
+    if (S)
+      UsedSummaries.emplace_back(GUID, S);
     // If this is an alias, we also care about any types/etc. that the aliasee
     // may reference.
-    if (auto *AS = dyn_cast_or_null<AliasSummary>(S))
+    if (auto *AS = dyn_cast_or_null<AliasSummary>(S)) {
       AddUsedThings(AS->getBaseObject());
+      if (AS->hasAliasee())
+        UsedSummaries.emplace_back(AS->getAliaseeGUID(), AS->getBaseObject());
+    }
+  }
+
+  // Include the entries of the summary extensions for the summaries that the
+  // backend uses. A thin-link pass can store its results there. The module
+  // hashes above identify the modules of the summaries.
+  for (const auto &[Key, Ext] : Index.extensions()) {
+    bool HasEntries = false;
+    for (const auto &[GUID, S] : UsedSummaries) {
+      const SummaryExtension::Entry *E = Ext.getEntry(S);
+      if (!E)
+        continue;
+      if (!HasEntries) {
+        AddString(Ext.getName());
+        AddUint64(Ext.getVersion());
+        AddUnsigned(Ext.isRequired());
+        HasEntries = true;
+      }
+      AddUint64(GUID);
+      AddUint64(E->Ints.size());
+      for (uint64_t Int : E->Ints)
+        AddUint64(Int);
+      AddUint64(E->Strings.size());
+      for (const std::string &Str : E->Strings)
+        AddString(Str);
+    }
   }
 
   auto AddTypeIdSummary = [&](StringRef TId, const TypeIdSummary &S) {

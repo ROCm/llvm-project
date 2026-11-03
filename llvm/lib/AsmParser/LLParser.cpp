@@ -1189,8 +1189,8 @@ bool LLParser::skipModuleSummaryEntry() {
   // nested sets of parentheses. The "tag:" looks like a Label. Once parsing
   // support is in place we will look for the tokens corresponding to the
   // expected tags.
-  if (Lex.getKind() != lltok::kw_gv && Lex.getKind() != lltok::kw_module &&
-      Lex.getKind() != lltok::kw_typeid &&
+  if (Lex.getKind() != lltok::kw_extension && Lex.getKind() != lltok::kw_gv &&
+      Lex.getKind() != lltok::kw_module && Lex.getKind() != lltok::kw_typeid &&
       Lex.getKind() != lltok::kw_typeidCompatibleVTable &&
       Lex.getKind() != lltok::kw_flags &&
       Lex.getKind() != lltok::kw_blockcount &&
@@ -1250,6 +1250,9 @@ bool LLParser::parseSummaryEntry() {
 
   bool result = false;
   switch (Lex.getKind()) {
+  case lltok::kw_extension:
+    result = parseSummaryExtension();
+    break;
   case lltok::kw_gv:
     result = parseGVEntry(SummaryID);
     break;
@@ -10457,6 +10460,123 @@ bool LLParser::addGlobalValueToIndex(
   }
 
   return false;
+}
+
+/// parseSummaryExtension
+///   ::= 'extension' ':' '(' 'name' ':' STRINGCONSTANT ',' 'version' ':' UInt64
+///         ',' 'required' ':' Flag
+///         [',' 'entries' ':' '(' Entry [',' Entry]* ')']? ')'
+bool LLParser::parseSummaryExtension() {
+  assert(Lex.getKind() == lltok::kw_extension);
+  Lex.Lex();
+
+  std::string Name;
+  uint64_t Version;
+  unsigned Required;
+  if (parseToken(lltok::colon, "expected ':' here") ||
+      parseToken(lltok::lparen, "expected '(' here") ||
+      parseToken(lltok::kw_name, "expected 'name' here") ||
+      parseToken(lltok::colon, "expected ':' here"))
+    return true;
+  LocTy NameLoc = Lex.getLoc();
+  if (parseStringConstant(Name) ||
+      parseToken(lltok::comma, "expected ',' here") ||
+      parseToken(lltok::kw_version, "expected 'version' here") ||
+      parseToken(lltok::colon, "expected ':' here") || parseUInt64(Version) ||
+      parseToken(lltok::comma, "expected ',' here") ||
+      parseToken(lltok::kw_required, "expected 'required' here") ||
+      parseToken(lltok::colon, "expected ':' here") || parseFlag(Required))
+    return true;
+  if (Name.empty())
+    return error(NameLoc, "expected the name of the summary extension");
+
+  // A file can hold more than one summary entry for an extension.
+  SummaryExtension &Ext = Index->getOrInsertExtension(Name, Version, Required);
+
+  if (EatIfPresent(lltok::comma)) {
+    if (parseToken(lltok::kw_entries, "expected 'entries' here") ||
+        parseToken(lltok::colon, "expected ':' here") ||
+        parseToken(lltok::lparen, "expected '(' here"))
+      return true;
+    do {
+      if (parseSummaryExtensionEntry(Ext))
+        return true;
+    } while (EatIfPresent(lltok::comma));
+    if (parseToken(lltok::rparen, "expected ')' here"))
+      return true;
+  }
+  return parseToken(lltok::rparen, "expected ')' here");
+}
+
+/// parseSummaryExtensionEntry
+///   ::= '(' 'gv' ':' GVReference ',' 'module' ':' SummaryID
+///         [',' 'ints' ':' '(' UInt64 [',' UInt64]* ')']?
+///         [',' 'strings' ':' '(' STRINGCONSTANT [',' STRINGCONSTANT]* ')']?
+///         ')'
+bool LLParser::parseSummaryExtensionEntry(SummaryExtension &Ext) {
+  if (parseToken(lltok::lparen, "expected '(' here"))
+    return true;
+
+  // The entry belongs to the summary of the value in the module.
+  LocTy Loc = Lex.getLoc();
+  ValueInfo VI;
+  unsigned GVId;
+  if (parseToken(lltok::kw_gv, "expected 'gv' here") ||
+      parseToken(lltok::colon, "expected ':' here") ||
+      parseGVReference(VI, GVId) ||
+      parseToken(lltok::comma, "expected ',' here") ||
+      parseToken(lltok::kw_module, "expected 'module' here") ||
+      parseToken(lltok::colon, "expected ':' here"))
+    return true;
+  LocTy ModuleLoc = Lex.getLoc();
+  if (parseToken(lltok::SummaryID, "expected module ID"))
+    return true;
+  auto ModIt = ModuleIdMap.find(Lex.getUIntVal());
+  if (ModIt == ModuleIdMap.end())
+    return error(ModuleLoc, "unknown module ID");
+  if (VI.getRef() == FwdVIRef)
+    return error(Loc, "a summary extension entry must refer to an earlier "
+                      "summary entry");
+  GlobalValueSummary *S = Index->findSummaryInModule(VI, ModIt->second);
+  if (!S)
+    return error(Loc, "the value has no summary in the module");
+  if (Ext.getEntry(S))
+    return error(Loc, "duplicate entry in summary extension '" + Ext.getName() +
+                          "'");
+
+  SummaryExtension::Entry E;
+  bool HasComma = EatIfPresent(lltok::comma);
+  if (HasComma && Lex.getKind() == lltok::kw_ints) {
+    Lex.Lex();
+    if (parseToken(lltok::colon, "expected ':' here") ||
+        parseToken(lltok::lparen, "expected '(' here"))
+      return true;
+    do {
+      uint64_t Val;
+      if (parseUInt64(Val))
+        return true;
+      E.Ints.push_back(Val);
+    } while (EatIfPresent(lltok::comma));
+    if (parseToken(lltok::rparen, "expected ')' here"))
+      return true;
+    HasComma = EatIfPresent(lltok::comma);
+  }
+  if (HasComma) {
+    if (parseToken(lltok::kw_strings, "expected 'ints' or 'strings' here") ||
+        parseToken(lltok::colon, "expected ':' here") ||
+        parseToken(lltok::lparen, "expected '(' here"))
+      return true;
+    do {
+      std::string Str;
+      if (parseStringConstant(Str))
+        return true;
+      E.Strings.push_back(std::move(Str));
+    } while (EatIfPresent(lltok::comma));
+    if (parseToken(lltok::rparen, "expected ')' here"))
+      return true;
+  }
+  Ext.setEntry(S, std::move(E));
+  return parseToken(lltok::rparen, "expected ')' here");
 }
 
 /// parseSummaryIndexFlags

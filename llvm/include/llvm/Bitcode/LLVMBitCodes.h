@@ -63,6 +63,9 @@ enum BlockIDs {
   SYMTAB_BLOCK_ID,
 
   SYNC_SCOPE_NAMES_BLOCK_ID,
+
+  // A summary extension. A sub-block of a summary block.
+  SUMMARY_EXTENSION_BLOCK_ID,
 };
 
 /// Identification block contains a string that describes the producer details,
@@ -366,6 +369,24 @@ enum AMDGPUFunctionSummaryFlags {
   AFS_HAS_WAVES_PER_EU = 1 << 1,
   AFS_HAS_WAVES_PER_EU_MAX = 1 << 2,
   AFS_HAS_MAX_NUM_WORKGROUPS = 1 << 3,
+};
+
+/// The records of a SUMMARY_EXTENSION_BLOCK, which holds the data of one
+/// summary extension. The strings are in the string table.
+enum SummaryExtensionCodes {
+  // HEADER: [strtab_offset, strtab_size, version, flags]
+  //   The name of the extension, and the version of its format. Flag bit 0 is
+  //   set if the extension is required.
+  SUMMARY_EXT_HEADER = 1,
+  // ENTRY: [valueid, n, n x int, m x (strtab_offset, strtab_size)]
+  //   In a per-module summary: the integers and the strings of the summary of
+  //   the value.
+  SUMMARY_EXT_ENTRY = 2,
+  // COMBINED_ENTRY: [valueid, modid, n, n x int,
+  //                  m x (strtab_offset, strtab_size)]
+  //   In a combined index: the integers and the strings of the summary of the
+  //   value in the module.
+  SUMMARY_EXT_COMBINED_ENTRY = 3,
 };
 
 enum MetadataCodes {

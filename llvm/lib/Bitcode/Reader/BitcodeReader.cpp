@@ -995,6 +995,11 @@ class ModuleSummaryIndexBitcodeReader : public BitcodeReaderBase {
   DenseMap<unsigned, std::pair<ValueInfo, GlobalValue::GUID>>
       ValueIdToValueInfoMap;
 
+  /// The summaries that a per-module summary block adds, by value ID. The
+  /// entries of the summary extensions refer to them. The module path cannot
+  /// find them: the summaries of all regular LTO modules have the same path.
+  DenseMap<unsigned, GlobalValueSummary *> PerModuleSummaries;
+
   /// Map populated during module path string table parsing, from the
   /// module ID to a string reference owned by the index's module
   /// path string table, used to correlate with combined index
@@ -1052,6 +1057,7 @@ private:
   makeCallList(ArrayRef<uint64_t> Record, bool IsOldProfileFormat,
                bool HasProfile, bool HasRelBF);
   Error parseEntireSummary(unsigned ID);
+  Error parseSummaryExtension();
   Error parseModuleStringTable();
   void parseTypeIdCompatibleVtableSummaryRecord(ArrayRef<uint64_t> Record);
   void parseTypeIdCompatibleVtableInfo(ArrayRef<uint64_t> Record, size_t &Slot,
@@ -8046,13 +8052,21 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
   std::vector<uint64_t> PendingContextIds;
 
   while (true) {
-    Expected<BitstreamEntry> MaybeEntry = Stream.advanceSkippingSubblocks();
+    Expected<BitstreamEntry> MaybeEntry = Stream.advance();
     if (!MaybeEntry)
       return MaybeEntry.takeError();
     BitstreamEntry Entry = MaybeEntry.get();
 
     switch (Entry.Kind) {
-    case BitstreamEntry::SubBlock: // Handled for us already.
+    case BitstreamEntry::SubBlock:
+      // Skip the sub-blocks that this reader does not know.
+      if (Entry.ID == bitc::SUMMARY_EXTENSION_BLOCK_ID) {
+        if (Error Err = parseSummaryExtension())
+          return Err;
+      } else if (Error Err = Stream.SkipBlock()) {
+        return Err;
+      }
+      continue;
     case BitstreamEntry::Error:
       return error("Malformed block");
     case BitstreamEntry::EndBlock:
@@ -8196,6 +8210,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
         else
           CurrentPrevailingFS = nullptr;
       }
+      PerModuleSummaries[ValueID] = FS.get();
       TheIndex.addGlobalValueSummary(VI, std::move(FS));
       break;
     }
@@ -8224,6 +8239,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       auto GUID = getValueInfoFromValueId(ValueID);
       AS->setOriginalName(std::get<1>(GUID));
       LastSeenGUID = std::get<0>(GUID).getGUID();
+      PerModuleSummaries[ValueID] = AS.get();
       TheIndex.addGlobalValueSummary(std::get<0>(GUID), std::move(AS));
       break;
     }
@@ -8248,6 +8264,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       FS->setModulePath(getThisModule()->first());
       auto GUID = getValueInfoFromValueId(ValueID);
       FS->setOriginalName(std::get<1>(GUID));
+      PerModuleSummaries[ValueID] = FS.get();
       TheIndex.addGlobalValueSummary(std::get<0>(GUID), std::move(FS));
       break;
     }
@@ -8276,6 +8293,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       VS->setVTableFuncs(VTableFuncs);
       auto GUID = getValueInfoFromValueId(ValueID);
       VS->setOriginalName(std::get<1>(GUID));
+      PerModuleSummaries[ValueID] = VS.get();
       TheIndex.addGlobalValueSummary(std::get<0>(GUID), std::move(VS));
       break;
     }
@@ -8749,6 +8767,104 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
     }
   }
   llvm_unreachable("Exit infinite loop");
+}
+
+// Parse a summary extension block into the Index.
+Error ModuleSummaryIndexBitcodeReader::parseSummaryExtension() {
+  if (Error Err = Stream.EnterSubBlock(bitc::SUMMARY_EXTENSION_BLOCK_ID))
+    return Err;
+
+  SmallVector<uint64_t, 64> Record;
+  SummaryExtension *Ext = nullptr;
+  while (true) {
+    Expected<BitstreamEntry> MaybeEntry = Stream.advanceSkippingSubblocks();
+    if (!MaybeEntry)
+      return MaybeEntry.takeError();
+    BitstreamEntry Entry = MaybeEntry.get();
+
+    switch (Entry.Kind) {
+    case BitstreamEntry::SubBlock: // Handled for us already.
+    case BitstreamEntry::Error:
+      return error("Malformed block");
+    case BitstreamEntry::EndBlock:
+      return Error::success();
+    case BitstreamEntry::Record:
+      // The interesting case.
+      break;
+    }
+
+    Record.clear();
+    Expected<unsigned> MaybeBitCode = Stream.readRecord(Entry.ID, Record);
+    if (!MaybeBitCode)
+      return MaybeBitCode.takeError();
+    unsigned BitCode = MaybeBitCode.get();
+    switch (BitCode) {
+    default: // Default behavior: ignore.
+      break;
+    case bitc::SUMMARY_EXT_HEADER: {
+      // [strtab_offset, strtab_size, version, flags]
+      auto [Name, Rest] = readNameFromStrtab(Record);
+      if (Name.empty() || Rest.size() < 2)
+        return error("Invalid summary extension header");
+      // The modules of a link can hold the same extension, also in different
+      // versions.
+      Ext = &TheIndex.getOrInsertExtension(Name, /*Version=*/Rest[0],
+                                           /*Required=*/Rest[1] & 1);
+      break;
+    }
+    case bitc::SUMMARY_EXT_ENTRY:
+    case bitc::SUMMARY_EXT_COMBINED_ENTRY: {
+      // ENTRY: [valueid, n, n x int, m x (strtab_offset, strtab_size)]
+      // COMBINED_ENTRY: [valueid, modid, n, n x int,
+      //                  m x (strtab_offset, strtab_size)]
+      if (!Ext)
+        return error("Invalid summary extension: entry before the header");
+      bool IsCombined = BitCode == bitc::SUMMARY_EXT_COMBINED_ENTRY;
+      ArrayRef<uint64_t> Ops = Record;
+      size_t NumIds = IsCombined ? 2 : 1;
+      if (Ops.size() <= NumIds || Ops[NumIds] > Ops.size() - NumIds - 1 ||
+          (Ops.size() - NumIds - 1 - Ops[NumIds]) % 2 != 0)
+        return error("Invalid summary extension entry");
+
+      // Find the summary that the entry belongs to: the summary of the value
+      // in this block, or in the module of a combined entry.
+      if (Ops[0] > std::numeric_limits<unsigned>::max())
+        return error("Invalid value id in summary extension entry");
+      GlobalValueSummary *S = nullptr;
+      if (IsCombined) {
+        auto It = ValueIdToValueInfoMap.find(Ops[0]);
+        if (It == ValueIdToValueInfoMap.end() || !It->second.first)
+          return error("Invalid value id in summary extension entry");
+        auto ModIt = ModuleIdMap.find(Ops[1]);
+        if (ModIt == ModuleIdMap.end())
+          return error("Invalid module id in summary extension entry");
+        S = TheIndex.findSummaryInModule(It->second.first, ModIt->second);
+      } else {
+        S = PerModuleSummaries.lookup(Ops[0]);
+      }
+      if (!S)
+        return error("Summary extension entry for a value without a summary");
+      if (Ext->getEntry(S))
+        return error("Duplicate summary extension entry");
+
+      SummaryExtension::Entry E;
+      uint64_t NumInts = Ops[NumIds];
+      Ops = Ops.drop_front(NumIds + 1);
+      E.Ints.assign(Ops.begin(), Ops.begin() + NumInts);
+      Ops = Ops.drop_front(NumInts);
+      while (!Ops.empty()) {
+        if (!UseStrtab || Ops.size() < 2 || Ops[0] > Strtab.size() ||
+            Ops[1] > Strtab.size() - Ops[0])
+          return error("Invalid string in summary extension entry");
+        auto [Str, Rest] = readNameFromStrtab(Ops);
+        E.Strings.push_back(Str.str());
+        Ops = Rest;
+      }
+      Ext->setEntry(S, std::move(E));
+      break;
+    }
+    }
+  }
 }
 
 // Parse the  module string table block into the Index.
