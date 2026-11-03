@@ -18,7 +18,6 @@
 
 #include <comgr-env.h>
 
-#include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/BinaryFormat/Magic.h>
 #include <llvm/Object/OffloadBinary.h>
@@ -31,6 +30,24 @@ namespace COMGR {
 using namespace llvm;
 
 using SizeFieldType = uint32_t;
+
+namespace {
+// A read-only view of one matched OffloadBinary's image, keeping the parsed
+// file list alive via shared ownership. Lets execute()'s in-place path hand
+// image data straight to a DataObject without a disk round trip.
+class InPlaceImageBuffer final : public MemoryBuffer {
+  std::shared_ptr<SmallVector<object::OffloadFile>> Owner;
+
+public:
+  InPlaceImageBuffer(std::shared_ptr<SmallVector<object::OffloadFile>> Owner,
+                     StringRef Image)
+      : Owner(std::move(Owner)) {
+    init(Image.begin(), Image.end(), /*RequiresNullTerminator=*/false);
+  }
+  StringRef getBufferIdentifier() const override { return "InPlaceImage"; }
+  BufferKind getBufferKind() const override { return MemoryBuffer_Malloc; }
+};
+} // namespace
 
 // Determine the output file extension and Comgr data kind for an unpackaged
 // offload image by inspecting the image's magic bytes
@@ -163,21 +180,27 @@ Expected<StringRef> UnpackageCommand::readExecuteOutput() {
 amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
   OutputFileNames.clear();
   DataKinds.clear();
+  InPlaceBuffers.clear();
+  WasInPlace = false;
 
-  SmallVector<object::OffloadFile> Files;
+  // Shared so the in-place path below can keep it alive past this function's
+  // return via the InPlaceImageBuffers handed back to the caller.
+  auto Files = std::make_shared<SmallVector<object::OffloadFile>>();
   MemoryBufferRef DataBufferRef(PackageData, PackageName);
-  if (Error E = object::extractOffloadBinaries(DataBufferRef, Files)) {
+  if (Error E = object::extractOffloadBinaries(DataBufferRef, *Files)) {
     logAllUnhandledErrors(std::move(E), LogS,
                           "Failed to extract offload binaries: ");
     return AMD_COMGR_STATUS_ERROR;
   }
 
+  // Compressed packages still need disk so CommandCache can cache them.
+  bool InPlace = PreferInPlace && !canCache();
+
   StringRef OutputPrefix = sys::path::stem(PackageName);
 
-  DenseMap<object::OffloadFile::TargetID, StringRef> Worklist;
   SmallVector<std::string> TargetNames;
   SmallVector<const object::OffloadBinary *> MatchedBinaries;
-  for (const object::OffloadFile &File : Files) {
+  for (const object::OffloadFile &File : *Files) {
     const object::OffloadBinary *Binary = File.getBinary();
     StringRef Triple = Binary->getTriple();
     StringRef Arch = Binary->getArch();
@@ -211,6 +234,17 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
         }
       }
     }
+  }
+
+  if (InPlace) {
+    WasInPlace = true;
+    for (const auto &[OutputFileName, Binary] :
+         llvm::zip_equal(TargetNames, MatchedBinaries)) {
+      InPlaceBuffers.push_back(
+          std::make_unique<InPlaceImageBuffer>(Files, Binary->getImage()));
+      OutputFileNames.push_back(OutputFileName);
+    }
+    return AMD_COMGR_STATUS_SUCCESS;
   }
 
   for (const auto &[OutputFileName, Binary] :

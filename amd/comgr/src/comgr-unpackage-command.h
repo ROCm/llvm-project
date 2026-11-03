@@ -13,6 +13,10 @@
 
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/StringRef.h>
+#include <llvm/Object/OffloadBinary.h>
+#include <llvm/Support/MemoryBuffer.h>
+
+#include <memory>
 
 namespace llvm {
 class raw_ostream;
@@ -23,21 +27,35 @@ namespace COMGR {
 // entries out of an llvm-offload-binary package, via extractOffloadBinaries
 class UnpackageCommand final : public CachedCommandAdaptor {
 private:
-  // The raw contents and name of the AMD_COMGR_DATA_KIND_PACKAGE input. Both
-  // are owned by the caller and must outlive this command.
+  // The raw contents and name of the AMD_COMGR_DATA_KIND_PACKAGE input, owned
+  // by the caller.
   llvm::StringRef PackageData;
   llvm::StringRef PackageName;
 
   // The requested (triple, arch) package entry IDs, owned by the caller.
   llvm::ArrayRef<std::pair<std::string, std::string>> PackageEntryIDs;
 
-  // Where output files are written, owned by the caller.
+  // Where output files are written, owned by the caller. Unused in the
+  // in-place path.
   llvm::StringRef OutputDir;
 
-  // Populated by execute() (cache miss) or writeExecuteOutput() (cache hit):
-  // the paths written and the Comgr data kind of each, in matching order.
+  // If set, execute() avoids disk and populates InPlaceBuffers instead.
+  // Ignored for compressed packages, whose output must go through disk for
+  // CommandCache (see writeExecuteOutput()).
+  bool PreferInPlace = false;
+
+  // The output paths (or, in-place, logical names) and data kinds, in
+  // matching order. Populated by execute() or writeExecuteOutput().
   llvm::SmallVector<std::string> OutputFileNames;
   llvm::SmallVector<amd_comgr_data_kind_t> DataKinds;
+
+  // Whether the last execute() took the in-place path; see isInPlace().
+  bool WasInPlace = false;
+
+  // In-place outputs from execute(), parallel to OutputFileNames/DataKinds.
+  // Each buffer aliases its OffloadBinary's image and keeps the owning
+  // OffloadFile list alive; callers should std::move each entry out.
+  llvm::SmallVector<std::unique_ptr<llvm::MemoryBuffer>> InPlaceBuffers;
 
   // To avoid copies, store the output of execute(), such that
   // readExecuteOutput can return a reference.
@@ -47,24 +65,34 @@ public:
   UnpackageCommand(
       llvm::StringRef PackageData, llvm::StringRef PackageName,
       llvm::ArrayRef<std::pair<std::string, std::string>> PackageEntryIDs,
-      llvm::StringRef OutputDir)
+      llvm::StringRef OutputDir, bool PreferInPlace = false)
       : PackageData(PackageData), PackageName(PackageName),
-        PackageEntryIDs(PackageEntryIDs), OutputDir(OutputDir) {}
+        PackageEntryIDs(PackageEntryIDs), OutputDir(OutputDir),
+        PreferInPlace(PreferInPlace) {}
 
   bool canCache() const override;
   llvm::Error writeExecuteOutput(llvm::StringRef CachedBuffer) override;
   llvm::Expected<llvm::StringRef> readExecuteOutput() override;
   amd_comgr_status_t execute(llvm::raw_ostream &LogS) override;
 
-  /// The output file paths written by the most recent execute() or
-  /// writeExecuteOutput() call, in order.
+  /// Output file paths from the most recent execute()/writeExecuteOutput().
+  /// Empty when isInPlace(); see getInPlaceBuffers() instead.
   llvm::ArrayRef<std::string> getOutputFileNames() const {
     return OutputFileNames;
   }
-  /// The Comgr data kind of each output file, parallel to
-  /// getOutputFileNames().
+  /// Data kind of each output, parallel to getOutputFileNames().
   llvm::ArrayRef<amd_comgr_data_kind_t> getDataKinds() const {
     return DataKinds;
+  }
+
+  /// Whether the last execute() produced in-place buffers instead of files.
+  bool isInPlace() const { return WasInPlace; }
+
+  /// In-place outputs, parallel to getDataKinds(); only non-empty when
+  /// isInPlace(). Callers should std::move each entry out.
+  llvm::MutableArrayRef<std::unique_ptr<llvm::MemoryBuffer>>
+  getInPlaceBuffers() {
+    return InPlaceBuffers;
   }
 
   ~UnpackageCommand() override = default;
