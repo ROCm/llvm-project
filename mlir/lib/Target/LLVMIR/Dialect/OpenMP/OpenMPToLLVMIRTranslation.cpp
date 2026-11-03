@@ -5557,11 +5557,6 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
     moduleTranslation.mapValue(
         loopOp.getRegion().front().getArgument(loopInfos.size()), iv);
 
-    // Capture the body insertion point for use in nested loops. BodyIP of the
-    // CanonicalLoopInfo always points to the beginning of the entry block of
-    // the body.
-    bodyInsertPoints.push_back(ip);
-
     // For the outermost loop when parent is distribute, set up allocation frame
     // so nested parallel regions don't end up using allocate frame of the
     // distribute operation.
@@ -5581,6 +5576,11 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
       // The insertion point should point to the loop body block.
       ip = allocBlock->getTerminator()->getIterator();
     }
+
+    // Capture the body insertion point for use in nested loops. BodyIP of the
+    // CanonicalLoopInfo always points to the beginning of the entry block of
+    // the body.
+    bodyInsertPoints.push_back(ip);
 
     if (loopInfos.size() != loopOp.getNumLoops() - 1)
       return llvm::Error::success();
