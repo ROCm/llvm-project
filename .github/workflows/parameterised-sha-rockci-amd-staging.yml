@@ -81,6 +81,12 @@ on:
         description: "Single Python version for wheel builds (empty for full matrix)."
         type: string
         default: ""
+      pytorch_git_refs:
+        description: >-
+          PyTorch refs to build wheels for. Empty falls back to the refs the
+          release type selects, which for ci is release/2.13 on its own.
+        type: string
+        default: "release/2.13,release/2.14,release/2.15,nightly"
       # Packaging.
       build_native_packages:
         description: "Build deb and rpm packages. The install tests that consume them are not part of this workflow."
@@ -331,7 +337,12 @@ jobs:
       prebuilt_stages: ${{ fromJSON(needs.setup.outputs.linux_build_config).prebuilt_stages }}
       build_runs_on: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_runs_on }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: ${{ inputs.test_type }}
+      # test_type picks the configure branch as well as the test depth: any
+      # value but "full" disables MIOpen, composable_kernel, hipDNN, hipTensor
+      # and hipBLASLt-provider, and PyTorch cannot configure without MIOpen.
+      # The test jobs still get the requested depth, so asking for wheels
+      # widens the build without also widening the test run.
+      test_type: ${{ inputs.build_pytorch && 'full' || inputs.test_type }}
       external_repo_config: ${{ needs.setup.outputs.external_repo_config }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
@@ -386,6 +397,8 @@ jobs:
       platform: linux
       package_version: ${{ needs.setup.outputs.rocm_package_version }}
       release_type: ci
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
     permissions:
       contents: read
       id-token: write
@@ -446,22 +459,76 @@ jobs:
       contents: read
       id-token: write
 
+  # TheRock derives the wheel matrix from the release type, and ci pins that to
+  # release/2.13 alone. Its generator accepts explicit refs but
+  # configure_multi_arch_ci.py never forwards them, so cross the requested refs
+  # with the requested Python versions here instead.
+  pytorch_matrix:
+    name: Resolve PyTorch matrix
+    needs: setup
+    if: >-
+      ${{
+        !cancelled() && !inputs.dry_run && inputs.build_pytorch &&
+        needs.setup.result == 'success' &&
+        needs.setup.outputs.linux_build_config != ''
+      }}
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+    steps:
+      - name: Cross Python versions with PyTorch refs
+        id: resolve
+        env:
+          REQUESTED_REFS: ${{ inputs.pytorch_git_refs }}
+          REQUESTED_PYTHON: ${{ inputs.python_version }}
+          FAMILIES: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
+          CONFIGURED: ${{ toJSON(fromJSON(needs.setup.outputs.linux_build_config).pytorch_build_matrix) }}
+        run: |
+          python3 - <<'RESOLVE'
+          import json
+          import os
+
+          def split(raw):
+              return [v.strip() for v in raw.replace(";", ",").split(",") if v.strip()]
+
+          refs = split(os.environ["REQUESTED_REFS"])
+          if refs:
+              families = os.environ["FAMILIES"]
+              matrix = [
+                  {
+                      "python_version": py,
+                      "pytorch_git_ref": ref,
+                      "amdgpu_families": families,
+                  }
+                  for py in split(os.environ["REQUESTED_PYTHON"]) or ["3.12"]
+                  for ref in refs
+              ]
+          else:
+              # toJSON renders an absent key as the JSON literal null.
+              matrix = json.loads(os.environ["CONFIGURED"] or "null") or []
+
+          print(f"{len(matrix)} wheel build(s):")
+          for row in matrix:
+              print(f"  py{row['python_version']} {row['pytorch_git_ref']} {row['amdgpu_families']}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps(matrix)}\n")
+          RESOLVE
+
   build_linux_pytorch_wheels:
     name: Build PyTorch | py${{ matrix.python_version }} ${{ matrix.pytorch_git_ref }}
-    needs: [setup, build_linux_python_packages]
-    # pytorch_build_matrix is only populated when build_pytorch resolved to a
-    # non-empty matrix, and toJSON renders an absent key as "null", not "[]".
+    needs: [setup, pytorch_matrix, build_linux_python_packages]
     if: >-
       ${{
         !cancelled() && inputs.build_pytorch &&
         needs.build_linux_python_packages.result == 'success' &&
-        toJSON(fromJSON(needs.setup.outputs.linux_build_config).pytorch_build_matrix) != 'null' &&
-        toJSON(fromJSON(needs.setup.outputs.linux_build_config).pytorch_build_matrix) != '[]'
+        needs.pytorch_matrix.result == 'success' &&
+        needs.pytorch_matrix.outputs.matrix != '[]'
       }}
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.setup.outputs.linux_build_config).pytorch_build_matrix }}
+        include: ${{ fromJSON(needs.pytorch_matrix.outputs.matrix) }}
     uses: ./.github/workflows/multi_arch_build_portable_linux_pytorch_wheels_ci.yml
     with:
       artifact_group: ${{ fromJSON(needs.setup.outputs.linux_build_config).artifact_group }}
@@ -639,6 +706,8 @@ jobs:
       platform: windows
       package_version: ${{ needs.setup.outputs.rocm_package_version }}
       release_type: ci
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
     permissions:
       contents: read
       id-token: write
@@ -672,6 +741,7 @@ jobs:
       - test_linux
       - build_linux_tarballs
       - build_linux_python_packages
+      - pytorch_matrix
       - build_linux_deb_packages
       - build_linux_rpm_packages
       - build_linux_pytorch_wheels
