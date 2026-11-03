@@ -441,9 +441,8 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
 
   DeviceEnvironmentTy DeviceEnvironment;
   DeviceEnvironment.DeviceDebugKind = OMPX_DebugKind.get();
-  DeviceEnvironment.NumDevices = RTL->getNumDevices();
-  // TODO: The device ID used here is not the real device ID used by OpenMP.
-  DeviceEnvironment.DeviceNum = RTLDeviceID;
+  DeviceEnvironment.NumDevices = PM->getNumDevices();
+  DeviceEnvironment.DeviceNum = DeviceID;
   DeviceEnvironment.DynamicMemSize = 0;
   DeviceEnvironment.ClockFrequency =
       getInfo<uint64_t>(DeviceInfo::TIMESTAMP_FREQUENCY);
