@@ -67,6 +67,18 @@ on:
         description: "JSON object with 'repository' (e.g., 'ROCm/rocm-libraries') and 'ref' fields for external repo builds."
         type: string
         default: ""
+      honor_requested_families:
+        description: >-
+          Build the families named by linux_amdgpu_families and
+          windows_amdgpu_families instead of the fixed convergence CI matrix.
+        type: boolean
+        default: false
+      version_git_sha:
+        description: >-
+          Git SHA to embed in the package version. Defaults to the commit of
+          the checked out repository.
+        type: string
+        default: ""
     outputs:
       enable_build_jobs:
         description: Whether to enable build jobs.
@@ -115,8 +127,8 @@ jobs:
       BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'
     outputs:
       enable_build_jobs: true
-      linux_build_config: ${{ steps.convergence_config.outputs.linux_build_config }}
-      windows_build_config: ${{ steps.convergence_config.outputs.windows_build_config }}
+      linux_build_config: ${{ steps.build_config.outputs.linux_build_config }}
+      windows_build_config: ${{ steps.build_config.outputs.windows_build_config }}
       test_type: 'quick'
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
@@ -198,6 +210,55 @@ jobs:
           prebuilt_stages: ${{ inputs.prebuilt_stages }}
           baseline_run_id: ${{ inputs.baseline_run_id }}
 
+      - name: Select build configuration
+        id: build_config
+        env:
+          HONOR_REQUESTED_FAMILIES: ${{ inputs.honor_requested_families }}
+          REQUESTED_LINUX: ${{ steps.configure.outputs.linux_build_config }}
+          REQUESTED_WINDOWS: ${{ steps.configure.outputs.windows_build_config }}
+          CONVERGENCE_LINUX: ${{ steps.convergence_config.outputs.linux_build_config }}
+          CONVERGENCE_WINDOWS: ${{ steps.convergence_config.outputs.windows_build_config }}
+        run: |
+          python3 - <<'SELECT_CONFIG'
+          import json
+          import os
+
+          # The convergence matrix is fixed: it ignores the requested families and
+          # holds every family except gfx94X to a sanity check. Callers that name
+          # families therefore opt in to the configured matrix instead. That matrix
+          # offers build_runs_on_large/medium/small but not build_runs_on, which
+          # multi_arch_ci_linux.yml consumes directly, so inherit any key the
+          # configured matrix omits rather than scheduling on an empty label. An
+          # empty configured value means the platform was not requested.
+          honor = os.environ["HONOR_REQUESTED_FAMILIES"] == "true"
+          selected = []
+          for name, requested, fallback in (
+              (
+                  "linux_build_config",
+                  os.environ["REQUESTED_LINUX"],
+                  os.environ["CONVERGENCE_LINUX"],
+              ),
+              (
+                  "windows_build_config",
+                  os.environ["REQUESTED_WINDOWS"],
+                  os.environ["CONVERGENCE_WINDOWS"],
+              ),
+          ):
+              if not honor:
+                  value = fallback
+              elif requested.strip() and fallback.strip():
+                  merged = json.loads(fallback)
+                  merged.update(json.loads(requested))
+                  value = json.dumps(merged)
+              else:
+                  value = requested
+              selected.append(f"{name}<<JSON_EOF\n{value}\nJSON_EOF\n")
+              print(f"{name}: {value or '<empty: platform not requested>'}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("".join(selected))
+          SELECT_CONFIG
+
       # Note: Other scripts treat "dev releases" and "CI builds" differently.
       # Here we set to a "dev" package version even for CI builds:
       #
@@ -216,7 +277,7 @@ jobs:
           python ./build_tools/compute_rocm_package_version.py \
             --release-type=${{ inputs.release_type }} \
             --prerelease-version=${{ inputs.prerelease_version }} \
-            --override-git-sha=${{ steps.checkout.outputs.commit }}
+            --override-git-sha=${{ inputs.version_git_sha || steps.checkout.outputs.commit }}
 
       - name: Detect external repo config
         id: external_repo_config
