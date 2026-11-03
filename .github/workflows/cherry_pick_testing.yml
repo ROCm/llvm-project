@@ -179,12 +179,25 @@ jobs:
             echo "| llvm-project commit | \`${LLVM_SHA:0:12}\` |"
             echo "| TheRock base branch | \`${THEROCK_REF}\` |"
             echo "| Base llvm commit | \`${BASE_SHA:0:12}\` |"
+            echo "| Comparison | ${STATUS} |"
             echo "| Commits on top of base | ${AHEAD} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "${STATUS}" != "ahead" ]]; then
             echo "::error::'${LLVM_BRANCH}' is '${STATUS}' relative to the llvm commit ${THEROCK_REF} pins (${BEHIND} missing, ${AHEAD} extra). Rebase onto ${BASE_SHA}."
             exit 1
+          fi
+
+          # "ahead" on its own is a weak check: a branch thousands of commits
+          # ahead is a different lineage, not a cherry-pick, and any failure it
+          # produces cannot be attributed to the commits under test. Warn
+          # rather than fail, because batches are legitimately larger than one.
+          readonly MAX_EXPECTED_COMMITS=25
+          if (( AHEAD > MAX_EXPECTED_COMMITS )); then
+            echo "::warning::'${LLVM_BRANCH}' is ${AHEAD} commits ahead of the llvm commit ${THEROCK_REF} pins, well over the ${MAX_EXPECTED_COMMITS} a cherry-pick would add. Results will not isolate your change; rebase onto ${BASE_SHA} to qualify the cherry-pick on its own."
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> [!WARNING]" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ${AHEAD} commits on top of the pinned base, so this run exercises more than the cherry-pick." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # rock-ci-deps/submodule-pr-update runs inside the build workflows, where
