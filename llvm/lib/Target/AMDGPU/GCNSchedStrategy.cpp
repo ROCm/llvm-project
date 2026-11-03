@@ -1500,7 +1500,7 @@ bool PreRARematStage::initGCNSchedStage() {
   // fixed if there is another pass after this pass.
   assert(!S.hasNextStage());
 
-  if (!GCNSchedStage::initGCNSchedStage() || DAG.Regions.size() <= 1)
+  if (!GCNSchedStage::initGCNSchedStage())
     return false;
 
 #ifndef NDEBUG
@@ -1535,6 +1535,12 @@ bool PreRARematStage::initGCNSchedStage() {
     }
     PrintTargetRegions();
   });
+
+  buildRematRegions();
+  if (RematRegions.size() <= 1) {
+    REMAT_DEBUG(dbgs() << "Single rematerialization region\n");
+    return false;
+  }
 
   // We need up-to-date live-out info. to query live-out register masks in
   // regions containing rematerializable instructions.
@@ -1627,7 +1633,7 @@ bool PreRARematStage::initGCNSchedStage() {
   // Finish initializing candidates.
   SmallVector<size_t> CandidateOrder;
   for (auto [CandIdx, Cand] : enumerate(Candidates)) {
-    Cand.init(FreqInfo, Remater, DAG);
+    Cand.init(FreqInfo, Remater, RematToSchedRegion, RematSplitPeak, DAG);
     Cand.update(TargetRegions, RPTargets, FreqInfo, !TargetOcc);
     if (!Cand.hasNullScore())
       CandidateOrder.push_back(CandIdx);
@@ -1710,7 +1716,11 @@ bool PreRARematStage::initGCNSchedStage() {
           for (const auto &[UseRegion, _] : Reg.Uses) {
             if (UseRegion == Reg.DefRegion)
               continue;
-            LaneBitmask LiveInMask = DAG.LiveIns[UseRegion].at(UseReg);
+            // The second half of a split region has no live-in map.
+            const unsigned UseSchedRegion = RematToSchedRegion[UseRegion];
+            if (FirstRematRegion[UseSchedRegion] != UseRegion)
+              continue;
+            LaneBitmask LiveInMask = DAG.LiveIns[UseSchedRegion].at(UseReg);
             LaneBitmask UncoveredLanes = LM & ~(LiveInMask & LM);
             // If this register has lanes not covered by the LiveIns, be sure
             // they do not map to any subrange. ref:
@@ -1735,6 +1745,7 @@ bool PreRARematStage::initGCNSchedStage() {
                                               Cand.LiveOut);
       }
       Cand.rematerialize(Remater);
+      updateSchedRegions();
 
       // Adjust RP targets. The save is guaranteed in regions in which the
       // register is live-through and unused but optimistic in all other regions
@@ -3104,6 +3115,103 @@ bool RewriteMFMAFormStage::rewrite(
   return true;
 }
 
+void PreRARematStage::buildRematRegions() {
+  RematRegions.clear();
+  RematToSchedRegion.clear();
+  FirstRematRegion.clear();
+  RematSplitPeak.assign(DAG.Regions.size(), SlotIndex());
+  const bool UnifiedRF = ST.hasGFX90AInsts();
+  for (unsigned I = 0, E = static_cast<unsigned>(DAG.Regions.size()); I != E;
+       ++I) {
+    auto [Begin, End] = DAG.Regions[I];
+    FirstRematRegion.push_back(static_cast<unsigned>(RematRegions.size()));
+    MachineBasicBlock::iterator Split = End;
+    if (TargetRegions[I])
+      Split = findRematSplit(Begin, End, UnifiedRF,
+                             RPTargets[I].hasVectorRegisterExcess(),
+                             RematSplitPeak[I]);
+    if (Split == End) {
+      RematRegions.emplace_back(Begin, End);
+      RematToSchedRegion.push_back(I);
+      continue;
+    }
+    REMAT_DEBUG(dbgs() << "Split region " << I << " after " << *Split);
+    RematRegions.emplace_back(Begin, Split);
+    RematToSchedRegion.push_back(I);
+    RematRegions.emplace_back(std::next(Split), End);
+    RematToSchedRegion.push_back(I);
+  }
+}
+
+MachineBasicBlock::iterator
+PreRARematStage::findRematSplit(MachineBasicBlock::iterator Begin,
+                                MachineBasicBlock::iterator End, bool UnifiedRF,
+                                bool VectorExcess, SlotIndex &PeakIdx) const {
+  MachineBasicBlock::iterator Last =
+      skipDebugInstructionsBackward(std::prev(End), Begin);
+  if (Last == Begin)
+    return End;
+
+  // Find the instruction at the RP peak, walking upwards.
+  GCNUpwardRPTracker RPTracker(*DAG.LIS);
+  RPTracker.reset(*Last);
+  MachineBasicBlock::iterator Peak = End;
+  unsigned PeakRP = 0;
+  for (MachineBasicBlock::iterator MI = std::next(Last); MI != Begin;) {
+    --MI;
+    if (MI->isDebugInstr())
+      continue;
+    RPTracker.resetMaxPressure();
+    RPTracker.recede(*MI);
+    const GCNRegPressure &RP = RPTracker.getMaxPressure();
+    unsigned NumRegs =
+        VectorExcess ? RP.getVGPRNum(UnifiedRF) : RP.getSGPRNum();
+    if (NumRegs >= PeakRP) {
+      PeakRP = NumRegs;
+      Peak = MI;
+    }
+  }
+
+  // Split after the first instruction at or after the peak that cannot be
+  // deleted, so that the first region's end stays valid. Both regions must
+  // contain a non-debug instruction.
+  for (MachineBasicBlock::iterator MI = Peak; MI != Last; ++MI) {
+    if (MI->isDebugInstr() || MI->isBundled())
+      continue;
+    if (!MI->mayStore() && !MI->hasUnmodeledSideEffects())
+      continue;
+    if (skipDebugInstructionsForward(Begin, MI) == MI)
+      continue;
+    if (skipDebugInstructionsForward(std::next(MI), End) == End)
+      return End;
+    PeakIdx = DAG.LIS->getInstructionIndex(*Peak);
+    return MI;
+  }
+  return End;
+}
+
+void PreRARematStage::updateSchedRegions() {
+  const unsigned NumRematRegions = static_cast<unsigned>(RematRegions.size());
+  for (unsigned I = 0, E = static_cast<unsigned>(DAG.Regions.size()); I != E;
+       ++I) {
+    unsigned Last =
+        (I + 1 == E ? NumRematRegions : FirstRematRegion[I + 1]) - 1;
+    DAG.Regions[I].first = RematRegions[FirstRematRegion[I]].first;
+    DAG.Regions[I].second = RematRegions[Last].second;
+  }
+}
+
+void PreRARematStage::updateRematRegions() {
+  const unsigned NumRematRegions = static_cast<unsigned>(RematRegions.size());
+  for (unsigned I = 0, E = static_cast<unsigned>(DAG.Regions.size()); I != E;
+       ++I) {
+    unsigned Last =
+        (I + 1 == E ? NumRematRegions : FirstRematRegion[I + 1]) - 1;
+    RematRegions[FirstRematRegion[I]].first = DAG.Regions[I].first;
+    RematRegions[Last].second = DAG.Regions[I].second;
+  }
+}
+
 unsigned PreRARematStage::getStageTargetOccupancy() const {
   return TargetOcc ? *TargetOcc : MFI.getMinWavesPerEU();
 }
@@ -3231,17 +3339,43 @@ PreRARematStage::ScoredRemat::FreqInfo::FreqInfo(
 
 void PreRARematStage::ScoredRemat::init(const FreqInfo &Freq,
                                         const Rematerializer &Remater,
+                                        ArrayRef<unsigned> RematToSchedRegion,
+                                        ArrayRef<SlotIndex> RematSplitPeak,
                                         GCNScheduleDAGMILive &DAG) {
   const Rematerializer::Reg &Reg = Remater.getReg(RegIdx);
   Register DefReg = Reg.getDefReg();
+  const unsigned DefRegion = RematToSchedRegion[Reg.DefRegion];
 
   Live |= LiveIn;
   Live |= LiveOut;
+  BitVector UsedIn(Live.size());
+  bool UsedAfterSplit = false;
+  for (const auto &[UseRegion, _] : Reg.Uses) {
+    UsedIn.set(RematToSchedRegion[UseRegion]);
+    UsedAfterSplit |= UseRegion != Reg.DefRegion &&
+                      RematToSchedRegion[UseRegion] == DefRegion;
+  }
+  // A register defined before the RP peak of a split region and used after the
+  // split is no longer live at the peak once it is rematerialized after the
+  // split, unless the original register is still used at or after the peak.
+  if (UsedAfterSplit) {
+    const SlotIndex Peak = RematSplitPeak[DefRegion];
+    const LiveIntervals &LIS = *DAG.LIS;
+    bool LiveAtPeak = !(LIS.getInstructionIndex(*Reg.getLastDef()) < Peak);
+    auto DefRegionUsers = Reg.Uses.find(Reg.DefRegion);
+    if (DefRegionUsers != Reg.Uses.end()) {
+      LiveAtPeak |= any_of(DefRegionUsers->second, [&](MachineInstr *MI) {
+        return !(LIS.getInstructionIndex(*MI) < Peak);
+      });
+    }
+    if (!LiveAtPeak)
+      Live.set(DefRegion);
+  }
 
   for (unsigned I : Live.set_bits()) {
     // If the register is both unused and live-through in the region, the
     // latter's RP is guaranteed to decrease.
-    if (!LiveIn[I] || !LiveOut[I] || Reg.Uses.contains(I))
+    if (!LiveIn[I] || !LiveOut[I] || UsedIn[I])
       UnpredictableRPSave.set(I);
   }
   RPSave.inc(DefReg, LaneBitmask::getNone(), Reg.Mask, DAG.MRI);
@@ -3254,12 +3388,12 @@ void PreRARematStage::ScoredRemat::init(const FreqInfo &Freq,
   // deleted so there is no frequency gain in the defining region.
   int64_t DefOrMin = Reg.hasUsersInDefRegion()
                          ? 0
-                         : std::max(Freq.Regions[Reg.DefRegion], Freq.MinFreq);
+                         : std::max(Freq.Regions[DefRegion], Freq.MinFreq);
   int64_t UseOrMax = 0;
   for (const auto &[UseRegion, _] : Reg.Uses) {
     if (Reg.DefRegion == UseRegion)
       continue;
-    uint64_t RegionFreq = Freq.Regions[UseRegion];
+    uint64_t RegionFreq = Freq.Regions[RematToSchedRegion[UseRegion]];
     UseOrMax += RegionFreq != 0 ? RegionFreq : Freq.MaxFreq;
   }
   FreqDiff = DefOrMin - UseOrMax;
@@ -3406,7 +3540,9 @@ void PreRARematStage::finalizeGCNSchedStage() {
   // affected regions.
   REMAT_DEBUG(dbgs() << "==== ROLLBACK ====\n");
   assert(Rollback && "rollbacker should be defined");
+  updateRematRegions();
   Rollback->Listener.rollback(Remater);
+  updateSchedRegions();
   for (const auto &[RegIdx, LiveIn, LiveOut] : Rollback->LiveMapUpdates) {
     const Rematerializer::Reg &Reg = Remater.getReg(RegIdx);
     addToLiveMaps(Reg.getDefReg(), Reg.Mask, LiveIn, LiveOut);

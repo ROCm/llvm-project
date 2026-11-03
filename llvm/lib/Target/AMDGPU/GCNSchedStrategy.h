@@ -566,9 +566,11 @@ public:
 ///    non-ignorable physical register use.
 /// 3  The register has no virtual register use whose live range would be
 ///    extended by the rematerialization.
-/// 4. The register has at least one user outside its defining region. If
-///    rematerialized, one copy is made per using region and the original
-///    register stays if the defining region has users.
+/// 4. The register has at least one user outside its defining
+///    rematerialization region. If rematerialized, one copy is made per using
+///    region and the original register stays if the defining region has users.
+///    Rematerialization regions are the scheduling regions, except that a
+///    scheduling region above its RP target is split in two after its RP peak.
 /// 5. The register is not used by or using another register that is going to be
 ///    rematerialized.
 class PreRARematStage : public GCNSchedStage {
@@ -614,7 +616,8 @@ private:
     /// This doesn't update the actual score (call \ref update for this).
     /// Note: LiveIn/LiveOut must be pre-populated before calling this.
     void init(const FreqInfo &Freq, const Rematerializer &Remater,
-              GCNScheduleDAGMILive &DAG);
+              ArrayRef<unsigned> RematToSchedRegion,
+              ArrayRef<SlotIndex> RematSplitPeak, GCNScheduleDAGMILive &DAG);
 
     /// Rematerializes the candidate using the \p Remater.
     void rematerialize(Rematerializer &Remater) const;
@@ -690,6 +693,16 @@ private:
   /// rescheduled.
   BitVector RescheduleRegions;
 
+  /// Regions given to \ref Remater. See \ref buildRematRegions.
+  SmallVector<RegionBoundaries> RematRegions;
+  /// The scheduling region of each rematerialization region.
+  SmallVector<unsigned> RematToSchedRegion;
+  /// The first rematerialization region of each scheduling region.
+  SmallVector<unsigned> FirstRematRegion;
+  /// For each split scheduling region, the slot of the instruction at its RP
+  /// peak; invalid when the region is not split.
+  SmallVector<SlotIndex> RematSplitPeak;
+
   /// Underlying utilities to identify and perform rematerializations.
   Rematerializer Remater;
 
@@ -744,6 +757,30 @@ private:
   /// Returns the occupancy the stage is trying to achieve.
   unsigned getStageTargetOccupancy() const;
 
+  /// Builds \ref RematRegions from the scheduling regions. Each target region
+  /// is split in two after the first instruction at or after its RP peak that
+  /// has side effects, so that registers live across the peak and only used
+  /// after it are candidates for rematerialization. The split instruction ends
+  /// the first region and cannot be deleted by rematerializations.
+  void buildRematRegions();
+
+  /// Returns the instruction after which region [\p Begin, \p End) is split,
+  /// or \p End if it is not split, and sets \p PeakIdx to the slot of the
+  /// instruction at the RP peak when it is split. \p VectorExcess selects the
+  /// register kind whose peak is used.
+  MachineBasicBlock::iterator findRematSplit(MachineBasicBlock::iterator Begin,
+                                             MachineBasicBlock::iterator End,
+                                             bool UnifiedRF, bool VectorExcess,
+                                             SlotIndex &PeakIdx) const;
+
+  /// Copies the boundaries of the rematerialization regions, which \ref Remater
+  /// may change, to the scheduling regions.
+  void updateSchedRegions();
+
+  /// Copies the boundaries of the scheduling regions, which re-scheduling may
+  /// change, to the rematerialization regions.
+  void updateRematRegions();
+
   /// Determines the stage's objective (increasing occupancy or reducing
   /// spilling, set in \ref TargetOcc). Defines \ref RPTargets in all regions to
   /// achieve that objective and mark those that don't achieve it in \ref
@@ -794,7 +831,7 @@ public:
       : GCNSchedStage(StageID, DAG),
         TargetRegions(static_cast<unsigned>(DAG.Regions.size())),
         RescheduleRegions(static_cast<unsigned>(DAG.Regions.size())),
-        Remater(MF, DAG.Regions, *DAG.LIS) {
+        Remater(MF, RematRegions, *DAG.LIS) {
     const size_t NumRegions = DAG.Regions.size();
     RPTargets.reserve(NumRegions);
   }
