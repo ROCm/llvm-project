@@ -8,7 +8,8 @@
 //
 // The AMDGPU passes of the ThinLTO thin link. They run on the combined summary
 // index, and they store their results as function attributes
-// (ThinLinkFnAttrs), which each ThinLTO backend sets on its functions.
+// (ThinLinkFnAttrs), which each ThinLTO backend sets on its functions. The
+// passes use the facts that the compile step stores in the summaries.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +20,15 @@
 
 namespace llvm {
 
+class Function;
 class PassBuilder;
+
+/// Adds the facts about \p F that the AMDGPU thin-link passes use to the
+/// summary extensions of \p Index. \p Summary is the summary of \p F in
+/// \p Index.
+void addAMDGPUThinLinkFacts(const Function &F,
+                            const GlobalValueSummary &Summary,
+                            ModuleSummaryIndex &Index);
 
 /// Propagates the occupancy attributes of the kernels
 /// (amdgpu-flat-work-group-size, amdgpu-waves-per-eu, and

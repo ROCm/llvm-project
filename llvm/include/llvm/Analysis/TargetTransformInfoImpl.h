@@ -1132,6 +1132,10 @@ public:
     return getDefaultCallTypeId(FTy, CC);
   }
 
+  virtual void addSummaryExtensionEntries(const Function &F,
+                                          const GlobalValueSummary &Summary,
+                                          ModuleSummaryIndex &Index) const {}
+
   virtual bool isIndexedLoadLegal(TTI::MemIndexedMode Mode, Type *Ty) const {
     return false;
   }

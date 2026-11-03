@@ -54,6 +54,7 @@ class DominatorTree;
 class CondBrInst;
 class Function;
 class GlobalValue;
+class GlobalValueSummary;
 class InstCombiner;
 class OptimizationRemarkEmitter;
 class InterleavedAccessInfo;
@@ -63,6 +64,7 @@ class LoadInst;
 class Loop;
 class LoopInfo;
 class LoopVectorizationLegality;
+class ModuleSummaryIndex;
 class ProfileSummaryInfo;
 class RecurrenceDescriptor;
 class SCEV;
@@ -1991,6 +1993,13 @@ public:
   /// default is getDefaultCallTypeId. A target overrides it if its ABI lets
   /// calls with different IR signatures reach the same function.
   LLVM_ABI uint64_t getCallTypeId(FunctionType *FTy, CallingConv::ID CC) const;
+
+  /// Adds the data about \p F that the passes of the target at the ThinLTO
+  /// thin link need to the summary extensions of \p Index. \p Summary is the
+  /// summary of \p F in \p Index. The default adds nothing.
+  LLVM_ABI void addSummaryExtensionEntries(const Function &F,
+                                           const GlobalValueSummary &Summary,
+                                           ModuleSummaryIndex &Index) const;
 
   /// The type of load/store indexing.
   enum MemIndexedMode {

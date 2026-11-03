@@ -755,7 +755,11 @@ static void computeFunctionSummary(
   FuncSummary->setCallTypeIds(std::move(CallTypeIds));
   if (NonRenamableLocal)
     CantBePromoted.insert(F.getGUID());
+  const FunctionSummary &Summary = *FuncSummary;
   Index.addGlobalValueSummary(F, std::move(FuncSummary));
+  // The target can store data about F for its passes at the thin link.
+  if (TTI)
+    TTI->addSummaryExtensionEntries(F, Summary, Index);
 }
 
 /// Find function pointers referenced within the given vtable initializer
