@@ -14,6 +14,14 @@
 # Multi Arch Parameterised CI amd-staging cannot serve this case: it resolves
 # changes through refs/pull/<n>/head and so needs an open PR, which a
 # cherry-pick branch does not have and often never will.
+#
+# The job graph calls the build, test and packaging workflows directly rather
+# than going through multi_arch_ci_linux.yml, following compiler_bump.yml in
+# TheRock. That workflow aggregates a dozen jobs into one result and gates most
+# of them on `!failure()`, which is true when *any* earlier job in the run
+# failed, so a package install test could skip the tarballs and the wheels.
+# Here every consumer of the build names the build explicitly, and a failure
+# stays local to the job that produced it.
 
 name: Cherry-pick Testing
 
@@ -41,6 +49,11 @@ on:
         description: 'Comma-separated list of Windows GPU families. "all" = all, "none" = skip platform.'
         type: string
         default: "none"
+      # Scope.
+      dry_run:
+        description: "Validate the cherry-pick base and resolve the build configuration, then stop without building."
+        type: boolean
+        default: false
       # Wheels.
       build_pytorch:
         description: "Build PyTorch wheels."
@@ -54,9 +67,14 @@ on:
         description: "Single Python version for wheel builds (empty for full matrix)."
         type: string
         default: ""
+      # Packaging.
+      build_native_packages:
+        description: "Build deb and rpm packages. The install tests that consume them are not part of this workflow."
+        type: boolean
+        default: true
       # Tests.
       run_tests:
-        description: "Run tests after the build. Uncheck for a build-only run."
+        description: "Run tests after the build. Uncheck for a build-only run; artifacts are still produced."
         type: boolean
         default: true
       test_type:
@@ -99,6 +117,12 @@ on:
 
 permissions:
   contents: read
+
+run-name: >-
+  CP ${{ inputs.LLVM_BRANCH }} on ${{ inputs.THEROCK_REF }}
+  | Linux: ${{ inputs.linux_amdgpu_families }}
+  | Windows: ${{ inputs.windows_amdgpu_families }}
+  | ${{ inputs.dry_run && 'Dry run' || !inputs.run_tests && 'Build only' || format('Tests: {0}', inputs.test_type) }}
 
 concurrency:
   # Keyed on the branch under test rather than the dispatching ref, so
@@ -189,6 +213,8 @@ jobs:
           name: multiple-pr-build-params
           path: ${{ github.run_id }}_PR_params.env
 
+  # Runs even for a dry run, so that resolving the configuration and the
+  # package version is itself a cheap preflight.
   setup:
     needs: validate_cp_base
     uses: ./.github/workflows/setup_multi_arch.yml
@@ -208,82 +234,243 @@ jobs:
       repository: "ROCm/TheRock"
       ref: ${{ inputs.THEROCK_REF }}
 
-  linux_build_and_test:
+  # ==========================================================================
+  # Linux
+  # ==========================================================================
+  copy_prebuilt_stages_linux:
+    name: Copy Prebuilt Stages (Linux)
+    needs: setup
+    if: >-
+      ${{
+        !inputs.dry_run &&
+        inputs.linux_amdgpu_families != '' &&
+        inputs.linux_amdgpu_families != 'none' &&
+        needs.setup.outputs.linux_build_config != '' &&
+        fromJSON(needs.setup.outputs.linux_build_config).prebuilt_stages != '' &&
+        fromJSON(needs.setup.outputs.linux_build_config).baseline_run_id != ''
+      }}
+    runs-on: aws-linux-scale-rocm-large
+    permissions:
+      contents: read
+      id-token: write
+    # Run in container to access AWS credentials mounted from the host runner.
+    container:
+      image: python:3.12-slim
+      options: -v /runner/config:/home/awsconfig/
+    env:
+      AWS_SHARED_CREDENTIALS_FILE: /home/awsconfig/credentials.ini
+    steps:
+      - name: Checking out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          repository: "ROCm/TheRock"
+          ref: ${{ needs.setup.outputs.ref }}
+
+      - name: Install artifact manager dependencies
+        run: pip install boto3
+
+      - name: Configure AWS credentials for artifact uploads
+        uses: ./.github/actions/configure_aws_artifacts_credentials
+        with:
+          release_type: ci
+
+      - name: Copy prebuilt stage artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TYPE: ci
+        run: |
+          python build_tools/artifact_manager.py copy \
+            --source-run-id=${{ fromJSON(needs.setup.outputs.linux_build_config).baseline_run_id }} \
+            --stage="${{ fromJSON(needs.setup.outputs.linux_build_config).prebuilt_stages }}" \
+            --amdgpu-families="${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}" \
+            --expand-family-to-targets
+
+  build_linux:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
     needs:
       - setup
       - cp_params
+      - copy_prebuilt_stages_linux
+    # The platform guard reads the inputs rather than the resolved config,
+    # because setup_multi_arch always emits a config for both platforms and so
+    # cannot express "this platform was not requested". compiler_bump.yml gates
+    # its own per-platform setup jobs the same way.
     if: >-
       ${{
+        !cancelled() && !inputs.dry_run &&
+        needs.setup.result == 'success' &&
+        needs.cp_params.result == 'success' &&
+        needs.copy_prebuilt_stages_linux.result != 'failure' &&
         inputs.linux_amdgpu_families != '' &&
         inputs.linux_amdgpu_families != 'none' &&
         needs.setup.outputs.linux_build_config != '' &&
         needs.setup.outputs.enable_build_jobs == 'true'
       }}
-    uses: ./.github/workflows/multi_arch_ci_linux.yml
+    uses: ./.github/workflows/multi_arch_build_portable_linux.yml
     with:
-      build_config: ${{ needs.setup.outputs.linux_build_config }}
-      test_labels: ${{ needs.setup.outputs.linux_test_labels }}
+      matrix_per_family_json: ${{ toJSON(fromJSON(needs.setup.outputs.linux_build_config).per_family_info) }}
+      dist_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
+      artifact_group: ${{ fromJSON(needs.setup.outputs.linux_build_config).artifact_group }}
+      build_variant_label: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_variant_label }}
+      build_variant_cmake_preset: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_variant_cmake_preset }}
+      build_variant_suffix: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_variant_suffix }}
+      prebuilt_stages: ${{ fromJSON(needs.setup.outputs.linux_build_config).prebuilt_stages }}
+      build_runs_on: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_runs_on }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      rocm_deb_package_version: ${{ needs.setup.outputs.rocm_deb_package_version }}
-      rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
       test_type: ${{ inputs.test_type }}
-      run_tests: ${{ inputs.run_tests }}
-      changed_projects: ${{ inputs.changed_projects }}
+      external_repo_config: ${{ needs.setup.outputs.external_repo_config }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
     permissions:
       contents: read
       id-token: write
 
-  windows_build_and_test:
-    name: Windows::${{ fromJSON(needs.setup.outputs.windows_build_config || '{}').build_variant_label || 'skip' }}
-    needs:
-      - setup
-      - cp_params
+  validate_linux_artifacts:
+    name: Validate Linux Artifact Structure
+    needs: [setup, build_linux]
+    if: ${{ !cancelled() && needs.build_linux.result == 'success' }}
+    uses: ./.github/workflows/test_artifacts_structure.yml
+    with:
+      amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
+      platform: linux
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+
+  test_linux:
+    name: Test Linux ${{ matrix.family_info.amdgpu_family }}
+    needs: [setup, build_linux]
     if: >-
       ${{
-        inputs.windows_amdgpu_families != '' &&
-        inputs.windows_amdgpu_families != 'none' &&
-        needs.setup.outputs.windows_build_config != '' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
+        !cancelled() && inputs.run_tests &&
+        needs.build_linux.result == 'success'
       }}
-    uses: ./.github/workflows/multi_arch_ci_windows.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        family_info: ${{ fromJSON(needs.setup.outputs.linux_build_config).per_family_info }}
+    uses: ./.github/workflows/test_artifacts.yml
     with:
-      build_config: ${{ needs.setup.outputs.windows_build_config }}
-      test_labels: ${{ needs.setup.outputs.windows_test_labels }}
-      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      artifact_group: ${{ fromJSON(needs.setup.outputs.linux_build_config).artifact_group }}
+      amdgpu_families: ${{ matrix.family_info.amdgpu_family }}
+      amdgpu_targets: ${{ matrix.family_info.amdgpu_targets }}
+      test_runs_on: ${{ matrix.family_info.test-runs-on }}
       test_type: ${{ inputs.test_type }}
-      run_tests: ${{ inputs.run_tests }}
+      test_labels: ${{ needs.setup.outputs.linux_test_labels }}
+      sanity_check_only_for_family: ${{ matrix.family_info.sanity_check_only_for_family }}
       changed_projects: ${{ inputs.changed_projects }}
+      build_variant: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_variant_label }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
-    permissions:
-      contents: read
-      id-token: write
 
-  build_tarballs:
-    name: Build Tarballs
-    needs:
-      - setup
-      - linux_build_and_test
+  build_linux_tarballs:
+    name: Build Linux Tarballs
+    needs: [setup, build_linux]
+    if: ${{ !cancelled() && needs.build_linux.result == 'success' }}
     uses: ./.github/workflows/multi_arch_build_tarballs.yml
     with:
       dist_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
       platform: linux
       package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      release_type: ci
+    permissions:
+      contents: read
+      id-token: write
+
+  build_linux_python_packages:
+    name: Build Linux Python Packages
+    needs: [setup, build_linux]
+    if: ${{ !cancelled() && needs.build_linux.result == 'success' }}
+    uses: ./.github/workflows/build_portable_linux_python_packages.yml
+    with:
+      artifact_group: ${{ fromJSON(needs.setup.outputs.linux_build_config).artifact_group }}
+      amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
+      linux_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).linux_amdgpu_families }}
+      windows_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).windows_amdgpu_families }}
+      multiarch_index: true
+      package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+    permissions:
+      contents: read
+      id-token: write
+
+  build_linux_deb_packages:
+    name: Build Linux DEB Packages
+    needs: [setup, build_linux]
+    if: >-
+      ${{
+        !cancelled() && inputs.build_native_packages &&
+        needs.build_linux.result == 'success'
+      }}
+    uses: ./.github/workflows/multi_arch_build_native_linux_packages.yml
+    with:
+      dist_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
+      rocm_version: ${{ needs.setup.outputs.rocm_deb_package_version || needs.setup.outputs.rocm_package_version }}
+      native_package_type: deb
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+    permissions:
+      contents: read
+      id-token: write
+
+  build_linux_rpm_packages:
+    name: Build Linux RPM Packages
+    needs: [setup, build_linux]
+    if: >-
+      ${{
+        !cancelled() && inputs.build_native_packages &&
+        needs.build_linux.result == 'success'
+      }}
+    uses: ./.github/workflows/multi_arch_build_native_linux_packages.yml
+    with:
+      dist_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
+      rocm_version: ${{ needs.setup.outputs.rocm_rpm_package_version || needs.setup.outputs.rocm_package_version }}
+      native_package_type: rpm
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+    permissions:
+      contents: read
+      id-token: write
+
+  build_linux_pytorch_wheels:
+    name: Build PyTorch | py${{ matrix.python_version }} ${{ matrix.pytorch_git_ref }}
+    needs: [setup, build_linux_python_packages]
+    # pytorch_build_matrix is only populated when build_pytorch resolved to a
+    # non-empty matrix, and toJSON renders an absent key as "null", not "[]".
+    if: >-
+      ${{
+        !cancelled() && inputs.build_pytorch &&
+        needs.build_linux_python_packages.result == 'success' &&
+        toJSON(fromJSON(needs.setup.outputs.linux_build_config).pytorch_build_matrix) != 'null' &&
+        toJSON(fromJSON(needs.setup.outputs.linux_build_config).pytorch_build_matrix) != '[]'
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.linux_build_config).pytorch_build_matrix }}
+    uses: ./.github/workflows/multi_arch_build_portable_linux_pytorch_wheels_ci.yml
+    with:
+      artifact_group: ${{ fromJSON(needs.setup.outputs.linux_build_config).artifact_group }}
+      python_version: ${{ matrix.python_version }}
+      pytorch_git_ref: ${{ matrix.pytorch_git_ref }}
+      amdgpu_families: ${{ matrix.amdgpu_families }}
+      kpack_split: ${{ needs.build_linux_python_packages.outputs.kpack_split }}
+      rocm_package_find_links_url: ${{ needs.build_linux_python_packages.outputs.package_find_links_url }}
+      rocm_version: ${{ needs.setup.outputs.rocm_package_version }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
     permissions:
       contents: read
       id-token: write
 
   performance_tests:
     name: Performance Tests
-    needs:
-      - setup
-      - linux_build_and_test
-    # A plain condition keeps the implicit "needs succeeded" gate, so this is
-    # reached only after a successful Linux build.
-    if: ${{ inputs.run_performance_tests }}
+    needs: build_linux
+    if: >-
+      ${{
+        !cancelled() && inputs.run_performance_tests &&
+        needs.build_linux.result == 'success'
+      }}
     runs-on: ubuntu-24.04
     steps:
       - name: Report that performance testing is not wired up
@@ -297,18 +484,189 @@ jobs:
             echo "\`./.github/workflows/test_benchmarks.yml\`, which takes"
             echo "\`artifact_group\`, \`artifact_run_id\`, \`amdgpu_families\` and"
             echo "\`test_runs_on\`, and optionally the BENCHMARK_DB_URL secrets to"
-            echo "publish results."
+            echo "publish results. The per-family benchmark runner label is"
+            echo "already carried in the build config as \`benchmark-runs-on\`."
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  # ==========================================================================
+  # Windows
+  # ==========================================================================
+  copy_prebuilt_stages_windows:
+    name: Copy Prebuilt Stages (Windows)
+    needs: setup
+    if: >-
+      ${{
+        !inputs.dry_run &&
+        inputs.windows_amdgpu_families != '' &&
+        inputs.windows_amdgpu_families != 'none' &&
+        needs.setup.outputs.windows_build_config != '' &&
+        fromJSON(needs.setup.outputs.windows_build_config).prebuilt_stages != '' &&
+        fromJSON(needs.setup.outputs.windows_build_config).baseline_run_id != ''
+      }}
+    runs-on: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_runs_on || 'azure-windows-scale-rocm' }}
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checking out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          repository: "ROCm/TheRock"
+          ref: ${{ needs.setup.outputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install artifact manager dependencies
+        run: pip install boto3
+
+      - name: Configure AWS credentials for artifact uploads
+        uses: ./.github/actions/configure_aws_artifacts_credentials
+        with:
+          release_type: ci
+
+      - name: Copy prebuilt stage artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TYPE: ci
+        run: |
+          python build_tools/artifact_manager.py copy \
+            --source-run-id=${{ fromJSON(needs.setup.outputs.windows_build_config).baseline_run_id }} \
+            --stage="${{ fromJSON(needs.setup.outputs.windows_build_config).prebuilt_stages }}" \
+            --amdgpu-families="${{ fromJSON(needs.setup.outputs.windows_build_config).dist_amdgpu_families }}" \
+            --expand-family-to-targets
+
+  build_windows:
+    name: Windows::${{ fromJSON(needs.setup.outputs.windows_build_config || '{}').build_variant_label || 'skip' }}
+    needs:
+      - setup
+      - cp_params
+      - copy_prebuilt_stages_windows
+    if: >-
+      ${{
+        !cancelled() && !inputs.dry_run &&
+        needs.setup.result == 'success' &&
+        needs.cp_params.result == 'success' &&
+        needs.copy_prebuilt_stages_windows.result != 'failure' &&
+        inputs.windows_amdgpu_families != '' &&
+        inputs.windows_amdgpu_families != 'none' &&
+        needs.setup.outputs.windows_build_config != '' &&
+        needs.setup.outputs.enable_build_jobs == 'true'
+      }}
+    uses: ./.github/workflows/multi_arch_build_windows.yml
+    with:
+      matrix_per_family_json: ${{ toJSON(fromJSON(needs.setup.outputs.windows_build_config).per_family_info) }}
+      dist_amdgpu_families: ${{ fromJSON(needs.setup.outputs.windows_build_config).dist_amdgpu_families }}
+      artifact_group: ${{ fromJSON(needs.setup.outputs.windows_build_config).artifact_group }}
+      build_variant_label: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_variant_label }}
+      build_variant_cmake_preset: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_variant_cmake_preset }}
+      build_variant_suffix: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_variant_suffix }}
+      prebuilt_stages: ${{ fromJSON(needs.setup.outputs.windows_build_config).prebuilt_stages }}
+      build_runs_on: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_runs_on }}
+      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      test_type: ${{ inputs.test_type }}
+      external_repo_config: ${{ needs.setup.outputs.external_repo_config }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+    permissions:
+      contents: read
+      id-token: write
+
+  validate_windows_artifacts:
+    name: Validate Windows Artifact Structure
+    needs: [setup, build_windows]
+    if: ${{ !cancelled() && needs.build_windows.result == 'success' }}
+    uses: ./.github/workflows/test_artifacts_structure.yml
+    with:
+      amdgpu_families: ${{ fromJSON(needs.setup.outputs.windows_build_config).dist_amdgpu_families }}
+      platform: windows
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+
+  test_windows:
+    name: Test Windows ${{ matrix.family_info.amdgpu_family }}
+    needs: [setup, build_windows]
+    if: >-
+      ${{
+        !cancelled() && inputs.run_tests &&
+        needs.build_windows.result == 'success'
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        family_info: ${{ fromJSON(needs.setup.outputs.windows_build_config).per_family_info }}
+    uses: ./.github/workflows/test_artifacts.yml
+    with:
+      # Windows publishes per-architecture artifacts, so the fetch has to name
+      # the family rather than the shared group.
+      artifact_group: ${{ matrix.family_info.amdgpu_family }}
+      amdgpu_families: ${{ matrix.family_info.amdgpu_family }}
+      amdgpu_targets: ${{ matrix.family_info.amdgpu_targets }}
+      test_runs_on: ${{ matrix.family_info.test-runs-on }}
+      test_type: ${{ inputs.test_type }}
+      test_labels: ${{ needs.setup.outputs.windows_test_labels }}
+      sanity_check_only_for_family: ${{ matrix.family_info.sanity_check_only_for_family }}
+      changed_projects: ${{ inputs.changed_projects }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+
+  build_windows_tarballs:
+    name: Build Windows Tarballs
+    needs: [setup, build_windows]
+    if: ${{ !cancelled() && needs.build_windows.result == 'success' }}
+    uses: ./.github/workflows/multi_arch_build_tarballs.yml
+    with:
+      dist_amdgpu_families: ${{ fromJSON(needs.setup.outputs.windows_build_config).dist_amdgpu_families }}
+      platform: windows
+      package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      release_type: ci
+    permissions:
+      contents: read
+      id-token: write
+
+  build_windows_python_packages:
+    name: Build Windows Python Packages
+    needs: [setup, build_windows]
+    if: ${{ !cancelled() && needs.build_windows.result == 'success' }}
+    uses: ./.github/workflows/build_windows_python_packages.yml
+    with:
+      artifact_group: ${{ fromJSON(needs.setup.outputs.windows_build_config).artifact_group }}
+      amdgpu_families: ${{ fromJSON(needs.setup.outputs.windows_build_config).dist_amdgpu_families }}
+      linux_amdgpu_families: ${{ fromJSON(needs.setup.outputs.windows_build_config).linux_amdgpu_families }}
+      windows_amdgpu_families: ${{ fromJSON(needs.setup.outputs.windows_build_config).windows_amdgpu_families }}
+      multiarch_index: true
+      package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+    permissions:
+      contents: read
+      id-token: write
 
   ci_summary:
     name: CI Summary
     if: always()
     needs:
+      - validate_cp_base
       - setup
-      - linux_build_and_test
-      - windows_build_and_test
-      - build_tarballs
+      - build_linux
+      - validate_linux_artifacts
+      - test_linux
+      - build_linux_tarballs
+      - build_linux_python_packages
+      - build_linux_deb_packages
+      - build_linux_rpm_packages
+      - build_linux_pytorch_wheels
       - performance_tests
+      - build_windows
+      - validate_windows_artifacts
+      - test_windows
+      - build_windows_tarballs
+      - build_windows_python_packages
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
