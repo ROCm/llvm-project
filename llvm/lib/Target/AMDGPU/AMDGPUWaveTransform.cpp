@@ -82,6 +82,7 @@
 #include "SIMachineFunctionInfo.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/EquivalenceClasses.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/IntEqClasses.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -2417,42 +2418,52 @@ void ControlFlowRewriter::computeWTLiveInfo(
     LiveOut[B] = VirtRegSet();
   }
 
-  SmallVector<MachineBasicBlock *, 16> Work(Blocks.begin(), Blocks.end());
-  SmallPtrSet<MachineBasicBlock *, 16> Queued(Blocks.begin(), Blocks.end());
-  unsigned Idx = 0;
-  while (Idx < Work.size()) {
-    MachineBasicBlock *B = Work[Idx++];
-    Queued.erase(B);
+  const unsigned N = Blocks.size();
+  DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
+  for (unsigned I = 0; I < N; ++I)
+    RPOIndex[Blocks[I]] = I;
 
-    VirtRegSet Out;
-    DenseMap<MachineBasicBlock *, BlockSet>::const_iterator SuccIt =
-        WTSuccs.find(B);
-    if (SuccIt != WTSuccs.end()) {
-      for (MachineBasicBlock *Succ : SuccIt->second)
-        for (Register R : LiveIn[Succ])
-          Out.insert(R);
+  BitVector Work(N, true);
+  BitVector Next(N);
+  while (Work.any()) {
+    for (unsigned Idx : llvm::reverse(Work.set_bits())) {
+      MachineBasicBlock *B = Blocks[Idx];
+
+      VirtRegSet Out;
+      DenseMap<MachineBasicBlock *, BlockSet>::const_iterator SuccIt =
+          WTSuccs.find(B);
+      if (SuccIt != WTSuccs.end()) {
+        for (MachineBasicBlock *Succ : SuccIt->second)
+          for (Register R : LiveIn[Succ])
+            Out.insert(R);
+      }
+
+      VirtRegSet In = UEUse[B];
+      const VirtRegSet &Kill = Killed[B];
+      for (Register R : Out)
+        if (!Kill.contains(R))
+          In.insert(R);
+
+      if (Out == LiveOut[B] && In == LiveIn[B])
+        continue;
+      LiveOut[B] = std::move(Out);
+      if (In == LiveIn[B])
+        continue;
+      LiveIn[B] = std::move(In);
+
+      DenseMap<MachineBasicBlock *, BlockSet>::const_iterator PredIt =
+          WTPreds.find(B);
+      if (PredIt == WTPreds.end())
+        continue;
+      for (MachineBasicBlock *Pred : PredIt->second) {
+        DenseMap<MachineBasicBlock *, unsigned>::iterator PredIdx =
+            RPOIndex.find(Pred);
+        assert(PredIdx != RPOIndex.end() && "WT predecessor missing from RPO");
+        Next.set(PredIdx->second);
+      }
     }
-
-    VirtRegSet In = UEUse[B];
-    const VirtRegSet &Kill = Killed[B];
-    for (Register R : Out)
-      if (!Kill.contains(R))
-        In.insert(R);
-
-    if (Out == LiveOut[B] && In == LiveIn[B])
-      continue;
-    LiveOut[B] = std::move(Out);
-    if (In == LiveIn[B])
-      continue;
-    LiveIn[B] = std::move(In);
-
-    DenseMap<MachineBasicBlock *, BlockSet>::const_iterator PredIt =
-        WTPreds.find(B);
-    if (PredIt == WTPreds.end())
-      continue;
-    for (MachineBasicBlock *Pred : PredIt->second)
-      if (Queued.insert(Pred).second)
-        Work.push_back(Pred);
+    Work.reset();
+    std::swap(Work, Next);
   }
 }
 
