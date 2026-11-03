@@ -49,6 +49,7 @@ add_llvm_unittest(IRTests
   ShuffleVectorInstTest.cpp
   StructuralHashTest.cpp
   SummaryPassManagerTest.cpp
+  ThinLinkFnAttrsTest.cpp
   RuntimeLibcallsTest.cpp
   TimePassesTest.cpp
   TypesTest.cpp
