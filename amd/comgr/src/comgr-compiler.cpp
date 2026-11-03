@@ -40,6 +40,7 @@
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Options/Options.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -1963,8 +1964,11 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
            << "   Input Filename: " << Input->Name << "\n";
     }
 
+    // Skip disk unless save-temps, which expects unpackaged files on disk.
+    bool PreferInPlace = !env::shouldSaveTemps();
     UnpackageCommand Unpackage(StringRef(Input->Data, Input->Size), Input->Name,
-                               ActionInfo->PackageEntryIDs, OutputDir);
+                               ActionInfo->PackageEntryIDs, OutputDir,
+                               PreferInPlace);
     if (Cache) {
       if (auto Status = Cache->execute(Unpackage, LogS)) {
         return Status;
@@ -1975,9 +1979,12 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       }
     }
 
-    for (const auto &[DataKind, OutputFilePath] : llvm::zip_equal(
-             Unpackage.getDataKinds(), Unpackage.getOutputFileNames())) {
-
+    // Creates, populates (via Populate), and adds a DataObject to OutSetT.
+    // Shared by the in-place and on-disk result loops below.
+    auto addResult =
+        [&](amd_comgr_data_kind_t DataKind, StringRef OutputFileName,
+            function_ref<amd_comgr_status_t(DataObject *)> Populate)
+        -> amd_comgr_status_t {
       amd_comgr_data_t ResultT;
 
       if (auto Status = amd_comgr_create_data(DataKind, &ResultT))
@@ -1987,13 +1994,35 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       ScopedDataObjectReleaser SDOR(ResultT);
 
       DataObject *Result = DataObject::convert(ResultT);
-      if (auto Status = inputFromFile(Result, OutputFilePath))
+      if (auto Status = Populate(Result))
         return Status;
 
-      StringRef OutputFileName = sys::path::filename(OutputFilePath);
       Result->setName(OutputFileName);
 
-      if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT))
+      return amd_comgr_data_set_add(OutSetT, ResultT);
+    };
+
+    if (Unpackage.isInPlace()) {
+      for (const auto &[DataKind, OutputFileName, InPlaceBuffer] :
+           llvm::zip_equal(Unpackage.getDataKinds(),
+                           Unpackage.getOutputFileNames(),
+                           Unpackage.getInPlaceBuffers())) {
+        if (auto Status =
+                addResult(DataKind, OutputFileName, [&](DataObject *Result) {
+                  return Result->setData(std::move(InPlaceBuffer));
+                }))
+          return Status;
+      }
+      continue;
+    }
+
+    for (const auto &[DataKind, OutputFilePath] : llvm::zip_equal(
+             Unpackage.getDataKinds(), Unpackage.getOutputFileNames())) {
+      if (auto Status = addResult(DataKind, sys::path::filename(OutputFilePath),
+                                  [&](DataObject *Result) {
+                                    return inputFromFile(Result,
+                                                         OutputFilePath);
+                                  }))
         return Status;
     }
   }
