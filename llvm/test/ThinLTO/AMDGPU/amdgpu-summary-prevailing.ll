@@ -13,14 +13,14 @@
 ; RUN: llvm-dis %t/a.bc.thinlto.bc -o - | FileCheck %s --check-prefix=A
 ; RUN: llvm-dis %t/b.bc.thinlto.bc -o - | FileCheck %s --check-prefix=B
 
-; A kernel has facts also without occupancy attributes.
+; A kernel has facts also without launch attributes.
 ; A: ^[[F:[0-9]+]] = gv: (guid: {{[0-9]+}}, summaries: (function: (module: ^0, flags: (linkage: available_externally,
 ; A: ^[[KERNEL:[0-9]+]] = gv: (guid: {{[0-9]+}}, {{.*}}calls: ((callee: ^[[F]])))))
-; A: = extension: (name: "amdgpu-occupancy", version: 1, required: 0, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ("amdgpu-waves-per-eu", "2")), (gv: ^[[KERNEL]], module: ^0, ints: (91))))
+; A: = extension: (name: "amdgpu-launch-attrs", version: 1, required: 0, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ("amdgpu-waves-per-eu", "2")), (gv: ^[[KERNEL]], module: ^0, ints: (91))))
 ; A: = extension: (name: "fn-attrs", version: 1, required: 1, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ({{.*}}, "amdgpu-waves-per-eu", "7"))))
 
 ; B: ^[[F:[0-9]+]] = gv: (guid: {{[0-9]+}}, summaries: (function: (module: ^0, flags: (linkage: weak_odr,
-; B: = extension: (name: "amdgpu-occupancy", version: 1, required: 0, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ("amdgpu-waves-per-eu", "7"))))
+; B: = extension: (name: "amdgpu-launch-attrs", version: 1, required: 0, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ("amdgpu-waves-per-eu", "7"))))
 ; B: = extension: (name: "fn-attrs", version: 1, required: 1, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ({{.*}}, "amdgpu-waves-per-eu", "7"))))
 
 ;--- a.ll

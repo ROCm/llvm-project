@@ -8,6 +8,7 @@
 
 #include "AMDGPUThinLinkPasses.h"
 #include "AMDGPU.h"
+#include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/SummaryCallGraph.h"
@@ -26,19 +27,24 @@ using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-thinlink"
 
-/// The summary extension with the occupancy facts: an entry for each kernel,
-/// and for each function with an occupancy attribute. An entry holds the
-/// calling convention of the function, then the name and the value of each
-/// occupancy attribute of the function. Only the thin link uses the facts, so
-/// the extension is not required.
-static constexpr StringLiteral OccupancyFactsName = "amdgpu-occupancy";
-static constexpr uint64_t OccupancyFactsVersion = 1;
+/// The summary extension with the launch facts: an entry for each entry
+/// function (a kernel or a shader), and for each function with a launch
+/// attribute. An entry holds the calling convention of the function, then the
+/// name and the value of each launch attribute of the function. Only the thin
+/// link uses the facts, so the extension is not required.
+static constexpr StringLiteral LaunchFactsName = "amdgpu-launch-attrs";
+static constexpr uint64_t LaunchFactsVersion = 1;
 
-static constexpr StringLiteral FlatWorkGroupSizeAttr =
+/// The launch attributes: the attributes about the launches of the kernels
+/// that can reach a function.
+static constexpr StringLiteral FlatWorkGroupSizeName =
     "amdgpu-flat-work-group-size";
-static constexpr StringLiteral MaxNumWorkgroupsAttr =
+static constexpr StringLiteral MaxNumWorkgroupsName =
     "amdgpu-max-num-workgroups";
-static constexpr StringLiteral WavesPerEUAttr = "amdgpu-waves-per-eu";
+static constexpr StringLiteral WavesPerEUName = "amdgpu-waves-per-eu";
+static constexpr StringLiteral UniformWorkGroupSizeName =
+    "uniform-work-group-size";
+static constexpr StringLiteral ClusterDimsName = "amdgpu-cluster-dims";
 
 /// The summary extension with the implicit arguments that the code of each
 /// function uses, without the functions that it calls. An entry holds their
@@ -64,24 +70,24 @@ static StringRef getImplicitArgName(StringRef Attr) {
   return Attr;
 }
 
-static void addOccupancyFacts(const Function &F,
-                              const GlobalValueSummary &Summary,
-                              ModuleSummaryIndex &Index) {
+static void addLaunchFacts(const Function &F, const GlobalValueSummary &Summary,
+                           ModuleSummaryIndex &Index) {
   SummaryExtension::Entry E;
   for (StringRef Name :
-       {FlatWorkGroupSizeAttr, MaxNumWorkgroupsAttr, WavesPerEUAttr}) {
+       {FlatWorkGroupSizeName, MaxNumWorkgroupsName, WavesPerEUName,
+        UniformWorkGroupSizeName, ClusterDimsName}) {
     Attribute A = F.getFnAttribute(Name);
     if (!A.isStringAttribute())
       continue;
     E.Strings.push_back(Name.str());
     E.Strings.push_back(A.getValueAsString().str());
   }
-  // A kernel has facts also without occupancy attributes.
-  if (E.Strings.empty() && F.getCallingConv() != CallingConv::AMDGPU_KERNEL)
+  // An entry function has facts also without launch attributes.
+  if (E.Strings.empty() && !AMDGPU::isEntryFunctionCC(F.getCallingConv()))
     return;
   E.Ints.push_back(F.getCallingConv());
   Index
-      .getOrInsertExtension(OccupancyFactsName, OccupancyFactsVersion,
+      .getOrInsertExtension(LaunchFactsName, LaunchFactsVersion,
                             /*Required=*/false)
       .setEntry(&Summary, std::move(E));
 }
@@ -109,7 +115,7 @@ static void addImplicitArgFacts(const Function &F,
 void llvm::addAMDGPUThinLinkFacts(const Function &F,
                                   const GlobalValueSummary &Summary,
                                   ModuleSummaryIndex &Index) {
-  addOccupancyFacts(F, Summary, Index);
+  addLaunchFacts(F, Summary, Index);
   addImplicitArgFacts(F, Summary, Index);
 }
 
@@ -129,7 +135,7 @@ struct OccupancyAttrs {
   /// Sets the attribute \p Name to \p Value. If \p Value is not valid, the
   /// attribute keeps its default value.
   void set(StringRef Name, StringRef Value) {
-    if (Name == FlatWorkGroupSizeAttr) {
+    if (Name == FlatWorkGroupSizeName) {
       auto [MinS, MaxS] = Value.split(',');
       uint32_t Min, Max;
       if (!MinS.trim().getAsInteger(0, Min) &&
@@ -137,7 +143,7 @@ struct OccupancyAttrs {
         FlatWGSizeMin = Min;
         FlatWGSizeMax = Max;
       }
-    } else if (Name == WavesPerEUAttr) {
+    } else if (Name == WavesPerEUName) {
       auto [MinS, MaxS] = Value.split(',');
       MaxS = MaxS.trim();
       uint32_t Min, Max;
@@ -150,7 +156,7 @@ struct OccupancyAttrs {
         WavesPerEUMin = Min;
         WavesPerEUMax = Max;
       }
-    } else if (Name == MaxNumWorkgroupsAttr) {
+    } else if (Name == MaxNumWorkgroupsName) {
       SmallVector<StringRef, 3> Parts;
       Value.split(Parts, ',');
       uint32_t X, Y, Z;
@@ -193,24 +199,71 @@ struct OccupancyAttrs {
   }
 };
 
-/// The occupancy facts of a function: its calling convention and its own
-/// occupancy attributes. An attribute that the function does not have gets
-/// its default value.
-struct OccupancyFacts {
+/// The launch facts of a function: its calling convention and its own launch
+/// attributes. An attribute that the function does not have gets its default
+/// value.
+struct LaunchFacts {
   CallingConv::ID CC = CallingConv::C;
-  OccupancyAttrs Attrs;
+  OccupancyAttrs Occupancy;
+  bool UniformWorkGroupSize = false;
+  AMDGPU::ClusterDimsAttr ClusterDims;
+
+  bool isKernel() const { return CC == CallingConv::AMDGPU_KERNEL; }
 };
 
-/// Reads the occupancy facts in \p E. Returns nullopt if \p E is not valid.
-std::optional<OccupancyFacts> readFacts(const SummaryExtension::Entry &E) {
+/// Reads the launch facts in \p E. Returns nullopt if \p E is not valid.
+std::optional<LaunchFacts> readLaunchFacts(const SummaryExtension::Entry &E) {
   if (E.Ints.size() != 1 || E.Ints[0] > CallingConv::MaxID ||
       E.Strings.size() % 2 != 0)
     return std::nullopt;
-  OccupancyFacts Facts;
+  LaunchFacts Facts;
   Facts.CC = static_cast<CallingConv::ID>(E.Ints[0]);
-  for (size_t I = 0; I < E.Strings.size(); I += 2)
-    Facts.Attrs.set(E.Strings[I], E.Strings[I + 1]);
+  for (size_t I = 0; I < E.Strings.size(); I += 2) {
+    StringRef Name = E.Strings[I], Value = E.Strings[I + 1];
+    if (Name == UniformWorkGroupSizeName)
+      Facts.UniformWorkGroupSize = true;
+    else if (Name == ClusterDimsName)
+      Facts.ClusterDims = AMDGPU::ClusterDimsAttr::get(Value);
+    else
+      Facts.Occupancy.set(Name, Value);
+  }
   return Facts;
+}
+
+/// The launch facts of the functions, from the copy of each function that
+/// prevails.
+using LaunchFactsMap = DenseMap<const SummaryCallGraph::Node *, LaunchFacts>;
+
+/// Returns the launch facts of the functions in \p CG, or nullopt if \p Index
+/// has no launch facts.
+std::optional<LaunchFactsMap> getLaunchFacts(const ModuleSummaryIndex &Index,
+                                             const SummaryCallGraph &CG) {
+  const SummaryExtension *Ext =
+      Index.getExtension(LaunchFactsName, LaunchFactsVersion);
+  if (!Ext)
+    return std::nullopt;
+  LaunchFactsMap Facts;
+  for (const SummaryCallGraph::Node *N : CG.nodes()) {
+    const FunctionSummary *S = N->getSummary();
+    const SummaryExtension::Entry *E = S ? Ext->getEntry(S) : nullptr;
+    if (!E)
+      continue;
+    if (std::optional<LaunchFacts> F = readLaunchFacts(*E))
+      Facts.try_emplace(N, *F);
+    else
+      LLVM_DEBUG(dbgs() << "AMDGPU thin link: the launch facts of "
+                        << N->getValueInfo() << " are not valid\n");
+  }
+  return Facts;
+}
+
+/// Returns the facts of \p N if it is a kernel, or null.
+const LaunchFacts *getKernelFacts(const LaunchFactsMap &Facts,
+                                  const SummaryCallGraph::Node &N) {
+  auto It = Facts.find(&N);
+  if (It == Facts.end() || !It->second.isKernel())
+    return nullptr;
+  return &It->second;
 }
 
 /// A top-down problem: the value of a function is the merge of the occupancy
@@ -218,23 +271,15 @@ std::optional<OccupancyFacts> readFacts(const SummaryExtension::Entry &E) {
 struct KernelOccupancyProblem {
   using ValueT = std::optional<OccupancyAttrs>;
 
-  /// The facts of the copy of each function that prevails.
-  const DenseMap<const SummaryCallGraph::Node *, OccupancyFacts> &Facts;
-
-  /// Returns the attributes of \p N if it is a kernel, or null.
-  const OccupancyAttrs *getKernelAttrs(const SummaryCallGraph::Node &N) const {
-    auto It = Facts.find(&N);
-    if (It == Facts.end() || It->second.CC != CallingConv::AMDGPU_KERNEL)
-      return nullptr;
-    return &It->second.Attrs;
-  }
+  const LaunchFactsMap &Facts;
 
   ValueT getInitialValue(const SummaryCallGraph::Node &) {
     return std::nullopt;
   }
 
-  /// The code outside the summaries launches kernels. The pass assumes that it
-  /// calls no device function.
+  /// The code outside the summaries launches kernels. Unlike the other
+  /// passes, and like the occupancy propagation before the thin-link passes,
+  /// the pass assumes that this code calls no device function.
   ValueT getExternalValue() { return std::nullopt; }
 
   void join(ValueT &Into, const ValueT &V) {
@@ -249,9 +294,89 @@ struct KernelOccupancyProblem {
   /// Code cannot call a kernel, so the value of a kernel is its own
   /// attributes.
   ValueT transfer(const SummaryCallGraph::Node &N, const ValueT &In) {
-    if (const OccupancyAttrs *Kernel = getKernelAttrs(N))
-      return *Kernel;
+    if (const LaunchFacts *Kernel = getKernelFacts(Facts, N))
+      return Kernel->Occupancy;
     return In;
+  }
+};
+
+/// A top-down problem: the value of a function is true if all kernels that can
+/// reach it have the attribute uniform-work-group-size, false if some kernel
+/// does not have it, and none if no kernel can reach the function.
+struct UniformWorkGroupSizeProblem {
+  using ValueT = std::optional<bool>;
+
+  const LaunchFactsMap &Facts;
+
+  ValueT getInitialValue(const SummaryCallGraph::Node &) {
+    return std::nullopt;
+  }
+
+  /// Like in the attributor, the code outside the summaries can call a function
+  /// that it can see from a kernel without the attribute.
+  ValueT getExternalValue() { return false; }
+
+  void join(ValueT &Into, const ValueT &V) {
+    if (V)
+      Into = Into ? *Into && *V : *V;
+  }
+
+  ValueT transfer(const SummaryCallGraph::Node &N, const ValueT &In) {
+    if (const LaunchFacts *Kernel = getKernelFacts(Facts, N))
+      return Kernel->UniformWorkGroupSize;
+    return In;
+  }
+};
+
+/// Joins the cluster dimensions \p A and \p B like the attributor: the result
+/// is unknown if only one of them uses clusters, and variable if both use
+/// clusters with different dimensions.
+AMDGPU::ClusterDimsAttr joinClusterDims(AMDGPU::ClusterDimsAttr A,
+                                        const AMDGPU::ClusterDimsAttr &B) {
+  if (A == B)
+    return A;
+  if (A.isUnknown() || B.isUnknown() || A.isNoCluster() || B.isNoCluster())
+    return AMDGPU::ClusterDimsAttr();
+  A.setVariableDims();
+  return A;
+}
+
+/// A top-down problem: the value of a function is the join of the cluster
+/// dimensions of the entry functions that can reach it and of the functions
+/// on the way, or none if they have no cluster dimensions. An entry function
+/// without the attribute amdgpu-cluster-dims makes the value unknown.
+struct ClusterDimsProblem {
+  using ValueT = std::optional<AMDGPU::ClusterDimsAttr>;
+
+  const LaunchFactsMap &Facts;
+
+  ValueT getInitialValue(const SummaryCallGraph::Node &) {
+    return std::nullopt;
+  }
+
+  /// Like in the attributor, the cluster dimensions of the callers outside the
+  /// summaries are unknown.
+  ValueT getExternalValue() { return AMDGPU::ClusterDimsAttr(); }
+
+  void join(ValueT &Into, const ValueT &V) {
+    if (!V)
+      return;
+    Into = Into ? joinClusterDims(*Into, *V) : *V;
+  }
+
+  /// Like in the attributor, an entry function gets its own attribute, and
+  /// another function joins its own attribute with the value of its callers.
+  ValueT transfer(const SummaryCallGraph::Node &N, const ValueT &In) {
+    auto It = Facts.find(&N);
+    if (It == Facts.end())
+      return In;
+    const LaunchFacts &F = It->second;
+    if (AMDGPU::isEntryFunctionCC(F.CC))
+      return F.ClusterDims;
+    ValueT Out = In;
+    if (!F.ClusterDims.isUnknown())
+      join(Out, F.ClusterDims);
+    return Out;
   }
 };
 
@@ -296,25 +421,11 @@ struct ImplicitArgUsesProblem {
 
 PreservedAnalyses AMDGPUThinLinkOccupancyPass::run(ModuleSummaryIndex &Index,
                                                    SummaryAnalysisManager &AM) {
-  const SummaryExtension *FactsExt =
-      Index.getExtension(OccupancyFactsName, OccupancyFactsVersion);
-  // Build the call graph only for a link with occupancy facts.
-  if (!FactsExt)
+  // Build the call graph only for a link with launch facts.
+  if (!Index.getExtension(LaunchFactsName, LaunchFactsVersion))
     return PreservedAnalyses::all();
-
   const SummaryCallGraph &CG = AM.getResult<SummaryCallGraphAnalysis>(Index);
-  DenseMap<const SummaryCallGraph::Node *, OccupancyFacts> Facts;
-  for (const SummaryCallGraph::Node *N : CG.nodes()) {
-    const FunctionSummary *S = N->getSummary();
-    const SummaryExtension::Entry *E = S ? FactsExt->getEntry(S) : nullptr;
-    if (!E)
-      continue;
-    if (std::optional<OccupancyFacts> F = readFacts(*E))
-      Facts.try_emplace(N, *F);
-    else
-      LLVM_DEBUG(dbgs() << "AMDGPU thin link: the occupancy facts of "
-                        << N->getValueInfo() << " are not valid\n");
-  }
+  LaunchFactsMap Facts = *getLaunchFacts(Index, CG);
 
   KernelOccupancyProblem Problem{Facts};
   auto Values =
@@ -323,16 +434,16 @@ PreservedAnalyses AMDGPUThinLinkOccupancyPass::run(ModuleSummaryIndex &Index,
   for (const SummaryCallGraph::Node *N : CG.nodes()) {
     // A kernel keeps its own attributes. An alias has no code.
     std::optional<OccupancyAttrs> Result = Values.lookup(N);
-    if (!Result || Problem.getKernelAttrs(*N) || N->copies().empty())
+    if (!Result || getKernelFacts(Facts, *N) || N->copies().empty())
       continue;
 
     // A function with its own attributes gets their merge with the
     // attributes of the kernels.
     if (auto It = Facts.find(N); It != Facts.end())
-      Result->merge(It->second.Attrs);
+      Result->merge(It->second.Occupancy);
 
     ThinLinkFnAttrs Attrs;
-    Attrs.add(FlatWorkGroupSizeAttr, std::to_string(Result->FlatWGSizeMin) +
+    Attrs.add(FlatWorkGroupSizeName, std::to_string(Result->FlatWGSizeMin) +
                                          "," +
                                          std::to_string(Result->FlatWGSizeMax));
     // The merge of valid attributes is valid. If an input is not valid, the
@@ -341,12 +452,12 @@ PreservedAnalyses AMDGPUThinLinkOccupancyPass::run(ModuleSummaryIndex &Index,
       std::string WavesPerEU = std::to_string(Result->WavesPerEUMin);
       if (Result->WavesPerEUMax)
         WavesPerEU += "," + std::to_string(*Result->WavesPerEUMax);
-      Attrs.add(WavesPerEUAttr, WavesPerEU);
+      Attrs.add(WavesPerEUName, WavesPerEU);
     } else {
       LLVM_DEBUG(dbgs() << "AMDGPU thin link: the waves per EU of "
                         << N->getValueInfo() << " are not valid\n");
     }
-    Attrs.add(MaxNumWorkgroupsAttr, std::to_string(Result->MaxNumWGX) + "," +
+    Attrs.add(MaxNumWorkgroupsName, std::to_string(Result->MaxNumWGX) + "," +
                                         std::to_string(Result->MaxNumWGY) +
                                         "," +
                                         std::to_string(Result->MaxNumWGZ));
@@ -356,6 +467,62 @@ PreservedAnalyses AMDGPUThinLinkOccupancyPass::run(ModuleSummaryIndex &Index,
   }
 
   // The pass adds only results, which no analysis uses.
+  return PreservedAnalyses::all();
+}
+
+PreservedAnalyses
+AMDGPUThinLinkUniformWorkGroupSizePass::run(ModuleSummaryIndex &Index,
+                                            SummaryAnalysisManager &AM) {
+  if (!Index.getExtension(LaunchFactsName, LaunchFactsVersion))
+    return PreservedAnalyses::all();
+  const SummaryCallGraph &CG = AM.getResult<SummaryCallGraphAnalysis>(Index);
+  LaunchFactsMap Facts = *getLaunchFacts(Index, CG);
+
+  UniformWorkGroupSizeProblem Problem{Facts};
+  auto Values =
+      solveSummaryDataflow(CG, Problem, SummaryDataflowDirection::TopDown);
+
+  for (const SummaryCallGraph::Node *N : CG.nodes()) {
+    // A kernel keeps its own attribute. An alias has no code.
+    if (Values.lookup(N) != true || getKernelFacts(Facts, *N) ||
+        N->copies().empty())
+      continue;
+    ThinLinkFnAttrs Attrs;
+    Attrs.add(UniformWorkGroupSizeName);
+    ThinLinkFnAttrs::addToSummaries(Index, N->getValueInfo(), Attrs);
+  }
+  return PreservedAnalyses::all();
+}
+
+PreservedAnalyses
+AMDGPUThinLinkClusterDimsPass::run(ModuleSummaryIndex &Index,
+                                   SummaryAnalysisManager &AM) {
+  if (!Index.getExtension(LaunchFactsName, LaunchFactsVersion))
+    return PreservedAnalyses::all();
+  const SummaryCallGraph &CG = AM.getResult<SummaryCallGraphAnalysis>(Index);
+  LaunchFactsMap Facts = *getLaunchFacts(Index, CG);
+
+  ClusterDimsProblem Problem{Facts};
+  auto Values =
+      solveSummaryDataflow(CG, Problem, SummaryDataflowDirection::TopDown);
+
+  for (const SummaryCallGraph::Node *N : CG.nodes()) {
+    // An alias has no code.
+    if (N->copies().empty())
+      continue;
+    std::optional<AMDGPU::ClusterDimsAttr> Result = Values.lookup(N);
+    if (!Result || Result->isUnknown())
+      continue;
+    // An entry function keeps its own attribute. Do not set the attribute that
+    // a function has.
+    auto It = Facts.find(N);
+    if (It != Facts.end() && (AMDGPU::isEntryFunctionCC(It->second.CC) ||
+                              It->second.ClusterDims == *Result))
+      continue;
+    ThinLinkFnAttrs Attrs;
+    Attrs.add(ClusterDimsName, Result->to_string());
+    ThinLinkFnAttrs::addToSummaries(Index, N->getValueInfo(), Attrs);
+  }
   return PreservedAnalyses::all();
 }
 
@@ -411,11 +578,17 @@ void llvm::registerAMDGPUThinLinkPasses(PassBuilder &PB) {
           PB.getPassInstrumentationCallbacks()) {
     PIC->addClassToPassName(AMDGPUThinLinkOccupancyPass::name(),
                             "amdgpu-thinlink-occupancy");
+    PIC->addClassToPassName(AMDGPUThinLinkUniformWorkGroupSizePass::name(),
+                            "amdgpu-thinlink-uniform-work-group-size");
+    PIC->addClassToPassName(AMDGPUThinLinkClusterDimsPass::name(),
+                            "amdgpu-thinlink-cluster-dims");
     PIC->addClassToPassName(AMDGPUThinLinkImplicitArgsPass::name(),
                             "amdgpu-thinlink-implicit-args");
   }
   PB.registerSummaryPipelineEPCallback([](SummaryPassManager &SPM) {
     SPM.addPass(AMDGPUThinLinkOccupancyPass());
+    SPM.addPass(AMDGPUThinLinkUniformWorkGroupSizePass());
+    SPM.addPass(AMDGPUThinLinkClusterDimsPass());
     SPM.addPass(AMDGPUThinLinkImplicitArgsPass());
   });
   PB.registerPipelineParsingCallback(
@@ -425,6 +598,10 @@ void llvm::registerAMDGPUThinLinkPasses(PassBuilder &PB) {
           return false;
         if (Name == "amdgpu-thinlink-occupancy")
           SPM.addPass(AMDGPUThinLinkOccupancyPass());
+        else if (Name == "amdgpu-thinlink-uniform-work-group-size")
+          SPM.addPass(AMDGPUThinLinkUniformWorkGroupSizePass());
+        else if (Name == "amdgpu-thinlink-cluster-dims")
+          SPM.addPass(AMDGPUThinLinkClusterDimsPass());
         else if (Name == "amdgpu-thinlink-implicit-args")
           SPM.addPass(AMDGPUThinLinkImplicitArgsPass());
         else
