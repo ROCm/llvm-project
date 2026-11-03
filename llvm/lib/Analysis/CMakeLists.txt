@@ -166,6 +166,7 @@ add_llvm_component_library(LLVMAnalysis
   StackLifetime.cpp
   StackSafetyAnalysis.cpp
   StructuralHash.cpp
+  SummaryCallGraph.cpp
   TFLiteUtils.cpp
   TargetLibraryInfo.cpp
   TargetTransformInfo.cpp
