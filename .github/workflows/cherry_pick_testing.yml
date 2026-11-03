@@ -759,6 +759,37 @@ jobs:
         with:
           repository: "ROCm/TheRock"
           ref: ${{ needs.setup.outputs.ref }}
+      # Ahead of the evaluation step, which exits non-zero when anything
+      # failed and would otherwise take the links down with it.
+      - name: Link the tarballs
+        env:
+          LINUX_TARBALL_URLS: ${{ needs.build_linux_tarballs.outputs.tarball_urls }}
+          WINDOWS_TARBALL_URLS: ${{ needs.build_windows_tarballs.outputs.tarball_urls }}
+        run: |
+          python3 - <<'LINKS'
+          import json
+          import os
+
+          rows = []
+          for platform in ("linux", "windows"):
+              raw = os.environ[f"{platform.upper()}_TARBALL_URLS"]
+              # Skipped jobs hand back an empty string rather than "{}".
+              for family, url in (json.loads(raw) if raw else {}).items():
+                  rows.append((platform, family, url))
+
+          if not rows:
+              print("No tarballs were published.")
+              raise SystemExit(0)
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("\n## Tarballs\n\n")
+              summary.write("| Platform | Family | Download |\n|---|---|---|\n")
+              for platform, family, url in rows:
+                  name = url.rsplit("/", 1)[-1]
+                  summary.write(f"| {platform} | `{family}` | [{name}]({url}) |\n")
+                  print(f"{platform} {family}: {url}")
+          LINKS
+
       - name: Evaluate workflow results
         env:
           GITHUB_TOKEN: ${{ github.token }}
