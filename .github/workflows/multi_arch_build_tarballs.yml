@@ -31,6 +31,14 @@ on:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease".'
         type: string
         default: ""
+      repository:
+        description: "Repository to check out the build tools from."
+        type: string
+        default: ""
+      ref:
+        description: "Ref of `repository` to check out."
+        type: string
+        default: ""
   workflow_call:
     inputs:
       artifact_run_id:
@@ -51,6 +59,12 @@ on:
       release_type:
         type: string
         default: ""
+      repository:
+        type: string
+        default: ""
+      ref:
+        type: string
+        default: ""
 permissions:
   contents: read
 
@@ -69,6 +83,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref || github.ref_name }}
 
       - name: Setting up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
