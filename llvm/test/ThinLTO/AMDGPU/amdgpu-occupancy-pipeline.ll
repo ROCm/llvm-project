@@ -11,7 +11,7 @@
 ; RUN: llvm-lto2 run kernel.bc device.bc -o out -thinlto-distributed-indexes \
 ; RUN:   -debug-pass-manager -print-after=amdgpu-thinlink-occupancy \
 ; RUN:   -r=kernel.bc,kernel,px -r=kernel.bc,device_func,l \
-; RUN:   -r=device.bc,device_func,px 2>&1 | FileCheck %s
+; RUN:   -r=device.bc,device_func,p 2>&1 | FileCheck %s
 
 ; CHECK:      Running pass: ThinLinkFunctionAttrsPass on [summary index]
 ; CHECK-NEXT: Running analysis: ThinLinkInfoAnalysis on [summary index]
@@ -38,7 +38,7 @@
 ; RUN: llvm-lto2 run kernel.bc device.bc -o out -thinlto-distributed-indexes \
 ; RUN:   -thinlink-pipeline=amdgpu-thinlink-occupancy -debug-pass-manager \
 ; RUN:   -r=kernel.bc,kernel,px -r=kernel.bc,device_func,l \
-; RUN:   -r=device.bc,device_func,px 2>&1 | FileCheck %s --check-prefix=PIPELINE
+; RUN:   -r=device.bc,device_func,p 2>&1 | FileCheck %s --check-prefix=PIPELINE
 
 ; PIPELINE-NOT: Running pass
 ; PIPELINE:     Running pass: AMDGPUThinLinkOccupancyPass on [summary index]
