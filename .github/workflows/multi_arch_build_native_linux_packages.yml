@@ -128,6 +128,13 @@ jobs:
             --packages-dir "${{ env.PACKAGE_DIST_DIR }}" \
             --pkg-type ${{ inputs.native_package_type }}
 
+      - name: Build Package repository
+        run: |
+          python ./build_tools/packaging/linux/build_package_repo.py \
+            --pkg-type "${{ inputs.native_package_type }}" \
+            --package-dir "${{ env.PACKAGE_DIST_DIR }}" \
+            --release-type "${{ inputs.release_type }}"
+
       - name: Configure AWS credentials for artifact uploads
         if: ${{ github.repository == 'ROCm/TheRock' }}
         uses: ./.github/actions/configure_aws_artifacts_credentials
