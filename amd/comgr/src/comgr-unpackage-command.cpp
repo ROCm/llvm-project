@@ -88,10 +88,10 @@ bool UnpackageCommand::canCache() const {
       MemoryBufferRef(PackageData, PackageName));
 }
 
-Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {
-  OutputFileNames.clear();
-  DataKinds.clear();
-
+Error UnpackageCommand::splitCachedOutput(
+    StringRef CachedBuffer, SmallVectorImpl<std::string> &OutNames,
+    SmallVectorImpl<amd_comgr_data_kind_t> &OutKinds,
+    SmallVectorImpl<StringRef> &OutImages) {
   while (!CachedBuffer.empty()) {
     if (CachedBuffer.size() < sizeof(SizeFieldType))
       return createStringError(std::errc::invalid_argument,
@@ -103,7 +103,7 @@ Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {
     if (CachedBuffer.size() < NameSize)
       return createStringError(std::errc::invalid_argument,
                                "Not enough bytes to read output name");
-    StringRef Target = CachedBuffer.substr(0, NameSize);
+    StringRef Name = CachedBuffer.substr(0, NameSize);
     CachedBuffer = CachedBuffer.drop_front(NameSize);
 
     if (CachedBuffer.size() < sizeof(amd_comgr_data_kind_t))
@@ -126,15 +126,32 @@ Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {
     StringRef Image = CachedBuffer.substr(0, ImageSize);
     CachedBuffer = CachedBuffer.drop_front(ImageSize);
 
+    OutNames.push_back(Name.str());
+    OutKinds.push_back(DataKind);
+    OutImages.push_back(Image);
+  }
+
+  return Error::success();
+}
+
+Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {
+  OutputFileNames.clear();
+  DataKinds.clear();
+
+  SmallVector<std::string> Names;
+  SmallVector<StringRef> Images;
+  if (Error Err = splitCachedOutput(CachedBuffer, Names, DataKinds, Images))
+    return Err;
+
+  for (const auto &[Name, Image] : llvm::zip_equal(Names, Images)) {
     SmallString<128> OutputFilePath = OutputDir;
-    sys::path::append(OutputFilePath, Target);
+    sys::path::append(OutputFilePath, Name);
 
     if (Error Err =
             CachedCommandAdaptor::writeSingleOutputFile(OutputFilePath, Image))
       return Err;
 
     OutputFileNames.push_back(OutputFilePath.str().str());
-    DataKinds.push_back(DataKind);
   }
 
   return Error::success();
