@@ -39,6 +39,7 @@
 #include "llvm/Linker/IRMover.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/IRObjectFile.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/Caching.h"
 #include "llvm/Support/CommandLine.h"
@@ -2339,6 +2340,12 @@ static void thinLTOPropagateAMDGPUAttributes(
   };
 }
 
+} // end anonymous namespace
+
+// The thin-link passes are not in an anonymous namespace, so that the pass
+// instrumentation shows the same names with all compilers.
+namespace llvm {
+
 /// Propagates the function flags (norecurse, nounwind) over the summary call
 /// graph.
 struct ThinLinkFunctionAttrsPass
@@ -2381,7 +2388,44 @@ public:
   }
 };
 
-} // end anonymous namespace
+} // end namespace llvm
+
+/// Adds the passes of the default thin-link pipeline to \p SPM.
+static void addDefaultThinLinkPasses(SummaryPassManager &SPM,
+                                     lto::Config &Conf) {
+  SPM.addPass(ThinLinkFunctionAttrsPass());
+  SPM.addPass(ThinLinkAMDGPUAttributesPass(Conf));
+}
+
+/// Lets \p PB parse the names of the thin-link passes in this file, and lets
+/// the pass instrumentation in \p PIC show these names.
+static void registerThinLinkPasses(PassBuilder &PB,
+                                   PassInstrumentationCallbacks &PIC,
+                                   lto::Config &Conf) {
+  PIC.addClassToPassName(ThinLinkFunctionAttrsPass::name(),
+                         "thinlink-function-attrs");
+  PIC.addClassToPassName(ThinLinkAMDGPUAttributesPass::name(),
+                         "thinlink-amdgpu-attributes");
+  PIC.addClassToPassName(ThinLinkParamAccessPass::name(),
+                         "thinlink-param-access");
+  PB.registerPipelineParsingCallback(
+      [&Conf](StringRef Name, SummaryPassManager &SPM,
+              ArrayRef<PassBuilder::PipelineElement> InnerPipeline) {
+        if (!InnerPipeline.empty())
+          return false;
+        if (Name == "default")
+          addDefaultThinLinkPasses(SPM, Conf);
+        else if (Name == "thinlink-function-attrs")
+          SPM.addPass(ThinLinkFunctionAttrsPass());
+        else if (Name == "thinlink-amdgpu-attributes")
+          SPM.addPass(ThinLinkAMDGPUAttributesPass(Conf));
+        else if (Name == "thinlink-param-access")
+          SPM.addPass(ThinLinkParamAccessPass(Conf.LibraryOptions));
+        else
+          return false;
+        return true;
+      });
+}
 
 Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
                       const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols) {
@@ -2572,14 +2616,27 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
                                   recordNewLinkage, GUIDPreservedSymbols);
 
   // Run the thin-link passes that need the final linkage and the prevailing
-  // copies.
+  // copies. The pass builder needs a context only for its options, so it
+  // uses the context of the regular LTO module, which is done by now.
+  PassInstrumentationCallbacks PIC;
+  PassBuilder PB(RegularLTO.Ctx, /*TM=*/nullptr, /*PTO=*/std::nullopt,
+                 /*PGOOpt=*/std::nullopt, &PIC);
+  registerThinLinkPasses(PB, PIC, Conf);
   SummaryAnalysisManager SAM;
-  SAM.registerPass([] { return PassInstrumentationAnalysis(); });
+  PB.registerSummaryAnalyses(SAM);
   SAM.registerPass(
       [&] { return ThinLinkInfoAnalysis(GUIDPreservedSymbols, isPrevailing); });
   SummaryPassManager SPM;
-  SPM.addPass(ThinLinkFunctionAttrsPass());
-  SPM.addPass(ThinLinkAMDGPUAttributesPass(Conf));
+  if (Conf.ThinLinkPipeline.empty())
+    addDefaultThinLinkPasses(SPM, Conf);
+  else if (Error Err = PB.parsePassPipeline(SPM, Conf.ThinLinkPipeline))
+    return make_error<StringError>("unable to parse the thin-link pipeline '" +
+                                       Conf.ThinLinkPipeline +
+                                       "': " + toString(std::move(Err)),
+                                   inconvertibleErrorCode());
+  // Stack safety in the backends reads the parameter access ranges that this
+  // pass computes. The ranges of a module alone are not safe, so the pass also
+  // runs after a custom pipeline.
   SPM.addPass(ThinLinkParamAccessPass(Conf.LibraryOptions));
   SPM.run(ThinLTO.CombinedIndex, SAM);
 

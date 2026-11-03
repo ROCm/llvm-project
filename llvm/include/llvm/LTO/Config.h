@@ -125,6 +125,15 @@ struct Config {
   // conjunction OptPipeline.
   std::string AAPipeline;
 
+  /// If this field is set, the ThinLTO thin link runs this pipeline of summary
+  /// passes, instead of the default pipeline. The passes run on the combined
+  /// index after the link resolved the prevailing copies. The pass "default"
+  /// adds the passes of the default pipeline. After each pipeline, the link
+  /// runs ThinLinkParamAccessPass: stack safety in the backends needs its
+  /// results. Only the backends register pass plugins, so a plugin cannot add
+  /// summary passes to the thin link.
+  std::string ThinLinkPipeline;
+
   /// Setting this field will replace target triples in input files with this
   /// triple.
   std::string OverrideTriple;
