@@ -300,6 +300,49 @@ std::string llvm::computeLTOCacheKey(
         AddUnsigned(ET.first.isDSOLocal(Index.withDSOLocalPropagation()));
         AddUsedCfiGlobal(ET.first.getGUID());
       }
+
+      // The thin link can change these fields of a summary, also when the
+      // module itself does not change: the function flags (function attribute
+      // propagation), the MemProf clone decisions, and the parameter access
+      // ranges (stack safety).
+      FunctionSummary::FFlags Flags = FS->fflags();
+      AddUnsigned(Flags.ReadNone);
+      AddUnsigned(Flags.ReadOnly);
+      AddUnsigned(Flags.NoRecurse);
+      AddUnsigned(Flags.ReturnDoesNotAlias);
+      AddUnsigned(Flags.NoInline);
+      AddUnsigned(Flags.AlwaysInline);
+      AddUnsigned(Flags.NoUnwind);
+      AddUnsigned(Flags.MayThrow);
+      AddUnsigned(Flags.HasUnknownCall);
+      AddUnsigned(Flags.MustBeUnreachable);
+      AddUint64(FS->callsites().size());
+      for (const CallsiteInfo &CI : FS->callsites()) {
+        AddUint64(CI.Clones.size());
+        for (unsigned Clone : CI.Clones)
+          AddUnsigned(Clone);
+      }
+      AddUint64(FS->allocs().size());
+      for (const AllocInfo &AI : FS->allocs()) {
+        AddUint64(AI.Versions.size());
+        for (uint8_t Version : AI.Versions)
+          AddUint8(Version);
+      }
+      auto AddRange = [&](const ConstantRange &Range) {
+        AddUint64(Range.getLower().getZExtValue());
+        AddUint64(Range.getUpper().getZExtValue());
+      };
+      AddUint64(FS->paramAccesses().size());
+      for (const FunctionSummary::ParamAccess &PA : FS->paramAccesses()) {
+        AddUint64(PA.ParamNo);
+        AddRange(PA.Use);
+        AddUint64(PA.Calls.size());
+        for (const FunctionSummary::ParamAccess::Call &Call : PA.Calls) {
+          AddUint64(Call.ParamNo);
+          AddUint64(Call.Callee.getGUID());
+          AddRange(Call.Offsets);
+        }
+      }
     }
   };
 
