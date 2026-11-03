@@ -1943,7 +1943,6 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
 // Out over CFG predecessors. RPO until fixpoint. Succ edges form DSU classes.
 void ControlFlowRewriter::computeSparseGraph(
     SmallVectorImpl<WTComponent> &Components) {
-  Components.clear();
   DenseMap<MachineBasicBlock *, BlockSet> In;
   DenseMap<MachineBasicBlock *, BlockSet> Out;
 
