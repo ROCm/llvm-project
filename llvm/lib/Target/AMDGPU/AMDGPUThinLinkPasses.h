@@ -41,6 +41,16 @@ public:
   PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM);
 };
 
+/// Finds the implicit arguments that a function and the functions that it can
+/// call do not use, and gives the function the amdgpu-no-* attributes of these
+/// arguments. A backend cannot find them for a function that calls a function
+/// in another module.
+class AMDGPUThinLinkImplicitArgsPass
+    : public RequiredPassInfoMixin<AMDGPUThinLinkImplicitArgsPass> {
+public:
+  PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM);
+};
+
 /// Adds the AMDGPU passes to the ThinLTO thin link that \p PB builds.
 void registerAMDGPUThinLinkPasses(PassBuilder &PB);
 
