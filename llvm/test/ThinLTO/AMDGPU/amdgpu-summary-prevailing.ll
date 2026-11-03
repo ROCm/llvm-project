@@ -7,7 +7,8 @@
 ; RUN: opt -module-summary < %t/a.ll -o %t/a.bc
 ; RUN: opt -module-summary < %t/b.ll -o %t/b.bc
 ; RUN: llvm-lto2 run %t/a.bc %t/b.bc -o %t/o \
-; RUN:   -thinlto-distributed-indexes -r=%t/a.bc,f, -r=%t/a.bc,kernel,px \
+; RUN:   -thinlto-distributed-indexes -thinlink-pipeline=amdgpu-thinlink-occupancy \
+; RUN:   -r=%t/a.bc,f, -r=%t/a.bc,kernel,px \
 ; RUN:   -r=%t/b.bc,f,px
 ; RUN: llvm-dis %t/a.bc.thinlto.bc -o - | FileCheck %s --check-prefix=A
 ; RUN: llvm-dis %t/b.bc.thinlto.bc -o - | FileCheck %s --check-prefix=B

@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUThinLinkPasses.h"
+#include "AMDGPU.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/SummaryCallGraph.h"
 #include "llvm/Analysis/SummaryDataflow.h"
@@ -22,7 +24,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "amdgpu-thinlink-occupancy"
+#define DEBUG_TYPE "amdgpu-thinlink"
 
 /// The summary extension with the occupancy facts: an entry for each kernel,
 /// and for each function with an occupancy attribute. An entry holds the
@@ -38,9 +40,33 @@ static constexpr StringLiteral MaxNumWorkgroupsAttr =
     "amdgpu-max-num-workgroups";
 static constexpr StringLiteral WavesPerEUAttr = "amdgpu-waves-per-eu";
 
-void llvm::addAMDGPUThinLinkFacts(const Function &F,
-                                  const GlobalValueSummary &Summary,
-                                  ModuleSummaryIndex &Index) {
+/// The summary extension with the implicit arguments that the code of each
+/// function uses, without the functions that it calls. An entry holds their
+/// names: the names of their attributes without the "amdgpu-no-" prefix. A
+/// function without an entry can use all implicit arguments. Bump the version
+/// when getLocalImplicitArgUses() finds the uses of a new implicit argument.
+static constexpr StringLiteral ImplicitArgFactsName = "amdgpu-implicit-args";
+static constexpr uint64_t ImplicitArgFactsVersion = 1;
+
+/// The attributes for the implicit arguments that a function does not use, in
+/// the order of the bits of AMDGPU::getLocalImplicitArgUses().
+#define AMDGPU_ATTRIBUTE(Name, Str) Str,
+static constexpr StringLiteral ImplicitArgAttrs[] = {
+#include "AMDGPUAttributes.def"
+};
+static constexpr uint32_t AllImplicitArgs =
+    (1u << std::size(ImplicitArgAttrs)) - 1;
+
+/// Returns the name of the implicit argument of the attribute \p Attr.
+static StringRef getImplicitArgName(StringRef Attr) {
+  [[maybe_unused]] bool HasPrefix = Attr.consume_front("amdgpu-no-");
+  assert(HasPrefix && "unexpected implicit argument attribute");
+  return Attr;
+}
+
+static void addOccupancyFacts(const Function &F,
+                              const GlobalValueSummary &Summary,
+                              ModuleSummaryIndex &Index) {
   SummaryExtension::Entry E;
   for (StringRef Name :
        {FlatWorkGroupSizeAttr, MaxNumWorkgroupsAttr, WavesPerEUAttr}) {
@@ -58,6 +84,33 @@ void llvm::addAMDGPUThinLinkFacts(const Function &F,
       .getOrInsertExtension(OccupancyFactsName, OccupancyFactsVersion,
                             /*Required=*/false)
       .setEntry(&Summary, std::move(E));
+}
+
+static void addImplicitArgFacts(const Function &F,
+                                const GlobalValueSummary &Summary,
+                                ModuleSummaryIndex &Index) {
+  // Like the attributor, do not change an optnone function. Without facts, it
+  // and its callers can use all implicit arguments.
+  if (F.hasOptNone())
+    return;
+  std::optional<uint32_t> Uses = AMDGPU::getLocalImplicitArgUses(F);
+  if (!Uses)
+    return;
+  SummaryExtension::Entry E;
+  for (auto [I, Attr] : enumerate(ImplicitArgAttrs))
+    if (*Uses & (1u << I))
+      E.Strings.push_back(getImplicitArgName(Attr).str());
+  Index
+      .getOrInsertExtension(ImplicitArgFactsName, ImplicitArgFactsVersion,
+                            /*Required=*/false)
+      .setEntry(&Summary, std::move(E));
+}
+
+void llvm::addAMDGPUThinLinkFacts(const Function &F,
+                                  const GlobalValueSummary &Summary,
+                                  ModuleSummaryIndex &Index) {
+  addOccupancyFacts(F, Summary, Index);
+  addImplicitArgFacts(F, Summary, Index);
 }
 
 namespace {
@@ -202,6 +255,43 @@ struct KernelOccupancyProblem {
   }
 };
 
+/// Returns the implicit arguments that a copy of a function with the facts
+/// \p E uses. A copy without valid facts can use all of them.
+uint32_t readImplicitArgUses(const SummaryExtension::Entry *E) {
+  if (!E || !E->Ints.empty())
+    return AllImplicitArgs;
+  uint32_t Uses = 0;
+  for (StringRef Name : E->Strings) {
+    const auto *It = find_if(ImplicitArgAttrs, [&](StringRef Attr) {
+      return getImplicitArgName(Attr) == Name;
+    });
+    if (It == std::end(ImplicitArgAttrs))
+      return AllImplicitArgs;
+    Uses |= 1u << (It - std::begin(ImplicitArgAttrs));
+  }
+  return Uses;
+}
+
+/// A bottom-up problem: the value of a function is the set of the implicit
+/// arguments that the function and the functions that it can call use.
+struct ImplicitArgUsesProblem {
+  using ValueT = uint32_t;
+
+  /// The implicit arguments that the code of each function uses.
+  const DenseMap<const SummaryCallGraph::Node *, uint32_t> &LocalUses;
+
+  ValueT getInitialValue(const SummaryCallGraph::Node &) { return 0; }
+
+  /// The code outside the summaries can use all implicit arguments.
+  ValueT getExternalValue() { return AllImplicitArgs; }
+
+  void join(ValueT &Into, const ValueT &V) { Into |= V; }
+
+  ValueT transfer(const SummaryCallGraph::Node &N, const ValueT &In) {
+    return In | LocalUses.lookup(&N);
+  }
+};
+
 } // end anonymous namespace
 
 PreservedAnalyses AMDGPUThinLinkOccupancyPass::run(ModuleSummaryIndex &Index,
@@ -269,19 +359,76 @@ PreservedAnalyses AMDGPUThinLinkOccupancyPass::run(ModuleSummaryIndex &Index,
   return PreservedAnalyses::all();
 }
 
+PreservedAnalyses
+AMDGPUThinLinkImplicitArgsPass::run(ModuleSummaryIndex &Index,
+                                    SummaryAnalysisManager &AM) {
+  const SummaryExtension *FactsExt =
+      Index.getExtension(ImplicitArgFactsName, ImplicitArgFactsVersion);
+  // Build the call graph only for a link with facts about implicit arguments.
+  if (!FactsExt)
+    return PreservedAnalyses::all();
+
+  const SummaryCallGraph &CG = AM.getResult<SummaryCallGraphAnalysis>(Index);
+  // Each copy of a function can run, so the code of a function uses the
+  // implicit arguments that any of its copies uses.
+  DenseMap<const SummaryCallGraph::Node *, uint32_t> LocalUses;
+  for (const SummaryCallGraph::Node *N : CG.nodes()) {
+    uint32_t Uses = 0;
+    for (const FunctionSummary *Copy : N->copies())
+      Uses |= readImplicitArgUses(FactsExt->getEntry(Copy));
+    if (Uses)
+      LocalUses[N] = Uses;
+  }
+
+  ImplicitArgUsesProblem Problem{LocalUses};
+  auto Values =
+      solveSummaryDataflow(CG, Problem, SummaryDataflowDirection::BottomUp);
+
+  for (const SummaryCallGraph::Node *N : CG.nodes()) {
+    // An alias has no code.
+    auto It = Values.find(N);
+    if (N->copies().empty() || It == Values.end())
+      continue;
+    uint32_t Unused = AllImplicitArgs & ~It->second;
+    if (!Unused)
+      continue;
+    ThinLinkFnAttrs Attrs;
+    for (auto [I, Attr] : enumerate(ImplicitArgAttrs))
+      if (Unused & (1u << I))
+        Attrs.add(Attr);
+    LLVM_DEBUG(dbgs() << "AMDGPU thin link: set the implicit argument "
+                         "attributes of "
+                      << N->getValueInfo() << "\n");
+    ThinLinkFnAttrs::addToSummaries(Index, N->getValueInfo(), Attrs);
+  }
+
+  // The pass adds only results, which no analysis uses.
+  return PreservedAnalyses::all();
+}
+
 void llvm::registerAMDGPUThinLinkPasses(PassBuilder &PB) {
-  if (PassInstrumentationCallbacks *PIC = PB.getPassInstrumentationCallbacks())
+  if (PassInstrumentationCallbacks *PIC =
+          PB.getPassInstrumentationCallbacks()) {
     PIC->addClassToPassName(AMDGPUThinLinkOccupancyPass::name(),
                             "amdgpu-thinlink-occupancy");
+    PIC->addClassToPassName(AMDGPUThinLinkImplicitArgsPass::name(),
+                            "amdgpu-thinlink-implicit-args");
+  }
   PB.registerSummaryPipelineEPCallback([](SummaryPassManager &SPM) {
     SPM.addPass(AMDGPUThinLinkOccupancyPass());
+    SPM.addPass(AMDGPUThinLinkImplicitArgsPass());
   });
   PB.registerPipelineParsingCallback(
       [](StringRef Name, SummaryPassManager &SPM,
          ArrayRef<PassBuilder::PipelineElement> InnerPipeline) {
-        if (Name != "amdgpu-thinlink-occupancy" || !InnerPipeline.empty())
+        if (!InnerPipeline.empty())
           return false;
-        SPM.addPass(AMDGPUThinLinkOccupancyPass());
+        if (Name == "amdgpu-thinlink-occupancy")
+          SPM.addPass(AMDGPUThinLinkOccupancyPass());
+        else if (Name == "amdgpu-thinlink-implicit-args")
+          SPM.addPass(AMDGPUThinLinkImplicitArgsPass());
+        else
+          return false;
         return true;
       });
 }

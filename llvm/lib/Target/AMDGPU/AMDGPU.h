@@ -444,6 +444,14 @@ public:
                         LazyCallGraph &CG, CGSCCUpdateResult &UR);
 };
 
+namespace AMDGPU {
+/// Returns the implicit arguments that the code of \p F can use, without the
+/// functions that \p F calls: bit I stands for the I-th attribute in
+/// AMDGPUAttributes.def. Returns std::nullopt if the code can use any implicit
+/// argument. The attributor finds the same uses.
+std::optional<uint32_t> getLocalImplicitArgUses(const Function &F);
+} // namespace AMDGPU
+
 class AMDGPUPreloadKernelArgumentsPass
     : public OptionalPassInfoMixin<AMDGPUPreloadKernelArgumentsPass> {
   const TargetMachine &TM;
