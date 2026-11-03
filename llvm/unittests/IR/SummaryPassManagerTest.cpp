@@ -7,9 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/SummaryPassManager.h"
+#include "llvm/Analysis/SummaryCallGraph.h"
 #include "llvm/AsmParser/Parser.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/PassInstrumentation.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Testing/Support/Error.h"
 #include "gtest/gtest.h"
 
 using namespace llvm;
@@ -151,6 +155,85 @@ TEST(SummaryPassManagerTest, Instrumentation) {
 
   ASSERT_EQ(Passes.size(), 1u);
   EXPECT_NE(Passes[0].find("MarkLivePass"), std::string::npos);
+}
+
+// The pass builder registers the summary analyses and parses a pipeline of
+// summary passes.
+TEST(SummaryPassManagerTest, ParsePipeline) {
+  std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(TwoFunctions);
+  ASSERT_NE(Index, nullptr);
+
+  LLVMContext Ctx;
+  PassBuilder PB(Ctx);
+  DenseSet<GlobalValue::GUID> Preserved;
+  SummaryAnalysisManager AM;
+  PB.registerSummaryAnalyses(AM);
+  AM.registerPass([&] {
+    return ThinLinkInfoAnalysis(
+        Preserved,
+        [](GlobalValue::GUID, const GlobalValueSummary *) { return true; });
+  });
+
+  SummaryPassManager PM;
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, "require<summary-callgraph>,"
+                                             "require<summary-address-taken>,"
+                                             "invalidate<summary-callgraph>"),
+                    Succeeded());
+  PM.run(*Index, AM);
+  EXPECT_EQ(AM.getCachedResult<SummaryCallGraphAnalysis>(*Index), nullptr);
+  EXPECT_NE(AM.getCachedResult<SummaryAddressTakenAnalysis>(*Index), nullptr);
+}
+
+TEST(SummaryPassManagerTest, ParsePipelineErrors) {
+  LLVMContext Ctx;
+  PassBuilder PB(Ctx);
+  SummaryPassManager PM;
+  EXPECT_THAT_ERROR(
+      PB.parsePassPipeline(PM, "require<summary-callgraph>)"),
+      FailedWithMessage(
+          "invalid summary pass pipeline 'require<summary-callgraph>)'"));
+  EXPECT_THAT_ERROR(PB.parsePassPipeline(PM, "no-such-pass"),
+                    FailedWithMessage("unknown summary pass 'no-such-pass'"));
+  // A pass over modules is not a summary pass.
+  EXPECT_THAT_ERROR(PB.parsePassPipeline(PM, "no-op-module"),
+                    FailedWithMessage("unknown summary pass 'no-op-module'"));
+  EXPECT_THAT_ERROR(
+      PB.parsePassPipeline(PM, "require<summary-callgraph>(require<"
+                               "summary-callgraph>)"),
+      FailedWithMessage("unknown summary pass 'require<summary-callgraph>'"));
+}
+
+// Callbacks add passes and analyses that the pass builder does not know.
+TEST(SummaryPassManagerTest, ParsingCallbacks) {
+  std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(TwoFunctions);
+  ASSERT_NE(Index, nullptr);
+
+  LLVMContext Ctx;
+  PassBuilder PB(Ctx);
+  unsigned Runs = 0, Seen = 0;
+  PB.registerAnalysisRegistrationCallback([&](SummaryAnalysisManager &AM) {
+    AM.registerPass([&] { return CountFunctionsAnalysis(Runs); });
+  });
+  PB.registerPipelineParsingCallback(
+      [&](StringRef Name, SummaryPassManager &PM,
+          ArrayRef<PassBuilder::PipelineElement> InnerPipeline) {
+        if (Name != "mark-live" || !InnerPipeline.empty())
+          return false;
+        PM.addPass(MarkLivePass(Seen, /*PreserveAll=*/false));
+        return true;
+      });
+
+  SummaryAnalysisManager AM;
+  PB.registerSummaryAnalyses(AM);
+  SummaryPassManager PM;
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, "mark-live,mark-live"),
+                    Succeeded());
+  PM.run(*Index, AM);
+  EXPECT_EQ(Seen, 2u);
+  EXPECT_EQ(Runs, 2u);
+  for (const auto &[GUID, Info] : *Index)
+    for (const auto &Summary : Info.getSummaryList())
+      EXPECT_TRUE(Summary->isLive());
 }
 
 TEST(SummaryPassManagerTest, StackTraceName) {

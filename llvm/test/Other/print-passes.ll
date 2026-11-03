@@ -26,3 +26,7 @@
 ; CHECK: simple-loop-unswitch<nontrivial;no-nontrivial;trivial;no-trivial>
 ; CHECK: Loop analyses:
 ; CHECK: no-op-loop
+; CHECK: Summary passes:
+; CHECK: print<summary-callgraph>
+; CHECK: Summary analyses:
+; CHECK: summary-callgraph

@@ -834,6 +834,20 @@ LOOP_PASS_WITH_PARAMS(
     parseLoopUnswitchOptions, "nontrivial;no-nontrivial;trivial;no-trivial")
 #undef LOOP_PASS_WITH_PARAMS
 
+#ifndef SUMMARY_ANALYSIS
+#define SUMMARY_ANALYSIS(NAME, CREATE_PASS)
+#endif
+SUMMARY_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
+SUMMARY_ANALYSIS("summary-address-taken", SummaryAddressTakenAnalysis())
+SUMMARY_ANALYSIS("summary-callgraph", SummaryCallGraphAnalysis())
+#undef SUMMARY_ANALYSIS
+
+#ifndef SUMMARY_PASS
+#define SUMMARY_PASS(NAME, CREATE_PASS)
+#endif
+SUMMARY_PASS("print<summary-callgraph>", SummaryCallGraphPrinterPass(errs()))
+#undef SUMMARY_PASS
+
 #ifdef MODULE_CALLBACK
 MODULE_CALLBACK("pipeline-start-callbacks", invokePipelineStartEPCallbacks)
 #endif

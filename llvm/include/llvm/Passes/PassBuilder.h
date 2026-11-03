@@ -19,6 +19,7 @@
 #include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/RegAllocCommon.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/IR/SummaryPassManager.h"
 #include "llvm/Passes/OptimizationLevel.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Error.h"
@@ -203,6 +204,14 @@ public:
   /// also pre-register analyses and this will not override those.
   LLVM_ABI void
   registerMachineFunctionAnalyses(MachineFunctionAnalysisManager &MFAM);
+
+  /// Registers all available summary analysis passes.
+  ///
+  /// This is an interface that can be used to populate a \c
+  /// SummaryAnalysisManager with all registered summary analyses. Callers can
+  /// still manually register any additional analyses. The caller must also
+  /// register \c ThinLinkInfoAnalysis, as it holds the facts of the link.
+  LLVM_ABI void registerSummaryAnalyses(SummaryAnalysisManager &SAM);
 
   /// Construct the core LLVM function canonicalization and simplification
   /// pipeline.
@@ -409,6 +418,14 @@ public:
   /// There is no need to specify the pass nesting, and this function
   /// currently cannot handle the pass nesting.
   LLVM_ABI Error parsePassPipeline(MachineFunctionPassManager &MFPM,
+                                   StringRef PipelineText);
+
+  /// Parse a textual pipeline of summary passes into the provided \c
+  /// SummaryPassManager. The format is a comma separated list of summary pass
+  /// names:
+  ///
+  ///   summary-pass,require<summary-analysis>,...
+  LLVM_ABI Error parsePassPipeline(SummaryPassManager &SPM,
                                    StringRef PipelineText);
 
   /// Parse a textual alias analysis pipeline into the provided AA manager.
@@ -624,6 +641,10 @@ public:
       const std::function<void(MachineFunctionAnalysisManager &)> &C) {
     MachineFunctionAnalysisRegistrationCallbacks.push_back(C);
   }
+  void registerAnalysisRegistrationCallback(
+      const std::function<void(SummaryAnalysisManager &)> &C) {
+    SummaryAnalysisRegistrationCallbacks.push_back(C);
+  }
   /// @}}
 
   /// {{@ Register pipeline parsing callbacks with this pass builder instance.
@@ -654,6 +675,11 @@ public:
       const std::function<bool(StringRef Name, MachineFunctionPassManager &,
                                ArrayRef<PipelineElement>)> &C) {
     MachineFunctionPipelineParsingCallbacks.push_back(C);
+  }
+  void registerPipelineParsingCallback(
+      const std::function<bool(StringRef Name, SummaryPassManager &,
+                               ArrayRef<PipelineElement>)> &C) {
+    SummaryPipelineParsingCallbacks.push_back(C);
   }
   /// @}}
 
@@ -813,6 +839,9 @@ private:
 
   Error parseMachinePassPipeline(MachineFunctionPassManager &MFPM,
                                  ArrayRef<PipelineElement> Pipeline);
+  Error parseSummaryPass(SummaryPassManager &SPM, const PipelineElement &E);
+  Error parseSummaryPassPipeline(SummaryPassManager &SPM,
+                                 ArrayRef<PipelineElement> Pipeline);
   Error parseLoopPassPipeline(LoopPassManager &LPM,
                               ArrayRef<PipelineElement> Pipeline);
   Error parseFunctionPassPipeline(FunctionPassManager &FPM,
@@ -916,6 +945,13 @@ private:
                                  ArrayRef<PipelineElement>)>,
               2>
       MachineFunctionPipelineParsingCallbacks;
+  // Summary callbacks
+  SmallVector<std::function<void(SummaryAnalysisManager &)>, 2>
+      SummaryAnalysisRegistrationCallbacks;
+  SmallVector<std::function<bool(StringRef, SummaryPassManager &,
+                                 ArrayRef<PipelineElement>)>,
+              2>
+      SummaryPipelineParsingCallbacks;
   // Callbacks to parse `filter` parameter in register allocation passes
   SmallVector<std::function<RegAllocFilterFunc(StringRef)>, 2>
       RegClassFilterParsingCallbacks;
