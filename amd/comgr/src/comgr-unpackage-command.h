@@ -72,6 +72,14 @@ public:
 
   bool canCache() const override;
   llvm::Error writeExecuteOutput(llvm::StringRef CachedBuffer) override;
+  /// Split a cached output into (name, data kind, image) triples, in the
+  /// order they were written by readExecuteOutput(), without writing any
+  /// file.
+  llvm::Error
+  splitCachedOutput(llvm::StringRef CachedBuffer,
+                    llvm::SmallVectorImpl<std::string> &OutNames,
+                    llvm::SmallVectorImpl<amd_comgr_data_kind_t> &OutKinds,
+                    llvm::SmallVectorImpl<llvm::StringRef> &OutImages);
   llvm::Expected<llvm::StringRef> readExecuteOutput() override;
   amd_comgr_status_t execute(llvm::raw_ostream &LogS) override;
 

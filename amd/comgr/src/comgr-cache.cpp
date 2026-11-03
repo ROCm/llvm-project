@@ -134,6 +134,28 @@ bool readEntryFromCache(CachedCommandAdaptor &C, MemoryBuffer &CachedBuffer,
   LogS << CachedLogS;
   return true;
 }
+
+// Like readEntryFromCache, but returns the output in Hit instead of writing
+// it to C's output files.
+bool readEntryFromCacheInPlace(CachedCommandAdaptor &C,
+                               std::shared_ptr<MemoryBuffer> CachedBuffer,
+                               CommandCache::CachedOutput &Hit,
+                               raw_ostream &LogS) {
+  auto ErrorHandler = getComgrCacheErrorHandler(LogS);
+
+  StringRef CachedOutputFile;
+  StringRef CachedLogS;
+  if (Error E =
+          deserializeCacheEntry(*CachedBuffer, CachedOutputFile, CachedLogS)) {
+    ErrorHandler(std::move(E), "when reading the cache entry");
+    return false;
+  }
+
+  LogS << CachedLogS;
+  Hit.Entry = std::move(CachedBuffer);
+  Hit.Output = CachedOutputFile;
+  return true;
+}
 } // namespace
 
 std::optional<CachePruningPolicy>
@@ -195,7 +217,7 @@ CommandCache::CommandCache(StringRef CacheDir, const CachePruningPolicy &Policy,
 CommandCache::~CommandCache() { prune(); }
 
 amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
-                                         raw_ostream &LogS) {
+                                         raw_ostream &LogS, CachedOutput *Hit) {
 
   if (!C.canCache()) {
     // Do not cache preprocessor commands.
@@ -204,9 +226,9 @@ amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
     return C.execute(LogS);
   }
 
-  // This lambda will get called when the data is gotten from the cache and
-  // also after the data was set for a given key.
-  std::unique_ptr<MemoryBuffer> CachedBuffer;
+  // Called when the data is gotten from the cache, and after it's set for a
+  // given key. Shared so ownership can be handed to Hit on the in-place path.
+  std::shared_ptr<MemoryBuffer> CachedBuffer;
   auto AddBuffer = [&CachedBuffer](unsigned Task, const Twine &ModuleName,
                                    std::unique_ptr<MemoryBuffer> M) {
     CachedBuffer = std::move(M);
@@ -244,10 +266,14 @@ amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
   // If the "AddStream" is nullptr, then the data was cached and we already
   // called the "AddBuffer" lambda.
   AddStreamFn &AddStream = *AddStreamOrErr;
-  if (!AddStream && readEntryFromCache(C, *CachedBuffer, LogS)) {
-    if (env::shouldEmitVerboseLogs())
-      LogS << "Comgr cache: found entry " << *MaybeId << " in cache.\n";
-    return AMD_COMGR_STATUS_SUCCESS;
+  if (!AddStream) {
+    bool Found = Hit ? readEntryFromCacheInPlace(C, CachedBuffer, *Hit, LogS)
+                     : readEntryFromCache(C, *CachedBuffer, LogS);
+    if (Found) {
+      if (env::shouldEmitVerboseLogs())
+        LogS << "Comgr cache: found entry " << *MaybeId << " in cache.\n";
+      return AMD_COMGR_STATUS_SUCCESS;
+    }
   }
 
   std::string CapturedLogS;
