@@ -102,10 +102,10 @@ struct LiveInShapeInfo {
   explicit LiveInShapeInfo(mlir::Value liveIn);
 
   /// If the constructor found no explicit shape, recover the array extents from
-  /// `liveIn`'s FIR type, emitting the ops needed to describe them via
-  /// `builder` (descriptor reads for boxes, integer constants for static
-  /// extents). No-op when extents are already populated or cannot be recovered
-  /// (e.g. dynamic raw arrays).
+  /// `liveIn`'s FIR type, emitting integer constants for static extents via
+  /// `builder`. No-op when extents are already populated, the live-in is a box
+  /// (it carries its own shape), or they cannot be recovered (dynamic raw
+  /// arrays).
   void materializeExtents(fir::FirOpBuilder &builder, mlir::Value liveIn);
 
   bool isShapedValue() const {

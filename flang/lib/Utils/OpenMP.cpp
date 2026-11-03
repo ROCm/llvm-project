@@ -435,14 +435,9 @@ void LiveInShapeInfo::materializeExtents(
 
   mlir::Location loc = liveIn.getLoc();
 
-  // Boxed arrays carry their (possibly runtime) extents in the descriptor.
-  if (mlir::isa<fir::BaseBoxType>(liveIn.getType())) {
-    llvm::SmallVector<mlir::Value> boxExtents;
-    fir::genDimInfoFromBox(builder, loc, liveIn, /*lbounds=*/nullptr,
-        &boxExtents, /*strides=*/nullptr);
-    extents.assign(boxExtents.begin(), boxExtents.end());
+  // Boxed arrays carry their own shape, so there is nothing to recover.
+  if (mlir::isa<fir::BaseBoxType>(liveIn.getType()))
     return;
-  }
 
   // Raw-address arrays only expose constant extents via the type; dynamic
   // extents are not recoverable from the value alone.
@@ -559,6 +554,10 @@ static LiveInDeclareResult genLiveInDeclare(fir::FirOpBuilder &builder,
 
   mlir::Value shape = [&]() -> mlir::Value {
     if (!targetShapeCreationInfo.isShapedValue())
+      return {};
+
+    // A declare of a box address must not carry a shape: the descriptor does.
+    if (mlir::isa<fir::BaseBoxType>(fir::unwrapRefType(liveInArg.getType())))
       return {};
 
     if (targetShapeCreationInfo.isShapeShiftedValue()) {
