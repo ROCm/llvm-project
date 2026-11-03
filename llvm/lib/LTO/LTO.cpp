@@ -19,6 +19,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/StackSafetyAnalysis.h"
+#include "llvm/Analysis/SummaryCallGraph.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
@@ -2235,12 +2236,12 @@ getAMDGPUPropagatedAttrs(const AMDGPUFunctionSummary &Summary) {
 
 /// Propagate AMDGPU kernel occupancy attributes (flat-work-group-size,
 /// waves-per-eu, max-num-workgroups) top-down from kernels to device functions
-/// through the combined index call graph. Sets a backend callback on \p Conf
-/// to apply the propagated attributes when each module is compiled.
-static void thinLTOPropagateAMDGPUAttributes(
-    ModuleSummaryIndex &CombinedIndex,
-    const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols,
-    lto::Config &Conf) {
+/// through the summary call graph \p CG. Sets a backend callback on \p Conf to
+/// apply the propagated attributes when each module is compiled.
+static void
+thinLTOPropagateAMDGPUAttributes(const ModuleSummaryIndex &CombinedIndex,
+                                 const SummaryCallGraph &CG,
+                                 lto::Config &Conf) {
   const AMDGPUSummaryMap &AMDGPUSummaries = CombinedIndex.getAMDGPUSummaries();
   if (AMDGPUSummaries.empty())
     return;
@@ -2257,8 +2258,6 @@ static void thinLTOPropagateAMDGPUAttributes(
     }
   }
 
-  CombinedIndex.resolveIndirectCalls(GUIDPreservedSymbols);
-
   // Per-kernel BFS: propagate each kernel's constraints to all reachable
   // callees. When a callee is reached by multiple kernels, merge
   // conservatively. Callees are initialized from the first reaching
@@ -2271,15 +2270,19 @@ static void thinLTOPropagateAMDGPUAttributes(
     const AMDGPUPropagatedFunctionAttrs KernelAttrs =
         getAMDGPUPropagatedAttrs(KIt->second);
 
-    SmallVector<GlobalValue::GUID> Worklist;
+    const SummaryCallGraph::Node *KernelNode = CG.lookup(KernelGUID);
+    if (!KernelNode)
+      continue;
+    SmallVector<const SummaryCallGraph::Node *> Worklist;
     DenseSet<GlobalValue::GUID> Visited;
-    Worklist.push_back(KernelGUID);
+    Worklist.push_back(KernelNode);
     Visited.insert(KernelGUID);
 
-    auto VisitCallee = [&](GlobalValue::GUID CalleeGUID) {
+    auto VisitCallee = [&](const SummaryCallGraph::Node *Callee) {
+      GlobalValue::GUID CalleeGUID = Callee->getValueInfo().getGUID();
       if (!Visited.insert(CalleeGUID).second)
         return false;
-      Worklist.push_back(CalleeGUID);
+      Worklist.push_back(Callee);
 
       auto [It, Inserted] = Propagated.try_emplace(CalleeGUID);
       if (Inserted) {
@@ -2294,23 +2297,16 @@ static void thinLTOPropagateAMDGPUAttributes(
     };
 
     for (unsigned Idx = 0; Idx < Worklist.size(); ++Idx) {
-      GlobalValue::GUID CurGUID = Worklist[Idx];
-      ValueInfo VI = CombinedIndex.getValueInfo(CurGUID);
-      if (!VI)
-        continue;
-
-      for (const auto &Summary : VI.getSummaryList()) {
-        auto *FS = dyn_cast<FunctionSummary>(Summary->getBaseObject());
-        if (!FS)
+      const SummaryCallGraph::Node *Cur = Worklist[Idx];
+      for (const SummaryCallGraph::Edge &Edge : Cur->callees()) {
+        // The calls external node stands for code outside the summaries.
+        const SummaryCallGraph::Node *Callee = Edge.getNode();
+        if (Callee == CG.getCallsExternalNode())
           continue;
-        for (const auto &Edge : FS->calls())
-          VisitCallee(Edge.first.getGUID());
-        for (const auto &Edge : FS->indirect_calls()) {
-          if (VisitCallee(Edge.first.getGUID()))
-            LLVM_DEBUG(dbgs()
-                       << "AMDGPU ThinLTO: indirect call edge GUID=" << CurGUID
-                       << " -> GUID=" << Edge.first.getGUID() << "\n");
-        }
+        if (VisitCallee(Callee) && !Edge.isCall())
+          LLVM_DEBUG(dbgs() << "AMDGPU ThinLTO: indirect call edge GUID="
+                            << Cur->getValueInfo().getGUID() << " -> GUID="
+                            << Callee->getValueInfo().getGUID() << "\n");
       }
     }
   }
@@ -2401,10 +2397,13 @@ public:
   ThinLinkAMDGPUAttributesPass(lto::Config &Conf) : Conf(Conf) {}
 
   PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM) {
+    // Build the call graph only for a link with AMDGPU summaries.
+    if (Index.getAMDGPUSummaries().empty())
+      return PreservedAnalyses::all();
     thinLTOPropagateAMDGPUAttributes(
-        Index, AM.getResult<ThinLinkInfoAnalysis>(Index).GUIDPreservedSymbols,
-        Conf);
-    return PreservedAnalyses::none();
+        Index, AM.getResult<SummaryCallGraphAnalysis>(Index), Conf);
+    // The pass changes only the configuration of the backends.
+    return PreservedAnalyses::all();
   }
 };
 

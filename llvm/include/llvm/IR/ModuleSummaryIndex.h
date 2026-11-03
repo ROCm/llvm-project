@@ -905,14 +905,9 @@ public:
     /// function whose calling convention does not permit calls).
     GlobalValue::GUID CallTypeId = 0;
 
-    /// The distinct identifiers of the indirect calls in this function.
+    /// The distinct identifiers of the indirect calls in this function. The
+    /// summary call graph (SummaryCallGraph) finds their possible targets.
     std::vector<GlobalValue::GUID> IndirectCallTypeIds;
-
-    /// The possible targets of the indirect calls: one list for each
-    /// identifier in IndirectCallTypeIds that has targets. This is not part of
-    /// the summary in bitcode. ModuleSummaryIndex::resolveIndirectCalls()
-    /// computes it in the combined index.
-    SmallVector<ArrayRef<ValueInfo>, 0> IndirectCallTargets;
   };
 
   /// Flags specific to function summaries.
@@ -1218,70 +1213,6 @@ public:
     if (CTIdInfo)
       return CTIdInfo->IndirectCallTypeIds;
     return {};
-  }
-
-  /// Iterates over the possible targets of the indirect calls in a function,
-  /// as call edges.
-  class indirect_call_iterator
-      : public iterator_facade_base<indirect_call_iterator,
-                                    std::forward_iterator_tag, EdgeTy,
-                                    std::ptrdiff_t, const EdgeTy *, EdgeTy> {
-    ArrayRef<ArrayRef<ValueInfo>> Targets;
-    size_t List = 0;
-    size_t Pos = 0;
-
-    void skipEmptyLists() {
-      while (List < Targets.size() && Pos == Targets[List].size()) {
-        ++List;
-        Pos = 0;
-      }
-    }
-
-  public:
-    indirect_call_iterator() = default;
-    indirect_call_iterator(ArrayRef<ArrayRef<ValueInfo>> Targets, bool IsEnd)
-        : Targets(Targets), List(IsEnd ? Targets.size() : 0) {
-      skipEmptyLists();
-    }
-
-    EdgeTy operator*() const {
-      return {Targets[List][Pos],
-              CalleeInfo(CalleeInfo::HotnessType::Unknown, /*HasTC=*/false,
-                         /*HasIC=*/true)};
-    }
-
-    using iterator_facade_base::operator++;
-    indirect_call_iterator &operator++() {
-      ++Pos;
-      skipEmptyLists();
-      return *this;
-    }
-
-    bool operator==(const indirect_call_iterator &Other) const {
-      return List == Other.List && Pos == Other.Pos;
-    }
-  };
-
-  /// Returns the possible targets of the indirect calls in this function, as
-  /// call edges with HasIndirectCall set. Unlike the indirect call edges in
-  /// calls(), which come from profiles and !callees metadata, these are all
-  /// the address-taken functions with a matching call type identifier. The
-  /// range is empty until ModuleSummaryIndex::resolveIndirectCalls() runs.
-  iterator_range<indirect_call_iterator> indirect_calls() const {
-    ArrayRef<ArrayRef<ValueInfo>> Targets;
-    if (CTIdInfo)
-      Targets = CTIdInfo->IndirectCallTargets;
-    return {indirect_call_iterator(Targets, /*IsEnd=*/false),
-            indirect_call_iterator(Targets, /*IsEnd=*/true)};
-  }
-
-  /// Sets the possible targets of the indirect calls in this function. Used by
-  /// ModuleSummaryIndex::resolveIndirectCalls().
-  void setIndirectCallTargets(SmallVector<ArrayRef<ValueInfo>, 0> Targets) {
-    assert((CTIdInfo || Targets.empty()) &&
-           "Expected call type identifiers for indirect call targets");
-    if (CTIdInfo)
-      CTIdInfo->IndirectCallTargets = std::move(Targets);
   }
 
   /// Sets the call type identifiers of this function and of its indirect
@@ -1855,14 +1786,6 @@ private:
   // The summary extensions, by name and version.
   std::map<std::pair<std::string, uint64_t>, SummaryExtension> Extensions;
 
-  // The possible targets of indirect calls, for each call type identifier.
-  // The FunctionSummary::indirect_calls() ranges refer to these lists.
-  // Computed by resolveIndirectCalls().
-  DenseMap<GlobalValue::GUID, std::vector<ValueInfo>> IndirectCallTargets;
-
-  // True if resolveIndirectCalls() has run.
-  bool HasResolvedIndirectCalls = false;
-
   // The root node of the call graph. See getCallGraphRoot().
   std::unique_ptr<GlobalValueSummaryMapTy::value_type> CallGraphRoot;
 
@@ -1948,20 +1871,6 @@ public:
   extensions() const {
     return Extensions;
   }
-
-  /// Computes FunctionSummary::indirect_calls() for every function summary. An
-  /// indirect call can reach every live function whose address can be taken
-  /// and whose call type identifier is equal to the identifier of the call.
-  /// The address can be taken if some summary references the function, or if
-  /// the function is in \p GUIDPreservedSymbols: the values that are visible
-  /// outside the summaries (for example to native objects). For an alias, the
-  /// target is its aliasee. Call it at the thin link, after all summaries are
-  /// in the index. A second call does nothing.
-  LLVM_ABI void
-  resolveIndirectCalls(const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols);
-
-  /// Returns true if resolveIndirectCalls() has run.
-  bool hasResolvedIndirectCalls() const { return HasResolvedIndirectCalls; }
 
   unsigned addOrGetStackIdIndex(uint64_t StackId) {
     auto Inserted = StackIdToIndex.insert({StackId, StackIds.size()});

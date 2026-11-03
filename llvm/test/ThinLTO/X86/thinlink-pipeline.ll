@@ -12,24 +12,31 @@
 ; RUN:   -r=callee.bc,callee,p 2>&1 | FileCheck %s --check-prefix=GRAPH
 
 ; GRAPH:      Summary call graph:
+; GRAPH-NEXT:   <external callers>
+; GRAPH-NEXT:     calls {{[0-9]+}} (main)
+; GRAPH-NEXT:     calls {{[0-9]+}} (caller)
 ; GRAPH-NEXT:   {{[0-9]+}} (rec1) [main.bc]
 ; GRAPH-NEXT:     calls {{[0-9]+}} (rec2)
-; GRAPH-NEXT:   {{[0-9]+}} (external) [no summary]
+; GRAPH-NEXT:   {{[0-9]+}} (external) [unknown]
+; GRAPH-NEXT:     calls <external callees>
 ; GRAPH-NEXT:   {{[0-9]+}} (rec2) [main.bc]
 ; GRAPH-NEXT:     calls {{[0-9]+}} (rec1)
 ; GRAPH-NEXT:     calls {{[0-9]+}} (external)
 ; GRAPH-NEXT:   {{[0-9]+}} (callee) [callee.bc]
-; GRAPH-NEXT:   {{[0-9]+}} (main) [main.bc] [unknown callers]
+; GRAPH-NEXT:   {{[0-9]+}} (main) [main.bc]
 ; GRAPH-NEXT:     calls {{[0-9]+}} (callee)
 ; GRAPH-NEXT:     calls {{[0-9]+}} (rec1)
-; GRAPH-NEXT:   {{[0-9]+}} (caller) [main.bc] [unknown callers]
+; GRAPH-NEXT:   {{[0-9]+}} (caller) [main.bc]
 ; GRAPH-NEXT:     calls {{[0-9]+}} (callee)
+; GRAPH-NEXT:   <external callees>
 ; GRAPH-NEXT: SCCs in bottom-up order:
+; GRAPH-NEXT:   [{{[0-9]+}} (callee)]
+; GRAPH-NEXT:   [<external callees>]
 ; GRAPH-NEXT:   [{{[0-9]+}} (external)]
 ; GRAPH-NEXT:   [{{[0-9]+}} (rec2), {{[0-9]+}} (rec1)]
-; GRAPH-NEXT:   [{{[0-9]+}} (callee)]
 ; GRAPH-NEXT:   [{{[0-9]+}} (main)]
 ; GRAPH-NEXT:   [{{[0-9]+}} (caller)]
+; GRAPH-NEXT:   [<external callers>]
 
 ;; The pipeline replaces the default pipeline. Without the function attribute
 ;; pass, the thin link does not find that @caller does not unwind.
