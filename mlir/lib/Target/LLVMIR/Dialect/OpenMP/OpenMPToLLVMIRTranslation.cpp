@@ -5578,6 +5578,8 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
       llvm::OpenMPIRBuilder::InsertPointTy allocaIP(
           allocBlock->getFirstInsertionPt());
       allocFrame.emplace(moduleTranslation, allocaIP.getNodeParent(), deallocBlocks);
+      // The insertion point should point to the loop body block.
+      ip = allocBlock->getTerminator()->getIterator();
     }
 
     if (loopInfos.size() != loopOp.getNumLoops() - 1)
