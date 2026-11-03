@@ -11,6 +11,7 @@
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/PassInstrumentation.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Testing/Support/Error.h"
@@ -234,6 +235,74 @@ TEST(SummaryPassManagerTest, ParsingCallbacks) {
   for (const auto &[GUID, Info] : *Index)
     for (const auto &Summary : Info.getSummaryList())
       EXPECT_TRUE(Summary->isLive());
+}
+
+// A callback of the extension point adds passes to the default pipeline of the
+// thin link.
+TEST(SummaryPassManagerTest, PipelineExtensionPoint) {
+  std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(TwoFunctions);
+  ASSERT_NE(Index, nullptr);
+
+  LLVMContext Ctx;
+  PassBuilder PB(Ctx);
+  unsigned Runs = 0, Seen = 0;
+  PB.registerAnalysisRegistrationCallback([&](SummaryAnalysisManager &AM) {
+    AM.registerPass([&] { return CountFunctionsAnalysis(Runs); });
+  });
+  PB.registerSummaryPipelineEPCallback([&](SummaryPassManager &PM) {
+    PM.addPass(MarkLivePass(Seen, /*PreserveAll=*/true));
+  });
+
+  SummaryAnalysisManager AM;
+  PB.registerSummaryAnalyses(AM);
+  SummaryPassManager PM;
+  PB.invokeSummaryPipelineEPCallbacks(PM);
+  PM.run(*Index, AM);
+  EXPECT_EQ(Seen, 2u);
+}
+
+static unsigned TargetPassRuns = 0;
+
+// A pass of a test target.
+struct TargetPass : RequiredPassInfoMixin<TargetPass> {
+  PreservedAnalyses run(ModuleSummaryIndex &, SummaryAnalysisManager &) {
+    ++TargetPassRuns;
+    return PreservedAnalyses::all();
+  }
+};
+
+static void addTargetPasses(PassBuilder &PB) {
+  PB.registerSummaryPipelineEPCallback(
+      [](SummaryPassManager &PM) { PM.addPass(TargetPass()); });
+}
+
+// A target adds its passes to the thin link without a TargetMachine.
+TEST(SummaryPassManagerTest, TargetCallback) {
+  std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(TwoFunctions);
+  ASSERT_NE(Index, nullptr);
+
+  Target T;
+  TargetRegistry::RegisterThinLinkPassBuilderCallback(T, addTargetPasses);
+  LLVMContext Ctx;
+  PassBuilder PB(Ctx);
+  T.registerThinLinkPassBuilderCallbacks(PB);
+
+  SummaryAnalysisManager AM;
+  PB.registerSummaryAnalyses(AM);
+  SummaryPassManager PM;
+  PB.invokeSummaryPipelineEPCallbacks(PM);
+  TargetPassRuns = 0;
+  PM.run(*Index, AM);
+  EXPECT_EQ(TargetPassRuns, 1u);
+
+  // A target without a callback adds no passes.
+  Target Other;
+  PassBuilder OtherPB(Ctx);
+  Other.registerThinLinkPassBuilderCallbacks(OtherPB);
+  SummaryPassManager OtherPM;
+  OtherPB.invokeSummaryPipelineEPCallbacks(OtherPM);
+  OtherPM.run(*Index, AM);
+  EXPECT_EQ(TargetPassRuns, 1u);
 }
 
 TEST(SummaryPassManagerTest, StackTraceName) {

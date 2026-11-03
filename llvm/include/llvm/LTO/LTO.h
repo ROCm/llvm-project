@@ -19,6 +19,7 @@
 #include "llvm/IR/RuntimeLibcalls.h"
 #include "llvm/Support/Compiler.h"
 #include <memory>
+#include <set>
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
@@ -31,6 +32,7 @@
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/ThreadPool.h"
 #include "llvm/Support/thread.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/IPO/FunctionAttrs.h"
 #include "llvm/Transforms/IPO/FunctionImport.h"
 
@@ -654,6 +656,10 @@ private:
   // Identify symbols exported dynamically, and that therefore could be
   // referenced by a shared library not visible to the linker.
   DenseSet<GlobalValue::GUID> DynamicExportSymbols;
+
+  // The target triples of the inputs. The thin link runs the passes of their
+  // targets.
+  std::set<Triple> TargetTriples;
 
   // Diagnostic optimization remarks file
   LLVMRemarkFileHandle DiagnosticOutputFile;
