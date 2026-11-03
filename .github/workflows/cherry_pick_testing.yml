@@ -64,15 +64,11 @@ on:
         type: boolean
         default: false
       python_version:
-        description: "Single Python version for wheel builds (empty for full matrix)."
+        description: >-
+          Python versions for wheel builds, comma-separated. Empty means 3.12
+          for PyTorch wheels and the full matrix for ROCm Python packages.
         type: string
         default: ""
-      pytorch_git_refs:
-        description: >-
-          PyTorch refs to build wheels for. Empty falls back to the refs the
-          release type selects, which for ci is release/2.13 on its own.
-        type: string
-        default: "release/2.13,release/2.14,release/2.15,nightly"
       # Packaging.
       build_native_packages:
         description: "Build deb and rpm packages. The install tests that consume them are not part of this workflow."
@@ -465,37 +461,44 @@ jobs:
       - name: Cross Python versions with PyTorch refs
         id: resolve
         env:
-          REQUESTED_REFS: ${{ inputs.pytorch_git_refs }}
           REQUESTED_PYTHON: ${{ inputs.python_version }}
           FAMILIES: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
-          CONFIGURED: ${{ toJSON(fromJSON(needs.setup.outputs.linux_build_config).pytorch_build_matrix) }}
         run: |
           python3 - <<'RESOLVE'
           import json
           import os
 
-          def split(raw):
-              return [v.strip() for v in raw.replace(";", ",").split(",") if v.strip()]
+          # Qualifying a cherry-pick means covering every supported release
+          # line, so the refs are fixed rather than an input. Keep this in step
+          # with RELEASE_STABLE_PYTORCH_REFS in TheRock's
+          # build_tools/github_actions/configure_pytorch_release_matrix.py,
+          # whose table trails the branches that actually exist upstream.
+          PYTORCH_REFS = [
+              "release/2.13",
+              "release/2.14",
+              "release/2.15",
+              "nightly",
+          ]
 
-          refs = split(os.environ["REQUESTED_REFS"])
-          if refs:
-              families = os.environ["FAMILIES"]
-              matrix = [
-                  {
-                      "python_version": py,
-                      "pytorch_git_ref": ref,
-                      "amdgpu_families": families,
-                  }
-                  for py in split(os.environ["REQUESTED_PYTHON"]) or ["3.12"]
-                  for ref in refs
-              ]
-          else:
-              # toJSON renders an absent key as the JSON literal null.
-              matrix = json.loads(os.environ["CONFIGURED"] or "null") or []
+          python_versions = [
+              v.strip()
+              for v in os.environ["REQUESTED_PYTHON"].replace(";", ",").split(",")
+              if v.strip()
+          ] or ["3.12"]
+
+          matrix = [
+              {
+                  "python_version": python_version,
+                  "pytorch_git_ref": pytorch_git_ref,
+                  "amdgpu_families": os.environ["FAMILIES"],
+              }
+              for python_version in python_versions
+              for pytorch_git_ref in PYTORCH_REFS
+          ]
 
           print(f"{len(matrix)} wheel build(s):")
           for row in matrix:
-              print(f"  py{row['python_version']} {row['pytorch_git_ref']} {row['amdgpu_families']}")
+              print(f"  py{row['python_version']} {row['pytorch_git_ref']}")
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps(matrix)}\n")
