@@ -34,6 +34,7 @@
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/RuntimeLibcalls.h"
+#include "llvm/IR/SummaryPassManager.h"
 #include "llvm/LTO/LTOBackend.h"
 #include "llvm/Linker/IRMover.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -2338,6 +2339,48 @@ static void thinLTOPropagateAMDGPUAttributes(
   };
 }
 
+/// Propagates the function flags (norecurse, nounwind) over the summary call
+/// graph.
+struct ThinLinkFunctionAttrsPass
+    : RequiredPassInfoMixin<ThinLinkFunctionAttrsPass> {
+  PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM) {
+    thinLTOPropagateFunctionAttrs(
+        Index, AM.getResult<ThinLinkInfoAnalysis>(Index).IsPrevailing);
+    return PreservedAnalyses::none();
+  }
+};
+
+/// Propagates the AMDGPU kernel occupancy attributes.
+class ThinLinkAMDGPUAttributesPass
+    : public RequiredPassInfoMixin<ThinLinkAMDGPUAttributesPass> {
+  lto::Config &Conf;
+
+public:
+  ThinLinkAMDGPUAttributesPass(lto::Config &Conf) : Conf(Conf) {}
+
+  PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM) {
+    thinLTOPropagateAMDGPUAttributes(
+        Index, AM.getResult<ThinLinkInfoAnalysis>(Index).GUIDPreservedSymbols,
+        Conf);
+    return PreservedAnalyses::none();
+  }
+};
+
+/// Computes the parameter access ranges for stack safety.
+class ThinLinkParamAccessPass
+    : public RequiredPassInfoMixin<ThinLinkParamAccessPass> {
+  const cl::LibraryOptionsContext *LibraryOptions;
+
+public:
+  ThinLinkParamAccessPass(const cl::LibraryOptionsContext *LibraryOptions)
+      : LibraryOptions(LibraryOptions) {}
+
+  PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &) {
+    generateParamAccessSummary(LibraryOptions, Index);
+    return PreservedAnalyses::none();
+  }
+};
+
 } // end anonymous namespace
 
 Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
@@ -2528,12 +2571,17 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
   thinLTOResolvePrevailingInIndex(Conf, ThinLTO.CombinedIndex, isPrevailing,
                                   recordNewLinkage, GUIDPreservedSymbols);
 
-  thinLTOPropagateFunctionAttrs(ThinLTO.CombinedIndex, isPrevailing);
-
-  thinLTOPropagateAMDGPUAttributes(ThinLTO.CombinedIndex, GUIDPreservedSymbols,
-                                   Conf);
-
-  generateParamAccessSummary(Conf.LibraryOptions, ThinLTO.CombinedIndex);
+  // Run the thin-link passes that need the final linkage and the prevailing
+  // copies.
+  SummaryAnalysisManager SAM;
+  SAM.registerPass([] { return PassInstrumentationAnalysis(); });
+  SAM.registerPass(
+      [&] { return ThinLinkInfoAnalysis(GUIDPreservedSymbols, isPrevailing); });
+  SummaryPassManager SPM;
+  SPM.addPass(ThinLinkFunctionAttrsPass());
+  SPM.addPass(ThinLinkAMDGPUAttributesPass(Conf));
+  SPM.addPass(ThinLinkParamAccessPass(Conf.LibraryOptions));
+  SPM.run(ThinLTO.CombinedIndex, SAM);
 
   if (llvm::timeTraceProfilerEnabled())
     llvm::timeTraceProfilerEnd();
