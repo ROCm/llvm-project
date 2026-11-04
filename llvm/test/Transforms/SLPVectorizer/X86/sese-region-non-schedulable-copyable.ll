@@ -75,16 +75,15 @@ define void @arg_lane(ptr %p, ptr %q, i1 %c, i32 %y) {
 ; CHECK-NEXT:    [[A0:%.*]] = mul i32 [[X0]], 3
 ; CHECK-NEXT:    br i1 [[C]], label %[[THEN:.*]], label %[[EXIT:.*]]
 ; CHECK:       [[THEN]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = insertelement <2 x i32> poison, i32 [[X1]], i64 0
-; CHECK-NEXT:    [[TMP1:%.*]] = insertelement <2 x i32> [[TMP0]], i32 [[X3]], i64 1
-; CHECK-NEXT:    [[TMP2:%.*]] = mul <2 x i32> [[TMP1]], <i32 5, i32 7>
+; CHECK-NEXT:    [[A1:%.*]] = mul i32 [[X1]], 5
+; CHECK-NEXT:    [[A3:%.*]] = mul i32 [[X3]], 7
 ; CHECK-NEXT:    [[TMP3:%.*]] = insertelement <4 x i32> poison, i32 [[Y]], i64 2
 ; CHECK-NEXT:    [[TMP4:%.*]] = insertelement <4 x i32> [[TMP3]], i32 [[A0]], i64 0
-; CHECK-NEXT:    [[TMP5:%.*]] = shufflevector <2 x i32> [[TMP2]], <2 x i32> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
-; CHECK-NEXT:    [[TMP7:%.*]] = shufflevector <4 x i32> [[TMP4]], <4 x i32> [[TMP5]], <4 x i32> <i32 0, i32 4, i32 2, i32 5>
+; CHECK-NEXT:    [[TMP2:%.*]] = insertelement <4 x i32> [[TMP4]], i32 [[A1]], i64 1
+; CHECK-NEXT:    [[TMP5:%.*]] = insertelement <4 x i32> [[TMP2]], i32 [[A3]], i64 3
 ; CHECK-NEXT:    br label %[[EXIT]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP6:%.*]] = phi <4 x i32> [ [[TMP7]], %[[THEN]] ], [ zeroinitializer, %[[BB]] ]
+; CHECK-NEXT:    [[TMP6:%.*]] = phi <4 x i32> [ [[TMP5]], %[[THEN]] ], [ zeroinitializer, %[[BB]] ]
 ; CHECK-NEXT:    store <4 x i32> [[TMP6]], ptr [[Q]], align 4
 ; CHECK-NEXT:    ret void
 ;
@@ -212,16 +211,15 @@ define void @inst_lane(ptr %p, ptr %q, i1 %c, i32 %y) {
 ; CHECK-NEXT:    [[A0:%.*]] = add i32 [[X0]], 1
 ; CHECK-NEXT:    br i1 [[C]], label %[[THEN:.*]], label %[[EXIT:.*]]
 ; CHECK:       [[THEN]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = insertelement <2 x i32> poison, i32 [[X1]], i64 0
-; CHECK-NEXT:    [[TMP1:%.*]] = insertelement <2 x i32> [[TMP0]], i32 [[X3]], i64 1
-; CHECK-NEXT:    [[TMP2:%.*]] = add <2 x i32> [[TMP1]], <i32 2, i32 4>
+; CHECK-NEXT:    [[A1:%.*]] = add i32 [[X1]], 2
+; CHECK-NEXT:    [[A3:%.*]] = add i32 [[X3]], 4
 ; CHECK-NEXT:    [[TMP3:%.*]] = insertelement <4 x i32> poison, i32 [[A0]], i64 0
-; CHECK-NEXT:    [[TMP4:%.*]] = shufflevector <2 x i32> [[TMP2]], <2 x i32> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
-; CHECK-NEXT:    [[TMP5:%.*]] = shufflevector <4 x i32> [[TMP3]], <4 x i32> [[TMP4]], <4 x i32> <i32 0, i32 4, i32 poison, i32 5>
+; CHECK-NEXT:    [[TMP5:%.*]] = insertelement <4 x i32> [[TMP3]], i32 [[A1]], i64 1
 ; CHECK-NEXT:    [[TMP6:%.*]] = insertelement <4 x i32> [[TMP5]], i32 [[W]], i64 2
+; CHECK-NEXT:    [[TMP4:%.*]] = insertelement <4 x i32> [[TMP6]], i32 [[A3]], i64 3
 ; CHECK-NEXT:    br label %[[EXIT]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP7:%.*]] = phi <4 x i32> [ [[TMP6]], %[[THEN]] ], [ zeroinitializer, %[[BB]] ]
+; CHECK-NEXT:    [[TMP7:%.*]] = phi <4 x i32> [ [[TMP4]], %[[THEN]] ], [ zeroinitializer, %[[BB]] ]
 ; CHECK-NEXT:    store <4 x i32> [[TMP7]], ptr [[Q]], align 4
 ; CHECK-NEXT:    ret void
 ;

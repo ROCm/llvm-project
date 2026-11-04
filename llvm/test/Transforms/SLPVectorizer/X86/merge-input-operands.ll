@@ -750,12 +750,16 @@ define void @merge_cmp_pool(ptr %A, ptr %B, ptr %Out) {
 ; CHECK-NEXT:    [[TMP3:%.*]] = load <2 x i32>, ptr [[PB2]], align 4
 ; CHECK-NEXT:    [[TMP4:%.*]] = icmp slt <2 x i32> [[TMP0]], [[TMP2]]
 ; CHECK-NEXT:    [[TMP5:%.*]] = icmp slt <2 x i32> [[TMP1]], [[TMP3]]
-; CHECK-NEXT:    [[TMP6:%.*]] = xor <2 x i1> [[TMP4]], [[TMP5]]
-; CHECK-NEXT:    [[TMP7:%.*]] = shufflevector <2 x i1> [[TMP5]], <2 x i1> poison, <2 x i32> <i32 1, i32 0>
-; CHECK-NEXT:    [[TMP8:%.*]] = xor <2 x i1> [[TMP4]], [[TMP7]]
-; CHECK-NEXT:    [[TMP9:%.*]] = shufflevector <2 x i1> [[TMP6]], <2 x i1> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
+; CHECK-NEXT:    [[TMP8:%.*]] = xor <2 x i1> [[TMP4]], [[TMP5]]
+; CHECK-NEXT:    [[TMP7:%.*]] = extractelement <2 x i1> [[TMP4]], i64 0
+; CHECK-NEXT:    [[TMP13:%.*]] = extractelement <2 x i1> [[TMP5]], i64 1
+; CHECK-NEXT:    [[X2:%.*]] = xor i1 [[TMP7]], [[TMP13]]
+; CHECK-NEXT:    [[TMP9:%.*]] = extractelement <2 x i1> [[TMP4]], i64 1
+; CHECK-NEXT:    [[TMP14:%.*]] = extractelement <2 x i1> [[TMP5]], i64 0
+; CHECK-NEXT:    [[X3:%.*]] = xor i1 [[TMP9]], [[TMP14]]
 ; CHECK-NEXT:    [[TMP10:%.*]] = shufflevector <2 x i1> [[TMP8]], <2 x i1> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
-; CHECK-NEXT:    [[TMP11:%.*]] = shufflevector <2 x i1> [[TMP6]], <2 x i1> [[TMP8]], <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+; CHECK-NEXT:    [[TMP15:%.*]] = insertelement <4 x i1> [[TMP10]], i1 [[X2]], i64 2
+; CHECK-NEXT:    [[TMP11:%.*]] = insertelement <4 x i1> [[TMP15]], i1 [[X3]], i64 3
 ; CHECK-NEXT:    [[TMP12:%.*]] = zext <4 x i1> [[TMP11]] to <4 x i32>
 ; CHECK-NEXT:    store <4 x i32> [[TMP12]], ptr [[OUT:%.*]], align 4
 ; CHECK-NEXT:    ret void
@@ -923,9 +927,16 @@ entry:
 define void @merge_extractvalue_pool(ptr %A, ptr %Out) {
 ; CHECK-LABEL: @merge_extractvalue_pool(
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[TMP0:%.*]] = load <4 x float>, ptr [[A:%.*]], align 4
+; CHECK-NEXT:    [[S:%.*]] = load [4 x float], ptr [[A:%.*]], align 4
+; CHECK-NEXT:    [[E0:%.*]] = extractvalue [4 x float] [[S]], 0
+; CHECK-NEXT:    [[E1:%.*]] = extractvalue [4 x float] [[S]], 1
+; CHECK-NEXT:    [[E2:%.*]] = extractvalue [4 x float] [[S]], 2
+; CHECK-NEXT:    [[E3:%.*]] = extractvalue [4 x float] [[S]], 3
+; CHECK-NEXT:    [[TMP5:%.*]] = insertelement <4 x float> poison, float [[E0]], i64 0
+; CHECK-NEXT:    [[TMP0:%.*]] = insertelement <4 x float> [[TMP5]], float [[E1]], i64 1
 ; CHECK-NEXT:    [[TMP1:%.*]] = shufflevector <4 x float> [[TMP0]], <4 x float> poison, <4 x i32> <i32 0, i32 1, i32 0, i32 1>
-; CHECK-NEXT:    [[TMP2:%.*]] = shufflevector <4 x float> [[TMP0]], <4 x float> poison, <4 x i32> <i32 2, i32 3, i32 poison, i32 poison>
+; CHECK-NEXT:    [[TMP6:%.*]] = insertelement <4 x float> poison, float [[E2]], i64 0
+; CHECK-NEXT:    [[TMP2:%.*]] = insertelement <4 x float> [[TMP6]], float [[E3]], i64 1
 ; CHECK-NEXT:    [[TMP3:%.*]] = shufflevector <4 x float> [[TMP2]], <4 x float> poison, <4 x i32> <i32 0, i32 1, i32 1, i32 0>
 ; CHECK-NEXT:    [[TMP4:%.*]] = fmul <4 x float> [[TMP1]], [[TMP3]]
 ; CHECK-NEXT:    store <4 x float> [[TMP4]], ptr [[OUT:%.*]], align 4
