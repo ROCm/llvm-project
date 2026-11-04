@@ -1003,14 +1003,8 @@ static uint32_t getEffectiveNumThreads(const DeviceGeometryPropsTy &Props,
   assert(!KernelEnv.isBareMode() &&
          "bare kernel should not call this function");
 
-  if (UserThreadLimit > 0 && KernelEnv.isGenericMode()) {
-    // Downstream: a thread limit of -1 requests the preferred number of
-    // threads.
-    if (UserThreadLimit == (uint32_t)-1)
-      UserThreadLimit = KernelEnv.PreferredNumThreads;
-    else
-      UserThreadLimit += Props.WarpSize;
-  }
+  if (UserThreadLimit > 0 && KernelEnv.isGenericMode())
+    UserThreadLimit += Props.WarpSize;
 
   return std::min(KernelEnv.MaxNumThreads, (UserThreadLimit > 0)
                                                ? UserThreadLimit
