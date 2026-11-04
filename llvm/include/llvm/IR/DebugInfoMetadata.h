@@ -4686,7 +4686,8 @@ public:
   ///
   /// Handles both New and Old expressions, including Old expressions without
   /// an explicit DW_OP_LLVM_arg. Callers must handle locations that describe
-  /// the spill slot directly or whose load is added during frame-index lowering.
+  /// the spill slot directly or whose load is added during frame-index
+  /// lowering.
   static const DIExpression *spillArgs(const DIExpression *Expr,
                                        SmallBitVector SpilledOpIndexes,
                                        unsigned SpillAddrSpace);
