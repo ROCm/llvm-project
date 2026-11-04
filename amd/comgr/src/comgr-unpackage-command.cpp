@@ -64,10 +64,8 @@ getUnpackagedImageInfo(StringRef Image, const char *&FileExtension,
 }
 
 bool UnpackageCommand::canCache() const {
-  // Only compressed packages are worth caching: uncompressed extraction is
-  // already a cheap in-memory parse, so the cache's file I/O and hashing
-  // overhead isn't worth paying. Compressed packages require inflating the
-  // whole package up front, which is the expensive part this cache avoids.
+  // Uncompressed extraction is already a cheap in-memory parse, so the cache's
+  // file I/O and hashing overhead isn't worth it
   file_magic Magic = identify_magic(PackageData);
   if (Magic != file_magic::offload_binary)
     return false;
@@ -78,10 +76,7 @@ bool UnpackageCommand::canCache() const {
     return false;
 
   // InflatedSize was added in version 3; a v1/v2 header is shorter and has
-  // no such field, so reading it without this guard aliases into whatever
-  // bytes happen to follow the header (the entries block), which can read as
-  // spuriously nonzero. See OffloadBinary.cpp's own isCompressed() helper,
-  // which applies the same guard.
+  // no such field.
   return (*MaybeHeader)->Version >= 3 && (*MaybeHeader)->InflatedSize != 0;
 }
 
@@ -258,12 +253,6 @@ Error UnpackageCommand::addInputIdentifier(HashAlgorithm &H) const {
   if (!MaybeHeader)
     return MaybeHeader.takeError();
 
-  // The hash represents the compressed contents of the package: extracting
-  // the same bytes should give the same result. We don't have a cheap
-  // content hash available without decompressing (unlike the bundler's
-  // CompressedBundleHeader::Hash), so fall back to hashing the raw
-  // (still-compressed) buffer; this is still much cheaper than
-  // decompressing to check for a cache hit.
   CachedCommandAdaptor::addFileContents(H, PackageData);
   return Error::success();
 }

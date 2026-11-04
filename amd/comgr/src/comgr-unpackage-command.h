@@ -20,10 +20,7 @@ class raw_ostream;
 
 namespace COMGR {
 // Extracts offload binaries matching a set of requested (triple, arch)
-// entries out of an llvm-offload-binary package, via
-// llvm::object::OffloadFile::extractOffloadBinaries(). Caches its work when
-// the package is compressed, since extraction then requires a full
-// decompression of the package contents.
+// entries out of an llvm-offload-binary package, via extractOffloadBinaries
 class UnpackageCommand final : public CachedCommandAdaptor {
 private:
   // The raw contents and name of the AMD_COMGR_DATA_KIND_PACKAGE input. Both
