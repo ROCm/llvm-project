@@ -25,6 +25,7 @@ define void @copyable_mask_lane(ptr %r, ptr %x, ptr %y, i32 %n, ptr %out) {
 ; CHECK-NEXT:    [[TMP4:%.*]] = shufflevector <2 x i64> [[TMP8]], <2 x i64> poison, <2 x i32> zeroinitializer
 ; CHECK-NEXT:    [[TMP25:%.*]] = or disjoint <2 x i64> [[TMP4]], <i64 2, i64 3>
 ; CHECK-NEXT:    [[IV2:%.*]] = or disjoint i64 [[IV]], 2
+; CHECK-NEXT:    [[IV3:%.*]] = or disjoint i64 [[IV]], 3
 ; CHECK-NEXT:    [[TMP6:%.*]] = zext <2 x i32> [[TMP1]] to <2 x i64>
 ; CHECK-NEXT:    [[TMP7:%.*]] = icmp samesign ult <2 x i64> [[TMP25]], [[TMP6]]
 ; CHECK-NEXT:    [[PX0:%.*]] = getelementptr inbounds nuw float, ptr [[X]], i64 [[IV]]
@@ -33,6 +34,9 @@ define void @copyable_mask_lane(ptr %r, ptr %x, ptr %y, i32 %n, ptr %out) {
 ; CHECK-NEXT:    [[PY1:%.*]] = getelementptr inbounds nuw float, ptr [[Y]], i64 [[IV1]]
 ; CHECK-NEXT:    [[Y1:%.*]] = load float, ptr [[PY1]], align 4
 ; CHECK-NEXT:    [[PY2:%.*]] = getelementptr inbounds nuw float, ptr [[Y]], i64 [[IV2]]
+; CHECK-NEXT:    [[Y2:%.*]] = load float, ptr [[PY2]], align 4
+; CHECK-NEXT:    [[PY3:%.*]] = getelementptr inbounds nuw float, ptr [[Y]], i64 [[IV3]]
+; CHECK-NEXT:    [[Y3:%.*]] = load float, ptr [[PY3]], align 4
 ; CHECK-NEXT:    [[TMP9:%.*]] = load <4 x i8>, ptr [[PR0]], align 1
 ; CHECK-NEXT:    [[TMP10:%.*]] = icmp eq <4 x i8> [[TMP9]], zeroinitializer
 ; CHECK-NEXT:    [[TMP5:%.*]] = insertelement <4 x i1> <i1 true, i1 poison, i1 poison, i1 poison>, i1 [[C1]], i64 1
@@ -48,12 +52,11 @@ define void @copyable_mask_lane(ptr %r, ptr %x, ptr %y, i32 %n, ptr %out) {
 ; CHECK-NEXT:    [[TMP11:%.*]] = extractelement <4 x i1> [[TMP14]], i64 1
 ; CHECK-NEXT:    [[CY1:%.*]] = select fast i1 [[TMP11]], float [[Y1]], float 0.000000e+00
 ; CHECK-NEXT:    [[SY1]] = fadd fast float [[CY1]], [[AY1]]
-; CHECK-NEXT:    [[TMP12:%.*]] = load <2 x float>, ptr [[PY2]], align 4
-; CHECK-NEXT:    [[TMP23:%.*]] = shufflevector <4 x i1> [[TMP14]], <4 x i1> poison, <2 x i32> <i32 2, i32 3>
-; CHECK-NEXT:    [[TMP24:%.*]] = select <2 x i1> [[TMP23]], <2 x float> [[TMP12]], <2 x float> zeroinitializer
-; CHECK-NEXT:    [[TMP15:%.*]] = extractelement <2 x float> [[TMP24]], i64 0
+; CHECK-NEXT:    [[TMP23:%.*]] = extractelement <4 x i1> [[TMP14]], i64 2
+; CHECK-NEXT:    [[TMP15:%.*]] = select fast i1 [[TMP23]], float [[Y2]], float 0.000000e+00
 ; CHECK-NEXT:    [[SY2]] = fadd fast float [[TMP15]], [[AY2]]
-; CHECK-NEXT:    [[TMP16:%.*]] = extractelement <2 x float> [[TMP24]], i64 1
+; CHECK-NEXT:    [[TMP24:%.*]] = extractelement <4 x i1> [[TMP14]], i64 3
+; CHECK-NEXT:    [[TMP16:%.*]] = select fast i1 [[TMP24]], float [[Y3]], float 0.000000e+00
 ; CHECK-NEXT:    [[SY3]] = fadd fast float [[TMP16]], [[AY3]]
 ; CHECK-NEXT:    [[IV_NEXT]] = add nuw nsw i64 [[IV]], 4
 ; CHECK-NEXT:    [[CMP_LOOP:%.*]] = icmp samesign ult i64 [[IV_NEXT]], [[N64]]
