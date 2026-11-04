@@ -310,8 +310,8 @@ TEST(SummaryCallGraphTest, Aliases) {
 // of the function 7. The functions 1, 2, 4, 7, and 9 have the call type ID
 // 100, and 3 has 200. No summary refers to 4. The function 9 is dead. The
 // function 1 has a copy in a second module, and the copy in test.o calls 8.
-// The function 8 has indirect calls with the IDs 100 and 300, and an unknown
-// call.
+// The function 8 has indirect calls with the IDs 100 and 300, and a call
+// without a call type ID.
 static const char *IndirectCallSummary = R"Summary(
 ^0 = module: (path: "test.o", hash: (0, 0, 0, 0, 0))
 ^1 = module: (path: "test2.o", hash: (0, 0, 0, 0, 0))
@@ -322,7 +322,7 @@ static const char *IndirectCallSummary = R"Summary(
 ^6 = gv: (guid: 5, summaries: (variable: (module: ^0, flags: (linkage: external, live: 1), varFlags: (readonly: 0), refs: (^2, ^3, ^4, ^7, ^10))))
 ^7 = gv: (guid: 6, summaries: (alias: (module: ^0, flags: (linkage: external, live: 1), aliasee: ^8)))
 ^8 = gv: (guid: 7, summaries: (function: (module: ^0, flags: (linkage: external, live: 1), insts: 1, callTypeId: 100)))
-^9 = gv: (guid: 8, summaries: (function: (module: ^0, flags: (linkage: external, live: 1), insts: 2, funcFlags: (hasUnknownCall: 1), indirectCallTypeIds: (100, 300))))
+^9 = gv: (guid: 8, summaries: (function: (module: ^0, flags: (linkage: external, live: 1), insts: 2, funcFlags: (hasUnknownCall: 1), indirectCallTypeIds: (100, 300), hasCallWithoutTypeId: 1)))
 ^10 = gv: (guid: 9, summaries: (function: (module: ^0, flags: (linkage: external, live: 0), insts: 1, callTypeId: 100)))
 ^11 = flags: 1
 )Summary";
@@ -338,8 +338,8 @@ TEST(SummaryCallGraphTest, IndirectCalls) {
   const SummaryCallGraph &CG = A.graph(/*IncludeIndirectCalls=*/true);
   EXPECT_TRUE(CG.includesIndirectCalls());
 
-  // The unknown call can be a call to inline assembly or to an ifunc, which
-  // has no call type ID.
+  // The call without a call type ID, for example to inline assembly, calls
+  // the calls external node.
   SummaryCallGraph::Node *N8 = CG.lookup(8);
   ASSERT_NE(N8, nullptr);
   EXPECT_EQ(getIDs(CG, N8->callees()), GUIDList({1, 2, 7, ExternalCallees}));
@@ -418,6 +418,44 @@ TEST(SummaryCallGraphTest, IndirectCallsToPreservedSymbols) {
 
   EXPECT_EQ(getIDs(CG, CG.lookup(8)->callees()),
             GUIDList({1, 2, 4, 7, ExternalCallees}));
+}
+
+// In a closed world, only a call without a call type ID has an unknown callee.
+// The functions 1, 2, 3, and 6 have unknown calls: 1 has an indirect call, 2
+// has an indirect call and a call to inline assembly, 3 has no call type IDs
+// (like a summary of an older compiler), and 6 does not list the IDs of its
+// unknown calls. The call type IDs of 3 can be any IDs, so its unknown call
+// can reach each possible target, and it is also a target of each indirect
+// call. The function 7 has call type IDs, but no ID of its own, like a kernel,
+// so no indirect call reaches it.
+TEST(SummaryCallGraphTest, CallsWithoutTypeId) {
+  std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(R"(
+^0 = module: (path: "a.o", hash: (0, 0, 0, 0, 0))
+^1 = gv: (guid: 1, summaries: (function: (module: ^0, flags: (linkage: external), insts: 1, funcFlags: (hasUnknownCall: 1), indirectCallTypeIds: (100))))
+^2 = gv: (guid: 2, summaries: (function: (module: ^0, flags: (linkage: external), insts: 2, funcFlags: (hasUnknownCall: 1), indirectCallTypeIds: (100), hasCallWithoutTypeId: 1)))
+^3 = gv: (guid: 3, summaries: (function: (module: ^0, flags: (linkage: external), insts: 1, funcFlags: (hasUnknownCall: 1))))
+^4 = gv: (guid: 4, summaries: (function: (module: ^0, flags: (linkage: external), insts: 1, callTypeId: 100)))
+^5 = gv: (guid: 5, summaries: (variable: (module: ^0, flags: (linkage: external), varFlags: (readonly: 0), refs: (^3, ^4, ^7))))
+^6 = gv: (guid: 6, summaries: (function: (module: ^0, flags: (linkage: external), insts: 1, funcFlags: (hasUnknownCall: 1), callTypeId: 200)))
+^7 = gv: (guid: 7, summaries: (function: (module: ^0, flags: (linkage: external), insts: 1, callTypeId: 0)))
+)");
+  ASSERT_NE(Index, nullptr);
+  Analyses Closed(*Index, /*PreservedSymbols=*/{}, allPrevail,
+                  /*ClosedWorld=*/true);
+  const SummaryCallGraph &CG = Closed.graph(/*IncludeIndirectCalls=*/true);
+  EXPECT_EQ(getIDs(CG, CG.lookup(1)->callees()), GUIDList({4, 3}));
+  EXPECT_EQ(getIDs(CG, CG.lookup(2)->callees()),
+            GUIDList({4, 3, ExternalCallees}));
+  EXPECT_EQ(getIDs(CG, CG.lookup(3)->callees()),
+            GUIDList({3, 4, ExternalCallees}));
+  EXPECT_EQ(getIDs(CG, CG.lookup(6)->callees()), GUIDList({ExternalCallees}));
+  EXPECT_TRUE(CG.lookup(7)->callers().empty());
+
+  // In an open world, each unknown call can reach code outside the summaries.
+  Analyses Open(*Index);
+  const SummaryCallGraph &OpenCG = Open.graph(/*IncludeIndirectCalls=*/true);
+  EXPECT_EQ(getIDs(OpenCG, OpenCG.lookup(1)->callees()),
+            GUIDList({4, 3, ExternalCallees}));
 }
 
 static const char *AddressTakenSummary = R"(

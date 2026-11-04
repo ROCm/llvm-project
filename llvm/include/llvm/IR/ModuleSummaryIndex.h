@@ -896,8 +896,8 @@ public:
 
   /// Call type IDs (see TargetTransformInfo::getCallTypeId), which are 64-bit
   /// hashes like GUIDs. An indirect call can reach a function only if both
-  /// have the same ID. Because these fields are not always needed we
-  /// only allocate space for them if necessary.
+  /// have the same ID. The summary builder gives each function summary this
+  /// data, also if all fields are empty.
   struct CallTypeIdInfo {
     /// The identifier of this function, or 0 if no indirect call can reach it
     /// (for example, a local function whose address is not taken, or a
@@ -907,6 +907,10 @@ public:
     /// The distinct identifiers of the indirect calls in this function. The
     /// summary call graph (SummaryCallGraph) finds their possible targets.
     std::vector<GlobalValue::GUID> IndirectCallTypeIds;
+
+    /// True if this function has a call with an unknown callee that has no
+    /// call type ID: a call to inline assembly.
+    bool HasCallWithoutTypeId = false;
   };
 
   /// Flags specific to function summaries.
@@ -1214,13 +1218,29 @@ public:
     return {};
   }
 
+  /// Returns true if the summary has call type IDs, also if they are all
+  /// empty. A summary without them comes from a producer that does not compute
+  /// them, for example an older compiler, or the summary of a function in
+  /// module assembly. The function can then have any call type ID, and so can
+  /// each of its calls with an unknown callee.
+  bool hasCallTypeIds() const { return CTIdInfo != nullptr; }
+
+  /// Returns true if this function can have a call with an unknown callee
+  /// that is not an indirect call in indirectCallTypeIds(), for example a call
+  /// to inline assembly.
+  bool hasCallWithoutTypeId() const {
+    if (CTIdInfo && CTIdInfo->HasCallWithoutTypeId)
+      return true;
+    // The summary does not list the IDs of the unknown calls.
+    return FunFlags.HasUnknownCall &&
+           (!CTIdInfo || CTIdInfo->IndirectCallTypeIds.empty());
+  }
+
+  const CallTypeIdInfo *getCallTypeIdInfo() const { return CTIdInfo.get(); }
+
   /// Sets the call type identifiers of this function and of its indirect
   /// calls.
   void setCallTypeIds(CallTypeIdInfo Info) {
-    if (!Info.CallTypeId && Info.IndirectCallTypeIds.empty()) {
-      CTIdInfo.reset();
-      return;
-    }
     CTIdInfo = std::make_unique<CallTypeIdInfo>(std::move(Info));
   }
 

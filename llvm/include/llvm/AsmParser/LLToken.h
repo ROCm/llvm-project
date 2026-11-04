@@ -456,6 +456,7 @@ enum Kind {
   kw_typeCheckedLoadConstVCalls,
   kw_callTypeId,
   kw_indirectCallTypeIds,
+  kw_hasCallWithoutTypeId,
   kw_vFuncId,
   kw_offset,
   kw_args,

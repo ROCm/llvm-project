@@ -354,9 +354,10 @@ enum GlobalValueSummarySymtabCodes {
   // 34 is reserved: an older version of this compiler wrote AMDGPU data with
   // it. The data is now in a summary extension.
   // Call type identifiers of a function, emitted before the corresponding
-  // function summary record: the identifier of the function (0 if none), then
-  // the distinct identifiers of its indirect calls.
-  // [call_type_id, n x indirect_call_type_id]
+  // function summary record: the identifier of the function (0 if none), the
+  // flags (bit 0: the function has a call without a call type ID, for example
+  // to inline assembly), then the distinct identifiers of its indirect calls.
+  // [call_type_id, flags, n x indirect_call_type_id]
   FS_CALL_TYPE_IDS = 35,
 };
 

@@ -13,32 +13,49 @@
 ; RUN: llvm-dis %t.bc -o - | FileCheck %s
 ; RUN: llvm-lto2 run %t.bc -o %t.o -thinlto-distributed-indexes \
 ; RUN:   -r=%t.bc,f_float,px -r=%t.bc,f_i32,px -r=%t.bc,caller,px \
-; RUN:   -r=%t.bc,kernel,px -r=%t.bc,fp,px
+; RUN:   -r=%t.bc,kernel,px -r=%t.bc,fp,px -r=%t.bc,ifn,px \
+; RUN:   -r=%t.bc,resolver,px -r=%t.bc,ifunc_caller,px \
+; RUN:   -r=%t.bc,asm_goto,px -r=%t.bc,asm_invoke,px -r=%t.bc,personality, \
+; RUN:   -r=%t.bc,const_callers,px
 ; RUN: llvm-dis %t.bc.thinlto.bc -o - | FileCheck %s --check-prefix=COMBINED
 
-; The bitcode analyzer prints the operands as signed values.
-; BCAN: <CALL_TYPE_IDS op0=657395674655738670 op1=-4878270736549988137 op2=-6479867359252994093/>
+; The bitcode analyzer prints the operands as signed values. The second operand
+; holds the flags.
+; BCAN: <CALL_TYPE_IDS op0=657395674655738670 op1=1 op2=-4878270736549988137 op3=-6479867359252994093/>
 
 ; Functions with non-local linkage get their own identifier.
 ; CHECK-DAG: (name: "f_float", {{.*}}, insts: 1, callTypeId: 13568473337159563479)))
 ; CHECK-DAG: (name: "f_i32", {{.*}}, insts: 1, callTypeId: 18428409508369012832)))
-; A local function gets its own identifier only if its address is taken.
-; CHECK-DAG: (name: "local_not_taken", {{.*}}, insts: 1)))
+; A local function gets its own identifier only if its address is taken. A
+; function without an identifier still has call type IDs, all empty.
+; CHECK-DAG: (name: "local_not_taken", {{.*}}, insts: 1, callTypeId: 0)))
 ; CHECK-DAG: (name: "local_taken", {{.*}}, insts: 1, callTypeId: 10830334733921094663)))
 ; A function whose calling convention does not permit calls has no identifier.
-; CHECK-DAG: (name: "kernel", {{.*}}, insts: 1)))
+; CHECK-DAG: (name: "kernel", {{.*}}, insts: 1, callTypeId: 0)))
 ; The identifiers of the indirect calls have no duplicates, and the calling
-; convention is part of the identifier. Inline assembly is not an indirect call.
-; CHECK-DAG: (name: "caller", {{.*}}, calls: ((callee: ^{{[0-9]+}})), callTypeId: 657395674655738670, indirectCallTypeIds: (13568473337159563479, 11966876714456557523))))
+; convention is part of the identifier. A call to inline assembly has no
+; identifier, and the summary has a flag for it.
+; CHECK-DAG: (name: "caller", {{.*}}, calls: ((callee: ^{{[0-9]+}})), callTypeId: 657395674655738670, indirectCallTypeIds: (13568473337159563479, 11966876714456557523), hasCallWithoutTypeId: 1)))
+; A call to an ifunc gets the identifier of its type.
+; CHECK-DAG: (name: "ifunc_caller", {{.*}}, callTypeId: 10830334733921094663, indirectCallTypeIds: (18428409508369012832))))
+; Inline assembly through callbr and invoke has no identifier either.
+; CHECK-DAG: (name: "asm_goto", {{.*}}, callTypeId: 10830334733921094663, hasCallWithoutTypeId: 1)))
+; CHECK-DAG: (name: "asm_invoke", {{.*}}, callTypeId: 10830334733921094663, hasCallWithoutTypeId: 1, refs: (^{{[0-9]+}}))))
+; A call to an absolute address has no identifier. A call through a
+; dso_local_equivalent value reaches a function, so it gets an identifier.
+; CHECK-DAG: (name: "const_callers", {{.*}}, callTypeId: 10830334733921094663, indirectCallTypeIds: (10830334733921094663), hasCallWithoutTypeId: 1, refs: (^{{[0-9]+}}))))
 
 ; COMBINED-DAG: insts: 1, callTypeId: 13568473337159563479)))
 ; COMBINED-DAG: insts: 1, callTypeId: 18428409508369012832)))
 ; COMBINED-DAG: insts: 1, callTypeId: 10830334733921094663)))
-; COMBINED-DAG: callTypeId: 657395674655738670, indirectCallTypeIds: (13568473337159563479, 11966876714456557523))))
+; COMBINED-DAG: callTypeId: 657395674655738670, indirectCallTypeIds: (13568473337159563479, 11966876714456557523), hasCallWithoutTypeId: 1)))
+; COMBINED-DAG: callTypeId: 10830334733921094663, indirectCallTypeIds: (18428409508369012832))))
 
 target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
 
 @fp = global ptr @local_taken
+
+@ifn = ifunc i32 (i32), ptr @resolver
 
 define float @f_float(float %x) {
   ret float %x
@@ -66,5 +83,41 @@ define void @caller(ptr %p) {
   %b = call float %p(float 2.0)
   %c = call fastcc i32 %p(i32 1)
   call void asm sideeffect "", ""()
+  ret void
+}
+
+define ptr @resolver() {
+  ret ptr @f_i32
+}
+
+define void @ifunc_caller() {
+  %r = call i32 @ifn(i32 1)
+  ret void
+}
+
+define void @asm_goto() {
+  callbr void asm "", "!i"()
+          to label %normal [label %indirect]
+normal:
+  ret void
+indirect:
+  ret void
+}
+
+define void @asm_invoke() personality ptr @personality {
+  invoke void asm sideeffect unwind "", ""()
+          to label %cont unwind label %lpad
+cont:
+  ret void
+lpad:
+  %lp = landingpad { ptr, i32 } cleanup
+  ret void
+}
+
+declare i32 @personality(...)
+
+define void @const_callers() {
+  call void inttoptr (i64 4096 to ptr)()
+  call void dso_local_equivalent @local_taken()
   ret void
 }
