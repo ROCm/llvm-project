@@ -10726,7 +10726,8 @@ bool LLParser::parseGVEntry(unsigned ID) {
 ///   ::= 'function' ':' '(' 'module' ':' ModuleReference ',' GVFlags
 ///         ',' 'insts' ':' UInt32 [',' OptionalFFlags]? [',' OptionalCalls]?
 ///         [',' OptionalTypeIdInfo]? [',' 'callTypeId' ':' UInt64]?
-///         [',' OptionalIndirectCallTypeIds]? [',' OptionalParamAccesses]?
+///         [',' OptionalIndirectCallTypeIds]?
+///         [',' 'hasCallWithoutTypeId' ':' Flag]? [',' OptionalParamAccesses]?
 ///         [',' OptionalRefs]? ')'
 bool LLParser::parseFunctionSummary(std::string Name, GlobalValue::GUID GUID,
                                     unsigned ID) {
@@ -10788,6 +10789,16 @@ bool LLParser::parseFunctionSummary(std::string Name, GlobalValue::GUID GUID,
       if (parseOptionalIndirectCallTypeIds(CallTypeIds->IndirectCallTypeIds))
         return true;
       break;
+    case lltok::kw_hasCallWithoutTypeId: {
+      Lex.Lex();
+      if (!CallTypeIds)
+        CallTypeIds.emplace();
+      unsigned Val = 0;
+      if (parseToken(lltok::colon, "expected ':' here") || parseFlag(Val))
+        return true;
+      CallTypeIds->HasCallWithoutTypeId = Val;
+      break;
+    }
     case lltok::kw_refs:
       if (parseOptionalRefs(Refs))
         return true;

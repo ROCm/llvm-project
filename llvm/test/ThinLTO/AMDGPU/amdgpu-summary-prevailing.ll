@@ -15,7 +15,7 @@
 
 ; A kernel has facts also without launch attributes.
 ; A: ^[[F:[0-9]+]] = gv: (guid: {{[0-9]+}}, summaries: (function: (module: ^0, flags: (linkage: available_externally,
-; A: ^[[KERNEL:[0-9]+]] = gv: (guid: {{[0-9]+}}, {{.*}}calls: ((callee: ^[[F]])))))
+; A: ^[[KERNEL:[0-9]+]] = gv: (guid: {{[0-9]+}}, {{.*}}calls: ((callee: ^[[F]])), callTypeId: 0)))
 ; A: = extension: (name: "amdgpu-launch-attrs", version: 1, required: 0, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ("amdgpu-waves-per-eu", "2")), (gv: ^[[KERNEL]], module: ^0, ints: (91))))
 ; A: = extension: (name: "fn-attrs", version: 1, required: 1, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ({{.*}}, "amdgpu-waves-per-eu", "7"))))
 

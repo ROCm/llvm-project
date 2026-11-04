@@ -138,17 +138,30 @@ SummaryCallGraph::SummaryCallGraph(
   const bool KnowsIndirectCalls = IncludeIndirectCalls && Info.ClosedWorld;
 
   // The possible targets of the indirect calls with each call type ID: the
-  // functions whose address can be taken and that have the ID.
+  // functions whose address can be taken and that have the ID. A function
+  // with a copy without call type IDs can have any ID, so it is a target of
+  // each indirect call. A call without call type IDs can reach each target.
   DenseMap<GlobalValue::GUID, SmallVector<Node *, 4>> Targets;
+  SmallVector<Node *> AnyIdTargets;
+  SmallVector<Node *> AllTargets;
   for (Node *N : Nodes) {
     if (!IncludeIndirectCalls || !AddressTaken.contains(N->VI.getGUID()))
       continue;
     SmallVector<GlobalValue::GUID, 1> Ids;
-    for (FunctionSummary *FS : N->Copies)
-      if (FS->callTypeId() && !is_contained(Ids, FS->callTypeId()))
+    bool AnyId = false;
+    for (FunctionSummary *FS : N->Copies) {
+      if (!FS->hasCallTypeIds())
+        AnyId = true;
+      else if (FS->callTypeId() && !is_contained(Ids, FS->callTypeId()))
         Ids.push_back(FS->callTypeId());
-    for (GlobalValue::GUID Id : Ids)
-      Targets[Id].push_back(N);
+    }
+    if (AnyId)
+      AnyIdTargets.push_back(N);
+    else
+      for (GlobalValue::GUID Id : Ids)
+        Targets[Id].push_back(N);
+    if (AnyId || !Ids.empty())
+      AllTargets.push_back(N);
   }
 
   // Returns the node of a callee. A callee without a function or alias summary
@@ -176,18 +189,26 @@ SummaryCallGraph::SummaryCallGraph(
     for (FunctionSummary *FS : N->Copies) {
       for (const FunctionSummary::EdgeTy &E : FS->calls())
         Edges[GetNode(E.first)] |= CallEdge;
-      if (IncludeIndirectCalls)
-        for (GlobalValue::GUID Id : FS->indirectCallTypeIds()) {
-          auto It = Targets.find(Id);
-          if (It != Targets.end())
-            for (Node *Target : It->second)
-              Edges[Target] |= IndirectEdge;
+      if (IncludeIndirectCalls) {
+        auto AddTargets = [&](ArrayRef<Node *> Ts) {
+          for (Node *Target : Ts)
+            Edges[Target] |= IndirectEdge;
+        };
+        if (!FS->hasCallTypeIds()) {
+          if (FS->fflags().HasUnknownCall)
+            AddTargets(AllTargets);
+        } else if (!FS->indirectCallTypeIds().empty()) {
+          for (GlobalValue::GUID Id : FS->indirectCallTypeIds())
+            if (auto It = Targets.find(Id); It != Targets.end())
+              AddTargets(It->second);
+          AddTargets(AnyIdTargets);
         }
-      // The summary does not tell if each call with an unknown callee is an
-      // indirect call with a call type ID. A call to inline assembly or to an
-      // ifunc has no ID.
-      if (FS->fflags().HasUnknownCall ||
-          (!KnowsIndirectCalls && !FS->indirectCallTypeIds().empty()))
+      }
+      // If the graph knows the indirect calls, only a call without a call type
+      // ID, for example a call to inline assembly, has an unknown callee.
+      if (KnowsIndirectCalls ? FS->hasCallWithoutTypeId()
+                             : FS->fflags().HasUnknownCall ||
+                                   !FS->indirectCallTypeIds().empty())
         Edges[CallsExternalNode] |= IndirectEdge;
     }
     for (const auto &S : N->VI.getSummaryList())

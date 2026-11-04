@@ -4567,9 +4567,10 @@ static void writeFunctionTypeMetadataRecords(BitstreamWriter &Stream,
 
   SmallVector<uint64_t, 64> Record;
 
-  if (FS->callTypeId() || !FS->indirectCallTypeIds().empty()) {
-    Record.push_back(FS->callTypeId());
-    llvm::append_range(Record, FS->indirectCallTypeIds());
+  if (const FunctionSummary::CallTypeIdInfo *Info = FS->getCallTypeIdInfo()) {
+    Record.push_back(Info->CallTypeId);
+    Record.push_back(Info->HasCallWithoutTypeId ? 1 : 0);
+    llvm::append_range(Record, Info->IndirectCallTypeIds);
     Stream.EmitRecord(bitc::FS_CALL_TYPE_IDS, Record);
   }
 

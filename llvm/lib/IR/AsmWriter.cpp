@@ -3812,15 +3812,18 @@ void AssemblyWriter::printFunctionSummary(const FunctionSummary *FS) {
   if (const auto *TIdInfo = FS->getTypeIdInfo())
     printTypeIdInfo(*TIdInfo);
 
-  if (FS->callTypeId())
-    Out << ", callTypeId: " << FS->callTypeId();
-
-  if (!FS->indirectCallTypeIds().empty()) {
-    Out << ", indirectCallTypeIds: (";
-    ListSeparator LS;
-    for (GlobalValue::GUID Id : FS->indirectCallTypeIds())
-      Out << LS << Id;
-    Out << ")";
+  // A summary without call type IDs has no callTypeId field.
+  if (const FunctionSummary::CallTypeIdInfo *Info = FS->getCallTypeIdInfo()) {
+    Out << ", callTypeId: " << Info->CallTypeId;
+    if (!Info->IndirectCallTypeIds.empty()) {
+      Out << ", indirectCallTypeIds: (";
+      ListSeparator LS;
+      for (GlobalValue::GUID Id : Info->IndirectCallTypeIds)
+        Out << LS << Id;
+      Out << ")";
+    }
+    if (Info->HasCallWithoutTypeId)
+      Out << ", hasCallWithoutTypeId: 1";
   }
 
   // The AllocationType identifiers capture the profiled context behavior

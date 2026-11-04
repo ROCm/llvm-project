@@ -8419,13 +8419,14 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       break;
 
     case bitc::FS_CALL_TYPE_IDS:
-      if (Record.empty())
+      if (Record.size() < 2 || (Record[1] & ~uint64_t(1)))
         return error("Invalid call type ID record");
       assert(!PendingCallTypeIds);
       PendingCallTypeIds.emplace();
       PendingCallTypeIds->CallTypeId = Record[0];
+      PendingCallTypeIds->HasCallWithoutTypeId = Record[1] & 1;
       llvm::append_range(PendingCallTypeIds->IndirectCallTypeIds,
-                         drop_begin(Record));
+                         drop_begin(Record, 2));
       break;
 
     case bitc::FS_TYPE_TEST_ASSUME_VCALLS:

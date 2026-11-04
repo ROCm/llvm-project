@@ -57,9 +57,11 @@ class raw_ostream;
 ///   and the callers that the graph does not know.
 /// - With them, an indirect call calls each of its possible targets: a
 ///   function whose address can be taken and that has the call type ID of the
-///   call. These edges can be many: for each call type ID, the number of
-///   callers times the number of targets. A pass that needs them accepts their
-///   cost. If the link does not assume a closed world (see
+///   call. A summary without call type IDs (see
+///   FunctionSummary::hasCallTypeIds()) can have any ID. These edges can be
+///   many: for each call type ID, the number of callers times the number of
+///   targets. A pass that needs them accepts their cost. If the link does not
+///   assume a closed world (see
 ///   ThinLinkInfoAnalysis), the graph also has the edges of the other form:
 ///   code outside the summaries can call a function whose address escapes to
 ///   it, and an indirect call can reach code outside the summaries.
