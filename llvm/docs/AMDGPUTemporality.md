@@ -273,9 +273,9 @@ while `(regular, high)` normalizes to `(regular, regular)`.
 
 
 The hardware defines eight `TH_*` values in total. The two not listed above are
-associated with last-use and write-back semantics, which are out of scope for
-temporality per {ref}`amdgpu-temporality` and are therefore never targeted by
-this mapping.
+value 3 (`TH_LU` on loads, `TH_WB` on stores) and value 7 (`TH_NT_WB` on
+stores). Temporality alone never targets them; the two write-back encodings are
+reached only through the `amdgpu.write_back` key ({ref}`amdgpu-write-back`).
 
 #### SMEM (scalar loads)
 
@@ -340,6 +340,69 @@ possibly the opposite of `low`. It is discarded, not merged;
 | present | absent | `aux` applies, unchanged |
 | present | present | Temporality applies; `aux` is ignored |
 
+(amdgpu-write-back)=
+
+## Write-back
+
+`amdgpu.write_back` is a hint for stores. It asks the caches at `agent` and
+`system` scope to keep the stored line dirty instead of writing it through to
+memory early.
+
+Temporality controls how long a cache keeps a line; write-back controls whether
+that line may stay dirty. The two are independent, so write-back is a separate
+key. Like temporality, it is a performance hint and
+may be ignore.
+
+### Syntax
+
+`amdgpu.write_back` goes in the same hint node as `amdgpu.temporality`. Its
+value is an `i1` constant; `true` requests write-back and `false` has no effect.
+
+```llvm
+store i32 %v, ptr addrspace(1) %p, !mem.cache_hint !0
+!0 = !{ i32 1, !1 }
+!1 = !{ !"amdgpu.temporality", !"workgroup:low:agent:high",
+        !"amdgpu.write_back", i1 true }
+```
+
+### Applicability
+
+Write-back applies to the stores that Temporality applies to: non-atomic
+`store` instructions and store intrinsics. It is ignored on loads, and atomic
+instructions are excluded for the same reasons as for Temporality.
+
+### Hardware Lowering
+
+Pre-GFX12 targets have no write-back encoding, so the key is ignored.
+
+On GFX12 and later, the encoding depends on the `near` and `far` levels
+computed in {ref}`amdgpu-temporality-gfx12`. Only two pairs have a write-back
+encoding:
+
+| Computed near | Computed far | Encoding |
+|---|---|---|
+| low | high | `TH_NT_WB` |
+| regular | high | `TH_WB` |
+
+For any other pair the key has no effect, and the store is encoded as if the
+key were absent. For example, `(high, high)` stays `TH_HT`, because no
+write-back encoding keeps `near` at `high`.
+
+### Examples
+
+```llvm
+!1 = !{ !"amdgpu.temporality", !"workgroup:low:agent:high",
+        !"amdgpu.write_back", i1 true }
+; near = low, far = high          GFX12: TH_NT_WB (TH_NT_HT without the key)
+
+!2 = !{ !"amdgpu.temporality", !"agent:high", !"amdgpu.write_back", i1 true }
+; near = regular, far = high      GFX12: TH_WB    (TH_RT without the key)
+
+!3 = !{ !"amdgpu.temporality", !"high", !"amdgpu.write_back", i1 true }
+; near = high, far = high         GFX12: TH_HT    (key ignored: TH_WB has near
+;                                                  at regular, and near wins)
+```
+
 ## Diagnostics
 
 The AMDGPU backend performs the following checks at codegen time, not during
@@ -356,6 +419,8 @@ therefore caught only when codegen for this target reads the value.
 | Levels vary non-monotonically across entries | Not an error |
 | Both `!nontemporal` / `aux` and a temporality hint are present on the same instruction | Not an error; Temporality applies, and the other hint is ignored |
 | A scope is not implemented on the target | Not an error; it is promoted to the next larger supported scope |
+| The `amdgpu.write_back` value is not an `i1` constant | Error |
+| `amdgpu.write_back` is on a load, or the computed pair has no write-back encoding | Not an error; the key is ignored |
 
 ```llvm
 ; Valid values of "amdgpu.temporality"
