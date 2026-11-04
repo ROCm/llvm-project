@@ -128,6 +128,7 @@ TEST(SummaryPassManagerTest, ThinLinkInfo) {
   EXPECT_FALSE(Info.GUIDPreservedSymbols.contains(1));
   EXPECT_TRUE(Info.IsPrevailing(1, nullptr));
   EXPECT_FALSE(Info.IsPrevailing(2, nullptr));
+  EXPECT_FALSE(Info.ClosedWorld);
 
   // The link facts survive an invalidation of all analyses.
   AM.invalidate(*Index, PreservedAnalyses::none());

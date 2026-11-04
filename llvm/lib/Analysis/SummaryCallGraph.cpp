@@ -46,6 +46,32 @@ static GlobalValueSummary *getPrevailingCopy(
   return Prevailing;
 }
 
+/// Returns the GUIDs of the values that the lists llvm.global_ctors,
+/// llvm.global_dtors, llvm.used, and llvm.compiler.used of the modules refer
+/// to, directly or through other variables. Code outside the summaries can
+/// call the functions among them, also if they are not preserved symbols: the
+/// runtime calls the constructors and the destructors, and the users of a used
+/// value are not in the summaries.
+static DenseSet<GlobalValue::GUID>
+getRuntimeEntries(const ModuleSummaryIndex &Index) {
+  DenseSet<GlobalValue::GUID> Entries;
+  SmallVector<ValueInfo> Worklist;
+  for (StringRef Name : {"llvm.global_ctors", "llvm.global_dtors", "llvm.used",
+                         "llvm.compiler.used"})
+    if (ValueInfo VI = Index.getValueInfo(
+            GlobalValue::getGUIDAssumingExternalLinkage(Name)))
+      Worklist.push_back(VI);
+  while (!Worklist.empty()) {
+    ValueInfo VI = Worklist.pop_back_val();
+    for (const auto &S : VI.getSummaryList())
+      if (isa<GlobalVarSummary>(S.get()) && Index.isGlobalValueLive(S.get()))
+        for (ValueInfo Ref : S->refs())
+          if (Entries.insert(Ref.getGUID()).second)
+            Worklist.push_back(Ref);
+  }
+  return Entries;
+}
+
 SummaryCallGraph::Node *SummaryCallGraph::createNode(ValueInfo VI) {
   Node *N = new (Allocator.Allocate()) Node(VI);
   Nodes.push_back(N);
@@ -106,6 +132,11 @@ SummaryCallGraph::SummaryCallGraph(
       N->Prevailing = S;
   }
 
+  // The graph knows all callers and all callees of the indirect calls only if
+  // it includes them and the link assumes a closed world. Otherwise, the
+  // special nodes also stand for the indirect calls.
+  const bool KnowsIndirectCalls = IncludeIndirectCalls && Info.ClosedWorld;
+
   // The possible targets of the indirect calls with each call type ID: the
   // functions whose address can be taken and that have the ID.
   DenseMap<GlobalValue::GUID, SmallVector<Node *, 4>> Targets;
@@ -145,22 +176,19 @@ SummaryCallGraph::SummaryCallGraph(
     for (FunctionSummary *FS : N->Copies) {
       for (const FunctionSummary::EdgeTy &E : FS->calls())
         Edges[GetNode(E.first)] |= CallEdge;
-      if (IncludeIndirectCalls) {
+      if (IncludeIndirectCalls)
         for (GlobalValue::GUID Id : FS->indirectCallTypeIds()) {
           auto It = Targets.find(Id);
           if (It != Targets.end())
             for (Node *Target : It->second)
               Edges[Target] |= IndirectEdge;
         }
-        // The summary does not tell if each call with an unknown callee is an
-        // indirect call with a call type ID. A call to inline assembly or to
-        // an ifunc has no ID.
-        if (FS->fflags().HasUnknownCall)
-          Edges[CallsExternalNode] |= IndirectEdge;
-      } else if (FS->fflags().HasUnknownCall ||
-                 !FS->indirectCallTypeIds().empty()) {
+      // The summary does not tell if each call with an unknown callee is an
+      // indirect call with a call type ID. A call to inline assembly or to an
+      // ifunc has no ID.
+      if (FS->fflags().HasUnknownCall ||
+          (!KnowsIndirectCalls && !FS->indirectCallTypeIds().empty()))
         Edges[CallsExternalNode] |= IndirectEdge;
-      }
     }
     for (const auto &S : N->VI.getSummaryList())
       if (auto *AS = dyn_cast<AliasSummary>(S.get());
@@ -169,9 +197,9 @@ SummaryCallGraph::SummaryCallGraph(
     SetCallees(N, Edges);
   }
 
-  // Code outside the summaries can call the preserved symbols. If the graph
-  // does not include the indirect calls, the external calling node also stands
-  // for them, so it calls each function whose address can be taken.
+  // Code outside the summaries can call the preserved symbols and the entries
+  // of the runtime. Unless the graph knows the indirect calls, the external
+  // calling node also calls each function whose address can be taken.
   auto ByGUID = [](const Node *A, const Node *B) {
     return A->VI.getGUID() < B->VI.getGUID();
   };
@@ -184,10 +212,11 @@ SummaryCallGraph::SummaryCallGraph(
   Edges.clear();
   for (Node *N : Preserved)
     Edges[N] |= CallEdge;
-  if (!IncludeIndirectCalls)
-    for (Node *N : Nodes)
-      if (AddressTaken.contains(N->VI.getGUID()))
-        Edges[N] |= IndirectEdge;
+  DenseSet<GlobalValue::GUID> Entries = getRuntimeEntries(Index);
+  for (Node *N : Nodes)
+    if (Entries.contains(N->VI.getGUID()) ||
+        (!KnowsIndirectCalls && AddressTaken.contains(N->VI.getGUID())))
+      Edges[N] |= IndirectEdge;
   SetCallees(ExternalCallingNode, Edges);
 
   // Add the edges from the callers.

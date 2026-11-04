@@ -296,6 +296,9 @@ struct KernelOccupancyProblem {
 
   /// Like in the attributor, the code outside the summaries can call a function
   /// that it can see from a kernel with any launch: the default attributes.
+  /// They absorb each value except the minimum number of waves per EU, for
+  /// which the merge keeps the largest value. That attribute only limits the
+  /// registers of the function, so a smaller minimum still gives correct code.
   ValueT getExternalValue() { return OccupancyAttrs(); }
 
   void join(ValueT &Into, const ValueT &V) {

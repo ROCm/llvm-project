@@ -126,6 +126,12 @@ static cl::opt<bool>
     LTOKeepSymbolCopies("lto-keep-symbol-copies", cl::init(false), cl::Hidden,
                         cl::desc("Keep copies of symbols in LTO indexing"));
 
+static cl::opt<bool> AssumeThinLinkClosedWorld(
+    "thinlink-closed-world", cl::init(false), cl::Hidden,
+    cl::desc("Assume at the ThinLTO thin link that the link has all code that "
+             "can call the functions in the summaries, and all code that "
+             "their indirect calls can reach"));
+
 /// Indicate we are linking with an allocator that supports hot/cold operator
 /// new interfaces.
 extern cl::opt<bool> SupportsHotColdNew;
@@ -1002,6 +1008,7 @@ LTO::addModule(InputFile &Input, ArrayRef<SymbolResolution> InputRes,
   Res = ModOrErr->second;
 
   if (!LTOInfo->HasSummary) {
+    RegularLTO.HasModuleWithoutSummary = true;
     if (Error Err = linkRegularLTO(std::move(ModOrErr->first),
                                    /*LivenessFromIndex=*/false))
       return Err;
@@ -2460,8 +2467,13 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
   }
   SummaryAnalysisManager SAM;
   PB.registerSummaryAnalyses(SAM);
-  SAM.registerPass(
-      [&] { return ThinLinkInfoAnalysis(GUIDPreservedSymbols, isPrevailing); });
+  // The link can assume a closed world only if all code has a summary.
+  bool ClosedWorld = (Conf.ThinLinkClosedWorld || AssumeThinLinkClosedWorld) &&
+                     !RegularLTO.HasModuleWithoutSummary;
+  SAM.registerPass([&] {
+    return ThinLinkInfoAnalysis(GUIDPreservedSymbols, isPrevailing,
+                                ClosedWorld);
+  });
   SummaryPassManager SPM;
   if (Conf.ThinLinkPipeline.empty())
     addDefaultThinLinkPasses(SPM, Conf, PB);

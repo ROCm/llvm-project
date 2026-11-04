@@ -41,11 +41,13 @@ class Analyses {
 public:
   Analyses(ModuleSummaryIndex &Index,
            DenseSet<GlobalValue::GUID> PreservedSymbols = {},
-           ThinLinkInfoAnalysis::IsPrevailingFn IsPrevailing = allPrevail)
+           ThinLinkInfoAnalysis::IsPrevailingFn IsPrevailing = allPrevail,
+           bool ClosedWorld = false)
       : Index(Index), PreservedSymbols(std::move(PreservedSymbols)) {
     AM.registerPass([] { return PassInstrumentationAnalysis(); });
     AM.registerPass([&] {
-      return ThinLinkInfoAnalysis(this->PreservedSymbols, IsPrevailing);
+      return ThinLinkInfoAnalysis(this->PreservedSymbols, IsPrevailing,
+                                  ClosedWorld);
     });
     AM.registerPass([] { return SummaryCallGraphAnalysis(); });
     AM.registerPass([] { return SummaryAddressTakenAnalysis(); });
@@ -326,11 +328,13 @@ static const char *IndirectCallSummary = R"Summary(
 )Summary";
 
 // An indirect call can reach the live functions with its call type ID whose
-// address can be taken. For the alias, the aliasee is a target.
+// address can be taken. For the alias, the aliasee is a target. In a closed
+// world, code outside the summaries calls only the preserved symbols.
 TEST(SummaryCallGraphTest, IndirectCalls) {
   std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(IndirectCallSummary);
   ASSERT_NE(Index, nullptr);
-  Analyses A(*Index);
+  Analyses A(*Index, /*PreservedSymbols=*/{}, allPrevail,
+             /*ClosedWorld=*/true);
   const SummaryCallGraph &CG = A.graph(/*IncludeIndirectCalls=*/true);
   EXPECT_TRUE(CG.includesIndirectCalls());
 
@@ -350,13 +354,42 @@ TEST(SummaryCallGraphTest, IndirectCalls) {
   EXPECT_TRUE(is_contained(getSCCIDs(CG), GUIDList({1, 8})));
 }
 
+// In an open world, code outside the summaries can call each function whose
+// address can be taken, and an indirect call can reach code outside the
+// summaries.
+TEST(SummaryCallGraphTest, IndirectCallsInOpenWorld) {
+  std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(R"(
+^0 = module: (path: "a.o", hash: (0, 0, 0, 0, 0))
+^1 = gv: (guid: 1, summaries: (function: (module: ^0, flags: (linkage: external), insts: 1, indirectCallTypeIds: (100))))
+^2 = gv: (guid: 2, summaries: (function: (module: ^0, flags: (linkage: external), insts: 1, callTypeId: 100)))
+^3 = gv: (guid: 3, summaries: (variable: (module: ^0, flags: (linkage: external), varFlags: (readonly: 0), refs: (^2))))
+)");
+  ASSERT_NE(Index, nullptr);
+  Analyses Open(*Index);
+  const SummaryCallGraph &CG = Open.graph(/*IncludeIndirectCalls=*/true);
+  EXPECT_EQ(getIDs(CG, CG.lookup(1)->callees()),
+            GUIDList({2, ExternalCallees}));
+  EXPECT_EQ(getIDs(CG, CG.getExternalCallingNode()->callees()), GUIDList({2}));
+  EXPECT_EQ(getIDs(CG, CG.lookup(2)->callers()),
+            GUIDList({ExternalCallers, 1}));
+
+  Analyses Closed(*Index, /*PreservedSymbols=*/{}, allPrevail,
+                  /*ClosedWorld=*/true);
+  const SummaryCallGraph &ClosedCG =
+      Closed.graph(/*IncludeIndirectCalls=*/true);
+  EXPECT_EQ(getIDs(ClosedCG, ClosedCG.lookup(1)->callees()), GUIDList({2}));
+  EXPECT_TRUE(ClosedCG.getExternalCallingNode()->callees().empty());
+}
+
 // Without the indirect targets, an indirect call calls the calls external
 // node, and the external calling node calls each function whose address can be
-// taken, also the alias and the function 3 with another call type ID.
+// taken, also the alias and the function 3 with another call type ID. This is
+// also true in a closed world.
 TEST(SummaryCallGraphTest, IndirectCallsWithoutTargets) {
   std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(IndirectCallSummary);
   ASSERT_NE(Index, nullptr);
-  Analyses A(*Index);
+  Analyses A(*Index, /*PreservedSymbols=*/{}, allPrevail,
+             /*ClosedWorld=*/true);
   const SummaryCallGraph &CG = A.graph();
   EXPECT_FALSE(CG.includesIndirectCalls());
 

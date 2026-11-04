@@ -47,6 +47,9 @@ enum class SummaryDataflowDirection {
 ///   start of the join for the input of N.
 /// - ValueT getExternalValue(): the output of the code outside the summaries,
 ///   which the external calling node and the calls external node stand for.
+///   The special nodes also stand for the calls that the graph does not show,
+///   so the results are sound only if this value absorbs each value: a join
+///   of any value into it gives it again.
 /// - void join(ValueT &Into, const ValueT &V): joins \p V into \p Into.
 /// - ValueT transfer(const SummaryCallGraph::Node &N, const ValueT &In): the
 ///   output of N for the input \p In. It is not called for the special nodes.
