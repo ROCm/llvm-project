@@ -55,6 +55,7 @@ static Error runCodeGenPipelineNewPM(TargetMachine &TM, Module &M,
                                      raw_pwrite_stream &OS,
                                      raw_pwrite_stream *DwoOS,
                                      CodeGenFileType CGFT, bool DisableVerify,
+                                     bool DisableSimplifyLibCalls,
                                      IntrusiveRefCntPtr<vfs::FileSystem> VFS) {
   ModulePassManager MPM;
   MachineFunctionAnalysisManager MFAM;
@@ -67,6 +68,21 @@ static Error runCodeGenPipelineNewPM(TargetMachine &TM, Module &M,
   MachineModuleInfo MMI(&TM);
   PassInstrumentationCallbacks PIC;
   PipelineTuningOptions PTOptions;
+  StandardInstrumentations SI(M.getContext(), /*DebugLogging=*/false);
+  SI.registerCallbacks(PIC, &MAM);
+
+  // Add LibraryInfo.
+  TargetLibraryInfoImpl TLII(TM.getTargetTriple(), TM.Options.VecLib);
+  if (DisableSimplifyLibCalls)
+    TLII.disableAllFunctions();
+  FAM.registerPass([&] { return TargetLibraryAnalysis(TLII); });
+
+  MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
+  MAM.registerPass([&] {
+    const TargetOptions &Options = TM.Options;
+    return RuntimeLibraryAnalysis(Options.MCOptions.ABIName, Options.VecLib);
+  });
+
   PassBuilder PB(M.getContext(), &TM, PTOptions, std::nullopt, &PIC, VFS);
   PB.registerModuleAnalyses(MAM);
   PB.registerCGSCCAnalyses(CGAM);
@@ -74,11 +90,6 @@ static Error runCodeGenPipelineNewPM(TargetMachine &TM, Module &M,
   PB.registerLoopAnalyses(LAM);
   PB.registerMachineFunctionAnalyses(MFAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM, &MFAM);
-
-  StandardInstrumentations SI(M.getContext(), /*DebugLogging=*/false);
-  SI.registerCallbacks(PIC, &MAM);
-
-  MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
 
   Error BuildPipelineError = TM.buildCodeGenPipeline(
       MPM, MAM, OS, DwoOS, CGFT, Opt, MMI.getContext(), &PIC);
@@ -96,7 +107,8 @@ Error llvm::runCodeGenPipeline(TargetMachine &TM, Module &M,
                                IntrusiveRefCntPtr<vfs::FileSystem> VFS) {
   const PassesOptions &Opts = getPassesOptions(M.getContext());
   if (valueOr(Opts.force_new_pm_codegen, TM.shouldDefaultToNewPM())) {
-    return runCodeGenPipelineNewPM(TM, M, OS, DwoOS, CGFT, DisableVerify, VFS);
+    return runCodeGenPipelineNewPM(TM, M, OS, DwoOS, CGFT, DisableVerify,
+                                   DisableSimplifyLibCalls, VFS);
   }
 
   return runCodeGenPipelineLegacy(TM, M, OS, DwoOS, CGFT, DisableVerify,
