@@ -1017,24 +1017,20 @@ static uint32_t getEffectiveNumThreads(const DeviceGeometryPropsTy &Props,
                                                : KernelEnv.PreferredNumThreads);
 }
 
-/// Get the number of teams the user set with OMP_NUM_TEAMS, or zero.
-static uint32_t getOMPNumTeams() {
-  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
-  return OMP_NumTeams > 0 ? uint32_t(OMP_NumTeams) : 0;
-}
-
 /// Get the maximum number of blocks the device can launch for a kernel using
 /// \p NumThreads threads per block, further limited by OMP_NUM_TEAMS if the
 /// user set it.
 static uint32_t getDeviceBlockLimit(const DeviceGeometryPropsTy &Props,
                                     uint32_t NumThreads) {
+  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
+
   uint32_t BlockLimit = Props.MaxNumBlocks;
   // Some devices limit the total number of threads of a launch, which makes
   // the block limit depend on the thread count.
   if (Props.MaxGridSize && NumThreads > 0)
     BlockLimit = std::min<uint64_t>(BlockLimit, Props.MaxGridSize / NumThreads);
-  if (uint32_t NumTeams = getOMPNumTeams())
-    return std::min(BlockLimit, NumTeams);
+  if (OMP_NumTeams > 0)
+    return std::min(BlockLimit, uint32_t(OMP_NumTeams));
   return BlockLimit;
 }
 
