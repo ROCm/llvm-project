@@ -4,7 +4,7 @@
 define double @test(ptr %0, double %1) {
 ; CHECK-LABEL: define double @test(
 ; CHECK-SAME: ptr [[TMP0:%.*]], double [[TMP1:%.*]]) {
-; CHECK-NEXT:    [[TMP28:%.*]] = tail call double @llvm.exp.f64(double +qnan)
+; CHECK-NEXT:    [[TMP6:%.*]] = tail call double @llvm.exp.f64(double +qnan)
 ; CHECK-NEXT:    [[TMP3:%.*]] = insertelement <2 x double> poison, double [[TMP1]], i64 0
 ; CHECK-NEXT:    [[TMP4:%.*]] = shufflevector <2 x double> [[TMP3]], <2 x double> poison, <2 x i32> zeroinitializer
 ; CHECK-NEXT:    [[TMP5:%.*]] = fmul <2 x double> [[TMP4]], zeroinitializer
@@ -13,16 +13,16 @@ define double @test(ptr %0, double %1) {
 ; CHECK-NEXT:    [[TMP9:%.*]] = insertelement <2 x double> [[TMP7]], double [[TMP8]], i64 0
 ; CHECK-NEXT:    [[TMP10:%.*]] = fadd <2 x double> [[TMP9]], <double 1.000000e+00, double 0.000000e+00>
 ; CHECK-NEXT:    [[TMP11:%.*]] = fadd <2 x double> [[TMP7]], zeroinitializer
-; CHECK-NEXT:    [[TMP25:%.*]] = fmul <2 x double> [[TMP10]], <double 0.000000e+00, double 1.000000e+00>
+; CHECK-NEXT:    [[TMP12:%.*]] = fmul <2 x double> [[TMP10]], <double 0.000000e+00, double 1.000000e+00>
 ; CHECK-NEXT:    [[TMP13:%.*]] = fadd <2 x double> [[TMP11]], [[TMP5]]
-; CHECK-NEXT:    [[TMP14:%.*]] = insertelement <2 x double> <double poison, double 0.000000e+00>, double [[TMP28]], i64 0
-; CHECK-NEXT:    [[TMP22:%.*]] = fmul <2 x double> [[TMP14]], [[TMP13]]
-; CHECK-NEXT:    [[TMP23:%.*]] = fadd <2 x double> [[TMP25]], [[TMP22]]
-; CHECK-NEXT:    [[TMP24:%.*]] = extractelement <2 x double> [[TMP23]], i64 0
-; CHECK-NEXT:    [[TMP29:%.*]] = fadd double [[TMP24]], [[TMP28]]
-; CHECK-NEXT:    [[TMP19:%.*]] = extractelement <2 x double> [[TMP23]], i64 1
-; CHECK-NEXT:    [[TMP20:%.*]] = fadd double [[TMP19]], [[TMP29]]
-; CHECK-NEXT:    ret double [[TMP20]]
+; CHECK-NEXT:    [[TMP14:%.*]] = insertelement <2 x double> <double poison, double 0.000000e+00>, double [[TMP6]], i64 0
+; CHECK-NEXT:    [[TMP15:%.*]] = fmul <2 x double> [[TMP14]], [[TMP13]]
+; CHECK-NEXT:    [[TMP16:%.*]] = fadd <2 x double> [[TMP12]], [[TMP15]]
+; CHECK-NEXT:    [[TMP29:%.*]] = extractelement <2 x double> [[TMP16]], i64 0
+; CHECK-NEXT:    [[TMP27:%.*]] = fadd double [[TMP29]], [[TMP6]]
+; CHECK-NEXT:    [[TMP23:%.*]] = extractelement <2 x double> [[TMP16]], i64 1
+; CHECK-NEXT:    [[TMP30:%.*]] = fadd double [[TMP23]], [[TMP27]]
+; CHECK-NEXT:    ret double [[TMP30]]
 ;
   %3 = getelementptr i8, ptr %0, i64 8
   %4 = load double, ptr %0, align 8

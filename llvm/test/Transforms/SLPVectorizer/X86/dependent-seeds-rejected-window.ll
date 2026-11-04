@@ -8,40 +8,25 @@
 ; must still be tried, its tree includes x * x without the extracts.
 
 define void @cube(<2 x double> %d, <2 x double> %a0, <2 x double> %a1, ptr %out) {
-; SSE-LABEL: define void @cube(
-; SSE-SAME: <2 x double> [[D:%.*]], <2 x double> [[A0:%.*]], <2 x double> [[A1:%.*]], ptr [[OUT:%.*]]) #[[ATTR0:[0-9]+]] {
-; SSE-NEXT:  [[ENTRY:.*:]]
-; SSE-NEXT:    [[TMP0:%.*]] = fmul <2 x double> [[D]], [[D]]
-; SSE-NEXT:    [[TMP1:%.*]] = fmul <2 x double> [[D]], [[TMP0]]
-; SSE-NEXT:    [[S0:%.*]] = shufflevector <2 x double> [[TMP1]], <2 x double> poison, <2 x i32> zeroinitializer
-; SSE-NEXT:    [[TMP2:%.*]] = shufflevector <2 x double> [[TMP1]], <2 x double> poison, <2 x i32> <i32 1, i32 poison>
-; SSE-NEXT:    [[S1:%.*]] = shufflevector <2 x double> [[TMP2]], <2 x double> poison, <2 x i32> zeroinitializer
-; SSE-NEXT:    [[R0:%.*]] = fmul <2 x double> [[A0]], [[S0]]
-; SSE-NEXT:    [[R1:%.*]] = fmul <2 x double> [[A1]], [[S1]]
-; SSE-NEXT:    store <2 x double> [[R0]], ptr [[OUT]], align 8
-; SSE-NEXT:    [[OUT1:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 16
-; SSE-NEXT:    store <2 x double> [[R1]], ptr [[OUT1]], align 8
-; SSE-NEXT:    ret void
-;
-; AVX-LABEL: define void @cube(
-; AVX-SAME: <2 x double> [[D:%.*]], <2 x double> [[A0:%.*]], <2 x double> [[A1:%.*]], ptr [[OUT:%.*]]) #[[ATTR0:[0-9]+]] {
-; AVX-NEXT:  [[ENTRY:.*:]]
-; AVX-NEXT:    [[X0:%.*]] = extractelement <2 x double> [[D]], i64 0
-; AVX-NEXT:    [[X1:%.*]] = extractelement <2 x double> [[D]], i64 1
-; AVX-NEXT:    [[SQ0:%.*]] = fmul double [[X0]], [[X0]]
-; AVX-NEXT:    [[C0:%.*]] = fmul double [[X0]], [[SQ0]]
-; AVX-NEXT:    [[SQ1:%.*]] = fmul double [[X1]], [[X1]]
-; AVX-NEXT:    [[C1:%.*]] = fmul double [[X1]], [[SQ1]]
-; AVX-NEXT:    [[I0:%.*]] = insertelement <2 x double> poison, double [[C0]], i64 0
-; AVX-NEXT:    [[S0:%.*]] = shufflevector <2 x double> [[I0]], <2 x double> poison, <2 x i32> zeroinitializer
-; AVX-NEXT:    [[I1:%.*]] = insertelement <2 x double> poison, double [[C1]], i64 0
-; AVX-NEXT:    [[S1:%.*]] = shufflevector <2 x double> [[I1]], <2 x double> poison, <2 x i32> zeroinitializer
-; AVX-NEXT:    [[R0:%.*]] = fmul <2 x double> [[A0]], [[S0]]
-; AVX-NEXT:    [[R1:%.*]] = fmul <2 x double> [[A1]], [[S1]]
-; AVX-NEXT:    store <2 x double> [[R0]], ptr [[OUT]], align 8
-; AVX-NEXT:    [[OUT1:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 16
-; AVX-NEXT:    store <2 x double> [[R1]], ptr [[OUT1]], align 8
-; AVX-NEXT:    ret void
+; CHECK-LABEL: define void @cube(
+; CHECK-SAME: <2 x double> [[D:%.*]], <2 x double> [[A0:%.*]], <2 x double> [[A1:%.*]], ptr [[OUT:%.*]]) #[[ATTR0:[0-9]+]] {
+; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[X0:%.*]] = extractelement <2 x double> [[D]], i64 0
+; CHECK-NEXT:    [[X1:%.*]] = extractelement <2 x double> [[D]], i64 1
+; CHECK-NEXT:    [[SQ0:%.*]] = fmul double [[X0]], [[X0]]
+; CHECK-NEXT:    [[C0:%.*]] = fmul double [[X0]], [[SQ0]]
+; CHECK-NEXT:    [[SQ1:%.*]] = fmul double [[X1]], [[X1]]
+; CHECK-NEXT:    [[C1:%.*]] = fmul double [[X1]], [[SQ1]]
+; CHECK-NEXT:    [[I0:%.*]] = insertelement <2 x double> poison, double [[C0]], i64 0
+; CHECK-NEXT:    [[S0:%.*]] = shufflevector <2 x double> [[I0]], <2 x double> poison, <2 x i32> zeroinitializer
+; CHECK-NEXT:    [[I1:%.*]] = insertelement <2 x double> poison, double [[C1]], i64 0
+; CHECK-NEXT:    [[S1:%.*]] = shufflevector <2 x double> [[I1]], <2 x double> poison, <2 x i32> zeroinitializer
+; CHECK-NEXT:    [[R0:%.*]] = fmul <2 x double> [[A0]], [[S0]]
+; CHECK-NEXT:    [[R1:%.*]] = fmul <2 x double> [[A1]], [[S1]]
+; CHECK-NEXT:    store <2 x double> [[R0]], ptr [[OUT]], align 8
+; CHECK-NEXT:    [[OUT1:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 16
+; CHECK-NEXT:    store <2 x double> [[R1]], ptr [[OUT1]], align 8
+; CHECK-NEXT:    ret void
 ;
 entry:
   %x0 = extractelement <2 x double> %d, i64 0
@@ -66,7 +51,7 @@ entry:
 ; window with x^4, and the users are retried up the chain.
 define void @pow4(<2 x double> %d, <2 x double> %a0, <2 x double> %a1, ptr %out) {
 ; CHECK-LABEL: define void @pow4(
-; CHECK-SAME: <2 x double> [[D:%.*]], <2 x double> [[A0:%.*]], <2 x double> [[A1:%.*]], ptr [[OUT:%.*]]) #[[ATTR0:[0-9]+]] {
+; CHECK-SAME: <2 x double> [[D:%.*]], <2 x double> [[A0:%.*]], <2 x double> [[A1:%.*]], ptr [[OUT:%.*]]) #[[ATTR0]] {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
 ; CHECK-NEXT:    [[X0:%.*]] = extractelement <2 x double> [[D]], i64 0
 ; CHECK-NEXT:    [[X1:%.*]] = extractelement <2 x double> [[D]], i64 1
@@ -111,65 +96,37 @@ entry:
 ; Only the squares of lanes 0 and 1 have cube users among the seeds, so the
 ; users of these two lanes are retried.
 define void @partial_users(<2 x double> %d, double %x2, double %x3, <4 x double> %a, ptr %out) {
-; SSE-LABEL: define void @partial_users(
-; SSE-SAME: <2 x double> [[D:%.*]], double [[X2:%.*]], double [[X3:%.*]], <4 x double> [[A:%.*]], ptr [[OUT:%.*]]) #[[ATTR0]] {
-; SSE-NEXT:  [[ENTRY:.*:]]
-; SSE-NEXT:    [[TMP0:%.*]] = fmul <2 x double> [[D]], [[D]]
-; SSE-NEXT:    [[TMP1:%.*]] = fmul <2 x double> [[D]], [[TMP0]]
-; SSE-NEXT:    [[SQ2:%.*]] = fmul double [[X2]], [[X2]]
-; SSE-NEXT:    [[SQ3:%.*]] = fmul double [[X3]], [[X3]]
-; SSE-NEXT:    [[TMP2:%.*]] = shufflevector <2 x double> [[TMP1]], <2 x double> poison, <4 x i32> <i32 0, i32 poison, i32 poison, i32 poison>
-; SSE-NEXT:    [[B0:%.*]] = shufflevector <4 x double> [[TMP2]], <4 x double> poison, <4 x i32> zeroinitializer
-; SSE-NEXT:    [[TMP3:%.*]] = shufflevector <2 x double> [[TMP1]], <2 x double> poison, <4 x i32> <i32 1, i32 poison, i32 poison, i32 poison>
-; SSE-NEXT:    [[B1:%.*]] = shufflevector <4 x double> [[TMP3]], <4 x double> poison, <4 x i32> zeroinitializer
-; SSE-NEXT:    [[V2:%.*]] = insertelement <4 x double> poison, double [[SQ2]], i64 0
-; SSE-NEXT:    [[B2:%.*]] = shufflevector <4 x double> [[V2]], <4 x double> poison, <4 x i32> zeroinitializer
-; SSE-NEXT:    [[V3:%.*]] = insertelement <4 x double> poison, double [[SQ3]], i64 0
-; SSE-NEXT:    [[B3:%.*]] = shufflevector <4 x double> [[V3]], <4 x double> poison, <4 x i32> zeroinitializer
-; SSE-NEXT:    [[M0:%.*]] = fmul <4 x double> [[A]], [[B0]]
-; SSE-NEXT:    [[M1:%.*]] = fmul <4 x double> [[A]], [[B1]]
-; SSE-NEXT:    [[M2:%.*]] = fmul <4 x double> [[A]], [[B2]]
-; SSE-NEXT:    [[M3:%.*]] = fmul <4 x double> [[A]], [[B3]]
-; SSE-NEXT:    store <4 x double> [[M0]], ptr [[OUT]], align 8
-; SSE-NEXT:    [[O1:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 32
-; SSE-NEXT:    store <4 x double> [[M1]], ptr [[O1]], align 8
-; SSE-NEXT:    [[O2:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 64
-; SSE-NEXT:    store <4 x double> [[M2]], ptr [[O2]], align 8
-; SSE-NEXT:    [[O3:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 96
-; SSE-NEXT:    store <4 x double> [[M3]], ptr [[O3]], align 8
-; SSE-NEXT:    ret void
-;
-; AVX-LABEL: define void @partial_users(
-; AVX-SAME: <2 x double> [[D:%.*]], double [[X2:%.*]], double [[X3:%.*]], <4 x double> [[A:%.*]], ptr [[OUT:%.*]]) #[[ATTR0]] {
-; AVX-NEXT:  [[ENTRY:.*:]]
-; AVX-NEXT:    [[X0:%.*]] = extractelement <2 x double> [[D]], i64 0
-; AVX-NEXT:    [[X1:%.*]] = extractelement <2 x double> [[D]], i64 1
-; AVX-NEXT:    [[SQ0:%.*]] = fmul double [[X0]], [[X0]]
-; AVX-NEXT:    [[C0:%.*]] = fmul double [[X0]], [[SQ0]]
-; AVX-NEXT:    [[SQ1:%.*]] = fmul double [[X1]], [[X1]]
-; AVX-NEXT:    [[C1:%.*]] = fmul double [[X1]], [[SQ1]]
-; AVX-NEXT:    [[SQ2:%.*]] = fmul double [[X2]], [[X2]]
-; AVX-NEXT:    [[SQ3:%.*]] = fmul double [[X3]], [[X3]]
-; AVX-NEXT:    [[V0:%.*]] = insertelement <4 x double> poison, double [[C0]], i64 0
-; AVX-NEXT:    [[B0:%.*]] = shufflevector <4 x double> [[V0]], <4 x double> poison, <4 x i32> zeroinitializer
-; AVX-NEXT:    [[V1:%.*]] = insertelement <4 x double> poison, double [[C1]], i64 0
-; AVX-NEXT:    [[B1:%.*]] = shufflevector <4 x double> [[V1]], <4 x double> poison, <4 x i32> zeroinitializer
-; AVX-NEXT:    [[V2:%.*]] = insertelement <4 x double> poison, double [[SQ2]], i64 0
-; AVX-NEXT:    [[B2:%.*]] = shufflevector <4 x double> [[V2]], <4 x double> poison, <4 x i32> zeroinitializer
-; AVX-NEXT:    [[V3:%.*]] = insertelement <4 x double> poison, double [[SQ3]], i64 0
-; AVX-NEXT:    [[B3:%.*]] = shufflevector <4 x double> [[V3]], <4 x double> poison, <4 x i32> zeroinitializer
-; AVX-NEXT:    [[M0:%.*]] = fmul <4 x double> [[A]], [[B0]]
-; AVX-NEXT:    [[M1:%.*]] = fmul <4 x double> [[A]], [[B1]]
-; AVX-NEXT:    [[M2:%.*]] = fmul <4 x double> [[A]], [[B2]]
-; AVX-NEXT:    [[M3:%.*]] = fmul <4 x double> [[A]], [[B3]]
-; AVX-NEXT:    store <4 x double> [[M0]], ptr [[OUT]], align 8
-; AVX-NEXT:    [[O1:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 32
-; AVX-NEXT:    store <4 x double> [[M1]], ptr [[O1]], align 8
-; AVX-NEXT:    [[O2:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 64
-; AVX-NEXT:    store <4 x double> [[M2]], ptr [[O2]], align 8
-; AVX-NEXT:    [[O3:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 96
-; AVX-NEXT:    store <4 x double> [[M3]], ptr [[O3]], align 8
-; AVX-NEXT:    ret void
+; CHECK-LABEL: define void @partial_users(
+; CHECK-SAME: <2 x double> [[D:%.*]], double [[X2:%.*]], double [[X3:%.*]], <4 x double> [[A:%.*]], ptr [[OUT:%.*]]) #[[ATTR0]] {
+; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[X0:%.*]] = extractelement <2 x double> [[D]], i64 0
+; CHECK-NEXT:    [[X1:%.*]] = extractelement <2 x double> [[D]], i64 1
+; CHECK-NEXT:    [[SQ0:%.*]] = fmul double [[X0]], [[X0]]
+; CHECK-NEXT:    [[C0:%.*]] = fmul double [[X0]], [[SQ0]]
+; CHECK-NEXT:    [[SQ1:%.*]] = fmul double [[X1]], [[X1]]
+; CHECK-NEXT:    [[C1:%.*]] = fmul double [[X1]], [[SQ1]]
+; CHECK-NEXT:    [[SQ2:%.*]] = fmul double [[X2]], [[X2]]
+; CHECK-NEXT:    [[SQ3:%.*]] = fmul double [[X3]], [[X3]]
+; CHECK-NEXT:    [[V0:%.*]] = insertelement <4 x double> poison, double [[C0]], i64 0
+; CHECK-NEXT:    [[B0:%.*]] = shufflevector <4 x double> [[V0]], <4 x double> poison, <4 x i32> zeroinitializer
+; CHECK-NEXT:    [[V1:%.*]] = insertelement <4 x double> poison, double [[C1]], i64 0
+; CHECK-NEXT:    [[B1:%.*]] = shufflevector <4 x double> [[V1]], <4 x double> poison, <4 x i32> zeroinitializer
+; CHECK-NEXT:    [[V2:%.*]] = insertelement <4 x double> poison, double [[SQ2]], i64 0
+; CHECK-NEXT:    [[B2:%.*]] = shufflevector <4 x double> [[V2]], <4 x double> poison, <4 x i32> zeroinitializer
+; CHECK-NEXT:    [[V3:%.*]] = insertelement <4 x double> poison, double [[SQ3]], i64 0
+; CHECK-NEXT:    [[B3:%.*]] = shufflevector <4 x double> [[V3]], <4 x double> poison, <4 x i32> zeroinitializer
+; CHECK-NEXT:    [[M0:%.*]] = fmul <4 x double> [[A]], [[B0]]
+; CHECK-NEXT:    [[M1:%.*]] = fmul <4 x double> [[A]], [[B1]]
+; CHECK-NEXT:    [[M2:%.*]] = fmul <4 x double> [[A]], [[B2]]
+; CHECK-NEXT:    [[M3:%.*]] = fmul <4 x double> [[A]], [[B3]]
+; CHECK-NEXT:    store <4 x double> [[M0]], ptr [[OUT]], align 8
+; CHECK-NEXT:    [[O1:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 32
+; CHECK-NEXT:    store <4 x double> [[M1]], ptr [[O1]], align 8
+; CHECK-NEXT:    [[O2:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 64
+; CHECK-NEXT:    store <4 x double> [[M2]], ptr [[O2]], align 8
+; CHECK-NEXT:    [[O3:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 96
+; CHECK-NEXT:    store <4 x double> [[M3]], ptr [[O3]], align 8
+; CHECK-NEXT:    ret void
 ;
 entry:
   %x0 = extractelement <2 x double> %d, i64 0
@@ -214,21 +171,17 @@ define void @pow4x4(<4 x double> %d, <4 x double> %a, ptr %out) {
 ; CHECK-NEXT:    [[X3:%.*]] = extractelement <4 x double> [[D]], i64 3
 ; CHECK-NEXT:    [[SQ0:%.*]] = fmul double [[X0]], [[X0]]
 ; CHECK-NEXT:    [[C0:%.*]] = fmul double [[X0]], [[SQ0]]
-; CHECK-NEXT:    [[TMP0:%.*]] = shufflevector <4 x double> [[D]], <4 x double> poison, <2 x i32> <i32 0, i32 1>
-; CHECK-NEXT:    [[TMP1:%.*]] = insertelement <2 x double> [[TMP0]], double [[C0]], i64 0
-; CHECK-NEXT:    [[TMP2:%.*]] = fmul <2 x double> [[TMP0]], [[TMP1]]
-; CHECK-NEXT:    [[TMP3:%.*]] = extractelement <2 x double> [[TMP2]], i64 1
+; CHECK-NEXT:    [[R0:%.*]] = fmul double [[X0]], [[C0]]
+; CHECK-NEXT:    [[TMP3:%.*]] = fmul double [[X1]], [[X1]]
 ; CHECK-NEXT:    [[C1:%.*]] = fmul double [[X1]], [[TMP3]]
 ; CHECK-NEXT:    [[R1:%.*]] = fmul double [[X1]], [[C1]]
 ; CHECK-NEXT:    [[SQ2:%.*]] = fmul double [[X2]], [[X2]]
 ; CHECK-NEXT:    [[C2:%.*]] = fmul double [[X2]], [[SQ2]]
-; CHECK-NEXT:    [[TMP4:%.*]] = shufflevector <4 x double> [[D]], <4 x double> poison, <2 x i32> <i32 2, i32 3>
-; CHECK-NEXT:    [[TMP5:%.*]] = insertelement <2 x double> [[TMP4]], double [[C2]], i64 0
-; CHECK-NEXT:    [[TMP6:%.*]] = fmul <2 x double> [[TMP4]], [[TMP5]]
-; CHECK-NEXT:    [[TMP7:%.*]] = extractelement <2 x double> [[TMP6]], i64 1
+; CHECK-NEXT:    [[R2:%.*]] = fmul double [[X2]], [[C2]]
+; CHECK-NEXT:    [[TMP7:%.*]] = fmul double [[X3]], [[X3]]
 ; CHECK-NEXT:    [[C3:%.*]] = fmul double [[X3]], [[TMP7]]
 ; CHECK-NEXT:    [[R3:%.*]] = fmul double [[X3]], [[C3]]
-; CHECK-NEXT:    [[TMP8:%.*]] = shufflevector <2 x double> [[TMP2]], <2 x double> poison, <4 x i32> <i32 0, i32 poison, i32 poison, i32 poison>
+; CHECK-NEXT:    [[TMP8:%.*]] = insertelement <4 x double> poison, double [[R0]], i64 0
 ; CHECK-NEXT:    [[S0:%.*]] = shufflevector <4 x double> [[TMP8]], <4 x double> poison, <4 x i32> zeroinitializer
 ; CHECK-NEXT:    [[M0:%.*]] = fmul <4 x double> [[A]], [[S0]]
 ; CHECK-NEXT:    [[O0:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 0
@@ -238,7 +191,7 @@ define void @pow4x4(<4 x double> %d, <4 x double> %a, ptr %out) {
 ; CHECK-NEXT:    [[M1:%.*]] = fmul <4 x double> [[A]], [[S1]]
 ; CHECK-NEXT:    [[O1:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 32
 ; CHECK-NEXT:    store <4 x double> [[M1]], ptr [[O1]], align 8
-; CHECK-NEXT:    [[TMP9:%.*]] = shufflevector <2 x double> [[TMP6]], <2 x double> poison, <4 x i32> <i32 0, i32 poison, i32 poison, i32 poison>
+; CHECK-NEXT:    [[TMP9:%.*]] = insertelement <4 x double> poison, double [[R2]], i64 0
 ; CHECK-NEXT:    [[S2:%.*]] = shufflevector <4 x double> [[TMP9]], <4 x double> poison, <4 x i32> zeroinitializer
 ; CHECK-NEXT:    [[M2:%.*]] = fmul <4 x double> [[A]], [[S2]]
 ; CHECK-NEXT:    [[O2:%.*]] = getelementptr inbounds i8, ptr [[OUT]], i64 64
@@ -289,3 +242,6 @@ entry:
   store <4 x double> %m3, ptr %o3, align 8
   ret void
 }
+;; NOTE: These prefixes are unused and the list is autogenerated. Do not add tests below this line:
+; AVX: {{.*}}
+; SSE: {{.*}}

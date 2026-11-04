@@ -2,6 +2,7 @@
 ; XFAIL: *
 ; RUN: opt -passes=sandbox-vectorizer -sbvec-passes="seed-collection(stores)<load-store-vec>" -sbvec-vec-reg-bits=1024 %s -S | FileCheck %s
 ;
+; XFAIL: *
 ; Check that metadata gets propagated to the new vector instructions.
 
 define void @propagate_metadata(ptr %ptr0) {
