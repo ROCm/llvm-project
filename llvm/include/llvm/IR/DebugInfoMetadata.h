@@ -4750,7 +4750,7 @@ template <class NodeTy> struct MDNodeKeyImpl;
 ///
 /// Despite the name, it supports creating both DIExpr and DIOp-based
 /// ("NewElements") DIExpression nodes.
-class DIExprBuilder {
+class LLVM_ABI DIExprBuilder {
   LLVMContext &C;
   SmallVector<DIOp::Variant> Elements;
 #ifndef NDEBUG

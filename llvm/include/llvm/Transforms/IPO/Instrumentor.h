@@ -31,6 +31,7 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/StringSaver.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Transforms/IPO/InstrumentorUtils.h"
 #include "llvm/Transforms/Utils/Instrumentation.h"
 
