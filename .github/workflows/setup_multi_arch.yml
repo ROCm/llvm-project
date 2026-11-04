@@ -113,6 +113,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'
+      BUILD_RELEASE_TYPE: ${{ inputs.release_type }}
+      PRERELEASE_VERSION: ${{ inputs.prerelease_version }}
     outputs:
       enable_build_jobs: true
       linux_build_config: ${{ steps.convergence_config.outputs.linux_build_config }}
