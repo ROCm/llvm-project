@@ -2,7 +2,7 @@ import glob
 import os
 import platform
 import sys
-import subprocess
+import subprocess  # nosec B404 # lit setup probes the local clang
 import tempfile
 
 import lit.formats
@@ -72,7 +72,7 @@ def _clang_embeds_debuginfo_cfi():
         fd, src = tempfile.mkstemp(suffix=".hip")
         os.write(fd, b"__attribute__((global)) void k(float *p) { *p = 1.0f; }\n")
         os.close(fd)
-        out = subprocess.run(
+        out = subprocess.run(  # nosec B603 # argument list, clang from this build
             [
                 clang,
                 "-x",

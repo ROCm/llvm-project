@@ -53,8 +53,6 @@ using namespace llvm::omp::target::ompt;
 #endif
 using namespace llvm::omp::target::debug;
 
-using GenericDeviceTy = llvm::omp::target::plugin::GenericDeviceTy;
-
 void *targetAllocExplicit(size_t Size, int DeviceNum, int Kind,
                           const char *Name);
 void targetFreeExplicit(void *DevicePtr, int DeviceNum, int Kind,
@@ -362,11 +360,17 @@ EXTERN int omp_target_memcpy(void *Dst, const void *Src, size_t Length,
 
     // Downstream: if the direct copy fails, e.g., because the devices have no
     // peer access, copy through a host buffer instead.
+    // The copies use queues, so that OMPT device tracing records them.
     if (Rc != OFFLOAD_SUCCESS) {
       void *Buffer = malloc(Length);
-      Rc = SrcDeviceOrErr->retrieveDataSync(Buffer, SrcAddr, Length);
-      if (Rc == OFFLOAD_SUCCESS)
-        Rc = DstDeviceOrErr->submitDataSync(DstAddr, Buffer, Length);
+      {
+        AsyncInfoTy AsyncInfo(*SrcDeviceOrErr);
+        Rc = SrcDeviceOrErr->retrieveData(Buffer, SrcAddr, Length, AsyncInfo);
+      }
+      if (Rc == OFFLOAD_SUCCESS) {
+        AsyncInfoTy AsyncInfo(*DstDeviceOrErr);
+        Rc = DstDeviceOrErr->submitData(DstAddr, Buffer, Length, AsyncInfo);
+      }
       free(Buffer);
     }
   }
