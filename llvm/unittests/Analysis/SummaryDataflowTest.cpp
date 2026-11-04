@@ -30,13 +30,15 @@ static std::unique_ptr<ModuleSummaryIndex> parseIndex(StringRef Summary) {
 class Graph {
 public:
   Graph(ModuleSummaryIndex &Index,
-        DenseSet<GlobalValue::GUID> PreservedSymbols = {})
+        DenseSet<GlobalValue::GUID> PreservedSymbols = {},
+        bool ClosedWorld = false)
       : Index(Index), PreservedSymbols(std::move(PreservedSymbols)) {
     AM.registerPass([] { return PassInstrumentationAnalysis(); });
     AM.registerPass([&] {
       return ThinLinkInfoAnalysis(
           this->PreservedSymbols,
-          [](GlobalValue::GUID, const GlobalValueSummary *) { return true; });
+          [](GlobalValue::GUID, const GlobalValueSummary *) { return true; },
+          ClosedWorld);
     });
     AM.registerPass([] { return SummaryCallGraphAnalysis(); });
     AM.registerPass([] { return SummaryAddressTakenAnalysis(); });
@@ -147,8 +149,9 @@ TEST(SummaryDataflowTest, BottomUp) {
 
 // The function 1 has an indirect call that can reach the function 2, whose
 // address the variable 3 takes. Only the graph that includes the indirect
-// calls shows that the call reaches only 2. In the other graph, the call
-// reaches unknown code, and unknown code calls 2.
+// calls, in a closed world, shows that the call reaches only 2, and that only 1
+// calls 2. In the other graphs, the call can reach unknown code, and unknown
+// code can call 2.
 TEST(SummaryDataflowTest, IndirectEdges) {
   std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(R"(
 ^0 = module: (path: "a.o", hash: (0, 0, 0, 0, 0))
@@ -157,27 +160,31 @@ TEST(SummaryDataflowTest, IndirectEdges) {
 ^3 = gv: (guid: 3, summaries: (variable: (module: ^0, flags: (linkage: external), varFlags: (readonly: 0), refs: (^2))))
 )");
   ASSERT_NE(Index, nullptr);
-  Graph G(*Index);
-  const SummaryCallGraph &CG = G.get();
-  const SummaryCallGraph &IndirectCG = G.get(/*IncludeIndirectCalls=*/true);
-
-  UsesResource Uses;
-  EXPECT_FALSE(
-      solveSummaryDataflow(IndirectCG, Uses, SummaryDataflowDirection::BottomUp)
-          .lookup(IndirectCG.lookup(1)));
-  EXPECT_TRUE(solveSummaryDataflow(CG, Uses, SummaryDataflowDirection::BottomUp)
-                  .lookup(CG.lookup(1)));
-
-  ReachingRoots Roots;
-  Roots.Roots = {1};
+  Graph Open(*Index);
+  Graph Closed(*Index, /*PreservedSymbols=*/{}, /*ClosedWorld=*/true);
   using Set = ReachingRoots::ValueT;
-  EXPECT_EQ(
-      solveSummaryDataflow(IndirectCG, Roots, SummaryDataflowDirection::TopDown)
-          .lookup(IndirectCG.lookup(2)),
-      Set({1}));
-  EXPECT_EQ(solveSummaryDataflow(CG, Roots, SummaryDataflowDirection::TopDown)
-                .lookup(CG.lookup(2)),
-            Set({0}));
+  struct Expected {
+    const SummaryCallGraph &CG;
+    bool Uses;
+    Set Roots;
+  };
+  for (const Expected &E :
+       {Expected{Closed.get(/*IncludeIndirectCalls=*/true), false, Set({1})},
+        Expected{Open.get(/*IncludeIndirectCalls=*/true), true, Set({0, 1})},
+        Expected{Closed.get(), true, Set({0})},
+        Expected{Open.get(), true, Set({0})}}) {
+    UsesResource Uses;
+    EXPECT_EQ(
+        solveSummaryDataflow(E.CG, Uses, SummaryDataflowDirection::BottomUp)
+            .lookup(E.CG.lookup(1)),
+        E.Uses);
+    ReachingRoots Roots;
+    Roots.Roots = {1};
+    EXPECT_EQ(
+        solveSummaryDataflow(E.CG, Roots, SummaryDataflowDirection::TopDown)
+            .lookup(E.CG.lookup(2)),
+        E.Roots);
+  }
 }
 
 } // end anonymous namespace

@@ -494,6 +494,8 @@ protected:
     };
     std::vector<AddedModule> ModsWithSummaries;
     bool EmptyCombinedModule = true;
+    /// True if a module without a summary is in the combined module.
+    bool HasModuleWithoutSummary = false;
   } RegularLTO;
 
   using ModuleMapType = MapVector<StringRef, BitcodeModule>;

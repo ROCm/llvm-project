@@ -39,24 +39,30 @@ class raw_ostream;
 /// A node is a value with a live function or alias summary, or a callee
 /// without one. Like the IR call graph (CallGraph), the graph also has two
 /// special nodes: the external calling node calls each function that code
-/// outside the summaries can call (a preserved symbol), and the calls external
-/// node is a callee of each node whose callees are not all known.
+/// outside the summaries can call, and the calls external node is a callee of
+/// each node whose callees are not all known.
 ///
 /// The edges of a node come from all its live copies. The copy that prevails
 /// runs when code calls the symbol, and a module can still inline its own copy
 /// that does not prevail. An alias calls its aliasee.
 ///
-/// When a pass asks SummaryCallGraphAnalysis for the graph, it selects whether
-/// the graph includes the indirect calls:
+/// The external calling node calls each preserved symbol, and each function
+/// that a module lists as a constructor, a destructor, or a used value
+/// (llvm.global_ctors, llvm.global_dtors, llvm.used, llvm.compiler.used),
+/// also through a variable. When a pass asks SummaryCallGraphAnalysis for the
+/// graph, it selects whether the graph includes the indirect calls:
 /// - Without them, an indirect call calls the calls external node, and the
 ///   external calling node also calls each function whose address can be
 ///   taken. As in the IR call graph, the special nodes stand for the callees
 ///   and the callers that the graph does not know.
-/// - With them, an indirect call also calls each of its possible targets: a
+/// - With them, an indirect call calls each of its possible targets: a
 ///   function whose address can be taken and that has the call type ID of the
 ///   call. These edges can be many: for each call type ID, the number of
 ///   callers times the number of targets. A pass that needs them accepts their
-///   cost.
+///   cost. If the link does not assume a closed world (see
+///   ThinLinkInfoAnalysis), the graph also has the edges of the other form:
+///   code outside the summaries can call a function whose address escapes to
+///   it, and an indirect call can reach code outside the summaries.
 ///
 /// An edge has kinds. A call edge comes from FunctionSummary::calls(): a direct
 /// call, or a target that a profile or !callees metadata gives for an indirect
@@ -64,9 +70,6 @@ class raw_ostream;
 /// edge to a possible target of an indirect call, an edge from an indirect
 /// call or an unknown call to the calls external node, or an edge from the
 /// external calling node to a function whose address can be taken.
-///
-/// The graph that includes the indirect calls does not show calls through a
-/// function pointer that escapes to code outside the summaries.
 class SummaryCallGraph {
 public:
   class Node;

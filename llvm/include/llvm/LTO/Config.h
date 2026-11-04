@@ -134,6 +134,15 @@ struct Config {
   /// summary passes to the thin link.
   std::string ThinLinkPipeline;
 
+  /// If this field is set, the ThinLTO thin link assumes a closed world (see
+  /// ThinLinkInfoAnalysis). A toolchain can set it if each function of the
+  /// program is in a module with a summary, and the code outside the modules
+  /// never calls a function through a pointer: for example the device link of
+  /// a GPU program without native objects. The link ignores this field if a
+  /// module without a summary is in the link. The option
+  /// -thinlink-closed-world has the same effect as this field.
+  bool ThinLinkClosedWorld = false;
+
   /// Setting this field will replace target triples in input files with this
   /// triple.
   std::string OverrideTriple;
