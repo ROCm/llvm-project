@@ -395,9 +395,6 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
     return ProgramOrErr.takeError();
   ProgramTy Program = std::move(*ProgramOrErr);
 
-  // Dispatch this before the fast-reduction probe below: that probe is a
-  // downstream addition and its device-to-host read would otherwise be
-  // reported to the tool ahead of the load of the image it reads from.
   OMPT_IF_BUILT_AND_INITIALIZED({
     auto &Image = *llvm::offload::tmp::__ol_tgt_GetDeviceImageFromProgram(
         Program.getHandle());
@@ -406,21 +403,6 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
                         Image.getSize(), const_cast<void *>(Image.getStart()),
                         /*DeviceAddr=*/nullptr, /*ModuleId=*/0);
   });
-
-  AsyncInfoTy AsyncInfo(*this);
-  // From the image, read whether fast reduction is enabled (optional symbol).
-  auto IsFastReductionEnabledPtrOrErr = getAndRecordGlobalAddress(
-      Program, "__omp_plugin_enable_fast_reduction", sizeof(int8_t));
-  if (!IsFastReductionEnabledPtrOrErr) {
-    llvm::consumeError(IsFastReductionEnabledPtrOrErr.takeError());
-  } else {
-    int8_t IsFastReductionEnabled;
-    if (!retrieveData(&IsFastReductionEnabled, *IsFastReductionEnabledPtrOrErr,
-                      sizeof(int8_t), AsyncInfo) &&
-        !synchronize(AsyncInfo))
-      RTL->getDevice(RTLDeviceID)
-          .setIsFastReductionEnabled(IsFastReductionEnabled);
-  }
 
   // This symbol is optional.
   auto DeviceEnvironmentPtrOrErr = getAndRecordGlobalAddress(

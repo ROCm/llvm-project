@@ -1284,11 +1284,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   bool useAutoZeroCopy();
   virtual bool useAutoZeroCopyImpl() { return false; }
 
-  bool isFastReductionEnabled() const { return IsFastReductionEnabled; }
-  void setIsFastReductionEnabled(bool IsFastReductionEnabled) {
-    this->IsFastReductionEnabled = IsFastReductionEnabled;
-  }
-
   /// Performs sanity checks on zero-copy options and prints diagnostic info.
   Error zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
                                     bool isAutoZeroCopy, bool isEagerMaps);
@@ -1513,8 +1508,6 @@ private:
   /// Return the kernel environment object for kernel \p Name.
   Expected<KernelEnvironmentTy>
   getKernelEnvironmentForKernel(StringRef Name, DeviceImageTy &Image);
-
-  bool IsFastReductionEnabled = false;
 };
 
 /// Class implementing common functionalities of offload plugins. Each plugin
