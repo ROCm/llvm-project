@@ -617,6 +617,8 @@ PassBuilder::PassBuilder(LLVMContext &Context, TargetMachine *TM,
   PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
 #define SUMMARY_PASS(NAME, CREATE_PASS)                                        \
   PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
+#define SUMMARY_PASS_WITH_PARAMS(NAME, CLASS, CREATE_PASS, PARSER, PARAMS)     \
+  PIC->addClassToPassName(CLASS, NAME);
 #define SUMMARY_ANALYSIS(NAME, CREATE_PASS)                                    \
   PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
 #include "PassRegistry.def"
@@ -2637,6 +2639,14 @@ Error PassBuilder::parseSummaryPass(SummaryPassManager &SPM,
     SPM.addPass(CREATE_PASS);                                                  \
     return Error::success();                                                   \
   }
+#define SUMMARY_PASS_WITH_PARAMS(NAME, CLASS, CREATE_PASS, PARSER, PARAMS)     \
+  if (checkParametrizedPassName(Name, NAME)) {                                 \
+    auto Params = parsePassParameters(PARSER, Name, NAME);                     \
+    if (!Params)                                                               \
+      return Params.takeError();                                               \
+    SPM.addPass(CREATE_PASS(Params.get()));                                    \
+    return Error::success();                                                   \
+  }
 #define SUMMARY_ANALYSIS(NAME, CREATE_PASS)                                    \
   if (Name == "require<" NAME ">") {                                           \
     SPM.addPass(                                                               \
@@ -3086,6 +3096,14 @@ void PassBuilder::printPassNames(raw_ostream &OS) {
 #include "PassRegistry.def"
   };
   printPassNameList(StringTable(SummaryPassNames), OS);
+
+  OS << "Summary passes with params:\n";
+  static constexpr char SummaryPassNamesWithParams[] = {"\0"
+#define SUMMARY_PASS_WITH_PARAMS(NAME, CLASS, CREATE_PASS, PARSER, PARAMS)     \
+  NAME "\0" PARAMS "\0"
+#include "PassRegistry.def"
+  };
+  printPassNameListWithParams(StringTable(SummaryPassNamesWithParams), OS);
 
   OS << "Summary analyses:\n";
   static constexpr char SummaryAnalysisNames[] = {"\0"

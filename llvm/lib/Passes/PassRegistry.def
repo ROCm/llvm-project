@@ -845,8 +845,22 @@ SUMMARY_ANALYSIS("summary-callgraph", SummaryCallGraphAnalysis())
 #ifndef SUMMARY_PASS
 #define SUMMARY_PASS(NAME, CREATE_PASS)
 #endif
-SUMMARY_PASS("print<summary-callgraph>", SummaryCallGraphPrinterPass(errs()))
 #undef SUMMARY_PASS
+
+#ifndef SUMMARY_PASS_WITH_PARAMS
+#define SUMMARY_PASS_WITH_PARAMS(NAME, CLASS, CREATE_PASS, PARSER, PARAMS)
+#endif
+SUMMARY_PASS_WITH_PARAMS(
+    "print<summary-callgraph>", "SummaryCallGraphPrinterPass",
+    [](bool IncludeIndirectCalls) {
+      return SummaryCallGraphPrinterPass(errs(), IncludeIndirectCalls);
+    },
+    [](StringRef Params) {
+      return PassBuilder::parseSinglePassOption(Params, "indirect-calls",
+                                                "SummaryCallGraphPrinterPass");
+    },
+    "indirect-calls")
+#undef SUMMARY_PASS_WITH_PARAMS
 
 #ifdef MODULE_CALLBACK
 MODULE_CALLBACK("pipeline-start-callbacks", invokePipelineStartEPCallbacks)

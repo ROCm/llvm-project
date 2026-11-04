@@ -183,6 +183,12 @@ TEST(SummaryPassManagerTest, ParsePipeline) {
   PM.run(*Index, AM);
   EXPECT_EQ(AM.getCachedResult<SummaryCallGraphAnalysis>(*Index), nullptr);
   EXPECT_NE(AM.getCachedResult<SummaryAddressTakenAnalysis>(*Index), nullptr);
+
+  // The printer of the call graph takes a parameter.
+  SummaryPassManager PrintPM;
+  EXPECT_THAT_ERROR(
+      PB.parsePassPipeline(PrintPM, "print<summary-callgraph><indirect-calls>"),
+      Succeeded());
 }
 
 TEST(SummaryPassManagerTest, ParsePipelineErrors) {
@@ -202,6 +208,10 @@ TEST(SummaryPassManagerTest, ParsePipelineErrors) {
       PB.parsePassPipeline(PM, "require<summary-callgraph>(require<"
                                "summary-callgraph>)"),
       FailedWithMessage("unknown summary pass 'require<summary-callgraph>'"));
+  EXPECT_THAT_ERROR(
+      PB.parsePassPipeline(PM, "print<summary-callgraph><no-such-option>"),
+      FailedWithMessage("invalid SummaryCallGraphPrinterPass pass parameter "
+                        "'no-such-option'"));
 }
 
 // Callbacks add passes and analyses that the pass builder does not know.

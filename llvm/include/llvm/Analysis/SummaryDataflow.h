@@ -36,8 +36,8 @@ enum class SummaryDataflowDirection {
 
 /// Solves a dataflow problem on the summary call graph \p CG, one SCC at a
 /// time, in the order of \p Direction. In an SCC, the solver computes the
-/// outputs again until no output changes. If \p IncludeIndirect is false, the
-/// solver follows only the edges that have the call kind.
+/// outputs again until no output changes. The solver follows all edges of
+/// \p CG, so the analysis that gives \p CG selects the indirect edges.
 ///
 /// \p Problem provides:
 /// - ValueT: the type of the values, which can be copied and compared with
@@ -58,8 +58,7 @@ enum class SummaryDataflowDirection {
 template <typename ProblemT>
 DenseMap<const SummaryCallGraph::Node *, typename ProblemT::ValueT>
 solveSummaryDataflow(const SummaryCallGraph &CG, ProblemT &Problem,
-                     SummaryDataflowDirection Direction,
-                     bool IncludeIndirect = true) {
+                     SummaryDataflowDirection Direction) {
   using Node = SummaryCallGraph::Node;
   using ValueT = typename ProblemT::ValueT;
   const bool TopDown = Direction == SummaryDataflowDirection::TopDown;
@@ -71,7 +70,7 @@ solveSummaryDataflow(const SummaryCallGraph &CG, ProblemT &Problem,
   // The nodes that give the input of N: its callers or its callees. The order
   // of the SCCs puts them before N, or into the SCC of N.
   auto GetSources = [&](const Node *N) {
-    return TopDown ? N->callers(IncludeIndirect) : N->callees(IncludeIndirect);
+    return TopDown ? N->callers() : N->callees();
   };
 
   auto Solve = [&](SummaryCallGraph::SCC C) {
@@ -103,7 +102,7 @@ solveSummaryDataflow(const SummaryCallGraph &CG, ProblemT &Problem,
     } while (Changed && Iterate);
   };
 
-  ArrayRef<SummaryCallGraph::SCC> SCCs = CG.sccs(IncludeIndirect);
+  ArrayRef<SummaryCallGraph::SCC> SCCs = CG.sccs();
   if (TopDown)
     for (SummaryCallGraph::SCC C : reverse(SCCs))
       Solve(C);

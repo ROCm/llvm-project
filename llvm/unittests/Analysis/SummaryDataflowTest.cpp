@@ -42,8 +42,9 @@ public:
     AM.registerPass([] { return SummaryAddressTakenAnalysis(); });
   }
 
-  const SummaryCallGraph &get() {
-    return AM.getResult<SummaryCallGraphAnalysis>(Index);
+  const SummaryCallGraph &get(bool IncludeIndirectCalls = false) {
+    return AM.getResult<SummaryCallGraphAnalysis>(Index).getGraph(
+        IncludeIndirectCalls);
   }
 
 private:
@@ -144,8 +145,10 @@ TEST(SummaryDataflowTest, BottomUp) {
   EXPECT_TRUE(Out.lookup(CG.getCallsExternalNode()));
 }
 
-// A solver can leave out the indirect edges. The function 1 has an indirect
-// call that can reach the function 2, whose address the variable 3 takes.
+// The function 1 has an indirect call that can reach the function 2, whose
+// address the variable 3 takes. Only the graph that includes the indirect
+// calls shows that the call reaches only 2. In the other graph, the call
+// reaches unknown code, and unknown code calls 2.
 TEST(SummaryDataflowTest, IndirectEdges) {
   std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(R"(
 ^0 = module: (path: "a.o", hash: (0, 0, 0, 0, 0))
@@ -156,16 +159,25 @@ TEST(SummaryDataflowTest, IndirectEdges) {
   ASSERT_NE(Index, nullptr);
   Graph G(*Index);
   const SummaryCallGraph &CG = G.get();
+  const SummaryCallGraph &IndirectCG = G.get(/*IncludeIndirectCalls=*/true);
 
-  UsesResource Problem;
-  Problem.Users = {2};
-  auto All =
-      solveSummaryDataflow(CG, Problem, SummaryDataflowDirection::BottomUp);
-  EXPECT_TRUE(All.lookup(CG.lookup(1)));
-  auto Calls =
-      solveSummaryDataflow(CG, Problem, SummaryDataflowDirection::BottomUp,
-                           /*IncludeIndirect=*/false);
-  EXPECT_FALSE(Calls.lookup(CG.lookup(1)));
+  UsesResource Uses;
+  EXPECT_FALSE(
+      solveSummaryDataflow(IndirectCG, Uses, SummaryDataflowDirection::BottomUp)
+          .lookup(IndirectCG.lookup(1)));
+  EXPECT_TRUE(solveSummaryDataflow(CG, Uses, SummaryDataflowDirection::BottomUp)
+                  .lookup(CG.lookup(1)));
+
+  ReachingRoots Roots;
+  Roots.Roots = {1};
+  using Set = ReachingRoots::ValueT;
+  EXPECT_EQ(
+      solveSummaryDataflow(IndirectCG, Roots, SummaryDataflowDirection::TopDown)
+          .lookup(IndirectCG.lookup(2)),
+      Set({1}));
+  EXPECT_EQ(solveSummaryDataflow(CG, Roots, SummaryDataflowDirection::TopDown)
+                .lookup(CG.lookup(2)),
+            Set({0}));
 }
 
 } // end anonymous namespace

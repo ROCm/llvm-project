@@ -440,7 +440,9 @@ PreservedAnalyses AMDGPUThinLinkOccupancyPass::run(ModuleSummaryIndex &Index,
   // Build the call graph only for a link with launch facts.
   if (!Index.getExtension(LaunchFactsName, LaunchFactsVersion))
     return PreservedAnalyses::all();
-  const SummaryCallGraph &CG = AM.getResult<SummaryCallGraphAnalysis>(Index);
+  const SummaryCallGraph &CG =
+      AM.getResult<SummaryCallGraphAnalysis>(Index).getGraph(
+          /*IncludeIndirectCalls=*/true);
   LaunchFactsMap Facts = *getLaunchFacts(Index, CG);
 
   KernelOccupancyProblem Problem{Facts};
@@ -491,7 +493,9 @@ AMDGPUThinLinkUniformWorkGroupSizePass::run(ModuleSummaryIndex &Index,
                                             SummaryAnalysisManager &AM) {
   if (!Index.getExtension(LaunchFactsName, LaunchFactsVersion))
     return PreservedAnalyses::all();
-  const SummaryCallGraph &CG = AM.getResult<SummaryCallGraphAnalysis>(Index);
+  const SummaryCallGraph &CG =
+      AM.getResult<SummaryCallGraphAnalysis>(Index).getGraph(
+          /*IncludeIndirectCalls=*/true);
   LaunchFactsMap Facts = *getLaunchFacts(Index, CG);
 
   UniformWorkGroupSizeProblem Problem{Facts};
@@ -515,7 +519,9 @@ AMDGPUThinLinkClusterDimsPass::run(ModuleSummaryIndex &Index,
                                    SummaryAnalysisManager &AM) {
   if (!Index.getExtension(LaunchFactsName, LaunchFactsVersion))
     return PreservedAnalyses::all();
-  const SummaryCallGraph &CG = AM.getResult<SummaryCallGraphAnalysis>(Index);
+  const SummaryCallGraph &CG =
+      AM.getResult<SummaryCallGraphAnalysis>(Index).getGraph(
+          /*IncludeIndirectCalls=*/true);
   LaunchFactsMap Facts = *getLaunchFacts(Index, CG);
 
   ClusterDimsProblem Problem{Facts};
@@ -551,7 +557,9 @@ AMDGPUThinLinkImplicitArgsPass::run(ModuleSummaryIndex &Index,
   if (!FactsExt)
     return PreservedAnalyses::all();
 
-  const SummaryCallGraph &CG = AM.getResult<SummaryCallGraphAnalysis>(Index);
+  const SummaryCallGraph &CG =
+      AM.getResult<SummaryCallGraphAnalysis>(Index).getGraph(
+          /*IncludeIndirectCalls=*/true);
   // Each copy of a function can run, so the code of a function uses the
   // implicit arguments that any of its copies uses.
   DenseMap<const SummaryCallGraph::Node *, uint32_t> LocalUses;
