@@ -5851,6 +5851,7 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
 
   Value *SunkAddr = SunkAddrVH.pointsToAliveValue() ? SunkAddrVH : nullptr;
   Type *IntPtrTy = DL->getIntPtrType(Addr->getType());
+  Type *IdxTy = DL->getIndexType(Addr->getType());
 
   // The current BB may be optimized multiple times, we can't guarantee the
   // reuse of Addr happens later, call findInsertPos to find an appropriate
@@ -5919,7 +5920,7 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
     // (See below for code to add the scale.)
     if (AddrMode.Scale) {
       Type *ScaledRegTy = AddrMode.ScaledReg->getType();
-      if (cast<IntegerType>(IntPtrTy)->getBitWidth() >
+      if (cast<IntegerType>(IdxTy)->getBitWidth() >
           cast<IntegerType>(ScaledRegTy)->getBitWidth())
         return Modified;
     }
@@ -5967,8 +5968,8 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
       // we'd end up sinking both muls.
       if (AddrMode.BaseReg) {
         Value *V = AddrMode.BaseReg;
-        if (V->getType() != IntPtrTy)
-          V = Builder.CreateIntCast(V, IntPtrTy, /*isSigned=*/true, "sunkaddr");
+        if (V->getType() != IdxTy)
+          V = Builder.CreateIntCast(V, IdxTy, /*isSigned=*/true, "sunkaddr");
 
         ResultIndex = V;
       }
@@ -5976,18 +5977,18 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
       // Add the scale value.
       if (AddrMode.Scale) {
         Value *V = AddrMode.ScaledReg;
-        if (V->getType() == IntPtrTy) {
+        if (V->getType() == IdxTy) {
           // done.
         } else {
-          assert(cast<IntegerType>(IntPtrTy)->getBitWidth() <
+          assert(cast<IntegerType>(IdxTy)->getBitWidth() <
                      cast<IntegerType>(V->getType())->getBitWidth() &&
                  "We can't transform if ScaledReg is too narrow");
-          V = Builder.CreateTrunc(V, IntPtrTy, "sunkaddr");
+          V = Builder.CreateTrunc(V, IdxTy, "sunkaddr");
         }
 
         if (AddrMode.Scale != 1)
           V = Builder.CreateMul(
-              V, ConstantInt::getSigned(IntPtrTy, AddrMode.Scale), "sunkaddr");
+              V, ConstantInt::getSigned(IdxTy, AddrMode.Scale), "sunkaddr");
         if (ResultIndex)
           ResultIndex = Builder.CreateAdd(ResultIndex, V, "sunkaddr");
         else
@@ -5996,7 +5997,7 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
 
       // Add in the Base Offset if present.
       if (AddrMode.BaseOffs) {
-        Value *V = ConstantInt::getSigned(IntPtrTy, AddrMode.BaseOffs);
+        Value *V = ConstantInt::getSigned(IdxTy, AddrMode.BaseOffs);
         if (ResultIndex) {
           // We need to add this separately from the scale above to help with
           // SDAG consecutive load/store merging.
@@ -8617,9 +8618,7 @@ static bool tryUnmergingGEPsAcrossIndirectBr(GetElementPtrInst *GEPI,
   // Check that GEPI is a constant ptradd with canonical index type.
   Instruction *GEPIOp;
   ConstantInt *GEPIIdx;
-  if (!match(GEPI, m_PtrAdd(m_Instruction(GEPIOp), m_ConstantInt(GEPIIdx))))
-    return false;
-  if (GEPIIdx->getType() != DL.getIndexType(GEPI->getType()))
+  if (!match(GEPI, m_PtrAdd(DL, m_Instruction(GEPIOp), m_ConstantInt(GEPIIdx))))
     return false;
   // Check that GEPI is a cheap one.
   if (TTI->getIntImmCost(GEPIIdx->getValue(), GEPIIdx->getType(),
@@ -8657,7 +8656,7 @@ static bool tryUnmergingGEPsAcrossIndirectBr(GetElementPtrInst *GEPI,
     // Check if Usr is also a constant ptradd with GEPIOp as pointer operand.
     // If so, record it in the vector. If not, give up.
     ConstantInt *UGEPIIdx;
-    if (!match(Usr, m_PtrAdd(m_Specific(GEPIOp), m_ConstantInt(UGEPIIdx))))
+    if (!match(Usr, m_PtrAdd(DL, m_Specific(GEPIOp), m_ConstantInt(UGEPIIdx))))
       return false;
     if (GEPIIdx->getType() != UGEPIIdx->getType())
       return false;
