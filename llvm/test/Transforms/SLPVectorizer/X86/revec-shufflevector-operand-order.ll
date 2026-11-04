@@ -22,6 +22,17 @@ define void @test(ptr %r, i16 %a2, i32 %v57, i32 %z, double %d0, double %d1) {
 ; CHECK-NEXT:    [[TMP13:%.*]] = shufflevector <2 x i16> [[TMP12]], <2 x i16> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
 ; CHECK-NEXT:    [[TMP14:%.*]] = shufflevector <2 x i16> [[TMP11]], <2 x i16> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
 ; CHECK-NEXT:    [[TMP15:%.*]] = shufflevector <4 x i16> [[TMP13]], <4 x i16> [[TMP14]], <4 x i32> <i32 0, i32 1, i32 4, i32 5>
+; CHECK-NEXT:    [[TMP25:%.*]] = icmp sge <4 x i16> <i16 1, i16 0, i16 0, i16 1>, [[TMP15]]
+; CHECK-NEXT:    [[TMP26:%.*]] = shufflevector <4 x i1> [[TMP25]], <4 x i1> poison, <2 x i32> <i32 2, i32 3>
+; CHECK-NEXT:    [[TMP27:%.*]] = or <2 x i1> [[TMP26]], [[TMP5]]
+; CHECK-NEXT:    [[TMP28:%.*]] = select <2 x i1> [[TMP27]], <2 x double> [[TMP8]], <2 x double> [[TMP10]]
+; CHECK-NEXT:    [[TMP29:%.*]] = select <2 x i1> zeroinitializer, <2 x double> zeroinitializer, <2 x double> [[TMP28]]
+; CHECK-NEXT:    store <2 x double> [[TMP29]], ptr [[R]], align 8
+; CHECK-NEXT:    [[TMP30:%.*]] = shufflevector <4 x i1> [[TMP25]], <4 x i1> poison, <2 x i32> <i32 0, i32 1>
+; CHECK-NEXT:    [[TMP22:%.*]] = or <2 x i1> [[TMP30]], <i1 false, i1 true>
+; CHECK-NEXT:    [[TMP23:%.*]] = select <2 x i1> [[TMP22]], <2 x double> [[TMP8]], <2 x double> [[TMP10]]
+; CHECK-NEXT:    [[TMP24:%.*]] = select <2 x i1> zeroinitializer, <2 x double> zeroinitializer, <2 x double> [[TMP23]]
+; CHECK-NEXT:    store <2 x double> [[TMP24]], ptr [[V715]], align 8
 ; CHECK-NEXT:    [[V717:%.*]] = getelementptr double, ptr [[R]], i64 8
 ; CHECK-NEXT:    [[TMP16:%.*]] = insertelement <2 x i16> <i16 poison, i16 0>, i16 [[A2]], i64 0
 ; CHECK-NEXT:    [[V719:%.*]] = getelementptr double, ptr [[R]], i64 10
@@ -30,28 +41,14 @@ define void @test(ptr %r, i16 %a2, i32 %v57, i32 %z, double %d0, double %d1) {
 ; CHECK-NEXT:    [[TMP19:%.*]] = shufflevector <2 x i16> [[TMP18]], <2 x i16> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
 ; CHECK-NEXT:    [[TMP20:%.*]] = shufflevector <2 x i16> [[TMP17]], <2 x i16> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
 ; CHECK-NEXT:    [[TMP21:%.*]] = shufflevector <4 x i16> [[TMP19]], <4 x i16> [[TMP20]], <4 x i32> <i32 0, i32 1, i32 4, i32 5>
-; CHECK-NEXT:    [[TMP22:%.*]] = shufflevector <4 x i16> [[TMP15]], <4 x i16> poison, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
-; CHECK-NEXT:    [[TMP23:%.*]] = shufflevector <4 x i16> [[TMP21]], <4 x i16> poison, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
-; CHECK-NEXT:    [[TMP24:%.*]] = shufflevector <16 x i16> [[TMP22]], <16 x i16> [[TMP23]], <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 16, i32 17, i32 18, i32 19, i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
-; CHECK-NEXT:    [[TMP25:%.*]] = shufflevector <16 x i16> [[TMP24]], <16 x i16> poison, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 4, i32 5, i32 6, i32 7>
-; CHECK-NEXT:    [[TMP26:%.*]] = icmp sge <16 x i16> <i16 1, i16 0, i16 0, i16 1, i16 1, i16 0, i16 0, i16 1, i16 1, i16 0, i16 0, i16 1, i16 1, i16 0, i16 0, i16 1>, [[TMP25]]
-; CHECK-NEXT:    [[TMP27:%.*]] = shufflevector <16 x i1> [[TMP26]], <16 x i1> poison, <8 x i32> <i32 2, i32 3, i32 4, i32 5, i32 10, i32 11, i32 12, i32 13>
-; CHECK-NEXT:    [[TMP28:%.*]] = shufflevector <2 x i1> [[TMP5]], <2 x i1> poison, <8 x i32> <i32 0, i32 1, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
-; CHECK-NEXT:    [[TMP29:%.*]] = shufflevector <8 x i1> <i1 poison, i1 poison, i1 false, i1 true, i1 false, i1 true, i1 true, i1 false>, <8 x i1> [[TMP28]], <8 x i32> <i32 8, i32 9, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
-; CHECK-NEXT:    [[TMP30:%.*]] = or <8 x i1> [[TMP27]], [[TMP29]]
-; CHECK-NEXT:    [[TMP31:%.*]] = shufflevector <8 x i1> [[TMP30]], <8 x i1> poison, <2 x i32> <i32 0, i32 1>
-; CHECK-NEXT:    [[TMP32:%.*]] = select <2 x i1> [[TMP31]], <2 x double> [[TMP8]], <2 x double> [[TMP10]]
-; CHECK-NEXT:    [[TMP33:%.*]] = select <2 x i1> zeroinitializer, <2 x double> zeroinitializer, <2 x double> [[TMP32]]
-; CHECK-NEXT:    store <2 x double> [[TMP33]], ptr [[R]], align 8
-; CHECK-NEXT:    [[TMP34:%.*]] = shufflevector <8 x i1> [[TMP30]], <8 x i1> poison, <2 x i32> <i32 2, i32 3>
-; CHECK-NEXT:    [[TMP35:%.*]] = select <2 x i1> [[TMP34]], <2 x double> [[TMP8]], <2 x double> [[TMP10]]
-; CHECK-NEXT:    [[TMP36:%.*]] = select <2 x i1> zeroinitializer, <2 x double> zeroinitializer, <2 x double> [[TMP35]]
-; CHECK-NEXT:    store <2 x double> [[TMP36]], ptr [[V715]], align 8
-; CHECK-NEXT:    [[TMP37:%.*]] = shufflevector <8 x i1> [[TMP30]], <8 x i1> poison, <2 x i32> <i32 4, i32 5>
+; CHECK-NEXT:    [[TMP31:%.*]] = icmp sge <4 x i16> <i16 1, i16 0, i16 0, i16 1>, [[TMP21]]
+; CHECK-NEXT:    [[TMP32:%.*]] = shufflevector <4 x i1> [[TMP31]], <4 x i1> poison, <2 x i32> <i32 2, i32 3>
+; CHECK-NEXT:    [[TMP37:%.*]] = or <2 x i1> [[TMP32]], <i1 false, i1 true>
 ; CHECK-NEXT:    [[TMP38:%.*]] = select <2 x i1> [[TMP37]], <2 x double> [[TMP8]], <2 x double> [[TMP10]]
 ; CHECK-NEXT:    [[TMP39:%.*]] = select <2 x i1> zeroinitializer, <2 x double> zeroinitializer, <2 x double> [[TMP38]]
 ; CHECK-NEXT:    store <2 x double> [[TMP39]], ptr [[V717]], align 8
-; CHECK-NEXT:    [[TMP40:%.*]] = shufflevector <8 x i1> [[TMP30]], <8 x i1> poison, <2 x i32> <i32 6, i32 7>
+; CHECK-NEXT:    [[TMP36:%.*]] = shufflevector <4 x i1> [[TMP31]], <4 x i1> poison, <2 x i32> <i32 0, i32 1>
+; CHECK-NEXT:    [[TMP40:%.*]] = or <2 x i1> <i1 true, i1 false>, [[TMP36]]
 ; CHECK-NEXT:    [[TMP41:%.*]] = select <2 x i1> [[TMP40]], <2 x double> [[TMP8]], <2 x double> [[TMP10]]
 ; CHECK-NEXT:    [[TMP42:%.*]] = select <2 x i1> zeroinitializer, <2 x double> zeroinitializer, <2 x double> [[TMP41]]
 ; CHECK-NEXT:    store <2 x double> [[TMP42]], ptr [[V719]], align 8
