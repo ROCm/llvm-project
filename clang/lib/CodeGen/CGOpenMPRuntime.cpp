@@ -27,10 +27,13 @@
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
+#include "clang/CodeGenUtils/RecordLayoutUtils.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -1197,7 +1200,7 @@ struct PushAndPopStackRAII {
     // The FiniCB will still be needed but at the point where the
     // OpenMPIRBuilder is asked to construct a parallel (or similar) construct.
     auto FiniCB = [&CGF](llvm::OpenMPIRBuilder::InsertPointTy IP) {
-      assert(IP.getBlock()->end() == IP.getPoint() &&
+      assert(IP == IP.getNodeParent()->end() &&
              "Clang CG should cause non-terminated block!");
       CGBuilderTy::InsertPointGuard IPG(CGF.Builder);
       CGF.Builder.restoreIP(IP);
@@ -1853,7 +1856,7 @@ void CGOpenMPRuntime::emitAndRegisterVTable(CodeGenModule &CGM,
                                             const VarDecl *VD) {
   // Register C++ VTable to OpenMP Offload Entry if it's a new
   // CXXRecordDecl.
-  if (CXXRecord && CXXRecord->isDynamicClass() &&
+  if (CXXRecord && CXXRecord->hasDefinition() && CXXRecord->isDynamicClass() &&
       !CGM.getOpenMPRuntime().VTableDeclMap.contains(CXXRecord)) {
     auto Res = CGM.getOpenMPRuntime().VTableDeclMap.try_emplace(CXXRecord, VD);
     if (Res.second) {
@@ -1997,6 +2000,25 @@ void CGOpenMPRuntime::emitParallelCall(
     OpenMPSeverityClauseKind Severity, const Expr *Message) {
   if (!CGF.HaveInsertPoint())
     return;
+
+  // The caller waits for the parallel region to finish, so its captured stack
+  // variables remain alive until the region completes. Global variables also
+  // remain alive. Record this lifetime guarantee on the outlined function's
+  // parameters, even if other code has access to the same storage.
+  // The storage may still be modified or accessed through other pointers.
+  // For a captured pointer variable, this guarantees the lifetime of the
+  // variable itself, not the object it points to.
+  if (!CGM.getLangOpts().OpenMPIsTargetDevice) {
+    assert(OutlinedFn->arg_size() == CapturedVars.size() + 2 &&
+           "Expected tid and bound tid before the captured arguments");
+    for (auto [I, Captured] : llvm::enumerate(CapturedVars)) {
+      if (Captured->getType()->isPointerTy() &&
+          llvm::isa<llvm::AllocaInst, llvm::GlobalVariable>(
+              llvm::getUnderlyingObject(Captured)))
+        OutlinedFn->addParamAttr(I + 2, llvm::Attribute::NoFreeObj);
+    }
+  }
+
   llvm::Value *RTLoc = emitUpdateLocation(CGF, Loc);
   auto &M = CGM.getModule();
   auto &&ThenGen = [&M, OutlinedFn, CapturedVars, RTLoc,
@@ -10641,10 +10663,8 @@ static void emitOffloadingArraysAndArgs(
   CodeGenModule &CGM = CGF.CGM;
 
   using InsertPointTy = llvm::OpenMPIRBuilder::InsertPointTy;
-  InsertPointTy AllocaIP(CGF.AllocaInsertPt->getParent(),
-                         CGF.AllocaInsertPt->getIterator());
-  InsertPointTy CodeGenIP(CGF.Builder.GetInsertBlock(),
-                          CGF.Builder.GetInsertPoint());
+  InsertPointTy AllocaIP(CGF.AllocaInsertPt->getIterator());
+  InsertPointTy CodeGenIP(CGF.Builder.GetInsertPoint());
 
   auto DeviceAddrCB = [&](unsigned int I, llvm::Value *NewDecl) {
     if (const ValueDecl *DevVD = CombinedInfo.DevicePtrDecls[I]) {
@@ -11276,7 +11296,7 @@ static void emitTargetCallKernelLaunch(
         OMPRuntime->emitTargetNumIterationsCall(CGF, D, SizeEmitter);
     auto [DynCGroupMem, DynCGroupMemFallback] = emitDynCGroupMem(D, CGF);
     llvm::OpenMPIRBuilder::InsertPointTy AllocaIP(
-        CGF.AllocaInsertPt->getParent(), CGF.AllocaInsertPt->getIterator());
+        CGF.AllocaInsertPt->getIterator());
 
     llvm::OpenMPIRBuilder::TargetDataRTArgs RTArgs(
         BasePointersArray, PointersArray, SizesArray, MapTypesArray,
@@ -11960,8 +11980,7 @@ void CGOpenMPRuntime::emitTargetDataCalls(
       }
       break;
     }
-    return InsertPointTy(CGF.Builder.GetInsertBlock(),
-                         CGF.Builder.GetInsertPoint());
+    return InsertPointTy(CGF.Builder.GetInsertPoint());
   };
 
   auto DeviceAddrCB = [&](unsigned int I, llvm::Value *NewDecl) {
@@ -11983,10 +12002,8 @@ void CGOpenMPRuntime::emitTargetDataCalls(
   // Source location for the ident struct
   llvm::Value *RTLoc = emitUpdateLocation(CGF, D.getBeginLoc());
 
-  InsertPointTy AllocaIP(CGF.AllocaInsertPt->getParent(),
-                         CGF.AllocaInsertPt->getIterator());
-  InsertPointTy CodeGenIP(CGF.Builder.GetInsertBlock(),
-                          CGF.Builder.GetInsertPoint());
+  InsertPointTy AllocaIP(CGF.AllocaInsertPt->getIterator());
+  InsertPointTy CodeGenIP(CGF.Builder.GetInsertPoint());
   llvm::OpenMPIRBuilder::LocationDescription OmpLoc(CGF.Builder);
   llvm::OpenMPIRBuilder::InsertPointTy AfterIP =
       cantFail(OMPBuilder.createTargetData(

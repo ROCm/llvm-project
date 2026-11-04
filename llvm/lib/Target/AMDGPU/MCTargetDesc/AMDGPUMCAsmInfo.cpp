@@ -60,7 +60,12 @@ AMDGPUMCAsmInfo::AMDGPUMCAsmInfo(const Triple &TT,
   DwarfRegNumForCFI = true;
   SupportsHeterogeneousDebuggingExtensions = true;
 
-  UseIntegratedAssembler = false;
+  // MCAsmInfoELF enables this, and with the integrated assembler AsmPrinter
+  // then emits the preferred function alignment as .prefalign, which reduces
+  // the alignment of small functions. Keep emitting it as a plain .p2align so
+  // that enabling the integrated assembler does not change code layout.
+  HasPreferredAlignment = false;
+
   initializeAtSpecifiers(atSpecifiers);
 }
 

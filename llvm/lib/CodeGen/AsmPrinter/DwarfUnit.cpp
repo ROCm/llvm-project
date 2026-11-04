@@ -65,6 +65,10 @@ void DIEDwarfExpression::emitOpAddress(const GlobalVariable *GV) {
   CU.addOpAddress(getActiveDIE(), AP.getSymbol(GV));
 }
 
+void DIEDwarfExpression::emitRelocatedAddress(const MCSymbol *Sym) {
+  CU.addLabel(getActiveDIE(), dwarf::DW_FORM_addr, Sym);
+}
+
 void DIEDwarfExpression::enableTemporaryBuffer() {
   assert(!IsBuffering && "Already buffering?");
   IsBuffering = true;
@@ -874,6 +878,9 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIStringType *STy) {
     addUInt(Buffer, dwarf::DW_AT_encoding, dwarf::DW_FORM_data1,
             STy->getEncoding());
   }
+
+  if (STy->getCharType())
+    addType(Buffer, STy->getCharType());
 }
 
 void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy) {
@@ -922,8 +929,9 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy) {
   // If DWARF address space value is other than None, add it.  The IR
   // verifier checks that DWARF address space only exists for pointer
   // or reference types.
-  if (auto AS = DTy->getDWARFAddressSpace())
-    addUInt(Buffer, dwarf::DW_AT_LLVM_address_space, dwarf::DW_FORM_data4, *AS);
+  if (std::optional<unsigned> AS = DTy->getDWARFAddressSpace())
+    addUInt(Buffer, Asm->getTypeAddressSpaceAttribute(), dwarf::DW_FORM_data4,
+            *AS);
 
   // Add template alias template parameters.
   if (Tag == dwarf::DW_TAG_template_alias)

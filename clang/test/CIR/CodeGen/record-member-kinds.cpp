@@ -30,21 +30,21 @@ union NuaEmptyUnion { [[no_unique_address]] Empty e; int i; };
 struct EmptyForLayoutOnly { Empty e; };
 // CIR-DAG: !rec_EmptyForLayoutOnly = !cir.struct<"EmptyForLayoutOnly" {data !rec_Empty}>
 // LLVMCIR-DAG: %struct.EmptyForLayoutOnly = type { %struct.Empty }
-// OGCG-DAG: %struct.EmptyForLayoutOnly = type { i8 }
+// OGCG-DAG: %struct.EmptyForLayoutOnly = type { %struct.Empty }
 struct NuaHoldsAbiData {
   int x;
   [[no_unique_address]] EmptyForLayoutOnly e;
 };
 // CIR-DAG: !rec_NuaHoldsAbiData = !cir.struct<"NuaHoldsAbiData" {data !s32i, data !rec_EmptyForLayoutOnly}>
 // LLVMCIR-DAG: %struct.NuaHoldsAbiData = type { i32, %struct.EmptyForLayoutOnly }
-// OGCG-DAG: %struct.NuaHoldsAbiData = type { i32, [4 x i8] }
+// OGCG-DAG: %struct.NuaHoldsAbiData = type { i32, %struct.EmptyForLayoutOnly }
 struct alignas(8) NuaHoldsAbiDataAligned {
     [[no_unique_address]] EmptyForLayoutOnly e;
     NuaHoldsAbiDataAligned();
 };
 // CIR-DAG: !rec_NuaHoldsAbiDataAligned = !cir.struct<"NuaHoldsAbiDataAligned" {data !rec_EmptyForLayoutOnly, pad !cir.array<!u8i x 7>}>
 // LLVMCIR-DAG: %struct.NuaHoldsAbiDataAligned = type { %struct.EmptyForLayoutOnly, [7 x i8] }
-// OGCG-DAG: %struct.NuaHoldsAbiDataAligned = type { [8 x i8] }
+// OGCG-DAG: %struct.NuaHoldsAbiDataAligned = type { %struct.EmptyForLayoutOnly, [7 x i8] }
 
 // Multiple empty members in the nested type, neither with its own
 // [[no_unique_address]]: both stay data members of the nested type.
@@ -54,14 +54,14 @@ struct Empty2 {};
 struct MultiInner { Empty a; Empty2 b; };
 // CIR-DAG: !rec_MultiInner = !cir.struct<"MultiInner" {data !rec_Empty, data !rec_Empty2}>
 // LLVMCIR-DAG: %struct.MultiInner = type { %struct.Empty, %struct.Empty2 }
-// OGCG-DAG: %struct.MultiInner = type { [2 x i8] }
+// OGCG-DAG: %struct.MultiInner = type { %struct.Empty, %struct.Empty2 }
 struct NuaMultiInner {
   int x;
   [[no_unique_address]] MultiInner m;
 };
 // CIR-DAG: !rec_NuaMultiInner = !cir.struct<"NuaMultiInner" {data !s32i, data !rec_MultiInner}>
 // LLVMCIR-DAG: %struct.NuaMultiInner = type { i32, %struct.MultiInner }
-// OGCG-DAG: %struct.NuaMultiInner = type { i32, [4 x i8] }
+// OGCG-DAG: %struct.NuaMultiInner = type { i32, %struct.MultiInner }
 
 // Mixed: one nested member has its own [[no_unique_address]] (so it is fully
 // empty for layout and the ABI, and is elided), the other doesn't (so it
@@ -72,14 +72,14 @@ struct MixedInner {
 };
 // CIR-DAG: !rec_MixedInner = !cir.struct<"MixedInner" {data !rec_Empty2}>
 // LLVMCIR-DAG: %struct.MixedInner = type { %struct.Empty2 }
-// OGCG-DAG: %struct.MixedInner = type { i8 }
+// OGCG-DAG: %struct.MixedInner = type { %struct.Empty2 }
 struct NuaMixedInner {
   int x;
   [[no_unique_address]] MixedInner m;
 };
 // CIR-DAG: !rec_NuaMixedInner = !cir.struct<"NuaMixedInner" {data !s32i, data !rec_MixedInner}>
 // LLVMCIR-DAG: %struct.NuaMixedInner = type { i32, %struct.MixedInner }
-// OGCG-DAG: %struct.NuaMixedInner = type { i32, [4 x i8] }
+// OGCG-DAG: %struct.NuaMixedInner = type { i32, %struct.MixedInner }
 
 // Two [[no_unique_address]] fields side by side: one fully empty (elided,
 // reusing the offset of the preceding field), one holding ABI data (kept as
@@ -91,7 +91,7 @@ struct TwoFields {
 };
 // CIR-DAG: !rec_TwoFields = !cir.struct<"TwoFields" {data !s32i, data !rec_MultiInner}>
 // LLVMCIR-DAG: %struct.TwoFields = type { i32, %struct.MultiInner }
-// OGCG-DAG: %struct.TwoFields = type { i32, [4 x i8] }
+// OGCG-DAG: %struct.TwoFields = type { i32, %struct.MultiInner }
 
 // Nested two levels deep: the attribute only sits on the outermost field.
 struct DeepInner { MultiInner inner; };
@@ -102,7 +102,7 @@ struct DeepOuter {
 };
 // CIR-DAG: !rec_DeepOuter = !cir.struct<"DeepOuter" {data !s32i, data !rec_DeepInner}>
 // LLVMCIR-DAG: %struct.DeepOuter = type { i32, %struct.DeepInner }
-// OGCG-DAG: %struct.DeepOuter = type { i32, [4 x i8] }
+// OGCG-DAG: %struct.DeepOuter = type { i32, %struct.DeepInner }
 
 // A polymorphic class is never empty for the ABI: its vtable pointer is neither
 // a base nor a field.
@@ -276,7 +276,7 @@ EmptyForLayoutOnly *getNuaHoldsAbiDataE(NuaHoldsAbiData &s) { return &s.e; }
 // LLVMCIR: define {{.*}} @_Z19getNuaHoldsAbiDataE{{.*}}(
 // LLVMCIR:   getelementptr inbounds nuw %struct.NuaHoldsAbiData, ptr %{{.+}}, i32 0, i32 1
 // OGCG: define {{.*}} @_Z19getNuaHoldsAbiDataE{{.*}}(
-// OGCG:   getelementptr inbounds i8, ptr %{{.+}}, i64 4
+// OGCG:   getelementptr inbounds nuw %struct.NuaHoldsAbiData, ptr %{{.+}}, i32 0, i32 1
 
 EmptyForLayoutOnly *getNuaHoldsAbiDataAlignedE(NuaHoldsAbiDataAligned &s) { return &s.e; }
 // CIR: cir.func{{.*}} @_Z26getNuaHoldsAbiDataAlignedE{{.*}}(
@@ -292,7 +292,7 @@ MultiInner *getNuaMultiInnerM(NuaMultiInner &s) { return &s.m; }
 // LLVMCIR: define {{.*}} @_Z17getNuaMultiInnerM{{.*}}(
 // LLVMCIR:   getelementptr inbounds nuw %struct.NuaMultiInner, ptr %{{.+}}, i32 0, i32 1
 // OGCG: define {{.*}} @_Z17getNuaMultiInnerM{{.*}}(
-// OGCG:   getelementptr inbounds i8, ptr %{{.+}}, i64 4
+// OGCG:   getelementptr inbounds nuw %struct.NuaMultiInner, ptr %{{.+}}, i32 0, i32 1
 
 MixedInner *getNuaMixedInnerM(NuaMixedInner &s) { return &s.m; }
 // CIR: cir.func{{.*}} @_Z17getNuaMixedInnerM{{.*}}(
@@ -300,7 +300,7 @@ MixedInner *getNuaMixedInnerM(NuaMixedInner &s) { return &s.m; }
 // LLVMCIR: define {{.*}} @_Z17getNuaMixedInnerM{{.*}}(
 // LLVMCIR:   getelementptr inbounds nuw %struct.NuaMixedInner, ptr %{{.+}}, i32 0, i32 1
 // OGCG: define {{.*}} @_Z17getNuaMixedInnerM{{.*}}(
-// OGCG:   getelementptr inbounds i8, ptr %{{.+}}, i64 4
+// OGCG:   getelementptr inbounds nuw %struct.NuaMixedInner, ptr %{{.+}}, i32 0, i32 1
 
 // The fully-empty field reuses offset 0 (no GEP needed at all, in either
 // codegen), while the ABI-data-holding field next to it still gets a real
@@ -318,7 +318,7 @@ MultiInner *getTwoFieldsHolds(TwoFields &s) { return &s.holds; }
 // LLVMCIR: define {{.*}} @_Z17getTwoFieldsHolds{{.*}}(
 // LLVMCIR:   getelementptr inbounds nuw %struct.TwoFields, ptr %{{.+}}, i32 0, i32 1
 // OGCG: define {{.*}} @_Z17getTwoFieldsHolds{{.*}}(
-// OGCG:   getelementptr inbounds i8, ptr %{{.+}}, i64 4
+// OGCG:   getelementptr inbounds nuw %struct.TwoFields, ptr %{{.+}}, i32 0, i32 1
 
 DeepInner *getDeepOuterD(DeepOuter &s) { return &s.d; }
 // CIR: cir.func{{.*}} @_Z13getDeepOuterD{{.*}}(
@@ -326,4 +326,4 @@ DeepInner *getDeepOuterD(DeepOuter &s) { return &s.d; }
 // LLVMCIR: define {{.*}} @_Z13getDeepOuterD{{.*}}(
 // LLVMCIR:   getelementptr inbounds nuw %struct.DeepOuter, ptr %{{.+}}, i32 0, i32 1
 // OGCG: define {{.*}} @_Z13getDeepOuterD{{.*}}(
-// OGCG:   getelementptr inbounds i8, ptr %{{.+}}, i64 4
+// OGCG:   getelementptr inbounds nuw %struct.DeepOuter, ptr %{{.+}}, i32 0, i32 1

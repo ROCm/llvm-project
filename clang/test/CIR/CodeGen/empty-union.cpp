@@ -34,7 +34,7 @@ struct WrapEmpty {
 WrapEmpty w;
 // CIR-DAG: !rec_OuterWithEmpty = !cir.union<"OuterWithEmpty" {data !rec_Empty, data !s32i}>
 // CIR-DAG: !rec_WrapEmpty = !cir.struct<"WrapEmpty" {data !rec_OuterWithEmpty, data !s32i}>
-// CIR-DAG: cir.global external @w = #cir.zero : !rec_WrapEmpty {alignment = 4 : i64}
+// CIR-DAG: cir.global external @w = #cir.zero : !rec_WrapEmpty align(4)
 // LLVM-DAG: %struct.WrapEmpty = type { %union.OuterWithEmpty, i32 }
 // LLVM-DAG: %union.OuterWithEmpty = type { i32 }
 // LLVM-DAG: @w = global %struct.WrapEmpty zeroinitializer, align 4
@@ -97,11 +97,11 @@ Leading leadArr[2];
 // LLVMCIR-DAG: %struct.Middle = type { i32, %union.Empty, i32 }
 // LLVMCIR-DAG: %struct.LeadingZeroBitfield = type { %union.OnlyZeroBitfield, i32 }
 // LLVMCIR-DAG: %struct.LeadingOver = type { %union.EmptyAligned, i32, [12 x i8] }
-// OGCG-DAG:    %struct.Leading = type { [4 x i8], i32 }
-// OGCG-DAG:    %struct.Trailing = type { i32, [4 x i8] }
-// OGCG-DAG:    %struct.Middle = type { i32, [4 x i8], i32 }
-// OGCG-DAG:    %struct.LeadingZeroBitfield = type { [4 x i8], i32 }
-// OGCG-DAG:    %struct.LeadingOver = type { [16 x i8], i32, [12 x i8] }
+// OGCG-DAG:    %struct.Leading = type { %union.Empty, i32 }
+// OGCG-DAG:    %struct.Trailing = type { i32, %union.Empty }
+// OGCG-DAG:    %struct.Middle = type { i32, %union.Empty, i32 }
+// OGCG-DAG:    %struct.LeadingZeroBitfield = type { %union.OnlyZeroBitfield, i32 }
+// OGCG-DAG:    %struct.LeadingOver = type { %union.EmptyAligned, i32, [12 x i8] }
 // LLVM-DAG:    @lead = global %struct.Leading zeroinitializer, align 4
 // LLVM-DAG:    @leadOver = global %struct.LeadingOver zeroinitializer, align 16
 
