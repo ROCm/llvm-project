@@ -177,6 +177,8 @@ llvm::Error DeviceTy::init() {
                         &Backend))
     Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 
+  MaxDirectWriteSize = getInfo<uint64_t>(DeviceInfo::MAX_DIRECT_WRITE_SIZE);
+
   getInfoString(DeviceInfo::UID, Uid);
   if (Uid.empty())
     ODBG(ODT_Init) << "Failed to get UID for device " << DeviceID;
@@ -487,6 +489,14 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
     return nullptr;
   }
 
+  // Time the allocation here: the offload API below carries no profiler, and
+  // the trace record built by the RAII above reads these timestamps. Declared
+  // after that RAII, so it is destroyed -- and stamps -- first.
+  auto *Profiler = RTL->getProfiler();
+  assert(Profiler && "Plugin provides no profiler instance");
+  auto ProfTimer = Profiler->getScopedDataAllocTimer(
+      &RTL->getDevice(RTLDeviceID), HstPtr, Size);
+
   auto AllocOrErr =
       PluginCtx->allocate(RTL->getDevice(RTLDeviceID), Size, HstPtr,
                           static_cast<TargetAllocTy>(Kind), /*Alignment=*/0);
@@ -519,6 +529,13 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
              << ": device " << DeviceID << " has no context";
     return OFFLOAD_FAIL;
   }
+
+  // See allocData: the trace record built by the RAII above reads these
+  // timestamps, so this must be declared after it.
+  auto *Profiler = RTL->getProfiler();
+  assert(Profiler && "Plugin provides no profiler instance");
+  auto ProfTimer = Profiler->getScopedDataDeleteTimer(
+      &RTL->getDevice(RTLDeviceID), TgtAllocBegin);
 
   if (auto Err =
           PluginCtx->deallocate(RTL->getDevice(RTLDeviceID), TgtAllocBegin,
@@ -573,6 +590,17 @@ int32_t DeviceTy::submitDataSync(void *TgtPtrBegin, void *HstPtrBegin,
                                  const ident_t *Loc, const char *Name) {
   return submitDataImpl(TgtPtrBegin, HstPtrBegin, Size, /*Queue=*/nullptr,
                         Entry, HDTTMapPtr, Loc, Name);
+}
+
+int32_t DeviceTy::submitDataIndependently(void *TgtPtrBegin, void *HstPtrBegin,
+                                          int64_t Size, AsyncInfoTy &AsyncInfo,
+                                          const char *Name) {
+  if (Size > 0 && uint64_t(Size) <= MaxDirectWriteSize)
+    return submitDataSync(TgtPtrBegin, HstPtrBegin, Size, /*Entry=*/nullptr,
+                          /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr, Name);
+  return submitData(TgtPtrBegin, HstPtrBegin, Size, AsyncInfo,
+                    /*Entry=*/nullptr, /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr,
+                    Name);
 }
 
 int32_t DeviceTy::submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin,
@@ -882,21 +910,6 @@ static void freeAfterSynchronization(DeviceTy &Device, AsyncInfoTy &AsyncInfo,
   });
 }
 
-/// Downstream: free \p Ptr, which was allocated through the plugin's
-/// allocator with \p Kind, once \p AsyncInfo is synchronized.
-static void freePluginMemAfterSynchronization(GenericDeviceTy &GenericDevice,
-                                              AsyncInfoTy &AsyncInfo, void *Ptr,
-                                              TargetAllocTy Kind) {
-  AsyncInfo.addPostProcessingFunction([&GenericDevice, Ptr, Kind]() -> int {
-    if (auto Err = GenericDevice.dataDelete(Ptr, Kind)) {
-      REPORT() << "Failure to free memory " << Ptr << ": "
-               << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-    return OFFLOAD_SUCCESS;
-  });
-}
-
 /// Return a device pointer to a new kernel launch environment, or null if
 /// this launch has no reserved dyn_ptr slot to store one in. \p OmpABIVersion
 /// is the kernel-argument ABI version this launch was built against.
@@ -943,10 +956,9 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
   // Remember to free the memory later.
   freeAfterSynchronization(Device, AsyncInfo, *AllocOrErr);
 
-  // Use the KLE in the __tgt_async_info to ensure a stable address for the
+  // Use the KLE in the AsyncInfoTy to ensure a stable address for the
   // async data transfer.
-  auto &LocalKLE =
-      static_cast<__tgt_async_info *>(AsyncInfo)->KernelLaunchEnvironment;
+  auto &LocalKLE = AsyncInfo.getKernelLaunchEnvironment();
   LocalKLE = KernelLaunchEnvironmentTy{};
   LocalKLE.DynCGroupMemSize = DynBlockMemConf.Size;
   LocalKLE.DynCGroupMemFbPtr = DynBlockMemConf.FallbackPtr;
@@ -965,43 +977,20 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
     freeAfterSynchronization(Device, AsyncInfo, *ReductionAllocOrErr);
   }
 
-  // Downstream: stage the launch environment in pinned memory if the plugin
-  // transfers it faster from there, so the copy below can take that path.
-  GenericDeviceTy &GenericDevice = Device.RTL->getDevice(Device.RTLDeviceID);
-  const void *LaunchEnvSrc = &LocalKLE;
-  KernelLaunchEnvironmentTy *PinnedKLE =
-      GenericDevice.getPinnedLaunchEnvBuffer();
-  if (PinnedKLE) {
-    *PinnedKLE = LocalKLE;
-    LaunchEnvSrc = PinnedKLE;
-  }
-
-  // Downstream: the ProfilerData at this point will have a callback for a
-  // kernel launch, not a data-op. This is due to the "external" operation
-  // being a kernel launch and the data submit here being an implementation
-  // detail. We temporarily set the ProfilerData to nullptr, such that we
-  // disable the timing etc. further down to not trigger assertions or report
-  // implementation detail. For the same reason, copy with olMemcpy rather
-  // than Device.submitData(), which would report an OMPT data operation.
+  // Downstream: the async info's ProfilerData holds the OMPT trace record of
+  // the kernel launch. Submitting data replaces it with that of the data
+  // operation, so restore it for the launch.
   __tgt_async_info *AI = AsyncInfo;
   void *ProfilerData = AI->ProfilerData;
-  AI->ProfilerData = nullptr;
-  auto Res = olMemcpy(AsyncInfo.getQueue(), *AllocOrErr, Device.DeviceHandle,
-                      LaunchEnvSrc, /*SrcDevice=*/nullptr,
-                      sizeof(KernelLaunchEnvironmentTy));
+  int32_t Rc = Device.submitDataIndependently(*AllocOrErr, &LocalKLE,
+                                              sizeof(KernelLaunchEnvironmentTy),
+                                              AsyncInfo, "KernelLaunchEnv");
   AI->ProfilerData = ProfilerData;
-  if (Res)
+  if (Rc != OFFLOAD_SUCCESS)
     return createError(ErrorCode::BackendFailure,
-                       "failed to copy the kernel launch environment: %s",
-                       Res->Details);
-
-  // Register the staging buffer only now that the transfer reading it has been
-  // issued. Registering it earlier would let a concurrent finalization that
-  // observes the queue as complete release it while the transfer is still in
-  // flight.
-  if (PinnedKLE)
-    freePluginMemAfterSynchronization(GenericDevice, AsyncInfo, PinnedKLE,
-                                      TARGET_ALLOC_HOST);
+                       "failed to copy the kernel launch environment to "
+                       "device %d",
+                       Device.DeviceID);
 
   return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
 }
@@ -1047,6 +1036,28 @@ static uint32_t getDeviceBlockLimit(const DeviceGeometryPropsTy &Props,
   if (uint32_t NumTeams = getOMPNumTeams())
     return std::min(BlockLimit, NumTeams);
   return BlockLimit;
+}
+
+/// Get the default number of blocks for a kernel in Generic-SPMD mode.
+static uint32_t
+getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
+  // Envar to set the default number of blocks per compute unit for a kernel in
+  // Generic-SPMD mode. Currently only used on AMDGPU devices. Zero uses the
+  // default number of blocks of other kernels.
+  static UInt32Envar OMPX_GenericSPMDTeamsPerCU(
+      "LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU", 6);
+  // Downstream: the former name of the envar, honored if the new one is unset.
+  static UInt32Envar OMPX_AMDGPUGenericSPMDTeamsPerCU(
+      "LIBOMPTARGET_AMDGPU_GENERIC_SPMD_TEAMS_PER_CU", 6);
+  uint32_t TeamsPerCU = !OMPX_GenericSPMDTeamsPerCU.isPresent() &&
+                                OMPX_AMDGPUGenericSPMDTeamsPerCU.isPresent()
+                            ? OMPX_AMDGPUGenericSPMDTeamsPerCU.get()
+                            : OMPX_GenericSPMDTeamsPerCU.get();
+
+  if (Props.Backend != OL_PLATFORM_BACKEND_AMDGPU || !TeamsPerCU ||
+      !Props.NumComputeUnits)
+    return Props.DefaultNumBlocks;
+  return Props.NumComputeUnits * TeamsPerCU;
 }
 
 /// Threshold for the reduction data size (in bytes) above which a cross-team
@@ -1109,28 +1120,6 @@ getXTeamReductionNumBlocks(const DeviceGeometryPropsTy &Props,
     NumBlocks = std::min(NumBlocks, TripCountNumBlocks);
   }
   return NumBlocks;
-}
-
-/// Get the default number of blocks for a kernel in Generic-SPMD mode.
-static uint32_t
-getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
-  // Envar to set the default number of blocks per compute unit for a kernel in
-  // Generic-SPMD mode. Currently only used on AMDGPU devices. Zero uses the
-  // default number of blocks of other kernels.
-  static UInt32Envar OMPX_GenericSPMDTeamsPerCU(
-      "LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU", 6);
-  // Downstream: the former name of the envar, honored if the new one is unset.
-  static UInt32Envar OMPX_AMDGPUGenericSPMDTeamsPerCU(
-      "LIBOMPTARGET_AMDGPU_GENERIC_SPMD_TEAMS_PER_CU", 6);
-  uint32_t TeamsPerCU = !OMPX_GenericSPMDTeamsPerCU.isPresent() &&
-                                OMPX_AMDGPUGenericSPMDTeamsPerCU.isPresent()
-                            ? OMPX_AMDGPUGenericSPMDTeamsPerCU.get()
-                            : OMPX_GenericSPMDTeamsPerCU.get();
-
-  if (Props.Backend != OL_PLATFORM_BACKEND_AMDGPU || !TeamsPerCU ||
-      !Props.NumComputeUnits)
-    return Props.DefaultNumBlocks;
-  return Props.NumComputeUnits * TeamsPerCU;
 }
 
 /// Get the number of blocks for each thread to run one iteration of a loop of
