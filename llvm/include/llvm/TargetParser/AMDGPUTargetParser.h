@@ -280,6 +280,20 @@ constexpr unsigned getMaxFlatWorkGroupSize() {
   return 1024;
 }
 
+class TargetID;
+
+/// Queries used to resolve object-linking resources without MCSubtargetInfo.
+LLVM_ABI bool isWaveSizeSupported(const TargetID &Target, unsigned WaveSize);
+LLVM_ABI unsigned getNumExtraSGPRs(const TargetID &Target, bool VCCUsed,
+                                   bool FlatScrUsed);
+LLVM_ABI unsigned getEncodedNumVGPRBlocks(const TargetID &Target,
+                                          unsigned NumVGPRs, unsigned WaveSize);
+LLVM_ABI unsigned getNumSGPRBlocks(unsigned NumSGPRs);
+LLVM_ABI bool isLDSSizeCompatibleWithOccupancy(const TargetID &Target,
+                                               unsigned WaveSize, bool IsCuMode,
+                                               uint64_t LDSBytes,
+                                               unsigned Occupancy);
+
 /// Fills Features map with default values for given target GPU.
 /// \p Features contains overriding target features and this function returns
 /// default target features with entries overridden by \p Features.

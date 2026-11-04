@@ -10086,7 +10086,7 @@ Each `Summary` format will depend on whether the global value is a
 If the global value is a function, the `Summary` entry will look like:
 
 ```text
-function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 2[, FuncFlags]?[, Calls]?[, TypeIdInfo]?[, Params]?[, Refs]?
+function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 2[, FuncFlags]?[, Calls]?[, TypeIdInfo]?[, CallTypeIds]?[, Params]?[, Refs]?
 ```
 
 The `module` field includes the summary entry id for the module containing
@@ -10097,7 +10097,8 @@ to a local definition (the latter two are populated during the thin link).
 The `insts` field contains the number of IR instructions in the function.
 Finally, there are several optional fields: {ref}`FuncFlags<funcflags_summary>`,
 {ref}`Calls<calls_summary>`, {ref}`TypeIdInfo<typeidinfo_summary>`,
-{ref}`Params<params_summary>`, {ref}`Refs<refs_summary>`.
+{ref}`CallTypeIds<calltypeids_summary>`, {ref}`Params<params_summary>`,
+{ref}`Refs<refs_summary>`.
 
 (variable_summary)=
 
@@ -10313,6 +10314,31 @@ typeCheckedLoadConstVCalls: (ConstVCall[, ConstVCall]*)
 
 Where each ConstVCall has the format described for
 `TypeTestAssumeConstVCalls`.
+
+(calltypeids_summary)=
+
+#### CallTypeIds
+
+The optional `CallTypeIds` fields describe the signatures of the function and
+of its indirect calls with call type identifiers. They look like:
+
+```text
+callTypeId: 657395674655738670[, indirectCallTypeIds: (13568473337159563479[, 11966876714456557523]*)]?
+```
+
+Each identifier is the `GUID` of a string that describes a calling convention
+and a function type. By default, two signatures have the same identifier if
+they have the same calling convention and structurally equal function types,
+where identified structure types are compared by their elements. A target can
+use a less strict rule if its ABI lets calls with different IR signatures
+reach the same function.
+
+`callTypeId` is the identifier of the function. It is present only if an
+indirect call can reach the function: the calling convention of the function
+permits calls, and the function has non-local linkage or its address is taken.
+`indirectCallTypeIds` lists the distinct identifiers of the indirect calls in
+the function. An indirect call can reach a function only if both have the same
+identifier.
 
 (typeid_summary)=
 

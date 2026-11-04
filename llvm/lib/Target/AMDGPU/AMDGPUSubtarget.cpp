@@ -16,6 +16,7 @@
 #include "AMDGPUInstructionSelector.h"
 #include "AMDGPULegalizerInfo.h"
 #include "AMDGPURegisterBankInfo.h"
+#include "AMDGPUTargetMachine.h"
 #include "R600Subtarget.h"
 #include "SIMachineFunctionInfo.h"
 #include "Utils/AMDGPUBaseInfo.h"
@@ -230,7 +231,35 @@ AMDGPUSubtarget::getWavesPerEU(std::pair<unsigned, unsigned> FlatWorkGroupSizes,
   // Requested minimum/maximum number of waves per execution unit.
   std::pair<unsigned, unsigned> Requested =
       AMDGPU::getIntegerPairAttribute(F, "amdgpu-waves-per-eu", Default, true);
-  return getEffectiveWavesPerEU(Requested, FlatWorkGroupSizes, LDSBytes);
+  std::pair<unsigned, unsigned> WavesPerEU =
+      getEffectiveWavesPerEU(Requested, FlatWorkGroupSizes, LDSBytes);
+  if (!AMDGPUTargetMachine::EnableObjectLinking)
+    return WavesPerEU;
+
+  unsigned FunctionABIOccupancy = getFunctionABIOccupancy(F);
+  unsigned EffectiveMinWaves =
+      F.hasFnAttribute("amdgpu-waves-per-eu")
+          ? std::max(WavesPerEU.first, FunctionABIOccupancy)
+          : FunctionABIOccupancy;
+  return {EffectiveMinWaves, std::max(WavesPerEU.second, EffectiveMinWaves)};
+}
+
+unsigned AMDGPUSubtarget::getDefaultABIOccupancy(const Module &M) const {
+  unsigned Override = AMDGPU::getAMDGPUABIWavesPerEU(M);
+  if (Override)
+    Override = std::clamp(Override, getMinWavesPerEU(), getMaxWavesPerEU());
+
+  constexpr unsigned DefaultMaxWorkGroupSize = 1024;
+  return Override ? Override
+                  : getWavesPerEUForWorkGroup(DefaultMaxWorkGroupSize);
+}
+
+unsigned AMDGPUSubtarget::getFunctionABIOccupancy(const Function &F) const {
+  if (!F.hasFnAttribute("amdgpu-flat-work-group-size"))
+    return getDefaultABIOccupancy(*F.getParent());
+
+  std::pair<unsigned, unsigned> FlatWorkGroupSizes = getFlatWorkGroupSizes(F);
+  return getWavesPerEUForWorkGroup(FlatWorkGroupSizes.second);
 }
 
 std::optional<unsigned>

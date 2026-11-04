@@ -10559,7 +10559,8 @@ bool LLParser::parseGVEntry(unsigned ID) {
 /// FunctionSummary
 ///   ::= 'function' ':' '(' 'module' ':' ModuleReference ',' GVFlags
 ///         ',' 'insts' ':' UInt32 [',' OptionalFFlags]? [',' OptionalCalls]?
-///         [',' OptionalTypeIdInfo]? [',' OptionalParamAccesses]?
+///         [',' OptionalTypeIdInfo]? [',' 'callTypeId' ':' UInt64]?
+///         [',' OptionalIndirectCallTypeIds]? [',' OptionalParamAccesses]?
 ///         [',' OptionalRefs]? ')'
 bool LLParser::parseFunctionSummary(std::string Name, GlobalValue::GUID GUID,
                                     unsigned ID) {
@@ -10576,6 +10577,7 @@ bool LLParser::parseFunctionSummary(std::string Name, GlobalValue::GUID GUID,
   unsigned InstCount;
   SmallVector<FunctionSummary::EdgeTy, 0> Calls;
   FunctionSummary::TypeIdInfo TypeIdInfo;
+  std::optional<FunctionSummary::CallTypeIdInfo> CallTypeIds;
   std::vector<FunctionSummary::ParamAccess> ParamAccesses;
   SmallVector<ValueInfo, 0> Refs;
   std::vector<CallsiteInfo> Callsites;
@@ -10604,6 +10606,20 @@ bool LLParser::parseFunctionSummary(std::string Name, GlobalValue::GUID GUID,
       break;
     case lltok::kw_typeIdInfo:
       if (parseOptionalTypeIdInfo(TypeIdInfo))
+        return true;
+      break;
+    case lltok::kw_callTypeId:
+      Lex.Lex();
+      if (!CallTypeIds)
+        CallTypeIds.emplace();
+      if (parseToken(lltok::colon, "expected ':' here") ||
+          parseUInt64(CallTypeIds->CallTypeId))
+        return true;
+      break;
+    case lltok::kw_indirectCallTypeIds:
+      if (!CallTypeIds)
+        CallTypeIds.emplace();
+      if (parseOptionalIndirectCallTypeIds(CallTypeIds->IndirectCallTypeIds))
         return true;
       break;
     case lltok::kw_refs:
@@ -10639,6 +10655,8 @@ bool LLParser::parseFunctionSummary(std::string Name, GlobalValue::GUID GUID,
       std::move(TypeIdInfo.TypeCheckedLoadConstVCalls),
       std::move(ParamAccesses), std::move(Callsites), std::move(Allocs));
 
+  if (CallTypeIds)
+    FS->setCallTypeIds(std::move(*CallTypeIds));
   FS->setModulePath(ModulePath);
 
   return addGlobalValueToIndex(Name, GUID,
@@ -11329,6 +11347,27 @@ bool LLParser::parseTypeTests(std::vector<GlobalValue::GUID> &TypeTests) {
     return true;
 
   return false;
+}
+
+/// OptionalIndirectCallTypeIds
+///   ::= 'indirectCallTypeIds' ':' '(' UInt64 [',' UInt64]* ')'
+bool LLParser::parseOptionalIndirectCallTypeIds(
+    std::vector<GlobalValue::GUID> &IndirectCallTypeIds) {
+  assert(Lex.getKind() == lltok::kw_indirectCallTypeIds);
+  Lex.Lex();
+
+  if (parseToken(lltok::colon, "expected ':' here") ||
+      parseToken(lltok::lparen, "expected '(' here"))
+    return true;
+
+  do {
+    GlobalValue::GUID Id;
+    if (parseUInt64(Id))
+      return true;
+    IndirectCallTypeIds.push_back(Id);
+  } while (EatIfPresent(lltok::comma));
+
+  return parseToken(lltok::rparen, "expected ')' here");
 }
 
 /// VFuncIdList

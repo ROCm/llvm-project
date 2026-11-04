@@ -18,6 +18,7 @@
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
+#include "llvm/IR/CallTypeIdentifier.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -1123,6 +1124,10 @@ public:
             Callee->getFnAttribute("target-cpu")) &&
            (Caller->getFnAttribute("target-features") ==
             Callee->getFnAttribute("target-features"));
+  }
+
+  virtual uint64_t getCallTypeId(FunctionType *FTy, CallingConv::ID CC) const {
+    return getDefaultCallTypeId(FTy, CC);
   }
 
   virtual bool isIndexedLoadLegal(TTI::MemIndexedMode Mode, Type *Ty) const {

@@ -28,6 +28,7 @@ class LLVMContext;
 class Module;
 class ProfileSummaryInfo;
 class StackSafetyInfo;
+class TargetTransformInfo;
 
 /// Return -module-summary-max-indirect-edges.
 LLVM_ABI unsigned getMaxSummaryIndirectEdges(const LLVMContext &C);
@@ -38,12 +39,18 @@ LLVM_ABI unsigned getMaxSummaryIndirectEdges(const LLVMContext &C);
 /// BlockFrequencyInfo for a given function, that can be provided via
 /// a std::function callback. Otherwise, this routine will manually construct
 /// that information.
+///
+/// The call type identifiers in the summary come from the
+/// TargetTransformInfo that \p GetTTICallback returns. If there is no
+/// callback, or if it returns null, they use the target-independent default.
 LLVM_ABI ModuleSummaryIndex buildModuleSummaryIndex(
     const Module &M,
     std::function<BlockFrequencyInfo *(const Function &F)> GetBFICallback,
     ProfileSummaryInfo *PSI,
     std::function<const StackSafetyInfo *(const Function &F)> GetSSICallback =
-        [](const Function &F) -> const StackSafetyInfo * { return nullptr; });
+        [](const Function &F) -> const StackSafetyInfo * { return nullptr; },
+    std::function<const TargetTransformInfo *(const Function &F)>
+        GetTTICallback = nullptr);
 
 /// Analysis pass to provide the ModuleSummaryIndex object.
 class ModuleSummaryIndexAnalysis
