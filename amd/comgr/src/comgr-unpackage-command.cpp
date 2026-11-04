@@ -22,6 +22,7 @@
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/BinaryFormat/Magic.h>
 #include <llvm/Object/OffloadBinary.h>
+#include <llvm/Support/Endian.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
 #include <llvm/Support/raw_ostream.h>
@@ -85,11 +86,11 @@ Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {
   DataKinds.clear();
 
   while (!CachedBuffer.empty()) {
-    SizeFieldType NameSize;
-    if (CachedBuffer.size() < sizeof(NameSize))
+    if (CachedBuffer.size() < sizeof(SizeFieldType))
       return createStringError(std::errc::invalid_argument,
                                "Not enough bytes to read output name size");
-    memcpy(&NameSize, CachedBuffer.data(), sizeof(NameSize));
+    SizeFieldType NameSize = support::endian::read<SizeFieldType>(
+        CachedBuffer.data(), llvm::endianness::native);
     CachedBuffer = CachedBuffer.drop_front(sizeof(NameSize));
 
     if (CachedBuffer.size() < NameSize)
@@ -101,15 +102,15 @@ Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {
     if (CachedBuffer.size() < sizeof(amd_comgr_data_kind_t))
       return createStringError(std::errc::invalid_argument,
                                "Not enough bytes to read output data kind");
-    amd_comgr_data_kind_t DataKind;
-    memcpy(&DataKind, CachedBuffer.data(), sizeof(DataKind));
+    auto DataKind = support::endian::read<amd_comgr_data_kind_t>(
+        CachedBuffer.data(), llvm::endianness::native);
     CachedBuffer = CachedBuffer.drop_front(sizeof(DataKind));
 
-    SizeFieldType ImageSize;
-    if (CachedBuffer.size() < sizeof(ImageSize))
+    if (CachedBuffer.size() < sizeof(SizeFieldType))
       return createStringError(std::errc::invalid_argument,
                                "Not enough bytes to read output image size");
-    memcpy(&ImageSize, CachedBuffer.data(), sizeof(ImageSize));
+    SizeFieldType ImageSize = support::endian::read<SizeFieldType>(
+        CachedBuffer.data(), llvm::endianness::native);
     CachedBuffer = CachedBuffer.drop_front(sizeof(ImageSize));
 
     if (CachedBuffer.size() < ImageSize)
@@ -153,13 +154,16 @@ Expected<StringRef> UnpackageCommand::readExecuteOutput() {
                                       ImageSize);
     char *Ptr = OutputBuffer.data() + OldSize;
 
-    memcpy(Ptr, &NameSize, sizeof(NameSize));
+    support::endian::write<SizeFieldType>(Ptr, NameSize,
+                                          llvm::endianness::native);
     Ptr += sizeof(NameSize);
     memcpy(Ptr, Target.data(), NameSize);
     Ptr += NameSize;
-    memcpy(Ptr, &DataKind, sizeof(DataKind));
+    support::endian::write<amd_comgr_data_kind_t>(Ptr, DataKind,
+                                                  llvm::endianness::native);
     Ptr += sizeof(DataKind);
-    memcpy(Ptr, &ImageSize, sizeof(ImageSize));
+    support::endian::write<SizeFieldType>(Ptr, ImageSize,
+                                          llvm::endianness::native);
     Ptr += sizeof(ImageSize);
     memcpy(Ptr, OneOutputBuffer.getBufferStart(), ImageSize);
   }
@@ -194,10 +198,9 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
       object::OffloadFile::TargetID EntryTarget =
           std::make_pair(StringRef(Entry.first), StringRef(Entry.second));
       // Select files whose target matches the requested entry exactly, or is
-      // compatible with it. areTargetsCompatible() reports false for an exact
-      // match, so the equality check handles the common case.
-      if (EntryTarget == FileTarget ||
-          object::areTargetsCompatible(FileTarget, EntryTarget)) {
+      // compatible with it. An exact match is itself a compatible target, so
+      // areTargetsCompatible() alone covers both cases.
+      if (object::areTargetsCompatible(FileTarget, EntryTarget)) {
         const char *FileExtension;
         amd_comgr_data_kind_t DataKind;
         if (auto Status = getUnpackagedImageInfo(Binary->getImage(),
