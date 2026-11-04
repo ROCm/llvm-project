@@ -12,7 +12,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
 
 using namespace llvm;
 
@@ -55,31 +54,7 @@ SummaryCallGraph::Node *SummaryCallGraph::createNode(ValueInfo VI) {
   return N;
 }
 
-namespace {
-/// Walks the edges of a view of the graph: all edges, or only the edges that
-/// have the call kind.
-template <bool IncludeIndirect> struct ViewTraits {
-  using NodeRef = SummaryCallGraph::Node *;
-
-  static NodeRef getNode(const SummaryCallGraph::Edge &E) {
-    return E.getNode();
-  }
-  using ChildIteratorType =
-      mapped_iterator<ArrayRef<SummaryCallGraph::Edge>::iterator,
-                      decltype(&getNode)>;
-
-  static NodeRef getEntryNode(NodeRef N) { return N; }
-  static ChildIteratorType child_begin(NodeRef N) {
-    return map_iterator(N->callees(IncludeIndirect).begin(), &getNode);
-  }
-  static ChildIteratorType child_end(NodeRef N) {
-    return map_iterator(N->callees(IncludeIndirect).end(), &getNode);
-  }
-};
-} // end anonymous namespace
-
-template <bool IncludeIndirect>
-void SummaryCallGraph::computeSCCs(SCCList &List) {
+void SummaryCallGraph::computeSCCs() {
   // Start from a root that calls every node, so that the walk reaches all
   // nodes. Nothing calls the root, so it is alone in the last SCC.
   Node Root((ValueInfo()));
@@ -87,29 +62,25 @@ void SummaryCallGraph::computeSCCs(SCCList &List) {
   for (Node *N : Nodes)
     Root.Callees.push_back(Edge(N, CallEdge));
   Root.Callees.push_back(Edge(CallsExternalNode, CallEdge));
-  Root.NumCallCallees = Root.Callees.size();
 
   // Reserve the space first, so that the SCCs stay valid.
-  List.Nodes.reserve(Nodes.size() + 2);
-  using SCCIterator = scc_iterator<Node *, ViewTraits<IncludeIndirect>>;
-  for (SCCIterator I = SCCIterator::begin(&Root); !I.isAtEnd(); ++I) {
+  SCCNodes.reserve(Nodes.size() + 2);
+  for (scc_iterator<Node *> I = scc_begin(&Root); !I.isAtEnd(); ++I) {
     const std::vector<Node *> &Component = *I;
     if (Component.front() == &Root)
       continue;
-    size_t Begin = List.Nodes.size();
-    llvm::append_range(List.Nodes, Component);
-    List.SCCs.push_back(ArrayRef(List.Nodes).drop_front(Begin));
+    size_t Begin = SCCNodes.size();
+    llvm::append_range(SCCNodes, Component);
+    SCCs.push_back(ArrayRef(SCCNodes).drop_front(Begin));
   }
-  assert(List.Nodes.size() == Nodes.size() + 2 &&
+  assert(SCCNodes.size() == Nodes.size() + 2 &&
          "Expected each node in one SCC");
 }
 
 SummaryCallGraph::SummaryCallGraph(
-    ModuleSummaryIndex &Index,
-    const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols,
-    const DenseSet<GlobalValue::GUID> &AddressTaken,
-    function_ref<bool(GlobalValue::GUID, const GlobalValueSummary *)>
-        IsPrevailing) {
+    ModuleSummaryIndex &Index, const ThinLinkInfoAnalysis::Result &Info,
+    const DenseSet<GlobalValue::GUID> &AddressTaken, bool IncludeIndirectCalls)
+    : IncludeIndirectCalls(IncludeIndirectCalls) {
   ExternalCallingNode = new (Allocator.Allocate()) Node(ValueInfo());
   CallsExternalNode = new (Allocator.Allocate()) Node(ValueInfo());
 
@@ -130,7 +101,7 @@ SummaryCallGraph::SummaryCallGraph(
       continue;
     Node *N = createNode(VI);
     N->Copies = std::move(Copies);
-    GlobalValueSummary *S = getPrevailingCopy(VI, Index, IsPrevailing);
+    GlobalValueSummary *S = getPrevailingCopy(VI, Index, Info.IsPrevailing);
     if (S && !isa<GlobalVarSummary>(S))
       N->Prevailing = S;
   }
@@ -139,7 +110,7 @@ SummaryCallGraph::SummaryCallGraph(
   // functions whose address can be taken and that have the ID.
   DenseMap<GlobalValue::GUID, SmallVector<Node *, 4>> Targets;
   for (Node *N : Nodes) {
-    if (!AddressTaken.contains(N->VI.getGUID()))
+    if (!IncludeIndirectCalls || !AddressTaken.contains(N->VI.getGUID()))
       continue;
     SmallVector<GlobalValue::GUID, 1> Ids;
     for (FunctionSummary *FS : N->Copies)
@@ -149,23 +120,17 @@ SummaryCallGraph::SummaryCallGraph(
       Targets[Id].push_back(N);
   }
 
-  // Sets the edges to the callees of N, with the call kind first.
-  auto SetCallees = [](Node *N, const MapVector<Node *, unsigned> &Edges) {
-    for (const auto &[Callee, Kinds] : Edges)
-      if (Kinds & CallEdge)
-        N->Callees.push_back(Edge(Callee, Kinds));
-    N->NumCallCallees = N->Callees.size();
-    for (const auto &[Callee, Kinds] : Edges)
-      if (!(Kinds & CallEdge))
-        N->Callees.push_back(Edge(Callee, Kinds));
-  };
-
   // Returns the node of a callee. A callee without a function or alias summary
   // gets a node, which calls the calls external node.
   auto GetNode = [&](ValueInfo VI) {
     if (Node *N = NodeMap.lookup(VI.getGUID()))
       return N;
     return createNode(VI);
+  };
+
+  auto SetCallees = [](Node *N, const MapVector<Node *, unsigned> &Edges) {
+    for (const auto &[Callee, Kinds] : Edges)
+      N->Callees.push_back(Edge(Callee, Kinds));
   };
 
   // Add the edges to the callees. The loop also visits the nodes that it
@@ -180,17 +145,22 @@ SummaryCallGraph::SummaryCallGraph(
     for (FunctionSummary *FS : N->Copies) {
       for (const FunctionSummary::EdgeTy &E : FS->calls())
         Edges[GetNode(E.first)] |= CallEdge;
-      for (GlobalValue::GUID Id : FS->indirectCallTypeIds()) {
-        auto It = Targets.find(Id);
-        if (It != Targets.end())
-          for (Node *Target : It->second)
-            Edges[Target] |= IndirectEdge;
-      }
-      // The summary does not tell if each call with an unknown callee is an
-      // indirect call with a call type ID. A call to inline assembly or to an
-      // ifunc has no ID.
-      if (FS->fflags().HasUnknownCall)
+      if (IncludeIndirectCalls) {
+        for (GlobalValue::GUID Id : FS->indirectCallTypeIds()) {
+          auto It = Targets.find(Id);
+          if (It != Targets.end())
+            for (Node *Target : It->second)
+              Edges[Target] |= IndirectEdge;
+        }
+        // The summary does not tell if each call with an unknown callee is an
+        // indirect call with a call type ID. A call to inline assembly or to
+        // an ifunc has no ID.
+        if (FS->fflags().HasUnknownCall)
+          Edges[CallsExternalNode] |= IndirectEdge;
+      } else if (FS->fflags().HasUnknownCall ||
+                 !FS->indirectCallTypeIds().empty()) {
         Edges[CallsExternalNode] |= IndirectEdge;
+      }
     }
     for (const auto &S : N->VI.getSummaryList())
       if (auto *AS = dyn_cast<AliasSummary>(S.get());
@@ -199,41 +169,37 @@ SummaryCallGraph::SummaryCallGraph(
     SetCallees(N, Edges);
   }
 
-  // Code outside the summaries can call the preserved symbols.
+  // Code outside the summaries can call the preserved symbols. If the graph
+  // does not include the indirect calls, the external calling node also stands
+  // for them, so it calls each function whose address can be taken.
+  auto ByGUID = [](const Node *A, const Node *B) {
+    return A->VI.getGUID() < B->VI.getGUID();
+  };
   SmallVector<Node *> Preserved;
-  for (GlobalValue::GUID GUID : GUIDPreservedSymbols)
+  for (GlobalValue::GUID GUID : Info.GUIDPreservedSymbols)
     if (Node *N = NodeMap.lookup(GUID))
       Preserved.push_back(N);
-  llvm::sort(Nodes, [](const Node *A, const Node *B) {
-    return A->VI.getGUID() < B->VI.getGUID();
-  });
-  llvm::sort(Preserved, [](const Node *A, const Node *B) {
-    return A->VI.getGUID() < B->VI.getGUID();
-  });
+  llvm::sort(Nodes, ByGUID);
+  llvm::sort(Preserved, ByGUID);
   Edges.clear();
   for (Node *N : Preserved)
     Edges[N] |= CallEdge;
+  if (!IncludeIndirectCalls)
+    for (Node *N : Nodes)
+      if (AddressTaken.contains(N->VI.getGUID()))
+        Edges[N] |= IndirectEdge;
   SetCallees(ExternalCallingNode, Edges);
 
-  // Add the edges from the callers, with the call kind first.
+  // Add the edges from the callers.
   auto AddCallers = [](Node *N) {
     for (const Edge &E : N->Callees)
       E.N->Callers.push_back(Edge(N, E.Kinds));
   };
-  auto SortCallers = [](Node *N) {
-    auto Mid = std::stable_partition(N->Callers.begin(), N->Callers.end(),
-                                     [](const Edge &E) { return E.isCall(); });
-    N->NumCallCallers = Mid - N->Callers.begin();
-  };
   AddCallers(ExternalCallingNode);
   for (Node *N : Nodes)
     AddCallers(N);
-  for (Node *N : Nodes)
-    SortCallers(N);
-  SortCallers(CallsExternalNode);
 
-  computeSCCs<true>(SCCs);
-  computeSCCs<false>(CallSCCs);
+  computeSCCs();
 }
 
 /// Prints the name of \p N.
@@ -281,7 +247,7 @@ void SummaryCallGraph::print(raw_ostream &OS) const {
     PrintNode(N);
   PrintNode(CallsExternalNode);
   OS << "SCCs in bottom-up order:\n";
-  for (SCC C : SCCs.SCCs) {
+  for (SCC C : SCCs) {
     OS << "  [";
     ListSeparator LS;
     for (const Node *N : C) {
@@ -292,12 +258,32 @@ void SummaryCallGraph::print(raw_ostream &OS) const {
   }
 }
 
-SummaryCallGraph SummaryCallGraphAnalysis::run(ModuleSummaryIndex &Index,
-                                               SummaryAnalysisManager &AM) {
-  auto &Info = AM.getResult<ThinLinkInfoAnalysis>(Index);
-  auto &AddressTaken = AM.getResult<SummaryAddressTakenAnalysis>(Index);
-  return SummaryCallGraph(Index, Info.GUIDPreservedSymbols, AddressTaken,
-                          Info.IsPrevailing);
+const SummaryCallGraph &
+SummaryCallGraphAnalysis::Result::getGraph(bool IncludeIndirectCalls) {
+  std::unique_ptr<SummaryCallGraph> &CG =
+      IncludeIndirectCalls ? GraphWithIndirectCalls : Graph;
+  if (!CG)
+    CG = std::make_unique<SummaryCallGraph>(Index, Info, AddressTaken,
+                                            IncludeIndirectCalls);
+  return *CG;
+}
+
+bool SummaryCallGraphAnalysis::Result::invalidate(
+    ModuleSummaryIndex &Index, const PreservedAnalyses &PA,
+    SummaryAnalysisManager::Invalidator &Inv) {
+  // The result also refers to the set of the values whose address can be
+  // taken.
+  auto PAC = PA.getChecker<SummaryCallGraphAnalysis>();
+  return !(PAC.preserved() ||
+           PAC.preservedSet<AllAnalysesOn<ModuleSummaryIndex>>()) ||
+         Inv.invalidate<SummaryAddressTakenAnalysis>(Index, PA);
+}
+
+SummaryCallGraphAnalysis::Result
+SummaryCallGraphAnalysis::run(ModuleSummaryIndex &Index,
+                              SummaryAnalysisManager &AM) {
+  return Result(Index, AM.getResult<ThinLinkInfoAnalysis>(Index),
+                AM.getResult<SummaryAddressTakenAnalysis>(Index));
 }
 
 SummaryAddressTakenAnalysis::Result
@@ -337,6 +323,8 @@ SummaryAddressTakenAnalysis::run(ModuleSummaryIndex &Index,
 
 PreservedAnalyses SummaryCallGraphPrinterPass::run(ModuleSummaryIndex &Index,
                                                    SummaryAnalysisManager &AM) {
-  AM.getResult<SummaryCallGraphAnalysis>(Index).print(OS);
+  AM.getResult<SummaryCallGraphAnalysis>(Index)
+      .getGraph(IncludeIndirectCalls)
+      .print(OS);
   return PreservedAnalyses::all();
 }

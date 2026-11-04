@@ -27,6 +27,7 @@
 ; CHECK: Loop analyses:
 ; CHECK: no-op-loop
 ; CHECK: Summary passes:
-; CHECK: print<summary-callgraph>
+; CHECK: Summary passes with params:
+; CHECK: print<summary-callgraph><indirect-calls>
 ; CHECK: Summary analyses:
 ; CHECK: summary-callgraph

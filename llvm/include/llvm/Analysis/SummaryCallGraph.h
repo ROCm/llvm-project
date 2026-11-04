@@ -20,12 +20,12 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/ModuleSummaryIndex.h"
 #include "llvm/IR/SummaryPassManager.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Compiler.h"
+#include <memory>
 #include <vector>
 
 namespace llvm {
@@ -46,14 +46,27 @@ class raw_ostream;
 /// runs when code calls the symbol, and a module can still inline its own copy
 /// that does not prevail. An alias calls its aliasee.
 ///
+/// When a pass asks SummaryCallGraphAnalysis for the graph, it selects whether
+/// the graph includes the indirect calls:
+/// - Without them, an indirect call calls the calls external node, and the
+///   external calling node also calls each function whose address can be
+///   taken. As in the IR call graph, the special nodes stand for the callees
+///   and the callers that the graph does not know.
+/// - With them, an indirect call also calls each of its possible targets: a
+///   function whose address can be taken and that has the call type ID of the
+///   call. These edges can be many: for each call type ID, the number of
+///   callers times the number of targets. A pass that needs them accepts their
+///   cost.
+///
 /// An edge has kinds. A call edge comes from FunctionSummary::calls(): a direct
 /// call, or a target that a profile or !callees metadata gives for an indirect
-/// call. An indirect edge goes to a possible target of an indirect call: a
-/// function whose address can be taken and that has the call type ID of the
-/// call. A walk can leave out the indirect edges.
+/// call. An indirect edge stands for calls that the summary does not name: an
+/// edge to a possible target of an indirect call, an edge from an indirect
+/// call or an unknown call to the calls external node, or an edge from the
+/// external calling node to a function whose address can be taken.
 ///
-/// The graph does not show calls through a function pointer that escapes to
-/// code outside the summaries.
+/// The graph that includes the indirect calls does not show calls through a
+/// function pointer that escapes to code outside the summaries.
 class SummaryCallGraph {
 public:
   class Node;
@@ -62,8 +75,7 @@ public:
   enum EdgeKind : unsigned {
     /// A call edge in the summary.
     CallEdge = 1 << 0,
-    /// A possible target of an indirect call, or a call with a callee that the
-    /// summary does not know.
+    /// A call that the summary does not name.
     IndirectEdge = 1 << 1,
   };
 
@@ -106,18 +118,11 @@ public:
     ArrayRef<FunctionSummary *> copies() const { return Copies; }
 
     /// Returns the edges to the callees. Each callee is in one edge, which has
-    /// the kinds of all calls to it. If \p IncludeIndirect is false, returns
-    /// only the edges that have the call kind.
-    ArrayRef<Edge> callees(bool IncludeIndirect = true) const {
-      return IncludeIndirect ? ArrayRef(Callees)
-                             : ArrayRef(Callees).take_front(NumCallCallees);
-    }
+    /// the kinds of all calls to it.
+    ArrayRef<Edge> callees() const { return Callees; }
 
     /// Returns the edges from the callers, like callees().
-    ArrayRef<Edge> callers(bool IncludeIndirect = true) const {
-      return IncludeIndirect ? ArrayRef(Callers)
-                             : ArrayRef(Callers).take_front(NumCallCallers);
-    }
+    ArrayRef<Edge> callers() const { return Callers; }
 
   private:
     friend class SummaryCallGraph;
@@ -127,26 +132,21 @@ public:
     ValueInfo VI;
     GlobalValueSummary *Prevailing = nullptr;
     SmallVector<FunctionSummary *, 1> Copies;
-    // The edges that have the call kind come first.
     SmallVector<Edge, 0> Callees;
     SmallVector<Edge, 0> Callers;
-    unsigned NumCallCallees = 0;
-    unsigned NumCallCallers = 0;
   };
 
   /// A strongly connected component: functions that can call each other.
   using SCC = ArrayRef<Node *>;
 
-  /// Builds the call graph of \p Index. \p GUIDPreservedSymbols and
-  /// \p IsPrevailing are the facts of the link (see ThinLinkInfoAnalysis).
+  /// Builds the call graph of \p Index. \p Info holds the facts of the link.
   /// \p AddressTaken holds the values whose address can be taken (see
-  /// SummaryAddressTakenAnalysis).
-  LLVM_ABI SummaryCallGraph(
-      ModuleSummaryIndex &Index,
-      const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols,
-      const DenseSet<GlobalValue::GUID> &AddressTaken,
-      function_ref<bool(GlobalValue::GUID, const GlobalValueSummary *)>
-          IsPrevailing);
+  /// SummaryAddressTakenAnalysis). If \p IncludeIndirectCalls is true, the
+  /// graph has the edges from the indirect calls to their possible targets.
+  LLVM_ABI SummaryCallGraph(ModuleSummaryIndex &Index,
+                            const ThinLinkInfoAnalysis::Result &Info,
+                            const DenseSet<GlobalValue::GUID> &AddressTaken,
+                            bool IncludeIndirectCalls);
 
   SummaryCallGraph(SummaryCallGraph &&) = default;
 
@@ -166,31 +166,28 @@ public:
 
   /// Returns the SCCs of all nodes, also the special nodes, in bottom-up
   /// order: each SCC comes before the SCCs that call into it. Iterate in
-  /// reverse for the top-down order. If \p IncludeIndirect is false, returns
-  /// the SCCs of the edges that have the call kind.
-  ArrayRef<SCC> sccs(bool IncludeIndirect = true) const {
-    return IncludeIndirect ? SCCs.SCCs : CallSCCs.SCCs;
-  }
+  /// reverse for the top-down order.
+  ArrayRef<SCC> sccs() const { return SCCs; }
+
+  /// Returns true if the graph has the edges from the indirect calls to their
+  /// possible targets.
+  bool includesIndirectCalls() const { return IncludeIndirectCalls; }
 
   LLVM_ABI void print(raw_ostream &OS) const;
 
 private:
-  struct SCCList {
-    // The nodes of all SCCs, in the order of the SCCs. The SCCs refer to it.
-    std::vector<Node *> Nodes;
-    std::vector<SCC> SCCs;
-  };
-
   Node *createNode(ValueInfo VI);
-  template <bool IncludeIndirect> void computeSCCs(SCCList &List);
+  void computeSCCs();
 
   SpecificBumpPtrAllocator<Node> Allocator;
   Node *ExternalCallingNode;
   Node *CallsExternalNode;
   std::vector<Node *> Nodes;
   DenseMap<GlobalValue::GUID, Node *> NodeMap;
-  SCCList SCCs;
-  SCCList CallSCCs;
+  // The nodes of all SCCs, in the order of the SCCs. The SCCs refer to it.
+  std::vector<Node *> SCCNodes;
+  std::vector<SCC> SCCs;
+  bool IncludeIndirectCalls;
 };
 
 /// Walks all edges of the graph.
@@ -213,12 +210,35 @@ template <> struct GraphTraits<SummaryCallGraph::Node *> {
   }
 };
 
-/// Computes the SummaryCallGraph of the index. Uses ThinLinkInfoAnalysis and
-/// SummaryAddressTakenAnalysis.
+/// Gives the SummaryCallGraph of the index in the form that a pass selects.
+/// Uses ThinLinkInfoAnalysis and SummaryAddressTakenAnalysis.
 class SummaryCallGraphAnalysis
     : public AnalysisInfoMixin<SummaryCallGraphAnalysis> {
 public:
-  using Result = SummaryCallGraph;
+  /// Builds each form of the graph when a pass first asks for it. A pass that
+  /// does not need the indirect calls does not pay for their edges.
+  class Result {
+  public:
+    Result(ModuleSummaryIndex &Index, const ThinLinkInfoAnalysis::Result &Info,
+           const DenseSet<GlobalValue::GUID> &AddressTaken)
+        : Index(Index), Info(Info), AddressTaken(AddressTaken) {}
+
+    /// Returns the call graph of the index. If \p IncludeIndirectCalls is
+    /// true, the graph has the edges from the indirect calls to their possible
+    /// targets (see SummaryCallGraph).
+    LLVM_ABI const SummaryCallGraph &getGraph(bool IncludeIndirectCalls);
+
+    LLVM_ABI bool invalidate(ModuleSummaryIndex &Index,
+                             const PreservedAnalyses &PA,
+                             SummaryAnalysisManager::Invalidator &Inv);
+
+  private:
+    ModuleSummaryIndex &Index;
+    const ThinLinkInfoAnalysis::Result &Info;
+    const DenseSet<GlobalValue::GUID> &AddressTaken;
+    std::unique_ptr<SummaryCallGraph> Graph;
+    std::unique_ptr<SummaryCallGraph> GraphWithIndirectCalls;
+  };
 
   LLVM_ABI Result run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM);
 
@@ -243,13 +263,16 @@ private:
   LLVM_ABI static AnalysisKey Key;
 };
 
-/// Prints the SummaryCallGraph of the index.
+/// Prints the SummaryCallGraph of the index. If \p IncludeIndirectCalls is
+/// true, prints the graph that includes the indirect calls.
 class SummaryCallGraphPrinterPass
     : public RequiredPassInfoMixin<SummaryCallGraphPrinterPass> {
   raw_ostream &OS;
+  bool IncludeIndirectCalls;
 
 public:
-  explicit SummaryCallGraphPrinterPass(raw_ostream &OS) : OS(OS) {}
+  SummaryCallGraphPrinterPass(raw_ostream &OS, bool IncludeIndirectCalls)
+      : OS(OS), IncludeIndirectCalls(IncludeIndirectCalls) {}
 
   LLVM_ABI PreservedAnalyses run(ModuleSummaryIndex &Index,
                                  SummaryAnalysisManager &AM);

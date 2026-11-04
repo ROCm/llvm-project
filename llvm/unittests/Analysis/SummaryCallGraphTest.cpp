@@ -51,8 +51,9 @@ public:
     AM.registerPass([] { return SummaryAddressTakenAnalysis(); });
   }
 
-  SummaryCallGraph &graph() {
-    return AM.getResult<SummaryCallGraphAnalysis>(Index);
+  const SummaryCallGraph &graph(bool IncludeIndirectCalls = false) {
+    return AM.getResult<SummaryCallGraphAnalysis>(Index).getGraph(
+        IncludeIndirectCalls);
   }
 
   ModuleSummaryIndex &Index;
@@ -87,10 +88,9 @@ static GUIDList getIDs(const SummaryCallGraph &CG,
 
 // Returns the IDs of each SCC in bottom-up order. The IDs in an SCC are
 // sorted.
-static std::vector<GUIDList> getSCCIDs(const SummaryCallGraph &CG,
-                                       bool IncludeIndirect = true) {
+static std::vector<GUIDList> getSCCIDs(const SummaryCallGraph &CG) {
   std::vector<GUIDList> SCCs;
-  for (SummaryCallGraph::SCC C : CG.sccs(IncludeIndirect)) {
+  for (SummaryCallGraph::SCC C : CG.sccs()) {
     SCCs.push_back(getIDs(CG, C));
     llvm::sort(SCCs.back());
   }
@@ -106,7 +106,7 @@ TEST(SummaryCallGraphTest, Edges) {
 )");
   ASSERT_NE(Index, nullptr);
   Analyses A(*Index, /*PreservedSymbols=*/{1});
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph();
 
   EXPECT_EQ(getIDs(CG, CG.nodes()), GUIDList({1, 2, 3}));
   SummaryCallGraph::Node *N1 = CG.lookup(1), *N3 = CG.lookup(3);
@@ -144,7 +144,7 @@ TEST(SummaryCallGraphTest, Cycles) {
 )");
   ASSERT_NE(Index, nullptr);
   Analyses A(*Index);
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph();
 
   EXPECT_EQ(getSCCIDs(CG),
             std::vector<GUIDList>(
@@ -170,7 +170,7 @@ TEST(SummaryCallGraphTest, Copies) {
              [](GlobalValue::GUID GUID, const GlobalValueSummary *S) {
                return GUID != 1 || S->modulePath() == "b.o";
              });
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph();
 
   SummaryCallGraph::Node *N1 = CG.lookup(1);
   ASSERT_NE(N1, nullptr);
@@ -194,7 +194,7 @@ TEST(SummaryCallGraphTest, LocalAndPromotedCopies) {
   Analyses A(
       *Index, /*PreservedSymbols=*/{},
       [](GlobalValue::GUID, const GlobalValueSummary *) { return false; });
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph();
 
   EXPECT_EQ(getIDs(CG, CG.nodes()), GUIDList({1, 2, 3}));
   EXPECT_NE(CG.lookup(1)->getSummary(), nullptr);
@@ -215,7 +215,7 @@ TEST(SummaryCallGraphTest, UnknownCallees) {
 )");
   ASSERT_NE(Index, nullptr);
   Analyses A(*Index);
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph();
 
   EXPECT_EQ(getIDs(CG, CG.nodes()), GUIDList({1, 2, 3, 4}));
   for (GlobalValue::GUID GUID : {2, 3, 4}) {
@@ -245,7 +245,7 @@ TEST(SummaryCallGraphTest, DeadFunctions) {
   ASSERT_NE(Index, nullptr);
   ASSERT_TRUE(Index->withGlobalValueDeadStripping());
   Analyses A(*Index);
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph();
 
   EXPECT_EQ(getIDs(CG, CG.nodes()), GUIDList({1, 2}));
   EXPECT_EQ(getIDs(CG, CG.lookup(2)->callers()), GUIDList({1}));
@@ -276,7 +276,7 @@ TEST(SummaryCallGraphTest, Aliases) {
                  return S->modulePath() == "b.o";
                return S->modulePath() == "a.o" || GUID < 20;
              });
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph();
 
   EXPECT_EQ(getIDs(CG, CG.nodes()), GUIDList({1, 2, 10, 20, 21, 30, 31}));
   SummaryCallGraph::Node *N10 = CG.lookup(10), *N21 = CG.lookup(21);
@@ -294,7 +294,10 @@ TEST(SummaryCallGraphTest, Aliases) {
   EXPECT_EQ(getIDs(CG, N10->callers()), GUIDList({ExternalCallers, 1}));
   EXPECT_EQ(getIDs(CG, CG.lookup(20)->callees()), GUIDList({21}));
   EXPECT_EQ(getIDs(CG, N21->callees()), GUIDList({2}));
-  EXPECT_EQ(getIDs(CG, CG.lookup(2)->callers()), GUIDList({10, 21}));
+  // The address of 2 is the address of the preserved alias 10, so code
+  // outside the summaries can also call 2 through a pointer.
+  EXPECT_EQ(getIDs(CG, CG.lookup(2)->callers()),
+            GUIDList({ExternalCallers, 10, 21}));
   // A cycle of aliases is a cycle in the graph.
   EXPECT_EQ(getIDs(CG, CG.lookup(30)->callees()), GUIDList({31}));
   EXPECT_EQ(getIDs(CG, CG.lookup(31)->callees()), GUIDList({30}));
@@ -328,7 +331,8 @@ TEST(SummaryCallGraphTest, IndirectCalls) {
   std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(IndirectCallSummary);
   ASSERT_NE(Index, nullptr);
   Analyses A(*Index);
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph(/*IncludeIndirectCalls=*/true);
+  EXPECT_TRUE(CG.includesIndirectCalls());
 
   // The unknown call can be a call to inline assembly or to an ifunc, which
   // has no call type ID.
@@ -339,17 +343,36 @@ TEST(SummaryCallGraphTest, IndirectCalls) {
     EXPECT_FALSE(E.isCall());
     EXPECT_TRUE(E.isIndirect());
   }
-  EXPECT_TRUE(N8->callees(/*IncludeIndirect=*/false).empty());
   EXPECT_EQ(getIDs(CG, CG.lookup(2)->callers()), GUIDList({8}));
-  EXPECT_TRUE(CG.lookup(2)->callers(/*IncludeIndirect=*/false).empty());
+  EXPECT_TRUE(CG.getExternalCallingNode()->callees().empty());
 
-  // The call from 1 to 8 and the indirect call from 8 to 1 form a cycle only
-  // with the indirect edges.
+  // The call from 1 to 8 and the indirect call from 8 to 1 form a cycle.
+  EXPECT_TRUE(is_contained(getSCCIDs(CG), GUIDList({1, 8})));
+}
+
+// Without the indirect targets, an indirect call calls the calls external
+// node, and the external calling node calls each function whose address can be
+// taken, also the alias and the function 3 with another call type ID.
+TEST(SummaryCallGraphTest, IndirectCallsWithoutTargets) {
+  std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(IndirectCallSummary);
+  ASSERT_NE(Index, nullptr);
+  Analyses A(*Index);
+  const SummaryCallGraph &CG = A.graph();
+  EXPECT_FALSE(CG.includesIndirectCalls());
+
+  SummaryCallGraph::Node *N8 = CG.lookup(8);
+  ASSERT_NE(N8, nullptr);
+  EXPECT_EQ(getIDs(CG, N8->callees()), GUIDList({ExternalCallees}));
+  EXPECT_TRUE(N8->callees()[0].isIndirect());
+  EXPECT_EQ(getIDs(CG, CG.getExternalCallingNode()->callees()),
+            GUIDList({1, 2, 3, 6, 7}));
+  for (const SummaryCallGraph::Edge &E : CG.getExternalCallingNode()->callees())
+    EXPECT_TRUE(E.isIndirect());
+  EXPECT_EQ(getIDs(CG, CG.lookup(2)->callers()), GUIDList({ExternalCallers}));
+
   std::vector<GUIDList> SCCs = getSCCIDs(CG);
-  EXPECT_TRUE(is_contained(SCCs, GUIDList({1, 8})));
-  std::vector<GUIDList> CallSCCs = getSCCIDs(CG, /*IncludeIndirect=*/false);
-  EXPECT_TRUE(is_contained(CallSCCs, GUIDList({1})));
-  EXPECT_TRUE(is_contained(CallSCCs, GUIDList({8})));
+  EXPECT_TRUE(is_contained(SCCs, GUIDList({1})));
+  EXPECT_TRUE(is_contained(SCCs, GUIDList({8})));
 }
 
 // A function that code outside the summaries can call is also a target of the
@@ -358,7 +381,7 @@ TEST(SummaryCallGraphTest, IndirectCallsToPreservedSymbols) {
   std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(IndirectCallSummary);
   ASSERT_NE(Index, nullptr);
   Analyses A(*Index, /*PreservedSymbols=*/{4});
-  SummaryCallGraph &CG = A.graph();
+  const SummaryCallGraph &CG = A.graph(/*IncludeIndirectCalls=*/true);
 
   EXPECT_EQ(getIDs(CG, CG.lookup(8)->callees()),
             GUIDList({1, 2, 4, 7, ExternalCallees}));
@@ -405,20 +428,37 @@ TEST(SummaryCallGraphTest, AnalysisAndPrinter) {
                return S->modulePath() == "a.o";
              });
 
-  // The result stays in the cache until a pass invalidates it.
-  SummaryCallGraph *CG = &A.graph();
-  EXPECT_EQ(A.AM.getCachedResult<SummaryCallGraphAnalysis>(*Index), CG);
-  A.AM.invalidate(*Index, PreservedAnalyses::none());
+  // The result builds each form of the graph one time.
+  SummaryCallGraphAnalysis::Result &R =
+      A.AM.getResult<SummaryCallGraphAnalysis>(*Index);
+  const SummaryCallGraph *CG = &R.getGraph(/*IncludeIndirectCalls=*/false);
+  const SummaryCallGraph *IndirectCG =
+      &R.getGraph(/*IncludeIndirectCalls=*/true);
+  EXPECT_NE(CG, IndirectCG);
+  EXPECT_FALSE(CG->includesIndirectCalls());
+  EXPECT_TRUE(IndirectCG->includesIndirectCalls());
+  EXPECT_EQ(&R.getGraph(/*IncludeIndirectCalls=*/false), CG);
+  EXPECT_EQ(&R.getGraph(/*IncludeIndirectCalls=*/true), IndirectCG);
+
+  // The result stays in the cache until a pass invalidates it, or the set of
+  // the values whose address can be taken.
+  PreservedAnalyses PA;
+  PA.preserve<SummaryCallGraphAnalysis>();
+  PA.preserve<SummaryAddressTakenAnalysis>();
+  A.AM.invalidate(*Index, PA);
+  EXPECT_EQ(A.AM.getCachedResult<SummaryCallGraphAnalysis>(*Index), &R);
+  PA.abandon<SummaryAddressTakenAnalysis>();
+  A.AM.invalidate(*Index, PA);
   EXPECT_EQ(A.AM.getCachedResult<SummaryCallGraphAnalysis>(*Index), nullptr);
 
   std::string Output;
   raw_string_ostream OS(Output);
   SummaryPassManager PM;
-  PM.addPass(SummaryCallGraphPrinterPass(OS));
+  PM.addPass(SummaryCallGraphPrinterPass(OS, /*IncludeIndirectCalls=*/false));
   PM.run(*Index, A.AM);
   EXPECT_EQ(Output, "Summary call graph:\n"
                     "  <external callers>\n"
-                    "    calls 1\n"
+                    "    calls 1 (also indirect)\n"
                     "  1 [a.o]\n"
                     "    calls 2\n"
                     "    calls 3\n"
