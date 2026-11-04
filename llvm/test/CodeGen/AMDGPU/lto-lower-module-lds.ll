@@ -25,12 +25,32 @@
 ; Unified O3
 ; RUN: llvm-lto2 run -unified-lto=full -O3 -cg-opt-level 3 %t.unified.bc -o %t.s -r %t.unified.bc,test,px -debug-pass-manager -debug-pass=Structure 2>&1 | FileCheck %s
 
+; The same, with the New PM driving the CG pipeline as well.
+
+; Default O0
+; RUN: llvm-lto2 run -O0 -cg-opt-level 0 %t.default.bc -o %t.s -r %t.default.bc,test,px -debug-pass-manager -force-new-pm-codegen=true 2>&1 | FileCheck --check-prefix=NEWPM %s
+
+; Unified O0
+; RUN: llvm-lto2 run -unified-lto=full -O0 -cg-opt-level 0 %t.unified.bc -o %t.s -r %t.unified.bc,test,px -debug-pass-manager -force-new-pm-codegen=true 2>&1 | FileCheck --check-prefix=NEWPM %s
+
+; Default O3
+; RUN: llvm-lto2 run -O3 -cg-opt-level 3 %t.default.bc -o %t.s -r %t.default.bc,test,px -debug-pass-manager -force-new-pm-codegen=true 2>&1 | FileCheck --check-prefix=NEWPM %s
+
+; Unified O3
+; RUN: llvm-lto2 run -unified-lto=full -O3 -cg-opt-level 3 %t.unified.bc -o %t.s -r %t.unified.bc,test,px -debug-pass-manager -force-new-pm-codegen=true 2>&1 | FileCheck --check-prefix=NEWPM %s
+
 ; First print will be from the New PM during the full LTO pipeline.
 ; Second print will be from the legacy PM during the CG pipeline.
 
 ; CHECK: Running pass: AMDGPULowerModuleLDSPass on [module]
 ; CHECK: ModulePass Manager
 ; CHECK:   Lower uses of LDS variables from non-kernel functions
+
+; Both prints come from the New PM: the first from the full LTO pipeline, the
+; second from the CG pipeline.
+
+; NEWPM: Running pass: AMDGPULowerModuleLDSPass on [module]
+; NEWPM: Running pass: AMDGPULowerModuleLDSPass on [module]
 
 @lds = internal unnamed_addr addrspace(3) global i32 poison, align 4
 

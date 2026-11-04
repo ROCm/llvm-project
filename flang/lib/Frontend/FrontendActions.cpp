@@ -949,8 +949,10 @@ static void generateMachineCodeOrAssemblyImpl(
       return;
     }
   }
+  llvm::CodeGenPipelineConfig config;
+  config.DebugPassManager = codeGenOpts.DebugPassManager;
   llvm::Error codeGenError = runCodeGenPipeline(
-      tm, llvmModule, os, dwoOS ? &dwoOS->os() : nullptr, cgft);
+      tm, llvmModule, os, dwoOS ? &dwoOS->os() : nullptr, cgft, config);
   if (codeGenError) {
     unsigned diagID =
         diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
