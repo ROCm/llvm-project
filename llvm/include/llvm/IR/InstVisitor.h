@@ -199,6 +199,8 @@ public:
   RetTy visitCleanupPadInst(CleanupPadInst &I) { DELEGATE(FuncletPadInst); }
   RetTy visitCatchPadInst(CatchPadInst &I)     { DELEGATE(FuncletPadInst); }
   RetTy visitFreezeInst(FreezeInst &I)         { DELEGATE(Instruction); }
+  RetTy visitBitInsertInst(BitInsertInst &I) { DELEGATE(Instruction); }
+  RetTy visitBitExtractInst(BitExtractInst &I) { DELEGATE(Instruction); }
 
   // Handle the special intrinsic instruction classes.
   RetTy visitDbgDeclareInst(DbgDeclareInst &I)    { DELEGATE(DbgVariableIntrinsic);}

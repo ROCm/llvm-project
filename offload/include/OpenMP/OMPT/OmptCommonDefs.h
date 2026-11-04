@@ -28,28 +28,21 @@
   FOREACH_OMPT_NOEMI_EVENT(macro)                                              \
   FOREACH_OMPT_EMI_EVENT(macro)
 
-// Common device tracing functions
-#define FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(macro)                           \
-  macro(ompt_set_trace_ompt) macro(ompt_start_trace) macro(ompt_flush_trace)   \
-      macro(ompt_stop_trace) macro(ompt_advance_buffer_cursor)                 \
-          macro(ompt_get_record_type)
-
 // Supported device tracing entry points
 #define FOREACH_OMPT_DEVICE_TRACING_FN(macro)                                  \
-  FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(macro)                                 \
-  macro(ompt_get_record_ompt) macro(ompt_get_device_time)                      \
-      macro(ompt_translate_time)
-
-// Device tracing functionalities, which are also e.g. coupled to mutexes
-#define FOREACH_OMPT_DEVICE_TRACING_FN_IMPLEMENTAIONS(macro)                   \
-  FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(macro)                                 \
-  macro(ompt_set_timestamp) macro(ompt_set_granted_teams)
+  macro(ompt_set_trace_ompt) macro(ompt_start_trace) macro(ompt_flush_trace)   \
+      macro(ompt_stop_trace) macro(ompt_advance_buffer_cursor)                 \
+          macro(ompt_get_record_type) macro(ompt_get_record_ompt)              \
+              macro(ompt_get_device_time) macro(ompt_translate_time)
 
 #define OMPT_API_ROUTINE static
 
 #define OMPT_CALLBACK_AVAILABLE(fn) (llvm::omp::target::ompt::Initialized && fn)
 
 #define OMPT_IF_BUILT(stmt) stmt
+
+#define OMPT_IF_BUILT_AND_INITIALIZED(stmt)                                    \
+  OMPT_IF_BUILT(performIfOmptInitialized(stmt))
 
 #define OMPT_IF_ENABLED(stmts)                                                 \
   do {                                                                         \
@@ -121,6 +114,7 @@ typedef uint64_t (*IdInterfaceTy)();
 #else
 #define performIfOmptInitialized(stmt)
 #define OMPT_IF_BUILT(stmt)
+#define OMPT_IF_BUILT_AND_INITIALIZED(stmt)
 #define OMPT_IF_ENABLED(stmts)
 #define OMPT_IF_TRACING_ENABLED(stmts)
 #endif // OMPT_SUPPORT

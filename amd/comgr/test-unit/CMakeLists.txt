@@ -47,9 +47,7 @@ else()
 endif()
 
 # Pin C++17 and mirror LLVM's RTTI setting (avoids type_info link errors
-# against LLVM libs built with RTTI off, including hotswap::raiser
-# which carries its own non-RTTI / non-exceptions compile flags via
-# llvm_update_compile_flags()).
+# against LLVM libs built with RTTI off).
 function(comgr_configure_test_target target)
   set_target_properties(${target} PROPERTIES
     CXX_STANDARD 17
@@ -64,11 +62,6 @@ function(comgr_configure_test_target target)
   endif()
 endfunction()
 
-# Hotswap unit tests live in their own subtree mirroring src/hotswap:
-# hotswap/raiser (IR transpiler) and hotswap/decoder. The gtest discovery above
-# and comgr_configure_test_target() are inherited by the subdirectories.
-add_subdirectory(hotswap)
-
 # -- DemangleSymbolNameTest ---------------------------------------------------
 
 add_executable(DemangleSymbolNameTest
@@ -77,12 +70,11 @@ add_executable(DemangleSymbolNameTest
 target_link_libraries(DemangleSymbolNameTest PRIVATE
   ${COMGR_GTEST_LIBS}
   amd_comgr
+  LLVMSupport
   ${LLVM_PTHREAD_LIB})
 
-# Gtest's LLVM support brings in some printers for LLVM types (StringRef, etc.).
-# When building in-tree, the included headers bring in some code that depend on LLVM's abi-breaking checks.
-# This adds a dependency with LLVM's Support library.
-# We could link against Support, but since we're not using these printers we can just disable them.
+# Disable LLVM printers in this test. LLVM's prebuilt GTest main still needs
+# LLVMSupport for its ABI-check reference when assertions are enabled.
 target_compile_definitions(DemangleSymbolNameTest PRIVATE GTEST_NO_LLVM_SUPPORT=true)
 
 target_include_directories(DemangleSymbolNameTest PRIVATE
@@ -238,14 +230,4 @@ add_dependencies(test-unit
   DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
   IncludeMaterializationTest)
 
-# The transpile-path test binaries, exported by hotswap/CMakeLists.txt in
-# COMGR_HOTSWAP_TEST_TARGETS (empty unless COMGR_ENABLE_HOTSWAP_TRANSPILE is on).
-# Adding a hotswap test updates that list, not this file.
-foreach(HotswapTest ${COMGR_HOTSWAP_TEST_TARGETS})
-  add_custom_command(TARGET test-unit POST_BUILD
-    COMMAND $<TARGET_FILE:${HotswapTest}>)
-endforeach()
-if(COMGR_HOTSWAP_TEST_TARGETS)
-  add_dependencies(test-unit ${COMGR_HOTSWAP_TEST_TARGETS})
-endif()
 add_dependencies(check-comgr test-unit)

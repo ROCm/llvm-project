@@ -57,8 +57,6 @@ class OmptProfilerTy : public plugin::GenericProfilerTy {
 public:
   /** Public members **/
   OmptProfilerTy() {
-
-    OmptInitialized.store(false);
     // Bind the callbacks to this device's member functions
 #define bindOmptCallback(Name, Type, Code)                                     \
   if (ompt::Initialized && ompt::lookupCallbackByCode) {                       \
@@ -70,29 +68,9 @@ public:
 
     FOREACH_OMPT_DEVICE_EVENT(bindOmptCallback);
 #undef bindOmptCallback
-
-#define bindOmptTracingFunction(FunctionName)                                  \
-  if (ompt::Initialized && ompt::lookupDeviceTracingFn) {                      \
-    FunctionName##_fn = ompt::lookupDeviceTracingFn(#FunctionName);            \
-    ODBG(ODT_Tool) << "device tracing fn bound " << #FunctionName              \
-                   << "=" << ((void *)(uint64_t)FunctionName##_fn);            \
-  }
-
-    FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(bindOmptTracingFunction);
-#undef bindOmptTracingFunction
   }
 
   bool isProfilingEnabled() override;
-
-  void handleInit(plugin::GenericDeviceTy *Device,
-                  plugin::GenericPluginTy *Plugin) override;
-
-  void handleDeinit(plugin::GenericDeviceTy *Device,
-                    plugin::GenericPluginTy *Plugin) override;
-
-  void handleLoadBinary(plugin::GenericDeviceTy *Device,
-                        plugin::GenericPluginTy *Plugin,
-                        const StringRef InputTgtImage) override;
 
   void handleDataAlloc(uint64_t StartNanos, uint64_t EndNanos, void *HostPtr,
                        uint64_t Size, void *Data) override;
@@ -146,14 +124,6 @@ private:
 #define defineOmptCallback(Name, Type, Code) Name##_t Name##_fn = nullptr;
   FOREACH_OMPT_DEVICE_EVENT(defineOmptCallback)
 #undef defineOmptCallback
-
-  /// OMPT device tracing functions
-#define defineOmptTracingFunction(Name) ompt_interface_fn_t Name##_fn = nullptr;
-  FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(defineOmptTracingFunction);
-#undef defineOmptTracingFunction
-
-  /// Internal representation for OMPT device (initialize & finalize)
-  std::atomic<bool> OmptInitialized;
 };
 } // namespace ompt
 } // namespace target

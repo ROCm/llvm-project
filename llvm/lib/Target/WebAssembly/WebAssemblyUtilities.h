@@ -15,8 +15,10 @@
 #ifndef LLVM_LIB_TARGET_WEBASSEMBLY_UTILS_WEBASSEMBLYUTILITIES_H
 #define LLVM_LIB_TARGET_WEBASSEMBLY_UTILS_WEBASSEMBLYUTILITIES_H
 
+#include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/Support/CommandLine.h"
+#include <algorithm>
 
 namespace llvm {
 
@@ -34,6 +36,17 @@ class SDLoc;
 class SelectionDAG;
 
 namespace WebAssembly {
+
+enum class WebAssemblyABI {
+  MVP,
+  ExperimentalMV,
+};
+
+/// Parse an ABI name into the corresponding enum.
+inline WebAssemblyABI getABI(StringRef Name) {
+  return Name == "experimental-mv" ? WebAssemblyABI::ExperimentalMV
+                                   : WebAssemblyABI::MVP;
+}
 
 bool isChild(const MachineInstr &MI, const WebAssemblyFunctionInfo &MFI);
 bool mayThrow(const MachineInstr &MI);
@@ -84,6 +97,12 @@ bool canLowerReturn(size_t ResultSize, const WebAssemblySubtarget *Subtarget);
 MachineSDNode *getTLSBase(SelectionDAG &DAG, const SDLoc &DL,
                           const WebAssemblySubtarget *Subtarget,
                           const SDValue Chain = SDValue());
+
+/// Moves the element at \p Idx of \p Range to the front, keeping the order of
+/// the other elements.
+template <typename RangeT> void moveToFront(RangeT &Range, size_t Idx) {
+  std::rotate(Range.begin(), Range.begin() + Idx, Range.begin() + Idx + 1);
+}
 
 } // end namespace WebAssembly
 

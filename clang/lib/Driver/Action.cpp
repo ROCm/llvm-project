@@ -40,8 +40,6 @@ const char *Action::getClassName(ActionClass AC) {
   case VerifyPCHJobClass: return "verify-pch";
   case OffloadBundlingJobClass:
     return "clang-offload-bundler";
-  case OffloadUnbundlingJobClass:
-    return "clang-offload-unbundler";
   case OffloadPackagerJobClass:
     return "llvm-offload-binary";
   case LinkerWrapperJobClass:

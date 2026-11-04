@@ -2,6 +2,8 @@ name: LLVM submodule & PR-parameter setup
 description: >
   On pull_request updates amd-llvm submodule pointer to PR head and aligns
   spirv-llvm-translator and hipify with amd-staging tip.
+  On nightly schedule (and nightly workflow_dispatch without PR params) points
+  compiler/amd-llvm, spirv-llvm-translator, and hipify at their amd-staging tips.  
   On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
 
 inputs:
@@ -108,7 +110,7 @@ runs:
     - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
       if: github.event_name == 'workflow_dispatch'
       continue-on-error: true
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
       with:
         name: ${{ inputs.params_artifact_name }}
         path: .
@@ -128,7 +130,7 @@ runs:
     - name: Source the multiple PR's of params
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
       shell: bash
-      run: |
+      run: | # zizmor: ignore[github-env] workflow_dispatch only; file is produced by that same manual run
         set -a
         source "./${{ github.run_id }}_PR_params.env"
         set +a
@@ -136,6 +138,7 @@ runs:
         echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
         echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
         echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
+        echo "LLVM_ASSERTIONS_MODE=${LLVM_ASSERTIONS_MODE:-auto}" >> "$GITHUB_ENV"
 
     - name: Update submodule pointers from provided parameter PR values
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
@@ -161,7 +164,7 @@ runs:
         merge_upstream_prs() {
           local pr_urls="$1"
           local url repo num ref
-          git submodule update --init --depth 1 --jobs 1 compiler/amd-llvm
+          git submodule update --init --depth 1000 --jobs 1 compiler/amd-llvm
           IFS=',' read -ra PR_URLS <<< "$pr_urls"
           for url in "${PR_URLS[@]}"; do
             url="$(echo "$url" | xargs)"
@@ -232,10 +235,72 @@ runs:
         git submodule status
         git submodule
 
+    - name: Point compiler submodules at amd-staging tip for nightly
+      if: contains(github.workflow, 'Nightly') && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger != 'true'))
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$PWD"
+        git config --global user.email "z1-cciauto@amd.com"
+        git config --global user.name "Z1 cciauto"
+        read_amd_staging_tip() {
+          git ls-remote "$1" refs/heads/amd-staging | awk '{print $1}' | tr -d '[:space:]'
+        }
+        LLVM_SHA="$(read_amd_staging_tip https://github.com/ROCm/llvm-project.git)"
+        SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
+        HIPIFY_SHA="$(read_amd_staging_tip https://github.com/ROCm/HIPIFY.git)"
+        echo "Nightly llvm-project amd-staging tip: $LLVM_SHA"
+        echo "Nightly SPIRV amd-staging tip: $SPIRV_SHA"
+        echo "Nightly HIPIFY amd-staging tip: $HIPIFY_SHA"
+        if [[ -z "$LLVM_SHA" || ${#LLVM_SHA} -ne 40 || -z "$SPIRV_SHA" || ${#SPIRV_SHA} -ne 40 || -z "$HIPIFY_SHA" || ${#HIPIFY_SHA} -ne 40 ]]; then
+          echo "::error::Failed to resolve amd-staging tips for llvm-project, SPIRV, or HIPIFY." >&2
+          exit 1
+        fi
+        git update-index --cacheinfo 160000,"$LLVM_SHA",compiler/amd-llvm
+        git update-index --cacheinfo 160000,"$SPIRV_SHA",compiler/spirv-llvm-translator
+        git update-index --cacheinfo 160000,"$HIPIFY_SHA",compiler/hipify
+        git commit -m "Point compiler submodules at amd-staging tip for nightly"
+        git submodule update --init --depth 1 --jobs 4 \
+          compiler/amd-llvm \
+          compiler/spirv-llvm-translator \
+          compiler/hipify
+        git submodule status \
+          compiler/amd-llvm \
+          compiler/spirv-llvm-translator \
+          compiler/hipify
+
     - name: Enable LLVM assertions for Wavetransform
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
       shell: bash
       run: |
+        enable_assertions() {
+          cat > BRANCH_CONFIG.json <<'EOF'
+        {
+          "flags": {
+            "LLVM_ENABLE_ASSERTIONS": "ON"
+          }
+        }
+        EOF
+          echo "LLVM_ASSERTIONS=1" >> "$GITHUB_ENV"
+          echo "LLVM assertions enabled ($1)."
+        }
+
+        mode="$(printf '%s' "${LLVM_ASSERTIONS_MODE:-auto}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+        case "$mode" in
+          off|false|0|no)
+            echo "LLVM assertions disabled by workflow input."
+            exit 0
+            ;;
+          on|true|1|yes)
+            enable_assertions "workflow input"
+            exit 0
+            ;;
+          auto|"")
+            ;;
+          *)
+            echo "::warning::Unknown LLVM_ASSERTIONS_MODE '${mode}'; using auto."
+            ;;
+        esac
+
         if [[ -z "${LLVM_ROCm_PR_URL:-}" ]]; then
           echo "No LLVM_ROCm_PR_URL; leaving LLVM assertions off."
           exit 0
@@ -249,14 +314,6 @@ runs:
 
         # Ignore case and separators: wave-transform == wave_transform.
         if echo "${title} ${base}" | tr -d ' _-' | grep -qi wavetransform; then
-          cat > BRANCH_CONFIG.json <<'EOF'
-        {
-          "flags": {
-            "LLVM_ENABLE_ASSERTIONS": "ON"
-          }
-        }
-        EOF
-          echo "LLVM_ASSERTIONS=1" >> "$GITHUB_ENV"
-          echo "Wave-transform PR: building with LLVM assertions."
+          enable_assertions "wave-transform PR"
         fi
 

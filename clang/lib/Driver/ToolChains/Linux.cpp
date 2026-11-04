@@ -843,46 +843,6 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     addSystemInclude(DriverArgs, CC1Args, ResourceDirInclude);
 }
 
-static std::string DetectLibcxxIncludePath(llvm::vfs::FileSystem &vfs,
-                                           StringRef base) {
-  std::error_code EC;
-  int MaxVersion = 0;
-  std::string MaxVersionString = "";
-  for (llvm::vfs::directory_iterator LI = vfs.dir_begin(base, EC), LE;
-       !EC && LI != LE; LI = LI.increment(EC)) {
-    StringRef VersionText = llvm::sys::path::filename(LI->path());
-    int Version;
-    if (VersionText[0] == 'v' &&
-        !VersionText.slice(1, StringRef::npos).getAsInteger(10, Version)) {
-      if (Version > MaxVersion) {
-        MaxVersion = Version;
-        MaxVersionString = std::string(VersionText);
-      }
-    }
-  }
-  return MaxVersion ? (base + "/" + MaxVersionString).str() : "";
-}
-
-void Linux::addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
-                                  llvm::opt::ArgStringList &CC1Args) const {
-  const std::string& SysRoot = computeSysRoot();
-  const std::string LibCXXIncludePathCandidates[] = {
-      DetectLibcxxIncludePath(getVFS(), getDriver().Dir + "/../include/c++"),
-      // If this is a development, non-installed, clang, libcxx will
-      // not be found at ../include/c++ but it likely to be found at
-      // one of the following two locations:
-      DetectLibcxxIncludePath(getVFS(), SysRoot + "/usr/local/include/c++"),
-      DetectLibcxxIncludePath(getVFS(), SysRoot + "/usr/include/c++") };
-  for (const auto &IncludePath : LibCXXIncludePathCandidates) {
-    if (IncludePath.empty() || !getVFS().exists(IncludePath))
-      continue;
-    // Use the first candidate that exists.
-    addSystemInclude(DriverArgs, CC1Args, IncludePath);
-    return;
-  }
-}
-
-
 void Linux::addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
                                      llvm::opt::ArgStringList &CC1Args) const {
   // We need a detected GCC installation on Linux to provide libstdc++'s
@@ -1053,6 +1013,8 @@ Linux::getSupportedSanitizers(BoundArch BA,
   if (IsX86_64 || IsMIPS64 || IsAArch64 || IsPowerPC64 || IsSystemZ ||
       IsLoongArch64 || IsRISCV64)
     Res |= SanitizerKind::Thread;
+  if (IsX86_64 && !IsAndroid)
+    Res |= SanitizerKind::Concurrency;
   if (IsX86_64 || IsAArch64 || IsSystemZ || IsHexagon)
     Res |= SanitizerKind::Type;
   if (IsX86_64 || IsSystemZ || IsPowerPC64)

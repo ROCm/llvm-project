@@ -29,7 +29,12 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Target/TargetMachine.h"
 #include <bitset>
+#include <cstdint>
 #include <memory>
+#include <optional>
+
+#define OPTIONS_STRUCT_DECL
+#include "RISCVOptions.inc"
 
 #define GET_RISCV_MACRO_FUSION_PRED_DECL
 #include "RISCVGenMacroFusion.inc"
@@ -71,6 +76,10 @@ struct RISCVTuneInfo {
   unsigned MaxLoadsPerMemcmpOptSize;
   unsigned MaxLoadsPerMemcmp;
 
+  // How many vector elements can be coalesced if on the
+  // same cache line
+  uint8_t MaxVectorCoalesceElts;
+
   // The direction of PostRA scheduling.
   MISched::Direction PostRASchedDirection;
 
@@ -96,6 +105,8 @@ public:
   };
   // clang-format on
 private:
+  const RISCVOptions &CLOpts;
+
   virtual void anchor();
 
   RISCVProcFamilyEnum RISCVProcFamily = Others;
@@ -143,6 +154,7 @@ public:
   const RISCVFrameLowering *getFrameLowering() const override {
     return &FrameLowering;
   }
+  const RISCVOptions &getCLOpts() const { return CLOpts; }
   const RISCVInstrInfo *getInstrInfo() const override { return &InstrInfo; }
   const RISCVRegisterInfo *getRegisterInfo() const override {
     return &InstrInfo.getRegisterInfo();
@@ -176,6 +188,9 @@ public:
   bool GETTER() const { return ATTRIBUTE; }
 #include "RISCVGenSubtargetInfo.inc"
 
+  bool hasYInstructions() const {
+    return HasStdExtYCapMode || HasStdExtZyhybrid;
+  }
   bool hasStdExtZvl() const { return ZvlLen != 0; }
   bool hasStdExtFOrZfinx() const { return HasStdExtF || HasStdExtZfinx; }
   bool hasStdExtDOrZdinx() const { return HasStdExtD || HasStdExtZdinx; }
@@ -281,6 +296,7 @@ public:
   RISCVABI::ABI getTargetABI() const { return TargetABI; }
   bool isSoftFPABI() const {
     return TargetABI == RISCVABI::ABI_LP64 ||
+           TargetABI == RISCVABI::ABI_LP64E ||
            TargetABI == RISCVABI::ABI_ILP32 ||
            TargetABI == RISCVABI::ABI_ILP32E;
   }
@@ -299,8 +315,11 @@ public:
     return nullptr;
   };
 
-  // XRay support - require D and C extensions.
-  bool isXRaySupported() const override { return hasStdExtD() && hasStdExtC(); }
+  // XRay support - require D and Zcf/Zcd extensions. Effectively D and C
+  // without checking the C feature.
+  bool isXRaySupported() const override {
+    return hasStdExtD() && (is64Bit() || hasStdExtZcf()) && hasStdExtZcd();
+  }
 
   // Vector codegen related methods.
   bool hasVInstructions() const { return HasStdExtZve32x; }
@@ -390,7 +409,6 @@ public:
   unsigned getMispredictionPenalty() const override;
   unsigned getLoadLatency() const override;
 
-  unsigned getMaxLMULForFixedLengthVectors() const;
   bool useRVVForFixedLengthVectors() const;
 
   bool enableSubRegLiveness() const override;
@@ -446,6 +464,10 @@ public:
   unsigned getMaxLoadsPerMemcmp(bool OptSize) const {
     return OptSize ? TuneInfo->MaxLoadsPerMemcmpOptSize
                    : TuneInfo->MaxLoadsPerMemcmp;
+  }
+
+  uint8_t getMaxVectorCoalesceElts() const {
+    return TuneInfo->MaxVectorCoalesceElts;
   }
 
   MISched::Direction getPostRASchedDirection() const {

@@ -23,6 +23,13 @@ on:
         type: string
       test_runs_on:
         type: string
+    secrets:
+      BENCHMARK_DB_URL:
+        required: false
+        description: "Benchmark results database API endpoint (nightly benchmark runs only)."
+      BENCHMARK_DB_FALLBACK_URL:
+        required: false
+        description: "Fallback benchmark results database API endpoint (nightly benchmark runs only)."
 
 permissions:
   contents: read
@@ -77,7 +84,9 @@ jobs:
       matrix:
         components: ${{ fromJSON(needs.configure_benchmark_matrix.outputs.components) }}
     uses: './.github/workflows/test_component.yml'
-    secrets: inherit
+    secrets:
+      BENCHMARK_DB_URL: ${{ secrets.BENCHMARK_DB_URL }}
+      BENCHMARK_DB_FALLBACK_URL: ${{ secrets.BENCHMARK_DB_FALLBACK_URL }}
     with:
       artifact_run_id: ${{ inputs.artifact_run_id }}
       artifact_group: ${{ inputs.artifact_group }}

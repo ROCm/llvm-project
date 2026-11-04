@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Driver/ToolChain.h"
+#include "ClangCLArgs.h"
 #include "ToolChains/Arch/AArch64.h"
 #include "ToolChains/Arch/AMDGPU.h"
 #include "ToolChains/Arch/ARM.h"
@@ -808,7 +809,6 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
     return getClang();
 
   case Action::OffloadBundlingJobClass:
-  case Action::OffloadUnbundlingJobClass:
     return getOffloadBundler();
 
   case Action::OffloadPackagerJobClass:
@@ -1129,6 +1129,15 @@ ToolChain::getTargetSubDirPath(StringRef BaseDir) const {
     // Try legacy architecture name.
     AMDGPUTriple.setArchName("amdgcn");
     if (auto Path = getPathForTriple(AMDGPUTriple))
+      return *Path;
+  }
+
+  // Short SPIR-V spellings like "spirv64" are installed under the three-part
+  // name, "spirv64-unknown-unknown".
+  if (T.isSPIRV()) {
+    llvm::Triple SPIRVTriple(
+        T.normalize(llvm::Triple::CanonicalForm::THREE_IDENT));
+    if (auto Path = getPathForTriple(SPIRVTriple))
       return *Path;
   }
 
@@ -1465,7 +1474,7 @@ ObjCRuntime ToolChain::getDefaultObjCRuntime(bool isNonFragile) const {
 
 llvm::ExceptionHandling
 ToolChain::GetExceptionModel(const llvm::opt::ArgList &Args) const {
-  return llvm::ExceptionHandling::None;
+  return llvm::ExceptionHandling::Default;
 }
 
 bool ToolChain::isThreadModelSupported(const StringRef Model) const {
@@ -1530,6 +1539,7 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args, BoundArch BA,
     llvm::Triple Triple = getTriple();
     tools::arm::setArchNameInTriple(getDriver(), Args, InputType, Triple);
     tools::arm::setFloatABIInTriple(getDriver(), Args, Triple);
+    tools::arm::setEABIInTriple(getDriver(), Args, Triple);
     return Triple.getTriple();
   }
   }
@@ -1547,10 +1557,6 @@ void ToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                           ArgStringList &CC1Args) const {
   // Each toolchain should provide the appropriate include flags.
 }
-
-void ToolChain::addActionsFromClangTargetOptions(
-    const ArgList &DriverArgs, ArgStringList &CC1Args, const JobAction &JA,
-    Compilation &C, const InputInfoList &Inputs) const {}
 
 void ToolChain::addClangTargetOptions(
     const ArgList &DriverArgs, ArgStringList &CC1Args, BoundArch BA,
@@ -2007,11 +2013,12 @@ ToolChain::computeMSVCVersion(const Driver *D,
 }
 
 llvm::opt::DerivedArgList *ToolChain::TranslateOpenMPTargetArgs(
-    const llvm::opt::DerivedArgList &Args, bool SameTripleAsHost,
+    const llvm::opt::DerivedArgList &Args, const llvm::Triple &HostTriple,
     SmallVectorImpl<llvm::opt::Arg *> &AllocatedArgs) const {
   DerivedArgList *DAL = new DerivedArgList(Args.getBaseArgs());
   const OptTable &Opts = getDriver().getOpts();
   bool Modified = false;
+  bool SameTripleAsHost = getTriple() == HostTriple;
 
   // Handle -Xopenmp-target flags
   for (auto *A : Args) {
@@ -2077,13 +2084,25 @@ llvm::opt::DerivedArgList *ToolChain::TranslateOpenMPTargetArgs(
     }
     XOpenMPTargetArg->setBaseArg(A);
     A = XOpenMPTargetArg.release();
+    if (A->getOption().matches(options::OPT_D) &&
+        (getDriver().IsCLMode() || HostTriple.isWindowsMSVCEnvironment()))
+      A->getValues()[0] =
+          ClangCLArgs::translateMacroDefinition(A->getValue(), Args);
     AllocatedArgs.push_back(A);
     DAL->append(A);
     Modified = true;
   }
 
-  if (Modified)
+  if (Modified) {
+    // GNU-mode Clang targeting MSVC also accepts forwarded clang-cl options.
+    if (!getDriver().IsCLMode() && HostTriple.isWindowsMSVCEnvironment()) {
+      DerivedArgList *Translated =
+          ClangCLArgs::translateArgs(*DAL, HostTriple, Args);
+      delete DAL;
+      return Translated;
+    }
     return DAL;
+  }
 
   delete DAL;
   return nullptr;
@@ -2157,6 +2176,14 @@ void ToolChain::TranslateXarchArgs(
     DAL->AddSynthesizedArg(A);
   else
     AllocatedArgs->push_back(A);
+
+  // Forwarded macros are parsed after the shared input translation.
+  if (A->getOption().matches(options::OPT_D) &&
+      (getDriver().IsCLMode() ||
+       llvm::Triple(llvm::Triple::normalize(getDriver().getTargetTriple()))
+           .isWindowsMSVCEnvironment()))
+    A->getValues()[0] =
+        ClangCLArgs::translateMacroDefinition(A->getValue(), Args);
 }
 
 /// Match any triple recognized arch aliases.

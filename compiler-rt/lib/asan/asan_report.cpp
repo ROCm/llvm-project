@@ -534,7 +534,9 @@ void ReportGenericError(uptr pc, uptr bp, uptr sp, uptr addr, bool is_write,
   (void)exp;
 
   ScopedInErrorReport in_report(fatal);
-  ErrorGeneric error(GetCurrentTidOrInvalid(), pc, bp, sp, addr, is_write,
+  ErrorGeneric error(GetCurrentTidOrInvalid(), pc, bp, sp, addr,
+                     is_write ? ErrorGeneric::AccessType::Write
+                              : ErrorGeneric::AccessType::Read,
                      access_size);
   in_report.ReportError(error);
 }
@@ -617,7 +619,7 @@ void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
 
       InternalScopedString source_location;
       source_location.AppendF("    #0 0x%llx", e->alloc_pc);
-#if SANITIZER_AMDGPU
+#if SANITIZER_AMDHSA
       source_location.Append(" in ");
       __sanitizer::AMDGPUCodeObjectSymbolizer symbolizer;
       symbolizer.Init(e->fd, e->file_extent_start, e->file_extent_size);
@@ -665,6 +667,20 @@ void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
     slot->total_bytes += alloc_size;
     slot->count++;
   }
+}
+
+void ReportAssumeDereferenceableError(uptr pc, uptr bp, uptr sp, uptr addr,
+                                      uptr dereferenceable_size, bool fatal) {
+  if (!fatal && SuppressErrorReport(pc))
+    return;
+  ENABLE_FRAME_POINTER;
+
+  ScopedInErrorReport in_report(fatal);
+  ErrorGeneric error(GetCurrentTidOrInvalid(), pc, bp, sp, addr,
+                     ErrorGeneric::AccessType::Assumption,
+                     dereferenceable_size);
+  error.bug_descr = "dereferenceable-assumption-violation";
+  in_report.ReportError(error);
 }
 
 }  // namespace __asan
@@ -724,7 +740,8 @@ uptr __asan_get_report_address() {
 
 int __asan_get_report_access_type() {
   if (ScopedInErrorReport::CurrentError().kind == kErrorKindGeneric)
-    return ScopedInErrorReport::CurrentError().Generic.is_write;
+    return static_cast<int>(
+        ScopedInErrorReport::CurrentError().Generic.access_type);
   return 0;
 }
 
@@ -736,7 +753,8 @@ uptr __asan_get_report_access_size() {
 
 int __asan_get_report_src_address(uptr* out_addr, uptr* out_size) {
   ErrorDescription& err = ScopedInErrorReport::CurrentError();
-  if (err.kind == kErrorKindGeneric && !err.Generic.is_write) {
+  if (err.kind == kErrorKindGeneric &&
+      err.Generic.access_type == ErrorGeneric::AccessType::Read) {
     if (out_addr)
       *out_addr = err.Generic.addr_description.Address();
     if (out_size)
@@ -779,7 +797,8 @@ int __asan_get_report_src_address(uptr* out_addr, uptr* out_size) {
 
 int __asan_get_report_dest_address(uptr* out_addr, uptr* out_size) {
   ErrorDescription& err = ScopedInErrorReport::CurrentError();
-  if (err.kind == kErrorKindGeneric && err.Generic.is_write) {
+  if (err.kind == kErrorKindGeneric &&
+      err.Generic.access_type == ErrorGeneric::AccessType::Write) {
     if (out_addr)
       *out_addr = err.Generic.addr_description.Address();
     if (out_size)

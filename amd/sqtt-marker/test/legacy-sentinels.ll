@@ -1,6 +1,8 @@
 ; RUN: %opt -load-pass-plugin=%sqtt-marker-plugin \
-; RUN:   -sqtt-marker-scope-cu=-1 -sqtt-marker-scope-simd=-1 \
-; RUN:   -sqtt-marker-mem-barrier=none -passes='default<O0>' \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-scope-cu=-1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-scope-simd=-1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-mem-barrier=none \
+; RUN:   -passes='default<O0>' \
 ; RUN:   -S %s -o - | %FileCheck %s
 ; REQUIRES: amdgpu-registered-target
 

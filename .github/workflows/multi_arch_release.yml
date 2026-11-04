@@ -78,7 +78,6 @@ jobs:
     needs: setup
     if: ${{ needs.setup.outputs.linux_build_config != '' }}
     uses: ./.github/workflows/multi_arch_release_linux.yml
-    secrets: inherit
     with:
       build_config: ${{ needs.setup.outputs.linux_build_config }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}

@@ -27,6 +27,7 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Option/Option.h"
 #include "llvm/Support/VersionTuple.h"
+#include "llvm/Support/VirtualFileSystemFwd.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/TargetParser/Triple.h"
 #include <cassert>
@@ -44,11 +45,6 @@ class ArgList;
 class DerivedArgList;
 
 } // namespace opt
-namespace vfs {
-
-class FileSystem;
-
-} // namespace vfs
 } // namespace llvm
 
 namespace clang {
@@ -411,8 +407,9 @@ public:
   /// TranslateOpenMPTargetArgs - Create a new derived argument list for
   /// that contains the OpenMP target specific flags passed via
   /// -Xopenmp-target -opt=val OR -Xopenmp-target=<triple> -opt=val
+  /// HostTriple is the resolved host target, including architecture overrides.
   virtual llvm::opt::DerivedArgList *TranslateOpenMPTargetArgs(
-      const llvm::opt::DerivedArgList &Args, bool SameTripleAsHost,
+      const llvm::opt::DerivedArgList &Args, const llvm::Triple &HostTriple,
       SmallVectorImpl<llvm::opt::Arg *> &AllocatedArgs) const;
 
   /// Append the argument following \p A to \p DAL assuming \p A is an Xarch
@@ -758,14 +755,6 @@ public:
   virtual void
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &CC1Args) const;
-
-  /// Add options that need to be passed to cc1 for this target that could add
-  /// commands to the compilation to transform an input.
-  virtual void
-  addActionsFromClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                                   llvm::opt::ArgStringList &CC1Args,
-                                   const JobAction &JA, Compilation &C,
-                                   const InputInfoList &Inputs) const;
 
   /// Add options that need to be passed to cc1 for this target.
   virtual void

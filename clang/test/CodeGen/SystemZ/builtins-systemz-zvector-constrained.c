@@ -1,4 +1,5 @@
 // REQUIRES: systemz-registered-target
+// XFAIL: *
 // RUN: %clang_cc1 -target-cpu z13 -triple s390x-linux-gnu \
 // RUN: -O2 -fzvector -flax-vector-conversions=none \
 // RUN: -ffp-exception-behavior=strict \
@@ -7,8 +8,6 @@
 // RUN: -O2 -fzvector -flax-vector-conversions=none \
 // RUN: -ffp-exception-behavior=strict \
 // RUN: -Wall -Wno-unused -Werror -S %s -o - | FileCheck %s --check-prefix=CHECK-ASM
-
-// XFAIL: *
 
 #include <vecintrin.h>
 

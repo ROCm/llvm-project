@@ -20,3 +20,12 @@ author = "Advanced Micro Devices, Inc."
 copyright = (
     "Copyright (c) 2024-2025 Advanced Micro Devices, Inc. All rights reserved."
 )
+
+# Enable the per-page Markdown download button.
+html_theme_options.update({
+    "repository_url": "https://github.com/ROCm/llvm-project",
+    "path_to_docs": "amd/docs",
+    "use_repository_button": True,
+    "use_issues_button": True,
+    "use_download_button": True,
+})

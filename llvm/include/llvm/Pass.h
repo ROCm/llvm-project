@@ -59,13 +59,11 @@ enum PassManagerType {
   PMT_CallGraphPassManager,  ///< CGPassManager
   PMT_FunctionPassManager,   ///< FPPassManager
   PMT_LoopPassManager,       ///< LPPassManager
-  PMT_RegionPassManager,     ///< RGPassManager
   PMT_Last
 };
 
 // Different types of passes.
 enum PassKind {
-  PT_Region,
   PT_Loop,
   PT_Function,
   PT_CallGraphSCC,
@@ -84,9 +82,7 @@ enum class ThinOrFullLTOPhase {
   /// Full LTO prelink phase.
   FullLTOPreLink,
   /// Full LTO postlink (backend compile) phase.
-  FullLTOPostLink,
-  /// Custom LTO postlink (e.g. --lto-newpm-passes=...)
-  CustomLTOPostLink
+  FullLTOPostLink
 };
 
 #ifndef NDEBUG

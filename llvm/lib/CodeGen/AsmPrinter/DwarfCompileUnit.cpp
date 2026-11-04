@@ -874,6 +874,10 @@ bool DwarfCompileUnit::emitImplicitPointerLocation(const Loc::Single &Single,
   }
 
   if (!ArtificialDIEPtr) {
+    // Check that the value can be described before creating a DIE for it.
+    if (!Entry.isLocation() && !Entry.isInt() && !Entry.isConstantFP())
+      return false;
+
     DIE &ProcDIE = createAndAddDIE(dwarf::DW_TAG_dwarf_procedure, getUnitDie());
 
     if (Entry.isLocation()) {
@@ -881,10 +885,8 @@ bool DwarfCompileUnit::emitImplicitPointerLocation(const Loc::Single &Single,
     } else if (Entry.isInt()) {
       if (PointeeTy)
         addConstantValue(ProcDIE, Entry.getInt(), PointeeTy);
-    } else if (Entry.isConstantFP()) {
-      addConstantFPValue(ProcDIE, Entry.getConstantFP());
     } else {
-      return false;
+      addConstantFPValue(ProcDIE, Entry.getConstantFP());
     }
 
     ArtificialDIEPtr = &ProcDIE;
@@ -946,6 +948,22 @@ void DwarfCompileUnit::applyConcreteDbgVariableAttributes(
       addConstantFPValue(VariableDie, Entry->getConstantFP());
     } else if (Entry->isConstantInt()) {
       addConstantValue(VariableDie, Entry->getConstantInt(), DV.getType());
+    } else if (Entry->isGlobalAddress()) {
+      auto *Expr = Single.getExpr();
+      DIELoc *Loc = new (DIEValueAllocator) DIELoc;
+      DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
+      DwarfExpr.addFragmentOffset(Expr);
+      if (!DwarfExpr.addGlobalAddress(Entry->getGlobalAddress(),
+                                      Entry->getGlobalOffset()))
+        return;
+      // A rejected operation leaves the expression built so far in Loc, which
+      // describes some other location rather than none. Drop it instead.
+      if (!DwarfExpr.addExpression(Expr))
+        return;
+      addBlock(VariableDie, dwarf::DW_AT_location, DwarfExpr.finalize());
+      if (DwarfExpr.TagOffset)
+        addUInt(VariableDie, dwarf::DW_AT_LLVM_tag_offset, dwarf::DW_FORM_data1,
+                *DwarfExpr.TagOffset);
     } else if (Entry->isTargetIndexLocation()) {
       DIELoc *Loc = new (DIEValueAllocator) DIELoc;
       DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
@@ -1010,6 +1028,10 @@ void DwarfCompileUnit::applyConcreteDbgVariableAttributes(
       // only the WebAssembly-specific encoding is supported.
       assert(Asm->TM.getTargetTriple().isWasm());
       DwarfExpr.addWasmLocation(Loc.Index, static_cast<uint64_t>(Loc.Offset));
+    } else if (Entry.isGlobalAddress()) {
+      if (!DwarfExpr.addGlobalAddress(Entry.getGlobalAddress(),
+                                      Entry.getGlobalOffset()))
+        return false;
     } else {
       llvm_unreachable("Unsupported Entry type.");
     }
@@ -1807,9 +1829,6 @@ void DwarfCompileUnit::addVariableAddress(const DbgVariable &DV, DIE &Die,
 void DwarfCompileUnit::addLocationWithExpr(DIE &Die, dwarf::Attribute Attribute,
                                            const MachineLocation &Location,
                                            ArrayRef<uint64_t> Expr) {
-  if (DisableDwarfLocations)
-    return;
-
   DIELoc *Loc = new (DIEValueAllocator) DIELoc;
   DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
   if (Location.isIndirect())
@@ -1853,9 +1872,6 @@ void DwarfCompileUnit::addMemoryLocation(DIE &Die, dwarf::Attribute Attribute,
 void DwarfCompileUnit::addComplexAddress(const DIExpression *DIExpr, DIE &Die,
                                          dwarf::Attribute Attribute,
                                          const MachineLocation &Location) {
-  if (DisableDwarfLocations)
-    return;
-
   DIELoc *Loc = new (DIEValueAllocator) DIELoc;
   DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
   DwarfExpr.addFragmentOffset(DIExpr);
@@ -1882,9 +1898,6 @@ void DwarfCompileUnit::addComplexAddress(const DIExpression *DIExpr, DIE &Die,
 /// Add a Dwarf loclistptr attribute data and value.
 void DwarfCompileUnit::addLocationList(DIE &Die, dwarf::Attribute Attribute,
                                        unsigned Index) {
-  if (DisableDwarfLocations)
-    return;
-
   dwarf::Form Form = (DD->getDwarfVersion() >= 5)
                          ? dwarf::DW_FORM_loclistx
                          : DD->getDwarfSectionOffsetForm();

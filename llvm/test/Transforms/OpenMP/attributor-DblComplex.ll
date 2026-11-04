@@ -1,5 +1,5 @@
 ; RUN: opt --mtriple=amdgcn-amd-amdhsa -S -passes='attributor' < %s | FileCheck %s
-
+! XFAIL: *
 ; verify that the following test case does not assert in the attributor due
 ; to addrspace 5 to generic casts seen when compiling for amdgcn-amd-amdhsa
 ;

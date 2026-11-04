@@ -16,11 +16,9 @@
 #include "OpenMP/OMPT/Callback.h"
 #include "OpenMP/OMPT/Interface.h"
 #include "OpenMP/OMPT/OmptTracingBuffer.h"
-#include "PluginManager.h"
+#include "OpenMP/OffloadRTL.h"
 #include "Shared/Debug.h"
 #include "omp-tools.h"
-
-#include "llvm/Support/DynamicLibrary.h"
 
 #include <atomic>
 #include <cassert>

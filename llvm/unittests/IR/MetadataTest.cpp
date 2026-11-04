@@ -22,16 +22,12 @@
 #include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Support/Compiler.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
 #include <optional>
 #include <type_traits>
 using namespace llvm;
-
-namespace llvm {
-LLVM_ABI extern cl::opt<bool> PickMergedSourceLocations;
-} // namespace llvm
 
 namespace {
 
@@ -123,6 +119,13 @@ protected:
   }
   ConstantAsMetadata *getConstantAsMetadata() {
     return ConstantAsMetadata::get(getConstant());
+  }
+  /// Uses of \a ConstantData are not tracked, so tests that replace or delete
+  /// a constant need one with a use list.
+  ConstantAsMetadata *getGlobalAsMetadata() {
+    return ConstantAsMetadata::get(new GlobalVariable(
+        M, Type::getInt8Ty(Context), false, GlobalValue::ExternalLinkage,
+        nullptr, "g" + Twine(Counter++)));
   }
   DIType *getCompositeType() {
     return DICompositeType::getDistinct(Context, dwarf::DW_TAG_structure_type,
@@ -1456,7 +1459,9 @@ TEST_F(DILocationTest, Merge) {
   {
     // If PickMergedSourceLocation is enabled, when one source location is null
     // we should return the valid location.
-    PickMergedSourceLocations = true;
+    const char *Pick[] = {"prog", "-pick-merged-source-locations"};
+    ASSERT_TRUE(cl::parseCommandLineOptions(Context.getLibraryOptions(), Pick,
+                                            "", &nulls()));
     auto *A = DILocation::get(Context, 2, 7, N);
     auto *M1 = DILocation::getMergedLocation(A, nullptr);
     ASSERT_NE(nullptr, M1);
@@ -1469,7 +1474,9 @@ TEST_F(DILocationTest, Merge) {
     EXPECT_EQ(2u, M2->getLine());
     EXPECT_EQ(7u, M2->getColumn());
     EXPECT_EQ(N, M2->getScope());
-    PickMergedSourceLocations = false;
+    const char *NoPick[] = {"prog", "-pick-merged-source-locations=false"};
+    ASSERT_TRUE(cl::parseCommandLineOptions(Context.getLibraryOptions(), NoPick,
+                                            "", &nulls()));
   }
 
 #define EXPECT_ATOM(Loc, Group, Rank)                                          \
@@ -4478,6 +4485,8 @@ TEST_F(DIExpressionTest, isValid) {
   EXPECT_VALID(dwarf::DW_OP_LLVM_entry_value, 1);
   EXPECT_VALID(dwarf::DW_OP_LLVM_entry_value, 1, dwarf::DW_OP_plus_uconst, 6);
   EXPECT_VALID(dwarf::DW_OP_LLVM_arg, 0, dwarf::DW_OP_LLVM_entry_value, 1);
+  EXPECT_VALID(dwarf::DW_OP_constu, 6, dwarf::DW_OP_LLVM_user,
+               dwarf::DW_OP_LLVM_offset, dwarf::DW_OP_deref);
 
   // Invalid constructions.
   EXPECT_INVALID(~0u);
@@ -4493,6 +4502,8 @@ TEST_F(DIExpressionTest, isValid) {
   EXPECT_INVALID(dwarf::DW_OP_LLVM_arg, 0, dwarf::DW_OP_plus_uconst, 5,
                  dwarf::DW_OP_LLVM_entry_value, 1);
   EXPECT_INVALID(dwarf::DW_OP_LLVM_arg, 1, dwarf::DW_OP_LLVM_entry_value, 1);
+  EXPECT_INVALID(dwarf::DW_OP_LLVM_user);
+  EXPECT_INVALID(dwarf::DW_OP_LLVM_user, dwarf::DW_OP_LLVM_form_aspace_address);
 
   // A valid operation doesn't make a malformed suffix valid.
   EXPECT_INVALID(dwarf::DW_OP_reg0, dwarf::DW_OP_stack_value,
@@ -5391,20 +5402,18 @@ TEST_F(ValueAsMetadataTest, handleRAUWWithTypeChange) {
   // Test that handleRAUW supports type changes.
   // This is helpful in cases where poison values are used to encode
   // types in metadata, e.g. in type annotations.
-  // Changing the type stored in metadata requires to change the type of
-  // the stored poison value.
-  auto *I32Poison = PoisonValue::get(Type::getInt32Ty(Context));
   auto *I64Poison = PoisonValue::get(Type::getInt64Ty(Context));
-  auto *MD = ConstantAsMetadata::get(I32Poison);
+  auto *MD = getGlobalAsMetadata();
+  Value *GV = MD->getValue();
   TrackingMDRef Ref(MD);
 
-  EXPECT_EQ(MD->getValue(), I32Poison);
+  EXPECT_EQ(MD->getValue(), GV);
   EXPECT_NE(MD->getValue(), I64Poison);
 
-  ValueAsMetadata::handleRAUW(I32Poison, I64Poison);
+  ValueAsMetadata::handleRAUW(GV, I64Poison);
   MD = cast<ConstantAsMetadata>(Ref.get());
 
-  EXPECT_NE(MD->getValue(), I32Poison);
+  EXPECT_NE(MD->getValue(), GV);
   EXPECT_EQ(MD->getValue(), I64Poison);
 }
 
@@ -5427,8 +5436,7 @@ TEST_F(ValueAsMetadataTest, TempTempReplacement) {
 
 TEST_F(ValueAsMetadataTest, CollidingDoubleUpdates) {
   // Create a constant.
-  ConstantAsMetadata *CI =
-      ConstantAsMetadata::get(ConstantInt::get(Context, APInt(8, 0)));
+  ConstantAsMetadata *CI = getGlobalAsMetadata();
 
   // Create a temporary to prevent nodes from resolving.
   auto Temp = MDTuple::getTemporary(Context, {});
@@ -5791,7 +5799,7 @@ typedef MetadataTest MDTupleAllocationTest;
 TEST_F(MDTupleAllocationTest, Tracking) {
   // Make sure that the move constructor and move assignment op
   // for MDOperand correctly adjust tracking information.
-  auto *Value1 = getConstantAsMetadata();
+  auto *Value1 = getGlobalAsMetadata();
   MDTuple *A = MDTuple::getDistinct(Context, {Value1, Value1});
   EXPECT_EQ(A->getOperand(0), Value1);
   EXPECT_EQ(A->getOperand(1), Value1);
@@ -5807,7 +5815,7 @@ TEST_F(MDTupleAllocationTest, Tracking) {
   EXPECT_EQ(NewOps1.get(), static_cast<Metadata *>(Value1));
   EXPECT_EQ(NewOps2.get(), static_cast<Metadata *>(Value1));
 
-  auto *Value2 = getConstantAsMetadata();
+  auto *Value2 = getGlobalAsMetadata();
   Value *V1 = Value1->getValue();
   Value *V2 = Value2->getValue();
   ValueAsMetadata::handleRAUW(V1, V2);
@@ -5900,7 +5908,7 @@ TEST_F(MDTupleAllocationTest, Resize) {
 
 TEST_F(MDTupleAllocationTest, Tracking2) {
   // Resize a tuple and check that we can still RAUW one of its operands.
-  auto *Value1 = getConstantAsMetadata();
+  auto *Value1 = getGlobalAsMetadata();
   MDTuple *A = getTuple();
   A->push_back(Value1);
   A->push_back(Value1);
@@ -5909,7 +5917,7 @@ TEST_F(MDTupleAllocationTest, Tracking2) {
   EXPECT_EQ(A->getOperand(1), Value1);
   EXPECT_EQ(A->getOperand(2), Value1);
 
-  auto *Value2 = getConstantAsMetadata();
+  auto *Value2 = getGlobalAsMetadata();
   Value *V1 = Value1->getValue();
   Value *V2 = Value2->getValue();
   ValueAsMetadata::handleRAUW(V1, V2);

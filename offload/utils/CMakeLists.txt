@@ -4,7 +4,8 @@ set(OPENMP_UTILS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH
 macro(add_openmp_util path)
   install(PROGRAMS
      ${path}
-     DESTINATION "${OPENMP_UTILS_INSTALL_DIR}")
+     DESTINATION "${OPENMP_UTILS_INSTALL_DIR}"
+     COMPONENT offload)
 endmacro()
 
 add_subdirectory("${LLVM_EXTERNAL_OFFLOAD_SOURCE_DIR}/../amd/tools" amd-tools)

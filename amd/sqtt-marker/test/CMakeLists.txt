@@ -44,7 +44,7 @@ endif()
 
 configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)
 
-set(SQTT_MARKER_TEST_DEPENDS SQTTMarkerPass)
+set(SQTT_MARKER_TEST_DEPENDS SQTTMarkerPass SQTTMarkerTests)
 foreach(tool FileCheck clang clang-offload-bundler llvm-objcopy opt)
   if(TARGET ${tool})
     list(APPEND SQTT_MARKER_TEST_DEPENDS ${tool})
