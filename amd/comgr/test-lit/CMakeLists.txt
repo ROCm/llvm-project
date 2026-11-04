@@ -32,7 +32,7 @@ configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)
 add_custom_target(test-lit COMMAND "${LLVM_LIT_PATH}"
                   "${CMAKE_CURRENT_BINARY_DIR}" -v)
 
-foreach(tool FileCheck not clang lld llvm-as llvm-dis llvm-objcopy
+foreach(tool FileCheck not clang clang-offload-bundler lld llvm-as llvm-dis llvm-objcopy
              llvm-objdump llvm-offload-binary llvm-readobj llvm-readelf
              yaml2obj amd-llvm-spirv)
   if(TARGET ${tool})

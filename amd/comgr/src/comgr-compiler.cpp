@@ -1827,23 +1827,6 @@ amd_comgr_status_t AMDGPUCompiler::compileToRelocatable() {
   return processFiles(AMD_COMGR_DATA_KIND_RELOCATABLE, ".o");
 }
 
-namespace {
-// A view of part of a shared buffer, owned through the shared pointer.
-class SharedSliceMemoryBuffer final : public MemoryBuffer {
-  std::shared_ptr<MemoryBuffer> Owner;
-
-public:
-  SharedSliceMemoryBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Slice)
-      : Owner(std::move(Owner)) {
-    init(Slice.begin(), Slice.end(), /*RequiresNullTerminator=*/false);
-  }
-  StringRef getBufferIdentifier() const override {
-    return Owner->getBufferIdentifier();
-  }
-  BufferKind getBufferKind() const override { return Owner->getBufferKind(); }
-};
-} // namespace
-
 amd_comgr_status_t AMDGPUCompiler::unbundle() {
   if (auto Status = createTmpDirs()) {
     return Status;
@@ -1920,31 +1903,9 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
     }
 
     UnbundleCommand Unbundle(Input->DataKind, BundlerConfig);
-    // Contents of each output when they come from the cache entry in place.
-    SmallVector<StringRef> Contents;
-    CommandCache::CachedOutput Hit;
     if (Cache) {
-      // On a cache hit, use the cached code objects in place instead of
-      // writing each one to a temporary file and copying it back. Not on
-      // Windows, where a mapped cache entry could not be pruned, and not with
-      // save-temps, where the unbundled files are expected on disk.
-      bool InPlace = !env::shouldSaveTemps();
-#ifdef _WIN32
-      InPlace = false;
-#endif
-      if (auto Status =
-              Cache->execute(Unbundle, LogS, InPlace ? &Hit : nullptr))
+      if (auto Status = Cache->execute(Unbundle, LogS))
         return Status;
-
-      if (Hit.Entry) {
-        if (Error E = Unbundle.splitCachedOutput(Hit.Output, Contents)) {
-          logAllUnhandledErrors(std::move(E), LogS,
-                                "Comgr cache: ignoring entry: ");
-          Contents.clear();
-          if (auto Status = Unbundle.execute(LogS))
-            return Status;
-        }
-      }
     } else {
       if (auto Status = Unbundle.execute(LogS)) {
         return Status;
@@ -1964,10 +1925,8 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       ScopedDataObjectReleaser SDOR(ResultT);
 
       DataObject *Result = DataObject::convert(ResultT);
-      if (!Contents.empty()) {
-        if (auto Status =
-                Result->setData(std::make_unique<SharedSliceMemoryBuffer>(
-                    Hit.Entry, Contents[I])))
+      if (Unbundle.hasCachedOutputs()) {
+        if (auto Status = Result->setData(Unbundle.takeCachedOutput(I)))
           return Status;
       } else if (auto Status = inputFromFile(Result, OutputFilePath)) {
         return Status;

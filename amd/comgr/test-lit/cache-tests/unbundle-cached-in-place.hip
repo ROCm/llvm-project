@@ -12,12 +12,15 @@
 // RUN: rm -fr %t.cache
 // RUN: export AMD_COMGR_CACHE=1
 // RUN: export AMD_COMGR_CACHE_DIR=%t.cache
+// RUN: export AMD_COMGR_EMIT_VERBOSE_LOGS=1
+// RUN: export AMD_COMGR_REDIRECT_LOGS=stderr
 //
 // Fill the cache, then read the entry back in place.
 // RUN: unbundle %t.compressed-bundle.bc hip-amdgcn-amd-amdhsa-unknown-gfx900 \
 // RUN:    %t.miss.bc
 // RUN: unbundle %t.compressed-bundle.bc hip-amdgcn-amd-amdhsa-unknown-gfx900 \
-// RUN:    %t.hit.bc
+// RUN:    %t.hit.bc 2> %t.hit.log
+// RUN: %FileCheck --check-prefix=HIT %s < %t.hit.log
 // RUN: cmp %t.miss.bc %t.hit.bc
 //
 // With save-temps, the cache hit is written to the temporary directory.
@@ -29,6 +32,7 @@
 // RUN: cmp %t.miss.bc %t.savetemps.bc
 // RUN: ls %t.temps/comgr-*/output | %FileCheck --check-prefix=TEMPS %s
 // TEMPS: .bc
+// HIT: Comgr cache: found entry
 //
 // RUN: %llvm-dis %t.hit.bc -o - | %FileCheck %s
 // CHECK: "target-cpu"="gfx900"
