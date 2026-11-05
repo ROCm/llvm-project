@@ -166,11 +166,8 @@ llvm::Error DeviceTy::init() {
     return createError(ErrorCode::BackendFailure,
                        "failed to create context for device %d: %s", DeviceID,
                        Res->Details);
-<<<<<<< HEAD
   IsHostDevice =
       getInfo<ol_device_type_t>(DeviceInfo::TYPE) == OL_DEVICE_TYPE_HOST;
-=======
->>>>>>> 952b6f071f7d
 
   RTL = llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
   RTLDeviceID = llvm::offload::tmp::__ol_tgt_GetPluginDeviceId(DeviceHandle);
@@ -1044,11 +1041,10 @@ static uint32_t getDeviceBlockLimit(const DeviceGeometryPropsTy &Props,
 /// Get the default number of blocks for a kernel in Generic-SPMD mode.
 static uint32_t
 getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
-  // Envar to override the default number of teams per compute unit for a kernel
-  // in Generic-SPMD mode. Zero uses the default number of blocks of kernels in
-  // any other execution mode.
+  // Envar to set the default number of blocks per compute unit for a kernel in
+  // Generic-SPMD mode. Currently only used on AMDGPU devices. Zero uses the
+  // default number of blocks of other kernels.
   static UInt32Envar OMPX_GenericSPMDTeamsPerCU(
-<<<<<<< HEAD
       "LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU", 6);
   // Downstream: the former name of the envar, honored if the new one is unset.
   static UInt32Envar OMPX_AMDGPUGenericSPMDTeamsPerCU(
@@ -1060,17 +1056,6 @@ getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
 
   if (Props.Backend != OL_PLATFORM_BACKEND_AMDGPU || !TeamsPerCU ||
       !Props.NumComputeUnits)
-=======
-      "LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU", 0);
-
-  uint32_t TeamsPerCU =
-      OMPX_GenericSPMDTeamsPerCU.isPresent()
-          ? OMPX_GenericSPMDTeamsPerCU.get()
-          : llvm::omp::target::BackendConfig::get(Props.Backend)
-                .DefaultGenericSPMDTeamsPerCU;
-
-  if (!TeamsPerCU || !Props.NumComputeUnits)
->>>>>>> 952b6f071f7d
     return Props.DefaultNumBlocks;
   return Props.NumComputeUnits * TeamsPerCU;
 }
@@ -1555,9 +1540,8 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   KernelLaunchInfoTy KernelLaunchInfo = getKernelLaunchInfo(TgtEntryPtr);
   LaunchConfigTy Config = buildLaunchConfig(KernelArgs);
 
-  // Some backends (e.g. host) only support the latest ABI.
-  if (KernelArgs.Version < OMP_KERNEL_ARG_VERSION &&
-      getConfig().RequiresLatestKernelArgVersion) {
+  // Host kernels are only supported for the latest ABI.
+  if (KernelArgs.Version < OMP_KERNEL_ARG_VERSION && isHostDevice()) {
     REPORT() << "Incompatible kernel argument version for kernel "
              << KernelLaunchInfo.Name << " on host device";
     return OFFLOAD_FAIL;
