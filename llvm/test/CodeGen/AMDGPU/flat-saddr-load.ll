@@ -4352,7 +4352,7 @@ define amdgpu_ps float @atomic_flat_load_saddr_i32(ptr inreg %sbase, i32 %voffse
 ; GFX1250-NOECC-NEXT:    v_add_nc_u64_e32 v[0:1], s[2:3], v[0:1]
 ; GFX1250-NOECC-NEXT:    flat_load_b32 v0, v[0:1] scope:SCOPE_SYS
 ; GFX1250-NOECC-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX1250-NOECC-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NOECC-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NOECC-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NOECC-NEXT:    ; return to shader part epilog
   %zext.offset = zext i32 %voffset to i64
@@ -4405,7 +4405,7 @@ define amdgpu_ps float @atomic_flat_load_saddr_i32_immneg128(ptr inreg %sbase, i
 ; GFX1250-NOECC-NEXT:    v_add_nc_u64_e32 v[0:1], s[2:3], v[0:1]
 ; GFX1250-NOECC-NEXT:    flat_load_b32 v0, v[0:1] offset:-128 scope:SCOPE_SYS
 ; GFX1250-NOECC-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX1250-NOECC-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NOECC-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NOECC-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NOECC-NEXT:    ; return to shader part epilog
   %zext.offset = zext i32 %voffset to i64
@@ -4459,7 +4459,7 @@ define amdgpu_ps <2 x float> @atomic_flat_load_saddr_i64(ptr inreg %sbase, i32 %
 ; GFX1250-NOECC-NEXT:    v_add_nc_u64_e32 v[0:1], s[2:3], v[0:1]
 ; GFX1250-NOECC-NEXT:    flat_load_b64 v[0:1], v[0:1] scope:SCOPE_SYS
 ; GFX1250-NOECC-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX1250-NOECC-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NOECC-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NOECC-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NOECC-NEXT:    ; return to shader part epilog
   %zext.offset = zext i32 %voffset to i64
@@ -4512,7 +4512,7 @@ define amdgpu_ps <2 x float> @atomic_flat_load_saddr_i64_immneg128(ptr inreg %sb
 ; GFX1250-NOECC-NEXT:    v_add_nc_u64_e32 v[0:1], s[2:3], v[0:1]
 ; GFX1250-NOECC-NEXT:    flat_load_b64 v[0:1], v[0:1] offset:-128 scope:SCOPE_SYS
 ; GFX1250-NOECC-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX1250-NOECC-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NOECC-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NOECC-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NOECC-NEXT:    ; return to shader part epilog
   %zext.offset = zext i32 %voffset to i64
