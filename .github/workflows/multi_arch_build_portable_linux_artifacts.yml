@@ -143,7 +143,7 @@ jobs:
 
       - name: Carry temporary assertion patches for nightly
         if: ${{ env.LLVM_ASSERTIONS == '1' }}
-        uses: ./.github/actions/rock-ci-deps/nightly-assert-fix@amd/dev/kirthana14m/assertions-on-nightly # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/nightly-assert-fix@amd/dev/kirthana14m/assertions-on-nightly # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
 
       - name: Fetch sources
         timeout-minutes: 30
