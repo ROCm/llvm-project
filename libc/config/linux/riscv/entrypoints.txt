@@ -552,6 +552,7 @@ set(TARGET_LIBC_ENTRYPOINTS
 
     # wchar.h entrypoints
     libc.src.wchar.btowc
+    libc.src.wchar.swprintf
     libc.src.wchar.wcslen
     libc.src.wchar.wcsnlen
     libc.src.wchar.wctob
@@ -1152,6 +1153,7 @@ list(APPEND TARGET_LIBM_ENTRYPOINTS
   # bfloat16 entrypoints
   libc.src.math.atanbf16
   libc.src.math.acosbf16
+  libc.src.math.acoshbf16
   libc.src.math.asinbf16
   libc.src.math.bf16add
   libc.src.math.bf16addf
@@ -1798,9 +1800,6 @@ if(LLVM_LIBC_ENABLE_EXPERIMENTAL_ENTRYPOINTS)
       libc.src.unistd.setresuid
       libc.src.unistd.setreuid
       libc.src.unistd.setuid
-
-      # wchar.h entrypoints
-      libc.src.wchar.swprintf
     )
   endif()
 endif()

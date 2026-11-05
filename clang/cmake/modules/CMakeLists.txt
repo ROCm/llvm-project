@@ -23,7 +23,9 @@ else()
 endif()
 
 get_property(CLANG_EXPORTS GLOBAL PROPERTY CLANG_EXPORTS)
-export(TARGETS ${CLANG_EXPORTS} FILE ${clang_cmake_builddir}/ClangTargets.cmake)
+if(NOT "clang" IN_LIST LLVM_DEPENDENCY_ONLY_PROJECTS)
+  export(TARGETS ${CLANG_EXPORTS} FILE ${clang_cmake_builddir}/ClangTargets.cmake)
+endif()
 
 # ClangIR links MLIR. How that dependency reaches a find_package(Clang)
 # consumer depends on how MLIR was enabled in this build:
@@ -119,7 +121,8 @@ configure_file(
 set(CLANG_CONFIG_CODE)
 set(CLANG_CONFIG_CMAKE_DIR)
 
-if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY AND
+    NOT "clang" IN_LIST LLVM_DEPENDENCY_ONLY_PROJECTS)
   install_distribution_exports(Clang)
 
   install(FILES

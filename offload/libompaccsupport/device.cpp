@@ -18,6 +18,7 @@
 #include "OpenMP/OMPT/Interface.h"
 #include "OpenMP/OMPT/OmptCommonDefs.h"
 #include "OpenMP/OMPT/OmptTracing.h"
+#include "OpenMP/omp.h"
 #include "PluginManager.h"
 #ifdef OMPT_SUPPORT
 // Downstream: provides 'ompt::lookupDeviceTracingFn' and the device pointer to
@@ -395,9 +396,6 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
     return ProgramOrErr.takeError();
   ProgramTy Program = std::move(*ProgramOrErr);
 
-  // Dispatch this before the fast-reduction probe below: that probe is a
-  // downstream addition and its device-to-host read would otherwise be
-  // reported to the tool ahead of the load of the image it reads from.
   OMPT_IF_BUILT_AND_INITIALIZED({
     auto &Image = *llvm::offload::tmp::__ol_tgt_GetDeviceImageFromProgram(
         Program.getHandle());
@@ -406,21 +404,6 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
                         Image.getSize(), const_cast<void *>(Image.getStart()),
                         /*DeviceAddr=*/nullptr, /*ModuleId=*/0);
   });
-
-  AsyncInfoTy AsyncInfo(*this);
-  // From the image, read whether fast reduction is enabled (optional symbol).
-  auto IsFastReductionEnabledPtrOrErr = getAndRecordGlobalAddress(
-      Program, "__omp_plugin_enable_fast_reduction", sizeof(int8_t));
-  if (!IsFastReductionEnabledPtrOrErr) {
-    llvm::consumeError(IsFastReductionEnabledPtrOrErr.takeError());
-  } else {
-    int8_t IsFastReductionEnabled;
-    if (!retrieveData(&IsFastReductionEnabled, *IsFastReductionEnabledPtrOrErr,
-                      sizeof(int8_t), AsyncInfo) &&
-        !synchronize(AsyncInfo))
-      RTL->getDevice(RTLDeviceID)
-          .setIsFastReductionEnabled(IsFastReductionEnabled);
-  }
 
   // This symbol is optional.
   auto DeviceEnvironmentPtrOrErr = getAndRecordGlobalAddress(
@@ -1003,24 +986,12 @@ static uint32_t getEffectiveNumThreads(const DeviceGeometryPropsTy &Props,
   assert(!KernelEnv.isBareMode() &&
          "bare kernel should not call this function");
 
-  if (UserThreadLimit > 0 && KernelEnv.isGenericMode()) {
-    // Downstream: a thread limit of -1 requests the preferred number of
-    // threads.
-    if (UserThreadLimit == (uint32_t)-1)
-      UserThreadLimit = KernelEnv.PreferredNumThreads;
-    else
-      UserThreadLimit += Props.WarpSize;
-  }
+  if (UserThreadLimit > 0 && KernelEnv.isGenericMode())
+    UserThreadLimit += Props.WarpSize;
 
   return std::min(KernelEnv.MaxNumThreads, (UserThreadLimit > 0)
                                                ? UserThreadLimit
                                                : KernelEnv.PreferredNumThreads);
-}
-
-/// Get the number of teams the user set with OMP_NUM_TEAMS, or zero.
-static uint32_t getOMPNumTeams() {
-  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
-  return OMP_NumTeams > 0 ? uint32_t(OMP_NumTeams) : 0;
 }
 
 /// Get the maximum number of blocks the device can launch for a kernel using
@@ -1028,13 +999,15 @@ static uint32_t getOMPNumTeams() {
 /// user set it.
 static uint32_t getDeviceBlockLimit(const DeviceGeometryPropsTy &Props,
                                     uint32_t NumThreads) {
+  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
+
   uint32_t BlockLimit = Props.MaxNumBlocks;
   // Some devices limit the total number of threads of a launch, which makes
   // the block limit depend on the thread count.
   if (Props.MaxGridSize && NumThreads > 0)
     BlockLimit = std::min<uint64_t>(BlockLimit, Props.MaxGridSize / NumThreads);
-  if (uint32_t NumTeams = getOMPNumTeams())
-    return std::min(BlockLimit, NumTeams);
+  if (OMP_NumTeams > 0)
+    return std::min(BlockLimit, uint32_t(OMP_NumTeams));
   return BlockLimit;
 }
 
