@@ -18,6 +18,7 @@
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/MC/MCStreamer.h"
+#include "llvm/Target/CGPassBuilderOption.h"
 #include <optional>
 #include <utility>
 
@@ -101,6 +102,8 @@ public:
   TargetTransformInfo getTargetTransformInfo(const Function &F) const override;
 
   bool useIPRA() const override { return true; }
+
+  bool shouldDefaultToNewPM() const override { return true; }
 
   Error buildCodeGenPipeline(ModulePassManager &MPM, ModuleAnalysisManager &MAM,
                              raw_pwrite_stream &Out, raw_pwrite_stream *DwoOut,

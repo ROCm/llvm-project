@@ -454,6 +454,8 @@ struct CodegenConfig {
   std::function<void(legacy::PassManager &)> PreCodeGenPassesHook;
   std::string SplitDwarfFile;
   std::string SplitDwarfOutput;
+  bool DebugPassManager;
+  bool VerifyEach;
   CodegenConfig(const Config &Conf) : Conf(Conf) {
     CGFileType           = Conf.CGFileType;
     DwoDir               = Conf.DwoDir;
@@ -461,6 +463,8 @@ struct CodegenConfig {
     PreCodeGenPassesHook = Conf.PreCodeGenPassesHook;
     SplitDwarfFile       = Conf.SplitDwarfFile;
     SplitDwarfOutput     = Conf.SplitDwarfOutput;
+    DebugPassManager = Conf.DebugPassManager;
+    VerifyEach = Conf.VerifyEach;
   }
 };
 static void codegen(const CodegenConfig &Conf, TargetMachine *TM,

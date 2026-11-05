@@ -1,10 +1,10 @@
-; RUN: llc -mtriple=amdgpu6.00 -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX6 %s
-; RUN: llc -mtriple=amdgpu8.03 -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
-; RUN: llc -mtriple=amdgpu10.10 -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
-; RUN: llc -mtriple=amdgpu11.00 -amdgpu-enable-vopd=0 -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
+; RUN: llc -mtriple=amdgpu6.00 -stop-after=amdgpu-isel < %s | FileCheck -check-prefixes=GCN,GFX6 %s
+; RUN: llc -mtriple=amdgpu8.03 -stop-after=amdgpu-isel < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
+; RUN: llc -mtriple=amdgpu10.10 -stop-after=amdgpu-isel < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
+; RUN: llc -mtriple=amdgpu11.00 -amdgpu-enable-vopd=0 -stop-after=amdgpu-isel < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
 
 ; GCN-LABEL: name:            s_shl_i32
-; GCN: S_LSHL_B32
+; GCN: = S_LSHL_B32
 define amdgpu_kernel void @s_shl_i32(ptr addrspace(1) %out, i32 %lhs, i32 %rhs) {
   %result = shl i32 %lhs, %rhs
   store i32 %result, ptr addrspace(1) %out
@@ -12,8 +12,7 @@ define amdgpu_kernel void @s_shl_i32(ptr addrspace(1) %out, i32 %lhs, i32 %rhs) 
 }
 
 ; GCN-LABEL: name:            v_shl_i32
-; GFX6: V_LSHL_B32_e32
-; GFX8PLUS: V_LSHLREV_B32_e32
+; GCN: = V_LSHLREV_B32_e64
 define amdgpu_kernel void @v_shl_i32(ptr addrspace(1) %out, ptr addrspace(1) %in) {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %b_ptr = getelementptr i32, ptr addrspace(1) %in, i32 %tid
@@ -25,7 +24,7 @@ define amdgpu_kernel void @v_shl_i32(ptr addrspace(1) %out, ptr addrspace(1) %in
 }
 
 ; GCN-LABEL: name:            s_lshr_i32
-; GCN: S_LSHR_B32
+; GCN: = S_LSHR_B32
 define amdgpu_kernel void @s_lshr_i32(ptr addrspace(1) %out, i32 %lhs, i32 %rhs) {
   %result = lshr i32 %lhs, %rhs
   store i32 %result, ptr addrspace(1) %out
@@ -33,8 +32,7 @@ define amdgpu_kernel void @s_lshr_i32(ptr addrspace(1) %out, i32 %lhs, i32 %rhs)
 }
 
 ; GCN-LABEL: name:            v_lshr_i32
-; GFX6: V_LSHR_B32_e32
-; GFX8PLUS: V_LSHRREV_B32_e64
+; GCN: = V_LSHRREV_B32_e64
 define amdgpu_kernel void @v_lshr_i32(ptr addrspace(1) %out, ptr addrspace(1) %in) {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %b_ptr = getelementptr i32, ptr addrspace(1) %in, i32 %tid
@@ -46,7 +44,7 @@ define amdgpu_kernel void @v_lshr_i32(ptr addrspace(1) %out, ptr addrspace(1) %i
 }
 
 ; GCN-LABEL: name:            s_ashr_i32
-; GCN: S_ASHR_I32
+; GCN: = S_ASHR_I32
 define amdgpu_kernel void @s_ashr_i32(ptr addrspace(1) %out, i32 %lhs, i32 %rhs) #0 {
   %result = ashr i32 %lhs, %rhs
   store i32 %result, ptr addrspace(1) %out
@@ -54,8 +52,7 @@ define amdgpu_kernel void @s_ashr_i32(ptr addrspace(1) %out, i32 %lhs, i32 %rhs)
 }
 
 ; GCN-LABEL: name:            v_ashr_i32
-; GFX6: V_ASHR_I32_e32
-; GFX8PLUS: V_ASHRREV_I32_e64
+; GCN: = V_ASHRREV_I32_e64
 define amdgpu_kernel void @v_ashr_i32(ptr addrspace(1) %out, ptr addrspace(1) %in) {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %b_ptr = getelementptr i32, ptr addrspace(1) %in, i32 %tid
@@ -67,7 +64,7 @@ define amdgpu_kernel void @v_ashr_i32(ptr addrspace(1) %out, ptr addrspace(1) %i
 }
 
 ; GCN-LABEL: name:            s_shl_i64
-; GCN: S_LSHL_B64
+; GCN: = S_LSHL_B64
 define amdgpu_kernel void @s_shl_i64(ptr addrspace(1) %out, i64 %lhs, i64 %rhs) {
   %result = shl i64 %lhs, %rhs
   store i64 %result, ptr addrspace(1) %out
@@ -75,8 +72,8 @@ define amdgpu_kernel void @s_shl_i64(ptr addrspace(1) %out, i64 %lhs, i64 %rhs) 
 }
 
 ; GCN-LABEL: name:            v_shl_i64
-; GFX6: V_LSHL_B64
-; GFX8PLUS: V_LSHLREV_B64
+; GFX6: = V_LSHL_B64_e64
+; GFX8PLUS: = V_LSHLREV_B64_e64
 define amdgpu_kernel void @v_shl_i64(ptr addrspace(1) %out, ptr addrspace(1) %in) {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %idx = zext i32 %tid to i64
@@ -89,7 +86,7 @@ define amdgpu_kernel void @v_shl_i64(ptr addrspace(1) %out, ptr addrspace(1) %in
 }
 
 ; GCN-LABEL: name:            s_lshr_i64
-; GCN: S_LSHR_B64
+; GCN: = S_LSHR_B64
 define amdgpu_kernel void @s_lshr_i64(ptr addrspace(1) %out, i64 %lhs, i64 %rhs) {
   %result = lshr i64 %lhs, %rhs
   store i64 %result, ptr addrspace(1) %out
@@ -97,8 +94,8 @@ define amdgpu_kernel void @s_lshr_i64(ptr addrspace(1) %out, i64 %lhs, i64 %rhs)
 }
 
 ; GCN-LABEL: name:            v_lshr_i64
-; GFX6: V_LSHR_B64
-; GFX8PLUS: V_LSHRREV_B64
+; GFX6: = V_LSHR_B64_e64
+; GFX8PLUS: = V_LSHRREV_B64_e64
 define amdgpu_kernel void @v_lshr_i64(ptr addrspace(1) %out, ptr addrspace(1) %in) {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %idx = zext i32 %tid to i64
@@ -111,7 +108,7 @@ define amdgpu_kernel void @v_lshr_i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 }
 
 ; GCN-LABEL: name:            s_ashr_i64
-; GCN: S_ASHR_I64
+; GCN: = S_ASHR_I64
 define amdgpu_kernel void @s_ashr_i64(ptr addrspace(1) %out, i64 %lhs, i64 %rhs) {
   %result = ashr i64 %lhs, %rhs
   store i64 %result, ptr addrspace(1) %out
@@ -119,8 +116,8 @@ define amdgpu_kernel void @s_ashr_i64(ptr addrspace(1) %out, i64 %lhs, i64 %rhs)
 }
 
 ; GCN-LABEL: name:            v_ashr_i64
-; GFX6: V_ASHR_I64
-; GFX8PLUS: V_ASHRREV_I64
+; GFX6: = V_ASHR_I64_e64
+; GFX8PLUS: = V_ASHRREV_I64_e64
 define amdgpu_kernel void @v_ashr_i64(ptr addrspace(1) %out, ptr addrspace(1) %in) {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %idx = zext i32 %tid to i64

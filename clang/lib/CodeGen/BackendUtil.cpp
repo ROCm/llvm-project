@@ -1293,9 +1293,8 @@ void EmitAssemblyHelper::RunCodegenPipeline(
     Config.DebugPassManager = CodeGenOpts.DebugPassManager;
     Config.VerifyEach = CodeGenOpts.VerifyEach;
     Config.VFS = CI.getVirtualFileSystemPtr();
-    Error CodeGenError =
-        runCodeGenPipeline(*TM, *TheModule, *OS,
-                           DwoOS ? &DwoOS->os() : nullptr, CGFT, Config);
+    Error CodeGenError = runCodeGenPipeline(
+        *TM, *TheModule, *OS, DwoOS ? &DwoOS->os() : nullptr, CGFT, Config);
     if (CodeGenError)
       Diags.Report(diag::err_fe_unable_to_interface_with_target);
   });
