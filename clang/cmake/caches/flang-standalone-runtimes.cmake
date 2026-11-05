@@ -1,5 +1,5 @@
 # Cache for the Flang-standalone runtimes ExternalProject (-S runtimes).
-# Builds flang-rt (intrinsic .mod files) + OpenMP Fortran modules only.
+# Builds flang-rt libraries + intrinsic .mod files, and OpenMP Fortran modules.
 
 set(LLVM_ENABLE_RUNTIMES "flang-rt;openmp" CACHE STRING "")
 set(LIBOMP_FORTRAN_MODULES_ONLY ON CACHE BOOL
