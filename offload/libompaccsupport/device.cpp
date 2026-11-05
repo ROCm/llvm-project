@@ -18,6 +18,7 @@
 #include "OpenMP/OMPT/Interface.h"
 #include "OpenMP/OMPT/OmptCommonDefs.h"
 #include "OpenMP/OMPT/OmptTracing.h"
+#include "OpenMP/omp.h"
 #include "PluginManager.h"
 #ifdef OMPT_SUPPORT
 // Downstream: provides 'ompt::lookupDeviceTracingFn' and the device pointer to
