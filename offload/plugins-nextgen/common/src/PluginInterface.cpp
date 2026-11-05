@@ -1324,6 +1324,7 @@ int32_t GenericPluginTy::initialize_record_replay(
   }
   return OFFLOAD_SUCCESS;
 }
+<<<<<<< HEAD
 
 #if 0//<<<<<<< HEAD
 int32_t GenericPluginTy::create_event(int32_t DeviceId, void **EventPtr) {
@@ -1575,3 +1576,5 @@ int32_t GenericPluginTy::async_barrier(omp_interop_val_t *Interop) {
   }
   return OFFLOAD_SUCCESS;
 }
+=======
+>>>>>>> 4fb83151289b
