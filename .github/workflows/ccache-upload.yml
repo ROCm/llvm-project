@@ -1,0 +1,257 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Reusable Workflow: Build Compiler ccache and store to S3
+#
+# This workflow builds TheRock stage artifacts for all stages.
+# Handles both generic stages (compiler-runtime, profiler-apps, etc.) and
+# per-arch stages (math-libs, comm-libs) using conditional logic.
+#
+# Artifacts flow between stages via S3 using the artifact_manager.py tool.
+#
+# TODO: When kpack splitting is permanently enabled, change fetch commands to use
+# --generic-only instead of --amdgpu-families for efficiency. Subsequent build
+# stages only need generic (host) artifacts; device-specific kpacks are not
+# needed until final packaging.
+
+name: Build Compiler and Push ccache to S3
+
+on:
+  push:
+    branches:
+      - amd-staging
+      - amd/dev/amd-ssuchkov/ccache-changes
+
+  workflow_dispatch:
+    inputs:
+      stage_name:
+        type: string
+        required: false
+        default: "compiler-runtime"
+        description: "Stage name (e.g., compiler-runtime, math-libs)"
+      stage_display_name:
+        type: string
+        required: false
+        default: "Build Compiler & Push ccache"
+        description: "Human-readable display name for the job"
+      timeout_minutes:
+        type: number
+        required: false
+        default: 60
+        description: "Job timeout in minutes"
+      amdgpu_family:
+        type: string
+        required: false
+        default: ""
+        description: "GPU family for per-arch stages (empty for generic stages)"
+      dist_amdgpu_families:
+        type: string
+        required: false
+        default: "gfx94X-dcgpu;gfx110X-all;gfx90a;gfx125X-dcgpu"
+        description: "Semicolon-separated list of all GPU families for dist targets"
+      rocm_package_version:
+        type: string
+        required: false
+        default: "ADHOCBUILD"
+        description: "ROCm package version string"
+      build_variant_cmake_preset:
+        type: string
+        required: false
+        default: ""
+        description: "CMake preset name for this build variant (optional)"
+      release_type:
+        description: 'Release type; controls artifact bucket and IAM role'
+        type: string
+        default: ci
+      build_runs_on:
+        description: "Build runner label"
+        type: string
+        default: "aws-linux-scale-rocm-large"
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+        default: "ROCm/TheRock"
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to compiler/amd-staging."
+        type: string
+        default: "main"
+      extra_cmake_options:
+        description: "Extra CMake options when test_type == 'full'"
+        type: string
+        default: ""
+
+jobs:
+  build_stage:
+    name: ${{ inputs.stage_display_name || 'Build Compiler & Push ccache' }}
+    runs-on: ${{ inputs.build_runs_on || 'aws-linux-scale-rocm-large' }}
+    timeout-minutes: ${{ inputs.timeout_minutes && fromJSON(inputs.timeout_minutes) || 60 }}
+    permissions:
+      id-token: write
+    container:
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
+      options: -v /runner/config:/home/awsconfig/
+    env:
+      AWS_SHARED_CREDENTIALS_FILE: /home/awsconfig/credentials.ini
+      STAGE_NAME: ${{ inputs.stage_name || 'compiler-runtime' }}
+      AMDGPU_FAMILIES: ${{ inputs.amdgpu_family || '' }}
+      DIST_AMDGPU_FAMILIES: ${{ inputs.dist_amdgpu_families || 'gfx94X-dcgpu;gfx110X-all;gfx90a;gfx125X-dcgpu' }}
+      ROCM_PACKAGE_VERSION: ${{ inputs.rocm_package_version || 'ADHOCBUILD' }}
+      BUILD_DIR: build
+      CCACHE_CONFIGPATH: ${{ github.workspace }}/.ccache/ccache.conf
+      CACHE_DIR: ${{ github.workspace }}/.container-cache
+      TEATIME_FORCE_INTERACTIVE: 0
+      RELEASE_TYPE: ${{ inputs.release_type || 'ci' }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          repository: ${{ inputs.repository || 'ROCm/TheRock' }}
+          ref: ${{ inputs.ref || 'main' }}
+
+      - name: Submodule PR update (covers parameterised and PR creation)
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
+ 
+      - name: Install python deps
+        run: pip install -r requirements.txt
+
+      - name: Adjust git config
+        run: |
+          git config --global --add safe.directory $PWD
+          git config fetch.parallel 10
+
+      - name: Setup ccache
+        run: |
+          ./build_tools/setup_ccache.py \
+            --release-type "${RELEASE_TYPE}" \
+            --dir "$(dirname $CCACHE_CONFIGPATH)" \
+            --local-path "$CACHE_DIR/ccache"
+          ccache --set-config cache_dir="$CACHE_DIR/ccache"
+          ccache --set-config log_file="$(dirname "$CCACHE_CONFIGPATH")/ccache.log"
+          ccache --set-config remote_storage=""
+          ccache --set-config max_size=20G
+          ccache --set-config compression=false
+          ccache --set-config file_clone=true
+          ccache --set-config base_dir="${GITHUB_WORKSPACE}"
+          ccache --set-config hash_dir=false
+          ccache --set-config direct_mode=true
+          ccache --set-config sloppiness="include_file_ctime,time_macros"
+          # ccache --set-config sloppiness="pch_defines,time_macros,include_file_mtime,include_file_ctime,locale"
+          # ccache --set-config compiler_check="%compiler% -dumpversion"
+          ccache --set-config compiler_check=content
+          ccache --set-config ignore_options="-DCLANG_REPOSITORY_STRING=* -DLLVM_LIT_ARGS=*"
+          ccache --zero-stats
+          ccache --show-config
+          echo "CCACHE_REMOTE_STORAGE=" >> $GITHUB_ENV
+
+
+      - name: Runner health status
+        run: |
+          ./build_tools/health_status.py
+
+      # Note: no AWS credentials should be needed here since our CI buckets
+      # all currently have public read access.
+      - name: Fetch inbound artifacts
+        run: |
+          python build_tools/artifact_manager.py fetch \
+            --run-id=${{ github.run_id }} \
+            --stage="${STAGE_NAME}" \
+            --amdgpu-families="${AMDGPU_FAMILIES}" \
+            --output-dir="${BUILD_DIR}" \
+            --bootstrap    
+
+      - name: Fetch sources
+        timeout-minutes: 30
+        run: |
+          # Set to amd-staging latest  
+          LATEST=$(git ls-remote https://github.com/ROCm/llvm-project.git refs/heads/amd-staging | awk '{print $1}')
+          git update-index --cacheinfo 160000,"$LATEST",compiler/amd-llvm
+          git submodule status compiler/amd-llvm
+          
+          commit_log=$(./build_tools/fetch_sources.py --stage "${STAGE_NAME}" --jobs 12 --depth 1)
+          echo "$commit_log" | awk -F"'" '/Submodule path/ {
+            n = split($2, a, "/")
+            print a[n], $4
+          }' > submodule-commit-${STAGE_NAME}.txt          
+
+      - name: build prep (patches & hotfixes for CK, tests)
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd-staging # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
+        with:
+          test_type: ${{ inputs.test_type }}
+          stage_name: ${{ inputs.stage_name }}
+
+      - name: Get stage configuration
+        id: stage_config
+        run: |
+          python build_tools/configure_stage.py \
+            --stage="${STAGE_NAME}" \
+            --amdgpu-families="${AMDGPU_FAMILIES}" \
+            --dist-amdgpu-families="${DIST_AMDGPU_FAMILIES}" \
+            --manylinux \
+            --gha-output
+
+      - name: Install stage python deps
+        if: ${{ steps.stage_config.outputs.pip_install_cmd }}
+        run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
+          
+      - name: Configure Project
+        env:
+          cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+          amdgpu_families: ${{ env.AMDGPU_FAMILIES }}
+          package_version: ${{ env.ROCM_PACKAGE_VERSION }}
+          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_HIPTENSOR=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON -DLLVM_SMREV_REPO='ROCm' -DLLVM_SMREV_REVISION='ci-static'"
+          BUILD_DIR: build
+        run: |
+          cmake -B "${BUILD_DIR}" -S . -GNinja \
+            -DTHEROCK_PACKAGE_VERSION=${ROCM_PACKAGE_VERSION} \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_HIP_COMPILER_LAUNCHER=ccache \
+            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
+            ${{ steps.stage_config.outputs.cmake_args }} \
+            ${{ env.extra_cmake_options }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::317668459450:role/therock-aig-sharks-compiler-ci-s3-oidc
+          role-duration-seconds: 1800
+          
+      - name: Build stage
+        run: |
+          # check all sha
+          echo "TheRock: $(git rev-parse HEAD)"
+          for p in base/half base/rocm-cmake compiler/amd-llvm compiler/hipify compiler/spirv-llvm-translator rocm-systems; do
+            printf '%-32s %s\n' "$p" "$(git -C "$p" rev-parse HEAD 2>/dev/null || echo MISSING)"
+          done
+          git -C compiler/amd-llvm status --short | head -20   # shows patched or modified files
+          
+          cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+
+      - name: Show ccache stats for build
+        run: |
+          echo "========================================="
+          echo "ccache Stats (Build Step Only)"
+          echo "========================================="
+          ccache --show-stats -v
+
+      - name: Create ccache archive and push to S3
+        env:
+          S3_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
+        run: |
+          LOCAL_CACHE="$(ccache --get-config cache_dir)"
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          ARCHIVE_NAME="ccache_llvm_project_latest.tar"
+          
+          echo "CCACHE FOLDER SIZE: $(du -sh ${LOCAL_CACHE})"
+          echo "Using gz compression"
+          tar -cf "/tmp/${ARCHIVE_NAME}" \
+            --exclude='*.tmp' \
+            --exclude='*.lock' \
+            --exclude='ccache/tmp' \
+            -C "$(dirname $LOCAL_CACHE)" \
+            "$(basename $LOCAL_CACHE)"
+          
+          echo "upload to s3"
+          aws s3 cp /tmp/${ARCHIVE_NAME} s3://${S3_BUCKET}/amd-staging/ccache/${ARCHIVE_NAME} \
+              --quiet
