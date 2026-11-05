@@ -16282,7 +16282,7 @@ StmtResult SemaOpenMP::ActOnOpenMPTileDirective(ArrayRef<OMPClause *> Clauses,
     //   (TS <= 0) ? 1 : TS
     // \endcode
     QualType DimTy = DimTileSizeExpr->getType();
-    uint64_t DimWidth = Context.getTypeSize(DimTy);
+    unsigned DimWidth = Context.getIntWidth(DimTy);
     IntegerLiteral *Zero = IntegerLiteral::Create(
         Context, llvm::APInt::getZero(DimWidth), DimTy, {});
     IntegerLiteral *One =
@@ -16640,7 +16640,7 @@ StmtResult SemaOpenMP::ActOnOpenMPStripeDirective(ArrayRef<OMPClause *> Clauses,
     //   (TS <= 0) ? 1 : TS
     // \endcode
     QualType DimTy = DimStripeSizeExpr->getType();
-    uint64_t DimWidth = Context.getTypeSize(DimTy);
+    unsigned DimWidth = Context.getIntWidth(DimTy);
     IntegerLiteral *Zero = IntegerLiteral::Create(
         Context, llvm::APInt::getZero(DimWidth), DimTy, {});
     IntegerLiteral *One =
