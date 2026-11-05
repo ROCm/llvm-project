@@ -69,5 +69,6 @@ exclude_dirs:
   - llvm/utils/lit/lit/util.py
   - llvm/utils/sysroot.py
   - llvm/utils/update_llubi_test_checks.py
+  - llvm/utils/update_mc_test_checks.py
   - llvm/utils/update_mir_test_checks.py
   - llvm/utils/update_test_prefix.py
