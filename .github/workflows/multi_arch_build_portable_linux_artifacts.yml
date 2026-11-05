@@ -80,7 +80,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
       options: -v /runner/config:/home/awsconfig/
     env:
       AWS_SHARED_CREDENTIALS_FILE: /home/awsconfig/credentials.ini
@@ -140,39 +140,10 @@ jobs:
             --amdgpu-families="${{ inputs.amdgpu_family }}" \
             --output-dir="${BUILD_DIR}" \
             --bootstrap
- 
-      # Temp fix for the assertion on - this needs to be removed once the merge happens
-      - name: Carry wave32 EXEC CFI patch - temp for assertion on (TheRock #6102)
-        if: ${{ env.LLVM_ASSERTIONS == '1' }}
-        run: |
-          set -x
-          git config --global --add safe.directory "$PWD"
-          mkdir -p patches/amd-mainline/llvm-project
-          git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git \
-            d9189b378f8fdc2525acaf6975deee29538ba48d
-          git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
-            > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
- 
-      - name: Carry ObjectYAML VERS part size fix - temp for assertion on (llvm/llvm-project 221137)
-        if: ${{ env.LLVM_ASSERTIONS == '1' }}
-        run: |
-          set -x
-          git config --global --add safe.directory "$PWD"
-          mkdir -p patches/amd-mainline/llvm-project
-          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
-            refs/pull/221137/head
-          git format-patch -1 --stdout FETCH_HEAD \
-            > patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
 
-      - name: Carry mlir-pdll-lsp-server link fix - temp for assertion on (llvm/llvm-project 220123)
+      - name: Carry temporary assertion patches for nightly
         if: ${{ env.LLVM_ASSERTIONS == '1' }}
-        run: |
-          set -x
-          git config --global --add safe.directory "$PWD"
-          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
-            14cdf0c5f29976d682b51fdfb6038ed67acca82b
-          git format-patch -1 --stdout FETCH_HEAD \
-            > patches/amd-mainline/llvm-project/0003-mlir-pdll-lsp-server-link.patch
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/nightly-assert-fix@amd-staging # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
 
       - name: Fetch sources
         timeout-minutes: 30
@@ -239,9 +210,26 @@ jobs:
            ${{ steps.stage_config.outputs.cmake_args }} \
            ${{ env.extra_cmake_options }}
 
+      - name: Reset ccache stats for clean measurement
+        run: |
+          ccache --zero-stats
+          echo "ccache remote_only: $(ccache --get-config remote_only)"
+
       - name: Build stage
         run: |
           cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+
+      - name: Show ccache stats for build
+        if: always()
+        run: |
+          echo "========================================="
+          echo "CCache Stats (Build Step Only)"
+          echo "========================================="
+          ccache --show-stats
+          
+          echo ""
+          echo "Key metrics:"
+          ccache --show-stats | grep -E "Cacheable calls|cache hits|Cache misses|hit rate"
 
       - name: Generate failed log summaries
         if: ${{ !cancelled() }}
