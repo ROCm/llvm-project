@@ -18196,7 +18196,8 @@ the instruction in the code sequence that references the table.
 
                                                          3. ``global_inv``
 
-                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+                                                             use ``scope:SCOPE_SE`` if MTYPE NC is not used.
                                                            - Must happen before
                                                              any following
                                                              global/generic
@@ -18259,7 +18260,8 @@ the instruction in the code sequence that references the table.
 
                                                          3. ``global_inv``
 
-                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+                                                             use ``scope:SCOPE_SE`` if MTYPE NC is not used.
                                                            - Must happen before
                                                              any following
                                                              global/generic
@@ -18404,7 +18406,8 @@ the instruction in the code sequence that references the table.
 
                                                          4. ``global_inv``
 
-                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+                                                             use ``scope:SCOPE_SE`` if MTYPE NC is not used.
                                                            - Must happen before
                                                              any following
                                                              global/generic
@@ -18488,7 +18491,8 @@ the instruction in the code sequence that references the table.
 
                                                          4. ``global_inv``
 
-                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+                                                             use ``scope:SCOPE_SE`` if MTYPE NC is not used.
                                                            - Must happen before
                                                              any following
                                                              global/generic
@@ -18712,7 +18716,8 @@ the instruction in the code sequence that references the table.
 
                                                          2. ``global_inv``
 
-                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+                                                             use ``scope:SCOPE_SE`` if MTYPE NC is not used.
                                                            - Ensures that
                                                              following
                                                              loads will not see
@@ -18842,10 +18847,12 @@ the instruction in the code sequence that references the table.
                                                              completed before
                                                              their data is written
                                                              back.
+                                                             - Omit if ``global_wb`` is omitted.
 
                                                          2. ``global_wb``
 
                                                              - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                             - Omit if MTYPE NC is not used.
 
                                                          3. | ``s_wait_storecnt 0x0``
                                                             | ``s_wait_loadcnt 0x0``
@@ -19013,10 +19020,12 @@ the instruction in the code sequence that references the table.
                                                              completed before
                                                              their data is written
                                                              back.
+                                                             - Omit if ``global_wb`` is omitted.
 
                                                          2. ``global_wb``
 
                                                            - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Omit if MTYPE NC is not used.
 
                                                          3. | ``s_wait_storecnt 0x0``
                                                             | ``s_wait_loadcnt 0x0``
@@ -19152,10 +19161,12 @@ the instruction in the code sequence that references the table.
                                                              completed before
                                                              their data is written
                                                              back.
+                                                             - Omit if ``global_wb`` is omitted.
 
                                                          2. ``global_wb``
 
                                                            - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Omit if MTYPE NC is not used.
 
                                                          3. | ``s_wait_storecnt 0x0``
                                                             | ``s_wait_loadcnt 0x0``
@@ -19429,10 +19440,12 @@ the instruction in the code sequence that references the table.
                                                              completed before
                                                              their data is written
                                                              back.
+                                                             - Omit if ``global_wb`` is omitted.
 
                                                          2. ``global_wb``
 
                                                            - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Omit if MTYPE NC is not used.
 
                                                          3. | ``s_wait_storecnt 0x0``
                                                             | ``s_wait_loadcnt 0x0``
@@ -19498,7 +19511,8 @@ the instruction in the code sequence that references the table.
 
                                                          7. ``global_inv``
 
-                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+                                                             use ``scope:SCOPE_SE`` if MTYPE NC is not used.
                                                            - Must happen before
                                                              any following
                                                              global/generic
@@ -19543,9 +19557,11 @@ the instruction in the code sequence that references the table.
                                                              completed before
                                                              their data is written
                                                              back.
+                                                             - Omit if ``global_wb`` is omitted.
 
                                                          2. ``global_wb``
                                                              - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                             - Omit if MTYPE NC is not used.
 
                                                          3. | ``s_wait_storecnt 0x0``
                                                             | ``s_wait_loadcnt 0x0``
@@ -19615,7 +19631,8 @@ the instruction in the code sequence that references the table.
 
                                                          7. ``global_inv``
 
-                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+                                                             use ``scope:SCOPE_SE`` if MTYPE NC is not used.
                                                            - Must happen before
                                                              any following
                                                              global/generic
@@ -19762,9 +19779,11 @@ the instruction in the code sequence that references the table.
                                                              completed before
                                                              their data is written
                                                              back.
+                                                             - Omit if ``global_wb`` is omitted.
 
                                                          2. ``global_wb``
                                                              - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                             - Omit if MTYPE NC is not used.
 
                                                          3. | ``s_wait_storecnt 0x0``
                                                             | ``s_wait_loadcnt 0x0``
@@ -19844,7 +19863,8 @@ the instruction in the code sequence that references the table.
 
                                                          4. ``global_inv``
 
-                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+                                                           - Apply :ref:`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+                                                             use ``scope:SCOPE_SE`` if MTYPE NC is not used.
                                                            - Must happen before
                                                              any following
                                                              global/generic
