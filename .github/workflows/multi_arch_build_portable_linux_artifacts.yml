@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: ${{ inputs.repository || github.repository }}
-          ref: ${{ inputs.ref || github.head_ref || github.ref}}
+          ref: ${{ inputs.ref }}
 
       - name: Checkout external repository
         if: ${{ inputs.external_repo_config != '' }}
@@ -119,30 +119,26 @@ jobs:
           git config --global --add safe.directory $PWD
           git config fetch.parallel 10
 
-      # - name: Setup ccache
-      #   run: |
-      #     ./build_tools/setup_ccache.py \
-      #       --release-type "${{ inputs.release_type }}" \
-      #       --dir "$(dirname $CCACHE_CONFIGPATH)" \
-      #       --local-path "$CACHE_DIR/ccache"
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
-        with:
-          role-to-assume: arn:aws:iam::317668459450:role/therock-aig-sharks-compiler-ci-s3-oidc
-          role-duration-seconds: 900
-
       - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
-        with:
-          max-size: 10G
-          variant: sccache
-        env:
-          # S3 configuration
-          SCCACHE_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
-          SCCACHE_REGION: us-east-1
-          SCCACHE_S3_KEY_PREFIX: amd-staging/sccache/llvm-project
-          SCCACHE_S3_USE_SSL: true
+        run: |
+          ./build_tools/setup_ccache.py \
+            --release-type "${{ inputs.release_type }}" \
+            --dir "$(dirname $CCACHE_CONFIGPATH)" \
+            --local-path "$CACHE_DIR/ccache"
+          # FORCE disable remote storage & optimize local cache hits
+          ccache --set-config cache_dir="$CACHE_DIR/ccache"
+          ccache --set-config log_file="$(dirname "$CCACHE_CONFIGPATH")/ccache.log"
+          ccache --set-config remote_storage=""
+          ccache --set-config compression=false
+          ccache --set-config file_clone=true
+          ccache --set-config base_dir="${GITHUB_WORKSPACE}"
+          ccache --set-config hash_dir=false
+          ccache --set-config direct_mode=true
+          ccache --set-config ignore_options="-DCLANG_REPOSITORY_STRING=* -DLLVM_LIT_ARGS=*"
+          ccache --set-config sloppiness="pch_defines,time_macros,include_file_mtime,include_file_ctime,locale"
+          ccache --set-config compiler_check="%compiler% -dumpversion"
+          ccache --zero-stats
+          echo "CCACHE_REMOTE_STORAGE=" >> $GITHUB_ENV
 
       - name: Runner health status
         run: |
@@ -170,7 +166,7 @@ jobs:
              echo "$commit_log" | awk -F"'" '/Submodule path/ {
                n = split($2, a, "/")
                print a[n], $4
-             }' > submodule-commit-${STAGE_NAME}.txt          
+             }' > submodule-commit-${STAGE_NAME}.txt
 
       - name: build prep (patches & hotfixes for CK, tests)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd-staging # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
@@ -203,8 +199,8 @@ jobs:
         run: |
          cmake -B "${BUILD_DIR}" -S . -GNinja \
            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
-           -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
            ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \
            ${{ steps.stage_config.outputs.cmake_args }} \
@@ -228,64 +224,43 @@ jobs:
            ${{ steps.stage_config.outputs.cmake_args }} \
            ${{ env.extra_cmake_options }}
 
-      # - name: Unarch ccache
-      #   env:
-      #     S3_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
-      #     ARCHIVE_NAME: ccache_llvm_project_20261104_191757.tar.gz
-      #   run: |
-      #     LOCAL_CACHE="$(ccache --get-config cache_dir)"
-      #     # Create parent directory
-      #     mkdir -p "$(dirname $LOCAL_CACHE)"
-          
-      #     aws s3 cp s3://${S3_BUCKET}/amd-staging/ccache/${ARCHIVE_NAME} /tmp/ccache.tar.gz
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::317668459450:role/therock-aig-sharks-compiler-ci-s3-oidc
+          role-duration-seconds: 3600
 
-      #     # Extract tar.gz
-      #     echo "Extracting cache..."
-      #     tar -xzf /tmp/ccache.tar.gz \
-      #       -C "$(dirname $LOCAL_CACHE)"
-            
-      #     # Cleanup
-      #     rm -f /tmp/ccache.tar.gz
+      - name: Unarch ccache
+        env:
+          S3_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
+          ARCHIVE_NAME: ccache_llvm_project_latest.tar
+        run: |
+          LOCAL_CACHE="$(ccache --get-config cache_dir)"
+          
+          echo "CP arch from S3"
+          aws s3 cp s3://${S3_BUCKET}/amd-staging/ccache/${ARCHIVE_NAME} /tmp/ccache.tar \
+            --quiet
 
-      #     # FORCE disable remote storage
-      #     ccache --set-config remote_storage=""
-      #     ccache --set-config file_clone=true
+          echo "Extracting cache..."
+          tar -xf /tmp/ccache.tar \
+            -C "$(dirname $LOCAL_CACHE)"
           
-      #     # Also set via environment variable (override)
-      #     echo "CCACHE_REMOTE_STORAGE=" >> $GITHUB_ENV
-          
-      #     # Verify
-      #     echo "✅ S3 cache configured"
-      #     echo "Remote storage: $(ccache --get-config remote_storage)"
+          echo "$(du -sh ${LOCAL_CACHE})"
+          # Cleanup
+          rm -f /tmp/ccache.tar
           
       - name: Build stage
         run: |
-          sccache --zero-stats
-          cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0 -j$(nproc)
+          cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
 
       - name: Show ccache stats for build
         run: |
           echo "========================================="
-          echo "SCCache Stats (Build Step Only)"
+          echo "ccache Stats (Build Step Only)"
           echo "========================================="
-          sccache --show-stats
-          
-      # - name: Create ccache archive and push to S3
-      #   env:
-      #     S3_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
-      #   run: |
-      #     LOCAL_CACHE="$(ccache --get-config cache_dir)"
-      #     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-      #     ARCHIVE_NAME="ccache_llvm_project_${TIMESTAMP}.tar.gz"
-      #     echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
-      #     # Create tar.gz
-      #     tar -czf "/tmp/$ARCHIVE_NAME" \
-      #       -C "$(dirname $LOCAL_CACHE)" \
-      #       "$(basename $LOCAL_CACHE)"
-
-      #     aws s3 cp /tmp/${ARCHIVE_NAME} s3://${S3_BUCKET}/amd-staging/ccache/${ARCHIVE_NAME}
+          ccache --show-stats -v
       
-      - name: restore cred
+      - name: Restore cred
         if: always()
         run: |
           # Restore the runner's default credentials
