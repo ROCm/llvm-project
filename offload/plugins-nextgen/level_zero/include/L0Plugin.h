@@ -75,6 +75,9 @@ public:
     return false;
   }
 
+  Error flushQueueImpl(omp_interop_val_t *Interop) override;
+  Error syncBarrierImpl(omp_interop_val_t *Interop) override;
+  Error asyncBarrierImpl(omp_interop_val_t *Interop) override;
 
   Expected<bool> isImageCompatible(StringRef Image) const override;
 };

@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "ExclusiveAccess.h"
+#include "OpenMP/InteropAPI.h"
 #include "Shared/APITypes.h"
 #include "Shared/Debug.h"
 #include "Shared/Environment.h"
@@ -1308,18 +1309,27 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
                          "%s not supported by platform", __func__);
   }
 
-  /// Return the backend-native handle of the platform this device belongs to,
-  /// reinterpreted as a void pointer.
-  virtual Expected<void *> getNativePlatformHandle() {
-    return Plugin::error(error::ErrorCode::UNSUPPORTED,
-                         "%s not supported by platform", __func__);
-  }
-
   /// Return the backend-native handle of the queue held by \p AsyncInfo,
   /// reinterpreted as a void pointer.
   virtual Expected<void *> getNativeQueueHandle(__tgt_async_info *AsyncInfo) {
     return Plugin::error(error::ErrorCode::UNSUPPORTED,
                          "%s not supported by platform", __func__);
+  }
+
+  virtual Expected<omp_interop_val_t *>
+  createInterop(int32_t InteropType, interop_spec_t &InteropSpec) {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "%s not supported by platform", __func__);
+  }
+
+  virtual Error releaseInterop(omp_interop_val_t *Interop) {
+    return Plugin::success();
+  }
+
+  virtual interop_spec_t selectInteropPreference(int32_t InteropType,
+                                                 int32_t NumPrefers,
+                                                 interop_spec_t *Prefers) {
+    return interop_spec_t{tgt_fr_none, {false, 0}, 0};
   }
 
   /// Allocate and construct a kernel object.
@@ -1655,7 +1665,6 @@ struct GenericPluginTy {
     return isImageCompatible(Image);
   }
 
-<<<<<<< HEAD
   virtual Error flushQueueImpl(omp_interop_val_t *Interop) {
     return Plugin::success();
   }
@@ -1677,9 +1686,6 @@ struct GenericPluginTy {
   /// implementation returns a plain PluginContextTy that only tracks the
   /// device set. Plugins that own native context state (e.g. Level Zero)
   /// override this to instantiate a plugin-specific subclass.
-=======
-  /// Create a plugin-side context grouping the given devices.
->>>>>>> 4fb83151289b
   virtual Expected<std::unique_ptr<PluginContextTy>>
   createPluginContext(llvm::ArrayRef<GenericDeviceTy *> Devices) = 0;
 
@@ -1728,7 +1734,6 @@ public:
                                    const char *ReportFilename,
                                    const char *OutputDirPath);
 
-<<<<<<< HEAD
   /// Creates an asynchronous queue for the given plugin.
   int32_t init_async_info(int32_t DeviceId, __tgt_async_info **AsyncInfoPtr);
 
@@ -1780,8 +1785,6 @@ public:
   /// Queue an asynchronous barrier in the queue associated with the interop
   /// object and return immediately.
   int32_t async_barrier(omp_interop_val_t *Interop);
-=======
->>>>>>> 4fb83151289b
 
 private:
   /// Indicates if the platform runtime has been fully initialized.
