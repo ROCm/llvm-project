@@ -41,6 +41,7 @@ using namespace llvm::omp::target::error;
 using namespace llvm::omp::target::debug;
 using namespace llvm::omp::target::helpers;
 
+// Downstream: fills PluginManager::Plugins.
 namespace llvm::offload::tmp {
 GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
 } // namespace llvm::offload::tmp
@@ -58,15 +59,15 @@ void PluginManager::init() {
   if (auto Err = iteratePlatforms(
           [](ol_platform_handle_t Platform, void *Data) {
             auto *PM = static_cast<PluginManager *>(Data);
-            auto *Plugin =
-                llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
             PlatformTy &P =
                 PM->Platforms
                     .try_emplace(Platform, PlatformTy::create(Platform))
                     .first->second;
-            ODBG(ODT_Init) << "Adding plugin " << P.getName()
+            ODBG(ODT_Init) << "Added plugin " << P.getName()
                            << " from liboffload";
-            PM->Plugins.push_back(Plugin);
+            // Downstream: see PluginManager::Plugins.
+            PM->Plugins.push_back(
+                llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform));
           },
           this))
     REPORT() << "Failed to iterate platforms: " << toString(std::move(Err));

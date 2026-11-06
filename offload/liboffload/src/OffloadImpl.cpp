@@ -1733,6 +1733,8 @@ Error olQueryQueue_impl(ol_queue_handle_t Queue, bool *IsQueueWorkCompleted) {
 
 namespace tmp {
 // Temporary helpers to help transition of libomptarget to liboffload
+// Downstream: used by libomptarget to reach the plugin for AMD-specific device
+// queries and the OMPT profiler.
 GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform) {
   return Platform->Plugin.get();
 }
