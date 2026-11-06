@@ -52,11 +52,11 @@ using namespace ompt;
 #endif
 
 using namespace llvm::omp::target::error;
-using namespace llvm::omp::target::plugin;
 using namespace llvm::omp::target::rr;
 using namespace llvm::omp::target::debug;
 
 namespace llvm::offload::tmp {
+// Downstream: set DeviceTy::RTL and DeviceTy::RTLDeviceID.
 GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
 int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
 llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
@@ -172,6 +172,7 @@ llvm::Error DeviceTy::init() {
                        "failed to create context for device %d: %s", DeviceID,
                        Res->Details);
 
+  // Downstream: see DeviceTy::RTL.
   RTL = llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
   RTLDeviceID = llvm::offload::tmp::__ol_tgt_GetPluginDeviceId(DeviceHandle);
 
@@ -192,7 +193,8 @@ llvm::Error DeviceTy::init() {
   OMPT_IF_BUILT({
     // Downstream: tools get the plugin device rather than this DeviceTy, since
     // the device tracing entry points (ompt_start_trace, ...) cast it back.
-    GenericDeviceTy &GenericDevice = RTL->getDevice(RTLDeviceID);
+    llvm::omp::target::plugin::GenericDeviceTy &GenericDevice =
+        RTL->getDevice(RTLDeviceID);
     auto *DevicePtr = reinterpret_cast<ompt_device_t *>(&GenericDevice);
     // Register the device->user-id mapping unconditionally: a device can be
     // initialized before the tool connects, yet the plugin still needs this to
@@ -247,7 +249,7 @@ llvm::Error DeviceTy::init() {
     BoolEnvar OMPX_EmitRecordReport("LIBOMPTARGET_RECORD_REPORT", false);
     StringEnvar OMPX_RecordReportFilename("LIBOMPTARGET_RECORD_REPORT_FILENAME",
                                           "");
-    if (OMPX_RecordDevice != RTLDeviceID)
+    if (OMPX_RecordDevice != DeviceID)
       return llvm::Error::success();
 
     if (OMPX_RecordMemSize <= 0) {
@@ -769,16 +771,16 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
   OMPT_IF_BUILT(
       InterfaceRAII TargetDataExchangeRAII(
           RegionInterface.getCallbacks<ompt_target_data_transfer_from_device>(),
-          RTLDeviceID, SrcPtr, DstDev.RTLDeviceID, DstPtr, Size,
+          DeviceID, SrcPtr, DstDev.DeviceID, DstPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);
       // Only if 'TracedDeviceId' is actually traced, AsyncInfo->OmptEventInfo
       // is set and a trace record generated. Otherwise: No OMPT device tracing.
       TracerInterfaceRAII TargetDataExchangeTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_from_device>(),
-          AsyncInfo, RTL->getProfiler(), /*TracedDeviceId=*/RTLDeviceID,
-          /*EventType=*/ompt_callback_target_data_op, RTLDeviceID, SrcPtr,
-          DstDev.RTLDeviceID, DstPtr, Size,
+          AsyncInfo, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
+          /*EventType=*/ompt_callback_target_data_op, DeviceID, SrcPtr,
+          DstDev.DeviceID, DstPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
@@ -787,8 +789,8 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
     return OFFLOAD_FAIL;
   if (auto Res = olMemcpy(queue, DstPtr, DstDev.DeviceHandle, SrcPtr,
                           DeviceHandle, Size)) {
-    REPORT() << "Failure to copy data from device (" << RTLDeviceID
-             << ") to device (" << DstDev.RTLDeviceID
+    REPORT() << "Failure to copy data from device (" << DeviceID
+             << ") to device (" << DstDev.DeviceID
              << "). Pointers: host = " << SrcPtr << ", device = " << DstPtr
              << ", size = " << Size << ": " << Res->Details;
     return OFFLOAD_FAIL;

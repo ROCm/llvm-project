@@ -7,5 +7,5 @@ set(LIBOMPACCSUPPORT_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Mapping.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/OmpAccError.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Program.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../plugins-nextgen/common/src/RecordReplay.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/RecordReplay.cpp
   PARENT_SCOPE)
