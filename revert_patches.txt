@@ -16,6 +16,3 @@ ASAN-DEBUG lib breaks
 ---
 [DebugInfo] Accept DW_OP_xderef_size and DW_OP_lit1..DW_OP_lit31. (#227839)
 ---
-need to work comgr build issues
-adfd756d1b830 Enable ClangIR Build By Default (#221291)
----

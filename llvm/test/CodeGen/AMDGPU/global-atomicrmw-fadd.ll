@@ -23,11 +23,9 @@ define float @global_agent_atomic_fadd_ret_f32__amdgpu_no_fine_grained_memory(pt
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -233,11 +231,9 @@ define float @global_agent_atomic_fadd_ret_f32__offset12b_pos__amdgpu_no_fine_gr
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -445,11 +441,9 @@ define float @global_agent_atomic_fadd_ret_f32__offset12b_neg__amdgpu_no_fine_gr
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:-2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -667,11 +661,9 @@ define void @global_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory(p
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -871,11 +863,9 @@ define void @global_agent_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_g
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -1078,11 +1068,9 @@ define void @global_agent_atomic_fadd_noret_f32__offset12b_neg__amdgpu_no_fine_g
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:-2048 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -1293,11 +1281,9 @@ define float @global_system_atomic_fadd_ret_f32__offset12b_pos__amdgpu_no_fine_g
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -1509,11 +1495,9 @@ define void @global_system_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -1720,11 +1704,9 @@ define float @global_agent_atomic_fadd_ret_f32_maybe_remote(ptr addrspace(1) %pt
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -1949,11 +1931,9 @@ define float @global_agent_atomic_fadd_ret_f32_maybe_remote__amdgpu_ignore_denor
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -2178,11 +2158,9 @@ define void @global_agent_atomic_fadd_noret_f32_maybe_remote__amdgpu_ignore_deno
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -2400,11 +2378,9 @@ define float @global_agent_atomic_fadd_ret_f32___amdgpu_no_fine_grained_memory(p
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -2612,11 +2588,9 @@ define float @global_agent_atomic_fadd_ret_f32___amdgpu_no_fine_grained_memory__
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -2808,11 +2782,9 @@ define float @global_agent_atomic_fadd_ret_f32_amdgpu_ignore_denormal_mode(ptr a
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -3037,11 +3009,9 @@ define void @global_agent_atomic_fadd_noret_f32_maybe_remote(ptr addrspace(1) %p
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -3259,11 +3229,9 @@ define void @global_agent_atomic_fadd_noret_f32___amdgpu_no_fine_grained_memory(
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -3466,11 +3434,9 @@ define void @global_agent_atomic_fadd_noret_f32___amdgpu_no_fine_grained_memory_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -3643,11 +3609,9 @@ define void @global_agent_atomic_fadd_noret_f32_amdgpu_ignore_denormal_mode(ptr 
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -3865,11 +3829,9 @@ define float @global_agent_atomic_fadd_ret_f32__amdgpu_no_remote_memory(ptr addr
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -4092,11 +4054,9 @@ define void @global_agent_atomic_fadd_noret_f32__amdgpu_no_remote_memory(ptr add
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -4311,11 +4271,9 @@ define float @global_agent_atomic_fadd_ret_f32__amdgpu_no_remote_memory__amdgpu_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -4538,11 +4496,9 @@ define void @global_agent_atomic_fadd_noret_f32__amdgpu_no_remote_memory__amdgpu
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -4757,11 +4713,9 @@ define float @global_agent_atomic_fadd_ret_f32__amdgpu_no_remote_memory__amdgpu_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -4967,11 +4921,9 @@ define void @global_agent_atomic_fadd_noret_f32__amdgpu_no_remote_memory__amdgpu
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -5175,11 +5127,9 @@ define float @global_agent_atomic_fadd_ret_f32__ftz__amdgpu_no_fine_grained_memo
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -5369,11 +5319,9 @@ define float @global_agent_atomic_fadd_ret_f32__offset12b_pos__ftz__amdgpu_no_fi
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -5565,11 +5513,9 @@ define float @global_agent_atomic_fadd_ret_f32__offset12b_neg__ftz__amdgpu_no_fi
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:-2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -5771,11 +5717,9 @@ define void @global_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_fine_grained_mem
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -5945,11 +5889,9 @@ define void @global_agent_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_f
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -6122,11 +6064,9 @@ define void @global_agent_atomic_fadd_noret_f32__offset12b_neg__ftz__amdgpu_no_f
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:-2048 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -6307,11 +6247,9 @@ define float @global_system_atomic_fadd_ret_f32__offset12b_pos__ftz__amdgpu_no_f
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -6507,11 +6445,9 @@ define void @global_system_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -6688,11 +6624,9 @@ define float @global_agent_atomic_fadd_ret_f32__offset12b_pos__ieee__amdgpu_no_f
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -6884,11 +6818,9 @@ define void @global_agent_atomic_fadd_noret_f32__offset12b_pos__ieee__amdgpu_no_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -7061,11 +6993,9 @@ define float @global_agent_atomic_fadd_ret_f32__ftz__amdgpu_no_remote_memory(ptr
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -7288,11 +7218,9 @@ define void @global_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_remote_memory(pt
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -7507,11 +7435,9 @@ define float @global_agent_atomic_fadd_ret_f32__ftz__amdgpu_no_fine_grained_memo
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -7701,11 +7627,9 @@ define void @global_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_fine_grained_mem
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f32 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -7879,11 +7803,9 @@ define double @global_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(p
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f64 v[0:1], v[0:1], v[2:3], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -8127,11 +8049,9 @@ define double @global_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_g
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f64 v[0:1], v[0:1], v[2:3], off offset:2040 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -8376,11 +8296,9 @@ define double @global_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_g
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f64 v[0:1], v[0:1], v[2:3], off offset:-2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -8629,11 +8547,9 @@ define void @global_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(p
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f64 v[0:1], v[2:3], off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -8859,11 +8775,9 @@ define void @global_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_g
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f64 v[0:1], v[2:3], off offset:2040 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -9092,11 +9006,9 @@ define void @global_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_g
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_add_f64 v[0:1], v[2:3], off offset:-2048 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -9360,12 +9272,10 @@ define half @global_agent_atomic_fadd_ret_f16__amdgpu_no_fine_grained_memory(ptr
 ; GFX1250-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -9405,12 +9315,10 @@ define half @global_agent_atomic_fadd_ret_f16__amdgpu_no_fine_grained_memory(ptr
 ; GFX1250-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -9890,12 +9798,10 @@ define half @global_agent_atomic_fadd_ret_f16__offset12b_pos__amdgpu_no_fine_gra
 ; GFX1250-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -9935,12 +9841,10 @@ define half @global_agent_atomic_fadd_ret_f16__offset12b_pos__amdgpu_no_fine_gra
 ; GFX1250-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -10434,12 +10338,10 @@ define half @global_agent_atomic_fadd_ret_f16__offset12b_neg__amdgpu_no_fine_gra
 ; GFX1250-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -10480,12 +10382,10 @@ define half @global_agent_atomic_fadd_ret_f16__offset12b_neg__amdgpu_no_fine_gra
 ; GFX1250-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -10977,12 +10877,10 @@ define void @global_agent_atomic_fadd_noret_f16__amdgpu_no_fine_grained_memory(p
 ; GFX1250-TRUE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -11020,12 +10918,10 @@ define void @global_agent_atomic_fadd_noret_f16__amdgpu_no_fine_grained_memory(p
 ; GFX1250-FAKE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -11488,12 +11384,10 @@ define void @global_agent_atomic_fadd_noret_f16__offset12b_pos__amdgpu_no_fine_g
 ; GFX1250-TRUE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -11531,12 +11425,10 @@ define void @global_agent_atomic_fadd_noret_f16__offset12b_pos__amdgpu_no_fine_g
 ; GFX1250-FAKE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -12013,12 +11905,10 @@ define void @global_agent_atomic_fadd_noret_f16__offset12b_neg__amdgpu_no_fine_g
 ; GFX1250-TRUE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -12057,12 +11947,10 @@ define void @global_agent_atomic_fadd_noret_f16__offset12b_neg__amdgpu_no_fine_g
 ; GFX1250-FAKE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -12530,12 +12418,10 @@ define half @global_agent_atomic_fadd_ret_f16__offset12b_pos__align4__amdgpu_no_
 ; GFX1250-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v4, v5, 0xffff0000, v3
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[4:5], off offset:2046 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v5
 ; GFX1250-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -12564,12 +12450,10 @@ define half @global_agent_atomic_fadd_ret_f16__offset12b_pos__align4__amdgpu_no_
 ; GFX1250-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, 0xffff0000, v3
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[4:5], off offset:2046 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v5
 ; GFX1250-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -12938,12 +12822,10 @@ define void @global_agent_atomic_fadd_noret_f16__offset12b__align4_pos__amdgpu_n
 ; GFX1250-TRUE16-NEXT:    v_cvt_u32_u16_e32 v3, v2.h
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v4, v5, 0xffff0000, v3
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[4:5], off offset:2046 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v5
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v5, v3
@@ -12970,12 +12852,10 @@ define void @global_agent_atomic_fadd_noret_f16__offset12b__align4_pos__amdgpu_n
 ; GFX1250-FAKE16-NEXT:    v_and_b32_e32 v3, 0xffff, v3
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, 0xffff0000, v3
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[4:5], off offset:2046 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v3
@@ -13343,12 +13223,10 @@ define half @global_system_atomic_fadd_ret_f16__offset12b_pos__amdgpu_no_fine_gr
 ; GFX1250-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -13388,12 +13266,10 @@ define half @global_system_atomic_fadd_ret_f16__offset12b_pos__amdgpu_no_fine_gr
 ; GFX1250-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -13889,12 +13765,10 @@ define void @global_system_atomic_fadd_noret_f16__offset12b_pos__amdgpu_no_fine_
 ; GFX1250-TRUE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -13932,12 +13806,10 @@ define void @global_system_atomic_fadd_noret_f16__offset12b_pos__amdgpu_no_fine_
 ; GFX1250-FAKE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -14424,12 +14296,10 @@ define bfloat @global_agent_atomic_fadd_ret_bf16__amdgpu_no_fine_grained_memory(
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -14986,12 +14856,10 @@ define bfloat @global_agent_atomic_fadd_ret_bf16__offset12b_pos__amdgpu_no_fine_
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -15567,12 +15435,10 @@ define bfloat @global_agent_atomic_fadd_ret_bf16__offset12b_neg__amdgpu_no_fine_
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -16146,12 +16012,10 @@ define void @global_agent_atomic_fadd_noret_bf16__amdgpu_no_fine_grained_memory(
 ; GFX1250-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-NEXT:    v_mov_b32_e32 v5, v4
@@ -16693,12 +16557,10 @@ define void @global_agent_atomic_fadd_noret_bf16__offset12b_pos__amdgpu_no_fine_
 ; GFX1250-TRUE16-NEXT:    v_lshlrev_b32_e32 v2, v4, v2
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v2, v3, v5, v2
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v2, v[0:1], v[2:3], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v3, v2
@@ -16736,12 +16598,10 @@ define void @global_agent_atomic_fadd_noret_bf16__offset12b_pos__amdgpu_no_fine_
 ; GFX1250-FAKE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -17194,12 +17054,10 @@ define void @global_agent_atomic_fadd_noret_bf16__offset12b_neg__amdgpu_no_fine_
 ; GFX1250-TRUE16-NEXT:    v_lshlrev_b32_e32 v2, v4, v2
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v2, v3, v5, v2
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v2, v[0:1], v[2:3], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v3, v2
@@ -17238,12 +17096,10 @@ define void @global_agent_atomic_fadd_noret_bf16__offset12b_neg__amdgpu_no_fine_
 ; GFX1250-FAKE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -17684,12 +17540,10 @@ define bfloat @global_agent_atomic_fadd_ret_bf16__offset12b_pos__align4__amdgpu_
 ; GFX1250-TRUE16-NEXT:    v_pk_add_bf16 v3, v5, v2
 ; GFX1250-TRUE16-NEXT:    v_bfi_b32 v4, 0xffff0000, v5, v3
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[4:5], off offset:2046 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v5
 ; GFX1250-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -17716,12 +17570,10 @@ define bfloat @global_agent_atomic_fadd_ret_bf16__offset12b_pos__align4__amdgpu_
 ; GFX1250-FAKE16-NEXT:    v_pk_add_bf16 v3, v5, v2
 ; GFX1250-FAKE16-NEXT:    v_bfi_b32 v4, 0xffff0000, v5, v3
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[4:5], off offset:2046 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v5
 ; GFX1250-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -18176,12 +18028,10 @@ define void @global_agent_atomic_fadd_noret_bf16__offset12b__align4_pos__amdgpu_
 ; GFX1250-TRUE16-NEXT:    v_pk_add_bf16 v2, v3, v4
 ; GFX1250-TRUE16-NEXT:    v_bfi_b32 v2, 0xffff0000, v3, v2
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v2, v[0:1], v[2:3], off offset:2046 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v3, v2
@@ -18207,12 +18057,10 @@ define void @global_agent_atomic_fadd_noret_bf16__offset12b__align4_pos__amdgpu_
 ; GFX1250-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-FAKE16-NEXT:    v_bfi_b32 v4, 0xffff0000, v5, v3
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[4:5], off offset:2046 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v3
@@ -18585,12 +18433,10 @@ define bfloat @global_system_atomic_fadd_ret_bf16__offset12b_pos__amdgpu_no_fine
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-NEXT:    v_and_or_b32 v6, v7, v5, v4
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[6:7], off th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v7
 ; GFX1250-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
@@ -19170,12 +19016,10 @@ define void @global_system_atomic_fadd_noret_bf16__offset12b_pos__amdgpu_no_fine
 ; GFX1250-TRUE16-NEXT:    v_lshlrev_b32_e32 v2, v4, v2
 ; GFX1250-TRUE16-NEXT:    v_and_or_b32 v2, v3, v5, v2
 ; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-TRUE16-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-TRUE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-TRUE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-TRUE16-NEXT:    global_atomic_cmpswap_b32 v2, v[0:1], v[2:3], off th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-TRUE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-TRUE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX1250-TRUE16-NEXT:    v_mov_b32_e32 v3, v2
@@ -19213,12 +19057,10 @@ define void @global_system_atomic_fadd_noret_bf16__offset12b_pos__amdgpu_no_fine
 ; GFX1250-FAKE16-NEXT:    v_lshlrev_b32_e32 v4, v3, v4
 ; GFX1250-FAKE16-NEXT:    v_and_or_b32 v4, v5, v6, v4
 ; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
-; GFX1250-FAKE16-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-FAKE16-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-FAKE16-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-FAKE16-NEXT:    global_atomic_cmpswap_b32 v4, v[0:1], v[4:5], off th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-FAKE16-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v4, v5
 ; GFX1250-FAKE16-NEXT:    v_mov_b32_e32 v5, v4
@@ -19656,11 +19498,9 @@ define <2 x half> @global_agent_atomic_fadd_ret_v2f16__amdgpu_no_fine_grained_me
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -19900,11 +19740,9 @@ define <2 x half> @global_agent_atomic_fadd_ret_v2f16__offset12b_pos__amdgpu_no_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -20146,11 +19984,9 @@ define <2 x half> @global_agent_atomic_fadd_ret_v2f16__offset12b_neg__amdgpu_no_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v0, v[0:1], v2, off offset:-2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -20400,11 +20236,9 @@ define void @global_agent_atomic_fadd_noret_v2f16__amdgpu_no_fine_grained_memory
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -20618,11 +20452,9 @@ define void @global_agent_atomic_fadd_noret_v2f16__offset12b_pos__amdgpu_no_fine
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -20839,11 +20671,9 @@ define void @global_agent_atomic_fadd_noret_v2f16__offset12b_neg__amdgpu_no_fine
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v[0:1], v2, off offset:-2048 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -21068,11 +20898,9 @@ define <2 x half> @global_system_atomic_fadd_ret_v2f16__offset12b_pos__amdgpu_no
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -21318,11 +21146,9 @@ define void @global_system_atomic_fadd_noret_v2f16__offset12b_pos__amdgpu_no_fin
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v[0:1], v2, off offset:2044 scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -21543,11 +21369,9 @@ define <2 x half> @global_agent_atomic_fadd_ret_v2f16__amdgpu_no_remote_memory(p
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -21803,11 +21627,9 @@ define void @global_agent_atomic_fadd_noret_v2f16__amdgpu_no_remote_memory(ptr a
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -22051,11 +21873,9 @@ define <2 x half> @global_agent_atomic_fadd_ret_v2f16__amdgpu_no_fine_grained_me
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -22295,11 +22115,9 @@ define void @global_agent_atomic_fadd_noret_v2f16__amdgpu_no_fine_grained_memory
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -22513,11 +22331,9 @@ define <2 x half> @global_agent_atomic_fadd_ret_v2f16__maybe_remote(ptr addrspac
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -22773,11 +22589,9 @@ define void @global_agent_atomic_fadd_noret_v2f16__maybe_remote(ptr addrspace(1)
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_f16 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -23025,11 +22839,9 @@ define <2 x bfloat> @global_agent_atomic_fadd_ret_v2bf16__amdgpu_no_fine_grained
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -23422,11 +23234,9 @@ define <2 x bfloat> @global_agent_atomic_fadd_ret_v2bf16__offset12b_pos__amdgpu_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -23821,11 +23631,9 @@ define <2 x bfloat> @global_agent_atomic_fadd_ret_v2bf16__offset12b_neg__amdgpu_
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v0, v[0:1], v2, off offset:-2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -24228,11 +24036,9 @@ define void @global_agent_atomic_fadd_noret_v2bf16__amdgpu_no_fine_grained_memor
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -24612,11 +24418,9 @@ define void @global_agent_atomic_fadd_noret_v2bf16__offset12b_pos__amdgpu_no_fin
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v[0:1], v2, off offset:2044 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -24999,11 +24803,9 @@ define void @global_agent_atomic_fadd_noret_v2bf16__offset12b_neg__amdgpu_no_fin
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v[0:1], v2, off offset:-2048 scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -25394,11 +25196,9 @@ define <2 x bfloat> @global_system_atomic_fadd_ret_v2bf16__offset12b_pos__amdgpu
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v0, v[0:1], v2, off offset:2044 th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -25797,11 +25597,9 @@ define void @global_system_atomic_fadd_noret_v2bf16__offset12b_pos__amdgpu_no_fi
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_SYS
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v[0:1], v2, off offset:2044 scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_SYS
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -26188,11 +25986,9 @@ define <2 x bfloat> @global_agent_atomic_fadd_ret_v2bf16__amdgpu_no_remote_memor
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -26585,11 +26381,9 @@ define void @global_agent_atomic_fadd_noret_v2bf16__amdgpu_no_remote_memory(ptr 
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -26969,11 +26763,9 @@ define <2 x bfloat> @global_agent_atomic_fadd_ret_v2bf16__amdgpu_no_fine_grained
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -27366,11 +27158,9 @@ define void @global_agent_atomic_fadd_noret_v2bf16__amdgpu_no_fine_grained_memor
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -27750,11 +27540,9 @@ define <2 x bfloat> @global_agent_atomic_fadd_ret_v2bf16__maybe_remote(ptr addrs
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v0, v[0:1], v2, off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -28147,11 +27935,9 @@ define void @global_agent_atomic_fadd_noret_v2bf16__maybe_remote(ptr addrspace(1
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_wb scope:SCOPE_DEV
-; GFX1250-NEXT:    s_wait_storecnt 0x0
 ; GFX1250-NEXT:    global_atomic_pk_add_bf16 v[0:1], v2, off scope:SCOPE_DEV
 ; GFX1250-NEXT:    s_wait_storecnt 0x0
-; GFX1250-NEXT:    global_inv scope:SCOPE_DEV
+; GFX1250-NEXT:    global_inv scope:SCOPE_SE
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 ;

@@ -36,6 +36,7 @@
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGenUtils/CallUtils.h"
+#include "clang/CodeGenUtils/TargetUtils.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
@@ -2271,7 +2272,8 @@ public:
   void enableDebugInfo() { DisableDebugInfo = false; }
 
   bool shouldUseFusedARCCalls() {
-    return CGM.getCodeGenOpts().OptimizationLevel == 0;
+    return CGM.getCodeGenOpts().OptimizationLevel == 0 &&
+           !SanOpts.has(SanitizerKind::Thread);
   }
 
   const LangOptions &getLangOpts() const { return CGM.getLangOpts(); }
@@ -5149,7 +5151,7 @@ public:
                                llvm::AtomicOrdering &AO,
                                llvm::SyncScope::ID &SSID);
 
-  enum class MSVCIntrin;
+  using MSVCIntrin = CodeGenUtils::MSVCIntrin;
   llvm::Value *EmitMSVCBuiltinExpr(MSVCIntrin BuiltinID, const CallExpr *E);
 
   llvm::Value *EmitBuiltinAvailable(const VersionTuple &Version);

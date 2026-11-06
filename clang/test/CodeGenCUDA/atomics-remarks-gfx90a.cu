@@ -2,6 +2,7 @@
 // RUN:   -mllvm -amdgpu-late-wave-transform=1 \
 // RUN: -Rpass=atomic-expand -S -o - 2>&1 | \
 // RUN:   FileCheck %s --check-prefix=GFX90A-CAS
+// RUN: %if cir-enabled %{ %clang_cc1 -fclangir %s -triple=amdgpu9.0a-amd-amdhsa -fcuda-is-device -mllvm -amdgpu-late-wave-transform=1 -Rpass=atomic-expand -S -o - 2>&1 |   FileCheck %s --check-prefix=GFX90A-CAS %}
 
 // REQUIRES: amdgpu-registered-target
 

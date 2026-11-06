@@ -28,7 +28,6 @@ define float @local_atomic_fadd_ret_f32(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_mov_b32_e32 v1, 4.0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
@@ -161,7 +160,6 @@ define float @local_atomic_fadd_ret_f32__offset(ptr addrspace(3) %ptr) nounwind 
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_mov_b32_e32 v1, 4.0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
@@ -295,7 +293,6 @@ define void @local_atomic_fadd_noret_f32(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_mov_b32_e32 v1, 4.0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
@@ -426,7 +423,6 @@ define void @local_atomic_fadd_noret_f32__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_mov_b32_e32 v1, 4.0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
@@ -563,7 +559,6 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX13-SDAG-NEXT:    ds_load_b64 v[0:1], v0
@@ -594,7 +589,6 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX13-GISEL-TRUE16-NEXT:    ds_load_b64 v[0:1], v0
@@ -624,7 +618,6 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX13-GISEL-FAKE16-NEXT:    ds_load_b64 v[0:1], v0
@@ -925,7 +918,6 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX13-SDAG-NEXT:    ds_load_b64 v[0:1], v0 offset:65528
@@ -956,7 +948,6 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX13-GISEL-TRUE16-NEXT:    ds_load_b64 v[0:1], v0 offset:65528
@@ -986,7 +977,6 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX13-GISEL-FAKE16-NEXT:    ds_load_b64 v[0:1], v0 offset:65528
@@ -1288,7 +1278,6 @@ define void @local_atomic_fadd_noret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    ds_load_b64 v[1:2], v0
 ; GFX13-SDAG-NEXT:    s_mov_b32 s0, 0
@@ -1317,7 +1306,6 @@ define void @local_atomic_fadd_noret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    ds_load_b64 v[1:2], v0
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -1345,7 +1333,6 @@ define void @local_atomic_fadd_noret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    ds_load_b64 v[1:2], v0
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -1631,7 +1618,6 @@ define void @local_atomic_fadd_noret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    ds_load_b64 v[1:2], v0 offset:65528
 ; GFX13-SDAG-NEXT:    s_mov_b32 s0, 0
@@ -1660,7 +1646,6 @@ define void @local_atomic_fadd_noret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    ds_load_b64 v[1:2], v0 offset:65528
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -1688,7 +1673,6 @@ define void @local_atomic_fadd_noret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    ds_load_b64 v[1:2], v0 offset:65528
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -1980,7 +1964,6 @@ define half @local_atomic_fadd_ret_f16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-SDAG-TRUE16-NEXT:    v_lshlrev_b32_e32 v0, 3, v0
@@ -2023,7 +2006,6 @@ define half @local_atomic_fadd_ret_f16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-SDAG-FAKE16-NEXT:    v_lshlrev_b32_e32 v0, 3, v0
@@ -2066,7 +2048,6 @@ define half @local_atomic_fadd_ret_f16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-GISEL-TRUE16-NEXT:    v_and_b32_e32 v0, 3, v0
@@ -2108,7 +2089,6 @@ define half @local_atomic_fadd_ret_f16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-GISEL-FAKE16-NEXT:    v_and_b32_e32 v0, 3, v0
@@ -2673,7 +2653,6 @@ define half @local_atomic_fadd_ret_f16__offset(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-SDAG-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -2718,7 +2697,6 @@ define half @local_atomic_fadd_ret_f16__offset(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-SDAG-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -2763,7 +2741,6 @@ define half @local_atomic_fadd_ret_f16__offset(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -2807,7 +2784,6 @@ define half @local_atomic_fadd_ret_f16__offset(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -3395,7 +3371,6 @@ define void @local_atomic_fadd_noret_f16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-SDAG-TRUE16-NEXT:    v_lshlrev_b32_e32 v0, 3, v0
@@ -3437,7 +3412,6 @@ define void @local_atomic_fadd_noret_f16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-SDAG-FAKE16-NEXT:    v_lshlrev_b32_e32 v0, 3, v0
@@ -3479,7 +3453,6 @@ define void @local_atomic_fadd_noret_f16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-GISEL-TRUE16-NEXT:    v_and_b32_e32 v0, 3, v0
@@ -3519,7 +3492,6 @@ define void @local_atomic_fadd_noret_f16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-GISEL-FAKE16-NEXT:    v_and_b32_e32 v0, 3, v0
@@ -4066,7 +4038,6 @@ define void @local_atomic_fadd_noret_f16__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-SDAG-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -4109,7 +4080,6 @@ define void @local_atomic_fadd_noret_f16__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-SDAG-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -4152,7 +4122,6 @@ define void @local_atomic_fadd_noret_f16__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -4194,7 +4163,6 @@ define void @local_atomic_fadd_noret_f16__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -4760,7 +4728,6 @@ define half @local_atomic_fadd_ret_f16__offset__align4(ptr addrspace(3) %ptr) no
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-SDAG-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -4794,7 +4761,6 @@ define half @local_atomic_fadd_ret_f16__offset__align4(ptr addrspace(3) %ptr) no
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-SDAG-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -4828,7 +4794,6 @@ define half @local_atomic_fadd_ret_f16__offset__align4(ptr addrspace(3) %ptr) no
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -4861,7 +4826,6 @@ define half @local_atomic_fadd_ret_f16__offset__align4(ptr addrspace(3) %ptr) no
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -5308,7 +5272,6 @@ define void @local_atomic_fadd_noret_f16__offset__align4(ptr addrspace(3) %ptr) 
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-SDAG-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -5340,7 +5303,6 @@ define void @local_atomic_fadd_noret_f16__offset__align4(ptr addrspace(3) %ptr) 
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-SDAG-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -5372,7 +5334,6 @@ define void @local_atomic_fadd_noret_f16__offset__align4(ptr addrspace(3) %ptr) 
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -5403,7 +5364,6 @@ define void @local_atomic_fadd_noret_f16__offset__align4(ptr addrspace(3) %ptr) 
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -5833,7 +5793,6 @@ define bfloat @local_atomic_fadd_ret_bf16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-SDAG-NEXT:    v_lshlrev_b32_e32 v0, 3, v0
@@ -5876,7 +5835,6 @@ define bfloat @local_atomic_fadd_ret_bf16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-GISEL-TRUE16-NEXT:    v_and_b32_e32 v0, 3, v0
@@ -5918,7 +5876,6 @@ define bfloat @local_atomic_fadd_ret_bf16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-GISEL-FAKE16-NEXT:    v_and_b32_e32 v0, 3, v0
@@ -6478,7 +6435,6 @@ define bfloat @local_atomic_fadd_ret_bf16__offset(ptr addrspace(3) %ptr) nounwin
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-SDAG-NEXT:    s_mov_b32 s0, 0
@@ -6523,7 +6479,6 @@ define bfloat @local_atomic_fadd_ret_bf16__offset(ptr addrspace(3) %ptr) nounwin
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -6567,7 +6522,6 @@ define bfloat @local_atomic_fadd_ret_bf16__offset(ptr addrspace(3) %ptr) nounwin
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -7146,7 +7100,6 @@ define void @local_atomic_fadd_noret_bf16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-SDAG-NEXT:    v_lshlrev_b32_e32 v0, 3, v0
@@ -7188,7 +7141,6 @@ define void @local_atomic_fadd_noret_bf16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-GISEL-TRUE16-NEXT:    v_and_b32_e32 v0, 3, v0
@@ -7228,7 +7180,6 @@ define void @local_atomic_fadd_noret_bf16(ptr addrspace(3) %ptr) nounwind {
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_and_b32_e32 v1, -4, v0
 ; GFX13-GISEL-FAKE16-NEXT:    v_and_b32_e32 v0, 3, v0
@@ -7772,7 +7723,6 @@ define void @local_atomic_fadd_noret_bf16__offset(ptr addrspace(3) %ptr) nounwin
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-SDAG-NEXT:    s_mov_b32 s0, 0
@@ -7815,7 +7765,6 @@ define void @local_atomic_fadd_noret_bf16__offset(ptr addrspace(3) %ptr) nounwin
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -7857,7 +7806,6 @@ define void @local_atomic_fadd_noret_bf16__offset(ptr addrspace(3) %ptr) nounwin
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    v_add_nc_u32_e32 v1, 0xfffe, v0
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -8418,7 +8366,6 @@ define bfloat @local_atomic_fadd_ret_bf16__offset__align4(ptr addrspace(3) %ptr)
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-TRUE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-SDAG-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -8450,7 +8397,6 @@ define bfloat @local_atomic_fadd_ret_bf16__offset__align4(ptr addrspace(3) %ptr)
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-FAKE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-SDAG-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -8482,7 +8428,6 @@ define bfloat @local_atomic_fadd_ret_bf16__offset__align4(ptr addrspace(3) %ptr)
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -8515,7 +8460,6 @@ define bfloat @local_atomic_fadd_ret_bf16__offset__align4(ptr addrspace(3) %ptr)
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -9066,7 +9010,6 @@ define void @local_atomic_fadd_noret_bf16__offset__align4(ptr addrspace(3) %ptr)
 ; GFX13-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_expcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_samplecnt 0x0
-; GFX13-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-SDAG-NEXT:    s_mov_b32 s0, 0
@@ -9097,7 +9040,6 @@ define void @local_atomic_fadd_noret_bf16__offset__align4(ptr addrspace(3) %ptr)
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-TRUE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-GISEL-TRUE16-NEXT:    s_mov_b32 s0, 0
@@ -9128,7 +9070,6 @@ define void @local_atomic_fadd_noret_bf16__offset__align4(ptr addrspace(3) %ptr)
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_expcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_samplecnt 0x0
-; GFX13-GISEL-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-GISEL-FAKE16-NEXT:    ds_load_b32 v1, v0 offset:65534
 ; GFX13-GISEL-FAKE16-NEXT:    s_mov_b32 s0, 0
@@ -9583,7 +9524,6 @@ define <2 x half> @local_atomic_fadd_ret_v2f16(ptr addrspace(3) %ptr, <2 x half>
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
 ; GFX13-NEXT:    ds_pk_add_rtn_f16 v0, v0, v1
@@ -9824,7 +9764,6 @@ define <2 x half> @local_atomic_fadd_ret_v2f16__offset(ptr addrspace(3) %ptr, <2
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
 ; GFX13-NEXT:    ds_pk_add_rtn_f16 v0, v0, v1 offset:65532
@@ -10066,7 +10005,6 @@ define void @local_atomic_fadd_noret_v2f16(ptr addrspace(3) %ptr, <2 x half> %va
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
 ; GFX13-NEXT:    ds_pk_add_f16 v0, v1
@@ -10294,7 +10232,6 @@ define void @local_atomic_fadd_noret_v2f16__offset(ptr addrspace(3) %ptr, <2 x h
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
 ; GFX13-NEXT:    ds_pk_add_f16 v0, v1 offset:65532
@@ -10528,7 +10465,6 @@ define <2 x bfloat> @local_atomic_fadd_ret_v2bf16(ptr addrspace(3) %ptr, <2 x bf
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
 ; GFX13-NEXT:    ds_pk_add_rtn_bf16 v0, v0, v1
@@ -10902,7 +10838,6 @@ define <2 x bfloat> @local_atomic_fadd_ret_v2bf16__offset(ptr addrspace(3) %ptr,
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
 ; GFX13-NEXT:    ds_pk_add_rtn_bf16 v0, v0, v1 offset:65532
@@ -11278,7 +11213,6 @@ define void @local_atomic_fadd_noret_v2bf16(ptr addrspace(3) %ptr, <2 x bfloat> 
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
 ; GFX13-NEXT:    ds_pk_add_bf16 v0, v1
@@ -11639,7 +11573,6 @@ define void @local_atomic_fadd_noret_v2bf16__ofset(ptr addrspace(3) %ptr, <2 x b
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
 ; GFX13-NEXT:    ds_pk_add_bf16 v0, v1 offset:65532
@@ -14266,7 +14199,6 @@ define float @local_atomic_fadd_ret_f32__amdgpu_ignore_denormal_mode(ptr addrspa
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_mov_b32_e32 v1, 4.0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
@@ -14399,7 +14331,6 @@ define void @local_atomic_fadd_noret_f32__amdgpu_ignore_denormal_mode(ptr addrsp
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX13-NEXT:    s_wait_expcnt 0x0
 ; GFX13-NEXT:    s_wait_samplecnt 0x0
-; GFX13-NEXT:    s_wait_bvhcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_mov_b32_e32 v1, 4.0
 ; GFX13-NEXT:    s_wait_storecnt 0x0
