@@ -16,11 +16,42 @@
 
 namespace llvm {
 
-LLVM_ABI Error runCodeGenPipeline(
-    TargetMachine &TM, Module &M, raw_pwrite_stream &OS,
-    raw_pwrite_stream *DwoOS, CodeGenFileType CGFT, bool DisableVerify = true,
-    bool DisableSimplifyLibCalls = false,
-    IntrusiveRefCntPtr<vfs::FileSystem> VFS = vfs::getRealFileSystem());
+class ModuleSummaryIndex;
+
+namespace legacy {
+class PassManager;
+} // namespace legacy
+
+/// Options for the target-independent code generation pipeline.
+struct CodeGenPipelineConfig {
+  /// Combined summary index to make available to the pipeline, or null if the
+  /// pipeline should not have access to one.
+  const ModuleSummaryIndex *SummaryIndex = nullptr;
+
+  bool DisableVerify = true;
+  bool DisableSimplifyLibCalls = false;
+
+  /// Print the passes the New PM runs, as -debug-pass-manager does.
+  bool DebugPassManager = false;
+
+  /// Verify the IR after every pass.
+  bool VerifyEach = false;
+
+  /// Legacy-only extension point, invoked just before the pass manager is
+  /// populated. Ignored by the New PM pipeline.
+  std::function<void(legacy::PassManager &)> PreCodeGenPassesHook;
+
+  /// File system to use, or null to fall back to the real file system. The
+  /// fallback is resolved lazily because some clients cannot tolerate
+  /// vfs::getRealFileSystem() being called at all.
+  IntrusiveRefCntPtr<vfs::FileSystem> VFS = nullptr;
+};
+
+LLVM_ABI Error runCodeGenPipeline(TargetMachine &TM, Module &M,
+                                  raw_pwrite_stream &OS,
+                                  raw_pwrite_stream *DwoOS,
+                                  CodeGenFileType CGFT,
+                                  const CodeGenPipelineConfig &Config = {});
 
 } // namespace llvm
 

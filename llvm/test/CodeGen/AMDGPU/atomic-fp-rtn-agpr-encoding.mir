@@ -1,5 +1,5 @@
-# RUN: llc -mtriple=amdgpu9.42 -start-before=amdgpu-resource-usage -show-mc-encoding -o - %s | FileCheck --check-prefix=GFX942 %s
-# RUN: llc -mtriple=amdgpu9.50 -start-before=amdgpu-resource-usage -show-mc-encoding -o - %s | FileCheck --check-prefix=GFX942 %s
+# RUN: llc -mtriple=amdgpu9.42 -start-before=stack-frame-layout -show-mc-encoding -o - %s | FileCheck --check-prefix=GFX942 %s
+# RUN: llc -mtriple=amdgpu9.50 -start-before=stack-frame-layout -show-mc-encoding -o - %s | FileCheck --check-prefix=GFX942 %s
 
 # Check that the AGPR-result forms of these atomics encode sc1 correctly.
 
