@@ -38,7 +38,7 @@ endif()
 target_link_libraries(omptarget PRIVATE omp ${llvm_libs})
 target_include_directories(omptarget PRIVATE
   ${LIBOMPTARGET_INCLUDE_DIR} ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
-  # Downstream: libomptarget still includes PluginInterface.h.
+  # Downstream: GenericProfiler.h for the OMPT profiler.
   ${CMAKE_CURRENT_SOURCE_DIR}/../plugins-nextgen/common/include
   ${CMAKE_CURRENT_BINARY_DIR}/../plugins-nextgen/common/include
 )

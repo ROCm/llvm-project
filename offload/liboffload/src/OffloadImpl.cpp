@@ -1733,14 +1733,59 @@ Error olQueryQueue_impl(ol_queue_handle_t Queue, bool *IsQueueWorkCompleted) {
 
 namespace tmp {
 // Temporary helpers to help transition of libomptarget to liboffload
-// Downstream: used by libomptarget to reach the plugin for AMD-specific device
-// queries and the OMPT profiler.
-GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform) {
-  return Platform->Plugin.get();
+// Downstream: AMD-specific device queries and OMPT support for libomptarget.
+GenericDeviceTy *__ol_tgt_GetPluginDevice(ol_device_handle_t Device) {
+  return Device->Device;
 }
 
-int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device) {
-  return Device->DeviceNum;
+GenericProfilerTy *__ol_tgt_GetProfiler(ol_device_handle_t Device) {
+  return Device->Platform.Plugin->getProfiler();
+}
+
+void __ol_tgt_CheckInvalidImage(ol_platform_handle_t Platform,
+                                __tgt_device_image *Image) {
+  Platform->Plugin->check_invalid_image(Image);
+}
+
+bool __ol_tgt_IsAPU(ol_device_handle_t Device) {
+  return Device->Platform.Plugin->has_apu_device(Device->DeviceNum);
+}
+
+void __ol_tgt_ZeroCopySanityChecksAndDiag(ol_device_handle_t Device,
+                                          bool IsUnifiedSharedMemory,
+                                          bool IsAutoZeroCopy,
+                                          bool IsEagerMaps) {
+  Device->Platform.Plugin->zero_copy_sanity_checks_and_diag(
+      Device->DeviceNum, IsUnifiedSharedMemory, IsAutoZeroCopy, IsEagerMaps);
+}
+
+bool __ol_tgt_IsGfx90aCoarseGrainUsmMapEnabled(ol_device_handle_t Device) {
+  auto &Plugin = *Device->Platform.Plugin;
+  return Plugin.is_gfx90a(Device->DeviceNum) &&
+         Plugin.is_gfx90a_coarse_grain_usm_map_enabled(Device->DeviceNum);
+}
+
+void __ol_tgt_SetCoarseGrainMemRegion(ol_device_handle_t Device, void *Ptr,
+                                      int64_t Size) {
+  Device->Platform.Plugin->set_coarse_grain_mem_region(Device->DeviceNum, Ptr,
+                                                       Size);
+}
+
+void __ol_tgt_SetCoarseGrainMem(ol_device_handle_t Device, const void *Ptr,
+                                int64_t Size, bool SetAttr) {
+  Device->Platform.Plugin->set_coarse_grain_mem(Device->DeviceNum, Ptr, Size,
+                                                SetAttr);
+}
+
+int32_t __ol_tgt_QueryCoarseGrainMemRegion(ol_device_handle_t Device,
+                                           const void *Ptr, int64_t Size) {
+  return Device->Platform.Plugin->query_coarse_grain_mem_region(
+      Device->DeviceNum, Ptr, Size);
+}
+
+void __ol_tgt_PrepopulatePageTable(ol_device_handle_t Device, void *Ptr,
+                                   int64_t Size) {
+  Device->Platform.Plugin->prepopulate_page_table(Device->DeviceNum, Ptr, Size);
 }
 
 // Downstream: used by libomptarget for OMPT device tracing and forced

@@ -12,6 +12,7 @@
 
 #include "PluginManager.h"
 #include "OmpAccError.h"
+#include "OpenMP/AMDGPUSupport.h"
 #include "OpenMP/OMPT/Callback.h"
 #include "OpenMP/OMPT/Interface.h"
 #include "OpenMP/OMPT/OmptCommonDefs.h"
@@ -41,11 +42,6 @@ using namespace llvm::omp::target::error;
 using namespace llvm::omp::target::debug;
 using namespace llvm::omp::target::helpers;
 
-// Downstream: fills PluginManager::Plugins.
-namespace llvm::offload::tmp {
-GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
-} // namespace llvm::offload::tmp
-
 void PluginManager::init() {
   TIMESCOPE();
 
@@ -65,9 +61,6 @@ void PluginManager::init() {
                     .first->second;
             ODBG(ODT_Init) << "Added plugin " << P.getName()
                            << " from liboffload";
-            // Downstream: see PluginManager::Plugins.
-            PM->Plugins.push_back(
-                llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform));
           },
           this))
     REPORT() << "Failed to iterate platforms: " << toString(std::move(Err));
@@ -104,7 +97,6 @@ void PluginManager::deinit() {
   TraceRecordManager = nullptr;
 #endif
 
-  Plugins.clear();
   Platforms.clear();
   if (LibOffloadInitialized) {
     if (auto Err = olShutDown())
@@ -346,8 +338,14 @@ void PluginManager::registerLib(__tgt_bin_desc *Desc) {
   if (!FoundCompatibleImage) {
     for (DeviceImageTy &DI : deviceImages()) {
       __tgt_device_image *Img = &DI.getExecutableImage();
-      for (auto &R : plugins())
-        R.check_invalid_image(Img);
+      for (auto &[Platform, P] : Platforms) {
+        ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;
+        if (!olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND,
+                               sizeof(Backend), &Backend) &&
+            llvm::omp::target::BackendConfig::get(Backend)
+                .ExplainsIncompatibleImages)
+          llvm::offload::tmp::__ol_tgt_CheckInvalidImage(Platform, Img);
+      }
     }
   }
 
@@ -362,7 +360,8 @@ void PluginManager::registerLib(__tgt_bin_desc *Desc) {
   if (ExclusiveDevicesAccessor->size() > 0) {
     auto &Device = *(*ExclusiveDevicesAccessor)[0];
     UseAutoZeroCopy = Device.useAutoZeroCopy();
-    IsAPU = Device.checkIfAPU();
+    IsAPU = Device.getConfig().SupportsEagerZeroCopyMaps &&
+            llvm::offload::tmp::__ol_tgt_IsAPU(Device.DeviceHandle);
   }
 
   if (UseAutoZeroCopy)
@@ -387,10 +386,12 @@ void PluginManager::registerLib(__tgt_bin_desc *Desc) {
     // the first device in the system to run a sanity check.
     auto &Device = *(*ExclusiveDevicesAccessor)[0];
     // just skip checks if no devices are found in the system
-    Device.zeroCopySanityChecksAndDiag(
-        (getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY),
-        (getRequirements() & OMPX_REQ_AUTO_ZERO_COPY),
-        (getRequirements() & OMPX_REQ_EAGER_ZERO_COPY_MAPS));
+    if (Device.getConfig().ChecksZeroCopyConfig)
+      llvm::offload::tmp::__ol_tgt_ZeroCopySanityChecksAndDiag(
+          Device.DeviceHandle,
+          (getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY),
+          (getRequirements() & OMPX_REQ_AUTO_ZERO_COPY),
+          (getRequirements() & OMPX_REQ_EAGER_ZERO_COPY_MAPS));
   }
 
   ODBG(ODT_Init) << "Done registering entries!";
@@ -572,16 +573,9 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
                 static_cast<llvm::omp::OMPTgtExecModeFlags>(Cfg.ExecMode);
             uint8_t ExecModeVal = 0;
             if (ReadImageGlobal("_exec_mode", &ExecModeVal,
-                                sizeof(ExecModeVal))) {
+                                sizeof(ExecModeVal)))
               ExecMode =
                   static_cast<llvm::omp::OMPTgtExecModeFlags>(ExecModeVal);
-              if (!llvm::omp::target::plugin::GenericKernelTy::
-                      isValidExecutionMode(ExecMode)) {
-                REPORT() << "Invalid execution mode " << int(ExecModeVal)
-                         << " for '" << Entry.SymbolName << "'";
-                return OFFLOAD_FAIL;
-              }
-            }
             ODBG(ODT_Mapping)
                 << "Kernel '" << Entry.SymbolName << "' uses "
                 << KernelLaunchInfoTy::getExecutionModeName(ExecMode)

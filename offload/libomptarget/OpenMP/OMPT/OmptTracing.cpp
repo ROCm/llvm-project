@@ -33,6 +33,7 @@
 #define DEBUG_PREFIX "OMPT"
 
 using namespace llvm::omp::target::ompt;
+using namespace llvm::omp::target::debug;
 
 std::mutex llvm::omp::target::ompt::DeviceAccessMutex;
 std::mutex llvm::omp::target::ompt::TraceAccessMutex;

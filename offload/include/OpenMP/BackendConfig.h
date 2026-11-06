@@ -30,6 +30,17 @@ struct BackendConfig {
   /// by the user with LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU.
   uint32_t DefaultGenericSPMDTeamsPerCU = 0;
 
+  /// Downstream: AMDGPU-specific features; see OpenMP/AMDGPUSupport.h.
+  /// Whether host memory can be switched to coarse grain (gfx90a USM maps).
+  bool SupportsCoarseGrainMemory = false;
+  /// Whether devices can be APUs that support eager zero-copy maps, which
+  /// prefault the GPU page table.
+  bool SupportsEagerZeroCopyMaps = false;
+  /// Whether the zero-copy configuration is diagnosed at registration.
+  bool ChecksZeroCopyConfig = false;
+  /// Whether the plugin explains why no image is compatible (XNACK mode).
+  bool ExplainsIncompatibleImages = false;
+
   /// Get the configuration of \p Backend.
   static const BackendConfig &get(ol_platform_backend_t Backend);
 };

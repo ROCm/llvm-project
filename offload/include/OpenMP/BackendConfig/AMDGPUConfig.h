@@ -15,7 +15,14 @@ namespace llvm::omp::target {
 
 /// Constants of the AMDGPU backend.
 struct AMDGPUConfig final : BackendConfig {
-  AMDGPUConfig() { DefaultGenericSPMDTeamsPerCU = 6; }
+  AMDGPUConfig() {
+    DefaultGenericSPMDTeamsPerCU = 6;
+    // Downstream: see BackendConfig.
+    SupportsCoarseGrainMemory = true;
+    SupportsEagerZeroCopyMaps = true;
+    ChecksZeroCopyConfig = true;
+    ExplainsIncompatibleImages = true;
+  }
 };
 
 } // namespace llvm::omp::target
