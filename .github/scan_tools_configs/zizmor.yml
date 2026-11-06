@@ -31,3 +31,18 @@ rules:
       policies:
         # Security owns this workflow and moves the v1 tag.
         ROCm/rocm-security-gh/.github/workflows/security-baseline.yml: ref-pin
+  dangerous-triggers:
+    ignore:
+      # Upstream LLVM release-backport workflow. issue_comment is the
+      # /cherry-pick command channel. Jobs run only when github.repository
+      # is llvm/llvm-project, so they do not run in this fork.
+      - issue-release-workflow.yml
+      # Posts CI results on LLVM pull requests. The job runs only when
+      # github.repository is llvm/llvm-project.
+      - issue-write.yml
+      # Comments with buildbot information after an LLVM merge. The job
+      # runs only when github.repository is llvm/llvm-project.
+      - merged-prs.yml
+      # Notifies LLVM issue subscribers. The job runs only when
+      # github.repository is llvm/llvm-project.
+      - subscriber.yml
