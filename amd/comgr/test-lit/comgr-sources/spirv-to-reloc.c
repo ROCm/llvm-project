@@ -19,14 +19,19 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_set_t DataSetSpv, DataSetReloc;
   amd_comgr_action_info_t DataAction;
   size_t Count;
-  bool Asan = argc == 4 && strcmp(argv[1], "--asan") == 0;
+  bool Asan = argc > 1 && strcmp(argv[1], "--asan") == 0;
 
-  if (argc != 3 && !Asan) {
+  if (Asan) {
+    --argc;
+    ++argv;
+  }
+
+  if (argc != 3) {
     fprintf(stderr, "Usage: spirv-to-reloc [--asan] file.spv file.o\n");
     exit(1);
   }
 
-  SizeSpv = setBuf(argv[argc - 2], &BufSpv);
+  SizeSpv = setBuf(argv[1], &BufSpv);
 
   amd_comgr_(create_data(AMD_COMGR_DATA_KIND_SPIRV, &DataSpv));
   amd_comgr_(set_data(DataSpv, SizeSpv, BufSpv));
@@ -62,7 +67,7 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_t DataReloc;
   amd_comgr_(action_data_get_data(DataSetReloc, AMD_COMGR_DATA_KIND_RELOCATABLE,
                                   0, &DataReloc));
-  dumpData(DataReloc, argv[argc - 1]);
+  dumpData(DataReloc, argv[2]);
 
   amd_comgr_(release_data(DataSpv));
   amd_comgr_(release_data(DataReloc));
