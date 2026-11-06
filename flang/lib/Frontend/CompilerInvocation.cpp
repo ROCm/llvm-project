@@ -597,6 +597,11 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
       args.hasFlag(clang::options::OPT_fdefer_desc_map,
                    clang::options::OPT_fno_defer_desc_map, true);
 
+  opts.ImplicitDefaultMapperAllocatableMembers = args.hasFlag(
+      clang::options::OPT_fimplicit_default_mapper_allocatable_members,
+      clang::options::OPT_fno_implicit_default_mapper_allocatable_members,
+      /*Default=*/true);
+
   if (const llvm::opt::Arg *arg =
           args.getLastArg(clang::options::OPT_complex_range_EQ)) {
     llvm::StringRef argValue = llvm::StringRef(arg->getValue());
