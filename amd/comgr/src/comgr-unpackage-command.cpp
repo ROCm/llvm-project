@@ -67,18 +67,8 @@ getUnpackagedImageInfo(StringRef Image, const char *&FileExtension,
 bool UnpackageCommand::canCache() const {
   // Uncompressed extraction is already a cheap in-memory parse, so the cache's
   // file I/O and hashing overhead isn't worth it
-  file_magic Magic = identify_magic(PackageData);
-  if (Magic != file_magic::offload_binary)
-    return false;
-
-  auto MaybeHeader = object::OffloadBinary::extractHeader(
+  return object::OffloadBinary::isCompressed(
       MemoryBufferRef(PackageData, PackageName));
-  if (!MaybeHeader)
-    return false;
-
-  // InflatedSize was added in version 3; a v1/v2 header is shorter and has
-  // no such field.
-  return (*MaybeHeader)->Version >= 3 && (*MaybeHeader)->InflatedSize != 0;
 }
 
 Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {

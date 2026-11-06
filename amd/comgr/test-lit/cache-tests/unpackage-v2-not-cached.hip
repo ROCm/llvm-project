@@ -2,13 +2,14 @@
 // field added in version 3) must not be treated as compressed/cacheable.
 //
 // Regression test: UnpackageCommand::canCache() used to read
-// OffloadBinary::Header::InflatedSize without checking the header version
-// first. A v2 header is 32 bytes and has no InflatedSize field, so the read
-// aliased into whatever bytes happened to follow (the entries block), which
-// could read as spuriously nonzero and make an uncompressed v2 package look
-// compressed. That both wasted a cache entry on an uncompressed package and,
-// incidentally, defeated the in-place (no-disk-I/O) extraction path, which is
-// only taken when canCache() is false.
+// OffloadBinary::Header::InflatedSize itself, without checking the header
+// version first (that check now lives in OffloadBinary::isCompressed(), which
+// canCache() defers to). A v2 header is 32 bytes and has no InflatedSize
+// field, so the read aliased into whatever bytes happened to follow (the
+// entries block), which could read as spuriously nonzero and make an
+// uncompressed v2 package look compressed. That both wasted a cache entry on
+// an uncompressed package and, incidentally, defeated the in-place
+// (no-disk-I/O) extraction path, which is only taken when canCache() is false.
 //
 // RUN: %clang -c -x hip --offload-arch=gfx900 \
 // RUN: -nogpulib -nogpuinc -emit-llvm \
