@@ -304,7 +304,7 @@ BasicBlock::const_iterator BasicBlock::getFirstNonPHIIt() const {
 
 BasicBlock::const_iterator BasicBlock::getFirstNonPHIOrPseudoProbe() const {
   for (const Instruction &I : *this) {
-    if (isa<PHINode>(I) || isa<DbgInfoIntrinsic>(I))
+    if (isa<PHINode>(I))
       continue;
 
     if (isa<PHINode, PseudoProbeInst>(I))
@@ -321,7 +321,7 @@ BasicBlock::const_iterator BasicBlock::getFirstNonPHIOrPseudoProbe() const {
 
 BasicBlock::const_iterator BasicBlock::getFirstNonPHIOrLifetime() const {
   for (const Instruction &I : *this) {
-    if (isa<PHINode>(I) || isa<DbgInfoIntrinsic>(I))
+    if (isa<PHINode>(I))
       continue;
 
     if (I.isLifetimeStartOrEnd())
@@ -364,8 +364,7 @@ BasicBlock::const_iterator BasicBlock::getFirstNonPHIOrAlloca() const {
   if (isEntryBlock()) {
     const_iterator End = end();
     while (InsertPt != End &&
-           (isa<AllocaInst>(*InsertPt) || isa<DbgInfoIntrinsic>(*InsertPt) ||
-            isa<PseudoProbeInst>(*InsertPt))) {
+           (isa<AllocaInst>(*InsertPt) || isa<PseudoProbeInst>(*InsertPt))) {
       if (const AllocaInst *AI = dyn_cast<AllocaInst>(&*InsertPt)) {
         if (!AI->isStaticAlloca())
           break;
@@ -619,12 +618,6 @@ std::optional<uint64_t> BasicBlock::getIrrLoopHeaderWeight() const {
     }
   }
   return std::nullopt;
-}
-
-BasicBlock::iterator llvm::skipDebugIntrinsics(BasicBlock::iterator It) {
-  while (isa<DbgInfoIntrinsic>(It))
-    ++It;
-  return It;
 }
 
 void BasicBlock::renumberInstructions() {
