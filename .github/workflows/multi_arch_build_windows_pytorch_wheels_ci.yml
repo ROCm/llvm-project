@@ -149,7 +149,7 @@ jobs:
           python-version: ${{ inputs.python_version }}
 
       - name: Select Python version
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.python_version is a workflow_call/workflow_dispatch input; python_to_cp_version.py accepts only a dotted version such as 3.12
           python build_tools/github_actions/python_to_cp_version.py \
             --python-version ${{ inputs.python_version }}
 
@@ -159,7 +159,7 @@ jobs:
       # below keys off a single decision instead of repeating fork checks.
       - name: Determine cache type
         id: cache
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.cache_type is a workflow input limited to none, sccache, or ccache; compute_pytorch_cache_type.py passes ccache and none through and downgrades sccache to none on fork PRs
           python build_tools/github_actions/compute_pytorch_cache_type.py \
             --cache-type "${{ inputs.cache_type }}"
 
@@ -206,7 +206,7 @@ jobs:
 
       - name: Checkout PyTorch source (stable)
         if: ${{ inputs.pytorch_git_ref != 'nightly' }}
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.pytorch_git_ref is a workflow input (nightly or release/X.Y); pytorch_torch_repo.py uses it only as the git ref to checkout
           git config --global core.longpaths true
           python ./external-builds/pytorch/pytorch_torch_repo.py checkout \
             --checkout-dir ${{ env.CHECKOUT_ROOT }}/pytorch \
@@ -218,7 +218,7 @@ jobs:
       # GITHUB_ENV, which includes --rocm-sdk-version and --version-suffix.
       - name: Determine optional arguments passed to `build_prod_wheels.py`
         if: ${{ inputs.rocm_version }}
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.rocm_version is a workflow input; determine_version.py parses it with packaging.version before deriving build arguments
           python build_tools/github_actions/determine_version.py \
             --rocm-version ${{ inputs.rocm_version }}
 
@@ -243,7 +243,7 @@ jobs:
       - name: Expand amdgpu families to gfx targets
         if: ${{ inputs.amdgpu_families != '' }}
         id: expand
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.amdgpu_families is a workflow input; expand_amdgpu_families.py splits the semicolon-separated list and rejects families absent from therock_amdgpu_targets.cmake
           targets=$(python build_tools/github_actions/expand_amdgpu_families.py \
             --amdgpu-families "${{ inputs.amdgpu_families }}")
           echo "Expanded families '${{ inputs.amdgpu_families }}' -> '${targets}'"
@@ -259,8 +259,11 @@ jobs:
       # caller plumbs the value through and the fallback in
       # build_prod_wheels.py::get_rocm_sdk_targets is removed.
       - name: Build PyTorch wheels
-        shell: cmd
-        run: |
+        shell: cmd # zizmor: ignore[misfeature]
+        # determine_version.py emits multiple arguments from a parsed ROCm version.
+        # Trust that repository script to produce this intentional shell fragment.
+        # Delayed expansion keeps metacharacters in input values from becoming CMD operators.
+        run: | # zizmor: ignore[template-injection] workflow inputs artifact_group and the ROCm package URLs, plus cache_type and gfx targets produced by compute_pytorch_cache_type.py and expand_amdgpu_families.py; determine_version.py produces optional_build_prod_arguments from the parsed ROCm version
           set "CACHE_FLAG="
           if "${{ steps.cache.outputs.cache_type }}"=="sccache" set "CACHE_FLAG=--use-sccache"
           if "${{ steps.cache.outputs.cache_type }}"=="ccache" set "CACHE_FLAG=--use-ccache"
@@ -296,7 +299,8 @@ jobs:
           fi
 
       - name: Sanity check wheel
-        shell: cmd
+        # Keep CMD for compatibility with the Windows wheel build and validation.
+        shell: cmd # zizmor: ignore[misfeature]
         run: |
           python external-builds/pytorch/sanity_check_wheel.py ${{ env.PACKAGE_DIST_DIR }}
 
@@ -377,7 +381,7 @@ jobs:
       # When ROCm was built in this run, its wheels share this prefix;
       # otherwise only the new PyTorch wheels are uploaded.
       - name: Upload PyTorch wheels
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.artifact_group is a workflow input naming the GPU artifact group (for example gfx110X-all); this step passes --multiarch, so upload_python_packages.py does not put it in the upload path. This block also expands env.PACKAGE_DIST_DIR, which the job sets itself
           python build_tools/github_actions/upload_python_packages.py \
             --input-packages-dir="${{ env.PACKAGE_DIST_DIR }}" \
             --artifact-group="${{ inputs.artifact_group }}" \
