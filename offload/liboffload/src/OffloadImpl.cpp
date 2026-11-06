@@ -1630,6 +1630,36 @@ Error olGetSymbolInfoSize_impl(ol_symbol_handle_t Symbol,
   return olGetSymbolInfoImplDetail(Symbol, PropName, 0, nullptr, PropSizeRet);
 }
 
+Error olGetProgramInfoImplDetail(ol_program_handle_t Program,
+                                 ol_program_info_t PropName, size_t PropSize,
+                                 void *PropValue, size_t *PropSizeRet) {
+  InfoWriter Info(PropSize, PropValue, PropSizeRet);
+
+  switch (PropName) {
+  case OL_PROGRAM_INFO_IMAGE_BASE:
+    return Info.write<void *>(const_cast<void *>(Program->Image->getStart()));
+  case OL_PROGRAM_INFO_IMAGE_SIZE:
+    return Info.write<size_t>(Program->Image->getSize());
+  default:
+    return createOffloadError(ErrorCode::INVALID_ENUMERATION,
+                              "olGetProgramInfo enum '%i' is invalid",
+                              PropName);
+  }
+}
+
+Error olGetProgramInfo_impl(ol_program_handle_t Program,
+                            ol_program_info_t PropName, size_t PropSize,
+                            void *PropValue) {
+  return olGetProgramInfoImplDetail(Program, PropName, PropSize, PropValue,
+                                    nullptr);
+}
+
+Error olGetProgramInfoSize_impl(ol_program_handle_t Program,
+                                ol_program_info_t PropName,
+                                size_t *PropSizeRet) {
+  return olGetProgramInfoImplDetail(Program, PropName, 0, nullptr, PropSizeRet);
+}
+
 Error olLaunchHostFunction_impl(ol_queue_handle_t Queue,
                                 ol_host_function_cb_t Callback,
                                 void *UserData) {
@@ -1715,10 +1745,6 @@ int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device) {
 // synchronous execution.
 __tgt_async_info *__ol_tgt_GetAsyncInfoFromQueue(ol_queue_handle_t Queue) {
   return Queue ? Queue->AsyncInfo : nullptr;
-}
-
-DeviceImageTy *__ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program) {
-  return Program->Image;
 }
 
 RecordReplayTy *__ol_tgt_GetRecordReplay(ol_device_impl_t *Device) {
