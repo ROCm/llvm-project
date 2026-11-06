@@ -17,6 +17,7 @@ add_library(omptarget SHARED
   OpenMP/OMPT/OmptTracingBuffer.cpp
 
   ../libompaccsupport/AsyncInfo.cpp
+  ../libompaccsupport/BackendConfig.cpp
   ../libompaccsupport/device.cpp
   ../libompaccsupport/PluginManager.cpp
   ../libompaccsupport/DeviceImage.cpp
@@ -24,6 +25,7 @@ add_library(omptarget SHARED
   ../libompaccsupport/OmpAccError.cpp
   ../libompaccsupport/Platform.cpp
   ../libompaccsupport/Program.cpp
+  ../plugins-nextgen/common/src/RecordReplay.cpp
 
   KernelLanguage/API.cpp
 )
