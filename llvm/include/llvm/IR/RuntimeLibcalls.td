@@ -454,6 +454,8 @@ defvar OutPtrAttrs = [NoAlias, WriteOnly, NonNull];
 foreach S = !listconcat(F32VectorSuffixes, F64VectorSuffixes) in {
   defvar VT = !cast<VectorFuncArgType>(S);
   defvar IntVT = VT.IntType;
+  def S#Pair : StructFuncArgType<[VT, VT]>;
+  defvar VTPair = !cast<FuncArgType>(S#"Pair");
   defm ACOS : VectorMathLibcall<S, VT, [VT]>;
   defm ACOSH : VectorMathLibcall<S, VT, [VT]>;
   defm ASIN : VectorMathLibcall<S, VT, [VT]>;
@@ -495,7 +497,7 @@ foreach S = !listconcat(F32VectorSuffixes, F64VectorSuffixes) in {
   defm LOGB : VectorMathLibcall<S, VT, [VT]>;
   defm MODF : VectorMathLibcall<S, VT, [VT, Ptr], ArgMemWriteOnly,
                                  [[], OutPtrAttrs], [NoneType, VT]>;
-  defm MODF_STRET : VectorMathLibcall<S>;
+  defm MODF_STRET : VectorMathLibcall<S, VTPair, [VT]>;
   defm NEXTAFTER : VectorMathLibcall<S, VT, [VT, VT]>;
   defm POW : VectorMathLibcall<S, VT, [VT, VT]>;
   defm POW_FINITE : VectorMathLibcall<S, VT, [VT, VT]>;
@@ -503,11 +505,11 @@ foreach S = !listconcat(F32VectorSuffixes, F64VectorSuffixes) in {
   defm SINCOS : VectorMathLibcall<S, Void, [VT, Ptr, Ptr], ArgMemWriteOnly,
                                    [[], OutPtrAttrs, OutPtrAttrs],
                                    [NoneType, VT, VT]>;
-  defm SINCOS_STRET : VectorMathLibcall<S>;
+  defm SINCOS_STRET : VectorMathLibcall<S, VTPair, [VT]>;
   defm SINCOSPI : VectorMathLibcall<S, Void, [VT, Ptr, Ptr], ArgMemWriteOnly,
                                      [[], OutPtrAttrs, OutPtrAttrs],
                                      [NoneType, VT, VT]>;
-  defm SINCOSPI_STRET : VectorMathLibcall<S>;
+  defm SINCOSPI_STRET : VectorMathLibcall<S, VTPair, [VT]>;
   defm SIN : VectorMathLibcall<S, VT, [VT]>;
   defm SINH : VectorMathLibcall<S, VT, [VT]>;
   defm SINPI : VectorMathLibcall<S, VT, [VT]>;
@@ -825,8 +827,8 @@ def DEOPTIMIZE : RuntimeLibcall<Void, [Ellip]>;
 def RETURN_ADDRESS : RuntimeLibcall<Ptr, [Int]>;
 
 // GPU profiling
-def PROFILE_INSTRUMENT_GPU : RuntimeLibcall;
-def PROFILE_SAMPLING_GPU : RuntimeLibcall;
+def PROFILE_INSTRUMENT_GPU : RuntimeLibcall<Void, [Ptr, Ptr, UInt64]>;
+def PROFILE_SAMPLING_GPU : RuntimeLibcall<Int, [UInt32]>;
 
 // Clear cache
 def CLEAR_CACHE : RuntimeLibcall<Void, [Ptr, Ptr]>;
@@ -861,14 +863,15 @@ def SC_MEMSET : RuntimeLibcall<Ptr, [Ptr, Int, SizeT]>;
 def SC_MEMCHR : RuntimeLibcall<Ptr, [Ptr, Int, SizeT]>;
 
 // AArch64 SME ABI calls
-def SMEABI_SME_STATE : RuntimeLibcall;
-def SMEABI_TPIDR2_SAVE : RuntimeLibcall;
-def SMEABI_ZA_DISABLE : RuntimeLibcall;
-def SMEABI_TPIDR2_RESTORE : RuntimeLibcall;
-def SMEABI_GET_CURRENT_VG : RuntimeLibcall;
-def SMEABI_SME_STATE_SIZE : RuntimeLibcall;
-def SMEABI_SME_SAVE : RuntimeLibcall;
-def SMEABI_SME_RESTORE : RuntimeLibcall;
+def SMEState : StructFuncArgType<[UInt64, UInt64]>;
+def SMEABI_SME_STATE : RuntimeLibcall<SMEState, []>;
+def SMEABI_TPIDR2_SAVE : RuntimeLibcall<Void, []>;
+def SMEABI_ZA_DISABLE : RuntimeLibcall<Void, []>;
+def SMEABI_TPIDR2_RESTORE : RuntimeLibcall<Void, [Ptr]>;
+def SMEABI_GET_CURRENT_VG : RuntimeLibcall<UInt64, []>;
+def SMEABI_SME_STATE_SIZE : RuntimeLibcall<UInt64, []>;
+def SMEABI_SME_SAVE : RuntimeLibcall<Void, [Ptr]>;
+def SMEABI_SME_RESTORE : RuntimeLibcall<Void, [Ptr]>;
 
 // ARM EABI calls
 def AEABI_MEMCPY4 : RuntimeLibcall<Void, [Ptr, Ptr, SizeT]>; // Align 4
@@ -1087,10 +1090,12 @@ def SETBUF : RuntimeLibcall<Void, [Ptr, Ptr]>;
 def SETITIMER : RuntimeLibcall<Int, [Int, Ptr, Ptr]>;
 def SETVBUF : RuntimeLibcall<Int, [Ptr, Ptr, Int, SizeT]>;
 def SIPRINTF : RuntimeLibcall<Int, [Ptr, Ptr, Ellip]>;
-def SIZE_RETURNING_NEW : RuntimeLibcall<NoneType, []>;
-def SIZE_RETURNING_NEW_ALIGNED : RuntimeLibcall<NoneType, []>;
-def SIZE_RETURNING_NEW_ALIGNED_HOT_COLD : RuntimeLibcall<NoneType, []>;
-def SIZE_RETURNING_NEW_HOT_COLD : RuntimeLibcall<NoneType, []>;
+def SizedPtr : StructFuncArgType<[Ptr, SizeT]>;
+def SIZE_RETURNING_NEW : RuntimeLibcall<SizedPtr, [SizeT]>;
+def SIZE_RETURNING_NEW_ALIGNED : RuntimeLibcall<SizedPtr, [SizeT, AlignValT]>;
+def SIZE_RETURNING_NEW_ALIGNED_HOT_COLD
+    : RuntimeLibcall<SizedPtr, [SizeT, AlignValT, UInt8]>;
+def SIZE_RETURNING_NEW_HOT_COLD : RuntimeLibcall<SizedPtr, [SizeT, UInt8]>;
 def SMALL_FPRINTF : RuntimeLibcall<Int, [Ptr, Ptr, Ellip]>;
 def SMALL_PRINTF : RuntimeLibcall<Int, [Ptr, Ellip]>;
 def SMALL_SPRINTF : RuntimeLibcall<Int, [Ptr, Ptr, Ellip]>;
