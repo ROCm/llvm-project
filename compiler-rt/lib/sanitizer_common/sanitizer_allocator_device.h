@@ -182,12 +182,13 @@ class DeviceAllocatorT {
       return nullptr;
     if (p != nearest_chunk) {
       Header* h = GetHeader(nearest_chunk, &header);
-      CHECK_GE(nearest_chunk, h->map_beg);
-      CHECK_LT(nearest_chunk, h->map_beg + h->map_size);
-      CHECK_LE(nearest_chunk, p);
-      if (h->map_beg + h->map_size <= p) {
+      // The header comes from a fresh runtime query. A chunk the query does
+      // not contain is not ours; the caller falls through to the real free.
+      if (!h || nearest_chunk < h->map_beg)
         return nullptr;
-      }
+      uptr map_end = h->map_beg + h->map_size;
+      if (map_end < h->map_beg || nearest_chunk >= map_end || map_end <= p)
+        return nullptr;
     }
     return GetUser(nearest_chunk);
   }
@@ -241,10 +242,11 @@ class DeviceAllocatorT {
 
     if (p != chunks_[beg]) {
       h = GetHeader(chunks_[beg], &header);
-      CHECK_NE(h, nullptr);
-      if (p < h->map_beg)
+      if (!h || chunks_[beg] < h->map_beg)
         return nullptr;
-      if (h->map_beg + h->map_size <= p) {
+      uptr map_end = h->map_beg + h->map_size;
+      if (map_end < h->map_beg || chunks_[beg] >= map_end || p < h->map_beg ||
+          map_end <= p) {
         // TODO (bingma): See above TODO in this function
         return nullptr;
       }
