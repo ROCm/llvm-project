@@ -37,7 +37,8 @@ on:
         default: "release"
       default_container_image:
         type: string
-        default: "ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98"
+        # Pinned fallback. A caller may replace it at runtime; Callers must supply digest-pinned images; Zizmor cannot see that value.
+        default: "ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98" # zizmor: ignore[unpinned-images]
     secrets:
       BENCHMARK_DB_URL:
         required: false
@@ -63,7 +64,8 @@ jobs:
     container:
       # If the component has specified an alternate image, honor that option.
       # Otherwise use the default image.
-      image: >-
+      # Callers must supply digest-pinned images; fetch_test_configurations.py pins overrides.
+      image: >- # zizmor: ignore[unpinned-images]
         ${{ inputs.platform == 'linux' &&
             (fromJSON(inputs.component).container_image || inputs.default_container_image)
             || null
@@ -216,7 +218,10 @@ jobs:
             (shard ${{ matrix.shard }}/${{ fromJSON(inputs.component).total_shards }})
             (${{ inputs.amdgpu_families }})
             ${{ fromJSON(inputs.component).expect_failure == true && '(xfail)' || '' }}
-        run: |
+        # This input is intentionally a shell program from fetch_test_configurations.py,
+        # including command chains and per-command environment assignments. Callers
+        # must be trusted to select code, just as they select repository/ref above.
+        run: | # zizmor: ignore[template-injection]
           ${{ fromJSON(inputs.component).test_script }}
 
       - name: Print test reproduction command
