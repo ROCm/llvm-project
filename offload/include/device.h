@@ -34,12 +34,15 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Frontend/OpenMP/OMPConstants.h"
 
-#include "GlobalHandler.h"
 #include "OffloadAPI.h"
+// Downstream: see the GenericPluginTy alias below.
 #include "PluginInterface.h"
 #include "Program.h"
 
+// Downstream: the plugin interface is still used for AMD-specific device
+// queries (APU, USM, gfx90a coarse-grain, zero-copy) and the OMPT profiler.
 using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
 using DeviceInfo = llvm::omp::target::plugin::DeviceInfo;
 using InfoTreeNode = llvm::omp::target::plugin::InfoTreeNode;
@@ -129,6 +132,8 @@ using RecordReplayTy = llvm::omp::target::rr::RecordReplayTy;
 
 struct DeviceTy {
   int32_t DeviceID;
+  // Downstream: plugin and plugin-local device number for the plugin queries
+  // that liboffload doesn't expose yet.
   GenericPluginTy *RTL = nullptr;
   int32_t RTLDeviceID = -1;
   ol_platform_handle_t Platform;
