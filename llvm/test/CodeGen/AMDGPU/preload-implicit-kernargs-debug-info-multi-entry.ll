@@ -44,33 +44,33 @@ define amdgpu_kernel void @preload_block_count_x(ptr addrspace(1) inreg noundef 
 ; GFX942-NEXT:    s_nop 0
 ; GFX942-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; GFX942-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
-; GFX942-NEXT:    v_trunc_f32_e32 v1, v1
-; GFX942-NEXT:    v_fmamk_f32 v0, v1, 0xcf800000, v0
+; GFX942-NEXT:    v_trunc_f32_e32 v2, v1
+; GFX942-NEXT:    v_fmamk_f32 v0, v2, 0xcf800000, v0
 ; GFX942-NEXT:    v_cvt_u32_f32_e32 v1, v1
 ; GFX942-NEXT:    v_cvt_u32_f32_e32 v0, v0
 ; GFX942-NEXT:    v_readfirstlane_b32 s5, v1
-; GFX942-NEXT:    v_readfirstlane_b32 s8, v0
-; GFX942-NEXT:    s_mul_i32 s9, s1, s5
-; GFX942-NEXT:    s_mul_hi_u32 s11, s1, s8
-; GFX942-NEXT:    s_mul_i32 s10, s3, s8
-; GFX942-NEXT:    s_add_i32 s9, s11, s9
-; GFX942-NEXT:    s_mul_i32 s14, s1, s8
-; GFX942-NEXT:    s_add_i32 s9, s9, s10
-; GFX942-NEXT:    s_mul_i32 s11, s8, s9
-; GFX942-NEXT:    s_mul_hi_u32 s15, s8, s14
-; GFX942-NEXT:    s_mul_hi_u32 s10, s8, s9
+; GFX942-NEXT:    v_readfirstlane_b32 s9, v0
+; GFX942-NEXT:    s_mul_i32 s8, s1, s5
+; GFX942-NEXT:    s_mul_hi_u32 s11, s1, s9
+; GFX942-NEXT:    s_mul_i32 s10, s3, s9
+; GFX942-NEXT:    s_add_i32 s8, s11, s8
+; GFX942-NEXT:    s_mul_i32 s14, s1, s9
+; GFX942-NEXT:    s_add_i32 s8, s8, s10
+; GFX942-NEXT:    s_mul_i32 s11, s9, s8
+; GFX942-NEXT:    s_mul_hi_u32 s15, s9, s14
+; GFX942-NEXT:    s_mul_hi_u32 s10, s9, s8
 ; GFX942-NEXT:    s_add_u32 s11, s15, s11
 ; GFX942-NEXT:    s_addc_u32 s10, 0, s10
 ; GFX942-NEXT:    s_mul_hi_u32 s15, s5, s14
 ; GFX942-NEXT:    s_mul_i32 s14, s5, s14
 ; GFX942-NEXT:    s_add_u32 s11, s11, s14
 ; GFX942-NEXT:    s_addc_u32 s10, s10, s15
-; GFX942-NEXT:    s_mul_hi_u32 s11, s5, s9
+; GFX942-NEXT:    s_mul_hi_u32 s11, s5, s8
 ; GFX942-NEXT:    s_addc_u32 s11, s11, 0
-; GFX942-NEXT:    s_mul_i32 s9, s5, s9
-; GFX942-NEXT:    s_add_u32 s9, s10, s9
+; GFX942-NEXT:    s_mul_i32 s8, s5, s8
+; GFX942-NEXT:    s_add_u32 s8, s10, s8
 ; GFX942-NEXT:    s_addc_u32 s10, 0, s11
-; GFX942-NEXT:    s_add_u32 s8, s8, s9
+; GFX942-NEXT:    s_add_u32 s8, s9, s8
 ; GFX942-NEXT:    s_addc_u32 s5, s5, s10
 ; GFX942-NEXT:    s_mul_i32 s9, s1, s8
 ; GFX942-NEXT:    s_mul_i32 s14, s1, s5
