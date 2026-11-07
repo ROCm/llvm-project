@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: ${{ inputs.repository || github.repository }}
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.head_ref || github.ref}}
 
       - name: Checkout external repository
         if: ${{ inputs.external_repo_config != '' }}
@@ -210,27 +210,82 @@ jobs:
            ${{ steps.stage_config.outputs.cmake_args }} \
            ${{ env.extra_cmake_options }}
 
-      - name: Reset ccache stats for clean measurement
-        run: |
-          ccache --zero-stats
-          echo "ccache remote_only: $(ccache --get-config remote_only)"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::317668459450:role/therock-aig-sharks-compiler-ci-s3-oidc
+          role-duration-seconds: 3600
 
+      - name: Unarch ccache
+        env:
+          S3_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
+          ARCHIVE_NAME: ccache_llvm_project_latest.tar
+        run: |
+          LOCAL_CACHE="$(ccache --get-config cache_dir)"
+          
+          echo "CP arch from S3"
+          time aws s3 cp s3://${S3_BUCKET}/amd-staging/ccache/${ARCHIVE_NAME} /tmp/ccache.tar \
+            --quiet
+
+          echo "Extracting cache..."
+          time tar -xf /tmp/ccache.tar \
+            -C "$(dirname $LOCAL_CACHE)"
+          
+          echo "$(du -sh ${LOCAL_CACHE})"
+          # Cleanup
+          rm -f /tmp/ccache.tar.gz
+
+          # FORCE disable remote storage
+          ccache --set-config remote_storage=""
+          ccache --set-config file_clone=true
+          echo "CCACHE_REMOTE_STORAGE=" >> $GITHUB_ENV
+          
       - name: Build stage
         run: |
+          ccache --zero-stats
           cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
 
       - name: Show ccache stats for build
-        if: always()
         run: |
           echo "========================================="
-          echo "CCache Stats (Build Step Only)"
+          echo "ccache Stats (Build Step Only)"
           echo "========================================="
           ccache --show-stats
-          
-          echo ""
-          echo "Key metrics:"
-          ccache --show-stats | grep -E "Cacheable calls|cache hits|Cache misses|hit rate"
 
+      - name: Create ccache archive and push to S3
+        env:
+          S3_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
+        run: |
+          LOCAL_CACHE="$(ccache --get-config cache_dir)"
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          ARCHIVE_NAME="ccache_llvm_project_latest.tar"
+          
+          echo "Using gz compression"
+          time tar -cf "/tmp/${ARCHIVE_NAME}" \
+            --exclude='*.tmp' \
+            --exclude='*.lock' \
+            -C "$(dirname $LOCAL_CACHE)" \
+            "$(basename $LOCAL_CACHE)"
+          
+          echo "upload to s3"
+          time aws s3 cp /tmp/${ARCHIVE_NAME} s3://${S3_BUCKET}/amd-staging/ccache/${ARCHIVE_NAME} \
+              --quiet
+          
+      
+      - name: restore cred
+        if: always()
+        run: |
+          # Restore the runner's default credentials
+          if [ "$DEFAULT_AWS_ACCESS_KEY_ID" != "EMPTY" ]; then
+            echo "AWS_ACCESS_KEY_ID=$DEFAULT_AWS_ACCESS_KEY_ID" >> $GITHUB_ENV
+            echo "AWS_SECRET_ACCESS_KEY=$DEFAULT_AWS_SECRET_ACCESS_KEY" >> $GITHUB_ENV
+            echo "AWS_SESSION_TOKEN=$DEFAULT_AWS_SESSION_TOKEN" >> $GITHUB_ENV
+            echo "AWS_REGION=$DEFAULT_AWS_REGION" >> $GITHUB_ENV
+            echo "✅ Restored default AWS credentials"
+          else
+            echo "⚠️  No default credentials to restore"
+          fi
+                  
       - name: Generate failed log summaries
         if: ${{ !cancelled() }}
         run: |
