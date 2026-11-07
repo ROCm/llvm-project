@@ -13,17 +13,29 @@ int main(int argc, char *argv[]) {
   char *BundleData;
   size_t BundleSize;
 
-  if (argc < 4 || argc % 2) {
-    printf("Usage: %s <bc bundle> <arch> <bc output> [<arch> <bc output>]...\n",
+  // Optional leading flag: print each output's public data object name. The
+  // name is independent of the temporary file names Comgr uses internally.
+  int PrintNames = 0;
+  int Arg = 1;
+  if (Arg < argc && !strcmp(argv[Arg], "--print-names")) {
+    PrintNames = 1;
+    ++Arg;
+  }
+
+  // One bundle plus an <arch> <output> pair per requested entry.
+  size_t RemainingArgs = argc - Arg;
+  if (RemainingArgs < 3 || RemainingArgs % 2 == 0) {
+    printf("Usage: %s [--print-names] <bc bundle> <arch> <bc output> "
+           "[<arch> <bc output>]...\n",
            argv[0]);
     return -1;
   }
 
-  const char *BundlePath = argv[1];
-  size_t NumArch = (argc - 2) / 2;
+  const char *BundlePath = argv[Arg];
+  size_t NumArch = (RemainingArgs - 1) / 2;
   const char **AllArch = malloc(NumArch * sizeof(*AllArch));
   for (size_t I = 0; I < NumArch; ++I)
-    AllArch[I] = argv[2 + 2 * I];
+    AllArch[I] = argv[Arg + 1 + 2 * I];
 
   amd_comgr_data_t OneBundle;
   amd_comgr_data_set_t InputBundles;
@@ -67,9 +79,18 @@ int main(int argc, char *argv[]) {
     char *Buffer = (char *)malloc(BufferSize);
     amd_comgr_(get_data(OneBitcode, &BufferSize, Buffer));
 
-    FILE *BitcodeFile = fopen(argv[3 + 2 * I], "wb");
+    FILE *BitcodeFile = fopen(argv[Arg + 2 + 2 * I], "wb");
     fwrite(Buffer, 1, BufferSize, BitcodeFile);
     fclose(BitcodeFile);
+
+    if (PrintNames) {
+      size_t NameSize;
+      amd_comgr_(get_data_name(OneBitcode, &NameSize, NULL));
+      char *Name = (char *)malloc(NameSize);
+      amd_comgr_(get_data_name(OneBitcode, &NameSize, Name));
+      printf("%s\n", Name);
+      free(Name);
+    }
 
     free(Buffer);
     amd_comgr_(release_data(OneBitcode));
