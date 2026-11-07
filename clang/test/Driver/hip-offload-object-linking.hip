@@ -34,8 +34,10 @@
 // RDC-FULL: clang-linker-wrapper
 // RDC-FULL-SAME: "--device-compiler=amdgpu-amd-amdhsa=-flto=full"
 // RDC-FULL-NOT: "-plugin-opt=-amdgpu-enable-object-linking"
+// RDC-FULL-NOT: "-plugin-opt=-thinlink-closed-world"
 
 //--- RDC with ThinLTO: object linking in device cc1 and in the LTO backend.
+// All device code is bitcode, so the thin link assumes a closed world.
 // RUN: %clang -### --target=x86_64-linux-gnu -nogpulib -nogpuinc \
 // RUN:   --offload-arch=gfx90a -fgpu-rdc -foffload-lto=thin %s 2>&1 \
 // RUN:   | FileCheck -check-prefix=RDC-THIN %s
@@ -46,6 +48,7 @@
 // RDC-THIN: clang-linker-wrapper
 // RDC-THIN-SAME: "--device-compiler=amdgpu-amd-amdhsa=-flto=thin"
 // RDC-THIN-SAME: "--device-linker=amdgpu-amd-amdhsa=-plugin-opt=-amdgpu-enable-object-linking"
+// RDC-THIN-SAME: "--device-linker=amdgpu-amd-amdhsa=-plugin-opt=-thinlink-closed-world"
 
 //--- RDC with LTO disabled: device cc1 emits objects with object linking.
 // RUN: %clang -### --target=x86_64-linux-gnu -nogpulib -nogpuinc \
@@ -61,6 +64,7 @@
 // RDC-NOLTO: clang-linker-wrapper
 // RDC-NOLTO-NOT: "--device-compiler=amdgpu-amd-amdhsa=-flto
 // RDC-NOLTO-SAME: "--device-linker=amdgpu-amd-amdhsa=-plugin-opt=-amdgpu-enable-object-linking"
+// RDC-NOLTO-NOT: "-plugin-opt=-thinlink-closed-world"
 
 //--- RDC device-only compilation with LTO disabled.
 // RUN: %clang -### --target=x86_64-linux-gnu -nogpulib -nogpuinc \
@@ -87,12 +91,14 @@
 // LINK-THIN: clang-linker-wrapper
 // LINK-THIN-SAME: "--device-compiler=amdgpu-amd-amdhsa=-flto=thin"
 // LINK-THIN-SAME: "--device-linker=amdgpu-amd-amdhsa=-plugin-opt=-amdgpu-enable-object-linking"
+// LINK-THIN-SAME: "--device-linker=amdgpu-amd-amdhsa=-plugin-opt=-thinlink-closed-world"
 // RUN: %clang -### --target=x86_64-linux-gnu --offload-arch=gfx90a \
 // RUN:   --hip-link %t1.o %t2.o 2>&1 \
 // RUN:   | FileCheck -check-prefix=LINK-FULL %s
 // LINK-FULL: clang-linker-wrapper
 // LINK-FULL-SAME: "--device-compiler=amdgpu-amd-amdhsa=-flto=full"
 // LINK-FULL-NOT: "-plugin-opt=-amdgpu-enable-object-linking"
+// LINK-FULL-NOT: "-plugin-opt=-thinlink-closed-world"
 
 //--- SPIR-V device code never uses AMDGPU object linking.
 // RUN: %clang -### --target=x86_64-linux-gnu -nogpulib -nogpuinc \
@@ -102,3 +108,4 @@
 // SPIRV-NOT: "-amdgpu-enable-object-linking"
 // SPIRV: clang-linker-wrapper
 // SPIRV-NOT: "-plugin-opt=-amdgpu-enable-object-linking"
+// SPIRV-NOT: "-plugin-opt=-thinlink-closed-world"
