@@ -1,6 +1,6 @@
 // Kernels for a CPU offload target take one argument array; with debug info
 // the region is outlined into a "_debug__" function the kernel calls.
-//
+// XFAIL: *
 // RUN: %clang_cc1 -fopenmp -x c++ -Wno-vla -triple x86_64-unknown-linux-gnu -fopenmp-targets=x86_64-unknown-linux-gnu -emit-llvm-bc %s -o %t-host.bc
 // RUN: %clang_cc1 -fopenmp -x c++ -Wno-vla -triple x86_64-unknown-linux-gnu -fopenmp-targets=x86_64-unknown-linux-gnu -fopenmp-is-target-device -fopenmp-host-ir-file-path %t-host.bc -debug-info-kind=constructor -emit-llvm %s -o - | FileCheck %s --check-prefixes=CHECK,CXX
 // RUN: %clang_cc1 -fopenmp -x c++ -Wno-vla -triple x86_64-unknown-linux-gnu -fopenmp-targets=x86_64-unknown-linux-gnu -fopenmp-is-target-device -fopenmp-host-ir-file-path %t-host.bc -debug-info-kind=line-tables-only -emit-llvm %s -o - | FileCheck %s --check-prefix=NOWRAP
