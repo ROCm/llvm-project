@@ -139,9 +139,14 @@ struct Config {
   /// program is in a module with a summary, and the code outside the modules
   /// never calls a function through a pointer: for example the device link of
   /// a GPU program without native objects. The link ignores this field if a
-  /// module without a summary is in the link. The option
-  /// -thinlink-closed-world has the same effect as this field.
+  /// module without a summary is in the link, or if LinkHasNativeCode is set.
+  /// The option -thinlink-closed-world has the same effect as this field.
   bool ThinLinkClosedWorld = false;
+
+  /// If this field is set, the link has code that no LTO module holds, for
+  /// example a native object file or a shared library. The linker sets it.
+  /// The thin link then does not assume a closed world.
+  bool LinkHasNativeCode = false;
 
   /// Setting this field will replace target triples in input files with this
   /// triple.

@@ -146,6 +146,9 @@ static lto::Config createConfig(Ctx &ctx) {
   c.AllVtablesHaveTypeInfos = ctx.ltoAllVtablesHaveTypeInfos;
   c.AlwaysEmitRegularLTOObj = !ctx.arg.ltoObjPath.empty();
   c.KeepSymbolNameCopies = false;
+  // The thin link cannot see the code of native object files and shared
+  // libraries, so it must not assume a closed world.
+  c.LinkHasNativeCode = !ctx.objectFiles.empty() || !ctx.sharedFiles.empty();
 
   for (const llvm::StringRef &name : ctx.arg.thinLTOModulesToCompile)
     c.ThinLTOModulesToCompile.emplace_back(name);
