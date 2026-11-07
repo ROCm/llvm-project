@@ -264,6 +264,13 @@ void PassBuilder::invokeSummaryPipelineEPCallbacks(SummaryPassManager &SPM) {
   for (auto &C : SummaryPipelineEPCallbacks)
     C(SPM);
 }
+
+SummaryPassManager PassBuilder::buildThinLinkDefaultPipeline() {
+  SummaryPassManager SPM;
+  SPM.addPass(ThinLinkFunctionAttrsPass());
+  invokeSummaryPipelineEPCallbacks(SPM);
+  return SPM;
+}
 void PassBuilder::invokePipelineStartEPCallbacks(ModulePassManager &MPM,
                                                  OptimizationLevel Level) {
   for (auto &C : PipelineStartEPCallbacks)

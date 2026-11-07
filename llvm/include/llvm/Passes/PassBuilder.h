@@ -343,6 +343,14 @@ public:
   buildO0DefaultPipeline(OptimizationLevel Level,
                          ThinOrFullLTOPhase Phase = ThinOrFullLTOPhase::None);
 
+  /// Build the default pipeline of summary passes that the ThinLTO thin link
+  /// runs after it resolves the symbols: the generic passes, then the passes
+  /// that the callbacks of the summary pipeline extension point add (see
+  /// registerSummaryPipelineEPCallback()). The pipeline text "default" adds
+  /// these passes. The pipeline does not have ThinLinkParamAccessPass: the thin
+  /// link runs it after each pipeline, because the backends need its results.
+  LLVM_ABI SummaryPassManager buildThinLinkDefaultPipeline();
+
   /// Build the default `AAManager` with the default alias analysis pipeline
   /// registered.
   ///

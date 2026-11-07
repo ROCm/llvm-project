@@ -2634,6 +2634,10 @@ Error PassBuilder::parseSummaryPass(SummaryPassManager &SPM,
   StringRef Name = E.Name;
   // Only a callback can parse a summary pass with an inner pipeline.
   if (E.InnerPipeline.empty()) {
+    if (Name == "default") {
+      SPM.addPass(buildThinLinkDefaultPipeline());
+      return Error::success();
+    }
 #define SUMMARY_PASS(NAME, CREATE_PASS)                                        \
   if (Name == NAME) {                                                          \
     SPM.addPass(CREATE_PASS);                                                  \

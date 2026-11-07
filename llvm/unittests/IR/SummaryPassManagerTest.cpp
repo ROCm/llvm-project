@@ -272,6 +272,49 @@ TEST(SummaryPassManagerTest, PipelineExtensionPoint) {
   EXPECT_EQ(Seen, 2u);
 }
 
+// The default thin-link pipeline runs the generic passes, then the passes of
+// the extension point. The pipeline text "default" adds the same passes.
+TEST(SummaryPassManagerTest, DefaultPipeline) {
+  std::unique_ptr<ModuleSummaryIndex> Index = parseIndex(TwoFunctions);
+  ASSERT_NE(Index, nullptr);
+
+  LLVMContext Ctx;
+  PassInstrumentationCallbacks PIC;
+  std::vector<std::string> Passes;
+  PIC.registerBeforeNonSkippedPassCallback(
+      [&](StringRef Name, IRUnitRef) { Passes.push_back(Name.str()); });
+  PassBuilder PB(Ctx, /*TM=*/nullptr, /*PTO=*/std::nullopt,
+                 /*PGOOpt=*/std::nullopt, &PIC);
+  unsigned Runs = 0, Seen = 0;
+  PB.registerSummaryPipelineEPCallback([&](SummaryPassManager &PM) {
+    PM.addPass(MarkLivePass(Seen, /*PreserveAll=*/true));
+  });
+  DenseSet<GlobalValue::GUID> Preserved;
+  SummaryAnalysisManager AM;
+  PB.registerSummaryAnalyses(AM);
+  AM.registerPass([&] { return CountFunctionsAnalysis(Runs); });
+  AM.registerPass([&] {
+    return ThinLinkInfoAnalysis(
+        Preserved,
+        [](GlobalValue::GUID, const GlobalValueSummary *) { return true; });
+  });
+
+  auto CheckPasses = [&] {
+    ASSERT_EQ(Passes.size(), 2u);
+    EXPECT_NE(Passes[0].find("ThinLinkFunctionAttrsPass"), std::string::npos);
+    EXPECT_NE(Passes[1].find("MarkLivePass"), std::string::npos);
+  };
+  SummaryPassManager PM = PB.buildThinLinkDefaultPipeline();
+  PM.run(*Index, AM);
+  CheckPasses();
+
+  Passes.clear();
+  SummaryPassManager TextPM;
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(TextPM, "default"), Succeeded());
+  TextPM.run(*Index, AM);
+  CheckPasses();
+}
+
 static unsigned TargetPassRuns = 0;
 
 // A pass of a test target.

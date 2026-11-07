@@ -2187,72 +2187,6 @@ ThinBackend lto::createWriteIndexesThinBackend(
   return ThinBackend(Func, Parallelism);
 }
 
-// The thin-link passes are not in an anonymous namespace, so that the pass
-// instrumentation shows the same names with all compilers.
-namespace llvm {
-
-/// Propagates the function flags (norecurse, nounwind) over the summary call
-/// graph.
-struct ThinLinkFunctionAttrsPass
-    : RequiredPassInfoMixin<ThinLinkFunctionAttrsPass> {
-  PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM) {
-    thinLTOPropagateFunctionAttrs(
-        Index, AM.getResult<ThinLinkInfoAnalysis>(Index).IsPrevailing);
-    return PreservedAnalyses::none();
-  }
-};
-
-/// Computes the parameter access ranges for stack safety.
-class ThinLinkParamAccessPass
-    : public RequiredPassInfoMixin<ThinLinkParamAccessPass> {
-  const cl::LibraryOptionsContext *LibraryOptions;
-
-public:
-  ThinLinkParamAccessPass(const cl::LibraryOptionsContext *LibraryOptions)
-      : LibraryOptions(LibraryOptions) {}
-
-  PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &) {
-    generateParamAccessSummary(LibraryOptions, Index);
-    return PreservedAnalyses::none();
-  }
-};
-
-} // end namespace llvm
-
-/// Adds the passes of the default thin-link pipeline to \p SPM. The callbacks
-/// of the extension point of \p PB add the passes of the targets.
-static void addDefaultThinLinkPasses(SummaryPassManager &SPM, lto::Config &Conf,
-                                     PassBuilder &PB) {
-  SPM.addPass(ThinLinkFunctionAttrsPass());
-  PB.invokeSummaryPipelineEPCallbacks(SPM);
-}
-
-/// Lets \p PB parse the names of the thin-link passes in this file, and lets
-/// the pass instrumentation in \p PIC show these names.
-static void registerThinLinkPasses(PassBuilder &PB,
-                                   PassInstrumentationCallbacks &PIC,
-                                   lto::Config &Conf) {
-  PIC.addClassToPassName(ThinLinkFunctionAttrsPass::name(),
-                         "thinlink-function-attrs");
-  PIC.addClassToPassName(ThinLinkParamAccessPass::name(),
-                         "thinlink-param-access");
-  PB.registerPipelineParsingCallback(
-      [&Conf, &PB](StringRef Name, SummaryPassManager &SPM,
-                   ArrayRef<PassBuilder::PipelineElement> InnerPipeline) {
-        if (!InnerPipeline.empty())
-          return false;
-        if (Name == "default")
-          addDefaultThinLinkPasses(SPM, Conf, PB);
-        else if (Name == "thinlink-function-attrs")
-          SPM.addPass(ThinLinkFunctionAttrsPass());
-        else if (Name == "thinlink-param-access")
-          SPM.addPass(ThinLinkParamAccessPass(Conf.LibraryOptions));
-        else
-          return false;
-        return true;
-      });
-}
-
 Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
                       const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols) {
   llvm::TimeTraceScope timeScope("Run ThinLTO");
@@ -2451,7 +2385,6 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
   SI.registerCallbacks(PIC);
   PassBuilder PB(RegularLTO.Ctx, /*TM=*/nullptr, /*PTO=*/std::nullopt,
                  /*PGOOpt=*/std::nullopt, &PIC);
-  registerThinLinkPasses(PB, PIC, Conf);
   // Let the targets of the inputs add their passes. Two triples, or two
   // targets, can have the same function, which adds the passes one time.
   SmallVector<Target::ThinLinkPassBuilderCallbackTy, 2> Callbacks;
@@ -2476,7 +2409,7 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
   });
   SummaryPassManager SPM;
   if (Conf.ThinLinkPipeline.empty())
-    addDefaultThinLinkPasses(SPM, Conf, PB);
+    SPM = PB.buildThinLinkDefaultPipeline();
   else if (Error Err = PB.parsePassPipeline(SPM, Conf.ThinLinkPipeline))
     return make_error<StringError>("unable to parse the thin-link pipeline '" +
                                        Conf.ThinLinkPipeline +
@@ -2485,7 +2418,7 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
   // Stack safety in the backends reads the parameter access ranges that this
   // pass computes. The ranges of a module alone are not safe, so the pass also
   // runs after a custom pipeline.
-  SPM.addPass(ThinLinkParamAccessPass(Conf.LibraryOptions));
+  SPM.addPass(ThinLinkParamAccessPass(&RegularLTO.Ctx.getLibraryOptions()));
   SPM.run(ThinLTO.CombinedIndex, SAM);
 
   if (llvm::timeTraceProfilerEnabled())
