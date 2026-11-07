@@ -10197,6 +10197,15 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back(
             Args.MakeArgString("--device-linker=" + TC->getTripleString() +
                                "=-plugin-opt=-amdgpu-enable-object-linking"));
+
+      // With device LTO, all HIP device code is bitcode, so the thin link can
+      // assume a closed world. The linker turns it off if the link has native
+      // code. OpenMP does not use object linking, and keeps an open world.
+      if (TC->getTriple().isAMDGCN() && DeviceLTOMode == LTOK_Thin &&
+          (Kind == Action::OFK_HIP || Kind == Action::OFK_Cuda))
+        CmdArgs.push_back(
+            Args.MakeArgString("--device-linker=" + TC->getTripleString() +
+                               "=-plugin-opt=-thinlink-closed-world"));
     }
   }
 
