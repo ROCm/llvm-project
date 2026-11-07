@@ -27,6 +27,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_vop2
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sreg_64_xexec = IMPLICIT_DEF
@@ -51,6 +52,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_vop3
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sreg_64_xexec = IMPLICIT_DEF
@@ -76,6 +78,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_vop2_redef_vcc1
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sreg_64_xexec = IMPLICIT_DEF
@@ -102,6 +105,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_vop2_redef_vcc2
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sreg_64_xexec = IMPLICIT_DEF
@@ -124,6 +128,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_undef_vcc
+tracksRegLiveness: false
 body:             |
   bb.0:
     $vcc = S_AND_B64 $exec, undef $vcc, implicit-def dead $scc
@@ -145,6 +150,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_vop3_imp_vcc
+tracksRegLiveness: false
 body:             |
   bb.0:
     $vcc = IMPLICIT_DEF
@@ -167,6 +173,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_vop2_imp_vcc
+tracksRegLiveness: false
 body:             |
   bb.0:
     $vcc = IMPLICIT_DEF
@@ -190,6 +197,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_vop2_used_sel
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sreg_64_xexec = IMPLICIT_DEF
@@ -216,6 +224,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_vop2_used_vcc
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sreg_64_xexec = IMPLICIT_DEF
@@ -239,6 +248,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.3, implicit killed $vcc
 ---
 name:            negated_cond_vop2_dominated_blocks
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sreg_64_xexec = IMPLICIT_DEF
@@ -263,6 +273,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.3, implicit killed $vcc
 ---
 name:            negated_cond_vop2_different_blocks_cmp_and
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sreg_64_xexec = IMPLICIT_DEF
@@ -289,6 +300,7 @@ body:             |
 # GCN-NEXT: S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
 ---
 name:            negated_cond_subreg
+tracksRegLiveness: false
 body:             |
   bb.0:
     %0:sgpr_128 = IMPLICIT_DEF

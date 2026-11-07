@@ -3028,6 +3028,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942-NEXT:    scratch_store_dwordx2 v6, v[2:3], off
 ; GFX942-NEXT:  .LBB18_4: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fmin_ret_f64__amdgpu_no_fine_grained_memory:
@@ -3418,6 +3419,7 @@ define double @flat_agent_atomic_fmin_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    scratch_store_dwordx2 v6, v[2:3], off
 ; GFX942-NEXT:  .LBB19_4: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fmin_ret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -3811,6 +3813,7 @@ define double @flat_agent_atomic_fmin_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    scratch_store_dwordx2 v6, v[2:3], off
 ; GFX942-NEXT:  .LBB20_4: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fmin_ret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -4195,6 +4198,7 @@ define void @flat_agent_atomic_fmin_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX942-NEXT:  .LBB21_4: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fmin_noret_f64__amdgpu_no_fine_grained_memory:
@@ -4563,6 +4567,7 @@ define void @flat_agent_atomic_fmin_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX942-NEXT:  .LBB22_4: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fmin_noret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -4945,6 +4950,7 @@ define void @flat_agent_atomic_fmin_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX942-NEXT:  .LBB23_4: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fmin_noret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -5327,6 +5333,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_remote_memory(ptr %ptr,
 ; GFX942-NEXT:    scratch_store_dwordx2 v6, v[2:3], off
 ; GFX942-NEXT:  .LBB24_4: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fmin_ret_f64__amdgpu_no_remote_memory:
@@ -5764,6 +5771,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_fine_grained_memory__am
 ; GFX942-NEXT:    scratch_store_dwordx2 v6, v[2:3], off
 ; GFX942-NEXT:  .LBB25_4: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fmin_ret_f64__amdgpu_no_fine_grained_memory__amdgpu_no_remote_memory:

@@ -5997,6 +5997,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX942-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v5
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory:
@@ -6434,6 +6435,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB31_7: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -6874,6 +6876,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB32_7: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -7306,6 +7309,7 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB33_7: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory:
@@ -7724,6 +7728,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB34_7: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -8156,6 +8161,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB35_7: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:

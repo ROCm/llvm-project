@@ -3564,6 +3564,7 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX942-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v5
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fsub_ret_f64:
@@ -3988,6 +3989,7 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX942-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX942-NEXT:  .LBB17_5: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fsub_ret_f64__offset12b_pos:
@@ -4415,6 +4417,7 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX942-NEXT:    scratch_store_dwordx2 v4, v[2:3], off
 ; GFX942-NEXT:  .LBB18_5: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fsub_ret_f64__offset12b_neg:
@@ -4834,6 +4837,7 @@ define void @flat_agent_atomic_fsub_noret_f64(ptr %ptr, double %val) #0 {
 ; GFX942-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX942-NEXT:  .LBB19_5: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fsub_noret_f64:
@@ -5239,6 +5243,7 @@ define void @flat_agent_atomic_fsub_noret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX942-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX942-NEXT:  .LBB20_5: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fsub_noret_f64__offset12b_pos:
@@ -5658,6 +5663,7 @@ define void @flat_agent_atomic_fsub_noret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX942-NEXT:    scratch_store_dwordx2 v4, v[0:1], off
 ; GFX942-NEXT:  .LBB21_5: ; %atomicrmw.phi
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: flat_agent_atomic_fsub_noret_f64__offset12b_neg:

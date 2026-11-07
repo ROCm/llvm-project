@@ -18,6 +18,7 @@
 #include "OpenMP/OMPT/Interface.h"
 #include "OpenMP/OMPT/OmptCommonDefs.h"
 #include "OpenMP/OMPT/OmptTracing.h"
+#include "OpenMP/omp.h"
 #include "PluginManager.h"
 #ifdef OMPT_SUPPORT
 // Downstream: provides 'ompt::lookupDeviceTracingFn' and the device pointer to
@@ -59,6 +60,13 @@ int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
 RecordReplayTy *__ol_tgt_GetRecordReplay(ol_device_handle_t Device);
 llvm::omp::target::plugin::DeviceImageTy *
 __ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program);
+llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
+                                         ol_device_handle_t Device,
+                                         TargetAllocTy Kind, int64_t Size,
+                                         void *HostPtr);
+llvm::Error __ol_tgt_MemFree(ol_context_handle_t Context,
+                             ol_device_handle_t Device, void *Ptr,
+                             TargetAllocTy Kind);
 } // namespace llvm::offload::tmp
 
 int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
@@ -164,8 +172,6 @@ llvm::Error DeviceTy::init() {
     return createError(ErrorCode::BackendFailure,
                        "failed to create context for device %d: %s", DeviceID,
                        Res->Details);
-  IsHostDevice =
-      getInfo<ol_device_type_t>(DeviceInfo::TYPE) == OL_DEVICE_TYPE_HOST;
 
   RTL = llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
   RTLDeviceID = llvm::offload::tmp::__ol_tgt_GetPluginDeviceId(DeviceHandle);
@@ -174,6 +180,8 @@ llvm::Error DeviceTy::init() {
   if (olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND, sizeof(Backend),
                         &Backend))
     Backend = OL_PLATFORM_BACKEND_UNKNOWN;
+
+  MaxDirectWriteSize = getInfo<uint64_t>(DeviceInfo::MAX_DIRECT_WRITE_SIZE);
 
   getInfoString(DeviceInfo::UID, Uid);
   if (Uid.empty())
@@ -282,11 +290,12 @@ llvm::Expected<void *>
 DeviceTy::getAndRecordGlobalAddress(const ProgramTy &Program, const char *Name,
                                     size_t ExpectedSize) {
   size_t Size = 0;
-  auto AddrOrErr = Program.getGlobalAddress(Name, &Size);
+  auto AddrOrErr =
+      Program.getGlobalAddress(Name, ExpectedSize ? &Size : nullptr);
   if (!AddrOrErr)
     return AddrOrErr;
-  // Some backends return size 0 if the size is unknown.
-  // Only check the size if it is non-zero.
+  // If the user didn't specify an expected size or the backend returned size 0,
+  // we skip the size check.
   if (Size && Size != ExpectedSize)
     return createError(ErrorCode::InvalidBinary,
                        "size of global symbol %s does not match expected size "
@@ -390,9 +399,6 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
     return ProgramOrErr.takeError();
   ProgramTy Program = std::move(*ProgramOrErr);
 
-  // Dispatch this before the fast-reduction probe below: that probe is a
-  // downstream addition and its device-to-host read would otherwise be
-  // reported to the tool ahead of the load of the image it reads from.
   OMPT_IF_BUILT_AND_INITIALIZED({
     auto &Image = *llvm::offload::tmp::__ol_tgt_GetDeviceImageFromProgram(
         Program.getHandle());
@@ -401,21 +407,6 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
                         Image.getSize(), const_cast<void *>(Image.getStart()),
                         /*DeviceAddr=*/nullptr, /*ModuleId=*/0);
   });
-
-  AsyncInfoTy AsyncInfo(*this);
-  // From the image, read whether fast reduction is enabled (optional symbol).
-  auto IsFastReductionEnabledPtrOrErr = getAndRecordGlobalAddress(
-      Program, "__omp_plugin_enable_fast_reduction", sizeof(int8_t));
-  if (!IsFastReductionEnabledPtrOrErr) {
-    llvm::consumeError(IsFastReductionEnabledPtrOrErr.takeError());
-  } else {
-    int8_t IsFastReductionEnabled;
-    if (!retrieveData(&IsFastReductionEnabled, *IsFastReductionEnabledPtrOrErr,
-                      sizeof(int8_t), AsyncInfo) &&
-        !synchronize(AsyncInfo))
-      RTL->getDevice(RTLDeviceID)
-          .setIsFastReductionEnabled(IsFastReductionEnabled);
-  }
 
   // This symbol is optional.
   auto DeviceEnvironmentPtrOrErr = getAndRecordGlobalAddress(
@@ -473,7 +464,24 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
           RTLDeviceID, HstPtr, &TargetPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  TargetPtr = RTL->data_alloc(RTLDeviceID, Size, HstPtr, Kind);
+  // Time the allocation here: the offload API below carries no profiler, and
+  // the trace record built by the RAII above reads these timestamps. Declared
+  // after that RAII, so it is destroyed -- and stamps -- first.
+  auto *Profiler = RTL->getProfiler();
+  assert(Profiler && "Plugin provides no profiler instance");
+  auto ProfTimer = Profiler->getScopedDataAllocTimer(
+      &RTL->getDevice(RTLDeviceID), HstPtr, Size);
+
+  auto AllocOrErr = llvm::offload::tmp::__ol_tgt_MemAlloc(
+      Context, DeviceHandle, static_cast<TargetAllocTy>(Kind), Size, HstPtr);
+  if (!AllocOrErr) {
+    REPORT() << "Failure to allocate device memory: "
+             << llvm::toString(AllocOrErr.takeError());
+    return nullptr;
+  }
+  assert(*AllocOrErr && "Null pointer upon successful allocation");
+
+  TargetPtr = *AllocOrErr;
   return TargetPtr;
 }
 
@@ -488,7 +496,23 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
           RegionInterface.getTraceGenerators<ompt_target_data_delete>(),
           DeviceID, TgtAllocBegin,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
-  return RTL->data_delete(RTLDeviceID, TgtAllocBegin, Kind);
+
+  // See allocData: the trace record built by the RAII above reads these
+  // timestamps, so this must be declared after it.
+  auto *Profiler = RTL->getProfiler();
+  assert(Profiler && "Plugin provides no profiler instance");
+  auto ProfTimer = Profiler->getScopedDataDeleteTimer(
+      &RTL->getDevice(RTLDeviceID), TgtAllocBegin);
+
+  if (auto Err = llvm::offload::tmp::__ol_tgt_MemFree(
+          Context, DeviceHandle, TgtAllocBegin,
+          static_cast<TargetAllocTy>(Kind))) {
+    REPORT() << "Failure to deallocate device pointer " << TgtAllocBegin << ": "
+             << llvm::toString(std::move(Err));
+    return OFFLOAD_FAIL;
+  }
+
+  return OFFLOAD_SUCCESS;
 }
 
 llvm::Expected<void *> DeviceTy::allocCtxMem(int64_t Size,
@@ -531,12 +555,19 @@ int32_t DeviceTy::submitDataSync(void *TgtPtrBegin, void *HstPtrBegin,
                                  int64_t Size, HostDataToTargetTy *Entry,
                                  MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                  const ident_t *Loc, const char *Name) {
-  // Downstream: use a queue, so that OMPT device tracing records the transfer.
-  AsyncInfoTy AsyncInfo(*this);
-  if (submitData(TgtPtrBegin, HstPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
-                 Loc, Name) != OFFLOAD_SUCCESS)
-    return OFFLOAD_FAIL;
-  return AsyncInfo.synchronize();
+  return submitDataImpl(TgtPtrBegin, HstPtrBegin, Size, /*Queue=*/nullptr,
+                        Entry, HDTTMapPtr, Loc, Name);
+}
+
+int32_t DeviceTy::submitDataIndependently(void *TgtPtrBegin, void *HstPtrBegin,
+                                          int64_t Size, AsyncInfoTy &AsyncInfo,
+                                          const char *Name) {
+  if (Size > 0 && uint64_t(Size) <= MaxDirectWriteSize)
+    return submitDataSync(TgtPtrBegin, HstPtrBegin, Size, /*Entry=*/nullptr,
+                          /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr, Name);
+  return submitData(TgtPtrBegin, HstPtrBegin, Size, AsyncInfo,
+                    /*Entry=*/nullptr, /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr,
+                    Name);
 }
 
 int32_t DeviceTy::submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin,
@@ -601,12 +632,8 @@ int32_t DeviceTy::retrieveDataSync(void *HstPtrBegin, void *TgtPtrBegin,
                                    int64_t Size, HostDataToTargetTy *Entry,
                                    MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                    const ident_t *Loc) {
-  // Downstream: use a queue, so that OMPT device tracing records the transfer.
-  AsyncInfoTy AsyncInfo(*this);
-  if (retrieveData(HstPtrBegin, TgtPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
-                   Loc) != OFFLOAD_SUCCESS)
-    return OFFLOAD_FAIL;
-  return AsyncInfo.synchronize();
+  return retrieveDataImpl(HstPtrBegin, TgtPtrBegin, Size, /*Queue=*/nullptr,
+                          Entry, HDTTMapPtr, Loc);
 }
 
 int32_t DeviceTy::retrieveDataImpl(void *HstPtrBegin, void *TgtPtrBegin,
@@ -850,21 +877,6 @@ static void freeAfterSynchronization(DeviceTy &Device, AsyncInfoTy &AsyncInfo,
   });
 }
 
-/// Downstream: free \p Ptr, which was allocated through the plugin's
-/// allocator with \p Kind, once \p AsyncInfo is synchronized.
-static void freePluginMemAfterSynchronization(GenericDeviceTy &GenericDevice,
-                                              AsyncInfoTy &AsyncInfo, void *Ptr,
-                                              TargetAllocTy Kind) {
-  AsyncInfo.addPostProcessingFunction([&GenericDevice, Ptr, Kind]() -> int {
-    if (auto Err = GenericDevice.dataDelete(Ptr, Kind)) {
-      REPORT() << "Failure to free memory " << Ptr << ": "
-               << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-    return OFFLOAD_SUCCESS;
-  });
-}
-
 /// Return a device pointer to a new kernel launch environment, or null if
 /// this launch has no reserved dyn_ptr slot to store one in. \p OmpABIVersion
 /// is the kernel-argument ABI version this launch was built against.
@@ -911,10 +923,9 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
   // Remember to free the memory later.
   freeAfterSynchronization(Device, AsyncInfo, *AllocOrErr);
 
-  // Use the KLE in the __tgt_async_info to ensure a stable address for the
+  // Use the KLE in the AsyncInfoTy to ensure a stable address for the
   // async data transfer.
-  auto &LocalKLE =
-      static_cast<__tgt_async_info *>(AsyncInfo)->KernelLaunchEnvironment;
+  auto &LocalKLE = AsyncInfo.getKernelLaunchEnvironment();
   LocalKLE = KernelLaunchEnvironmentTy{};
   LocalKLE.DynCGroupMemSize = DynBlockMemConf.Size;
   LocalKLE.DynCGroupMemFbPtr = DynBlockMemConf.FallbackPtr;
@@ -933,43 +944,20 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
     freeAfterSynchronization(Device, AsyncInfo, *ReductionAllocOrErr);
   }
 
-  // Downstream: stage the launch environment in pinned memory if the plugin
-  // transfers it faster from there, so the copy below can take that path.
-  GenericDeviceTy &GenericDevice = Device.RTL->getDevice(Device.RTLDeviceID);
-  const void *LaunchEnvSrc = &LocalKLE;
-  KernelLaunchEnvironmentTy *PinnedKLE =
-      GenericDevice.getPinnedLaunchEnvBuffer();
-  if (PinnedKLE) {
-    *PinnedKLE = LocalKLE;
-    LaunchEnvSrc = PinnedKLE;
-  }
-
-  // Downstream: the ProfilerData at this point will have a callback for a
-  // kernel launch, not a data-op. This is due to the "external" operation
-  // being a kernel launch and the data submit here being an implementation
-  // detail. We temporarily set the ProfilerData to nullptr, such that we
-  // disable the timing etc. further down to not trigger assertions or report
-  // implementation detail. For the same reason, copy with olMemcpy rather
-  // than Device.submitData(), which would report an OMPT data operation.
+  // Downstream: the async info's ProfilerData holds the OMPT trace record of
+  // the kernel launch. Submitting data replaces it with that of the data
+  // operation, so restore it for the launch.
   __tgt_async_info *AI = AsyncInfo;
   void *ProfilerData = AI->ProfilerData;
-  AI->ProfilerData = nullptr;
-  auto Res = olMemcpy(AsyncInfo.getQueue(), *AllocOrErr, Device.DeviceHandle,
-                      LaunchEnvSrc, /*SrcDevice=*/nullptr,
-                      sizeof(KernelLaunchEnvironmentTy));
+  int32_t Rc = Device.submitDataIndependently(*AllocOrErr, &LocalKLE,
+                                              sizeof(KernelLaunchEnvironmentTy),
+                                              AsyncInfo, "KernelLaunchEnv");
   AI->ProfilerData = ProfilerData;
-  if (Res)
+  if (Rc != OFFLOAD_SUCCESS)
     return createError(ErrorCode::BackendFailure,
-                       "failed to copy the kernel launch environment: %s",
-                       Res->Details);
-
-  // Register the staging buffer only now that the transfer reading it has been
-  // issued. Registering it earlier would let a concurrent finalization that
-  // observes the queue as complete release it while the transfer is still in
-  // flight.
-  if (PinnedKLE)
-    freePluginMemAfterSynchronization(GenericDevice, AsyncInfo, PinnedKLE,
-                                      TARGET_ALLOC_HOST);
+                       "failed to copy the kernel launch environment to "
+                       "device %d",
+                       Device.DeviceID);
 
   return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
 }
@@ -982,24 +970,12 @@ static uint32_t getEffectiveNumThreads(const DeviceGeometryPropsTy &Props,
   assert(!KernelEnv.isBareMode() &&
          "bare kernel should not call this function");
 
-  if (UserThreadLimit > 0 && KernelEnv.isGenericMode()) {
-    // Downstream: a thread limit of -1 requests the preferred number of
-    // threads.
-    if (UserThreadLimit == (uint32_t)-1)
-      UserThreadLimit = KernelEnv.PreferredNumThreads;
-    else
-      UserThreadLimit += Props.WarpSize;
-  }
+  if (UserThreadLimit > 0 && KernelEnv.isGenericMode())
+    UserThreadLimit += Props.WarpSize;
 
   return std::min(KernelEnv.MaxNumThreads, (UserThreadLimit > 0)
                                                ? UserThreadLimit
                                                : KernelEnv.PreferredNumThreads);
-}
-
-/// Get the number of teams the user set with OMP_NUM_TEAMS, or zero.
-static uint32_t getOMPNumTeams() {
-  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
-  return OMP_NumTeams > 0 ? uint32_t(OMP_NumTeams) : 0;
 }
 
 /// Get the maximum number of blocks the device can launch for a kernel using
@@ -1007,14 +983,40 @@ static uint32_t getOMPNumTeams() {
 /// user set it.
 static uint32_t getDeviceBlockLimit(const DeviceGeometryPropsTy &Props,
                                     uint32_t NumThreads) {
+  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
+
   uint32_t BlockLimit = Props.MaxNumBlocks;
   // Some devices limit the total number of threads of a launch, which makes
   // the block limit depend on the thread count.
   if (Props.MaxGridSize && NumThreads > 0)
     BlockLimit = std::min<uint64_t>(BlockLimit, Props.MaxGridSize / NumThreads);
-  if (uint32_t NumTeams = getOMPNumTeams())
-    return std::min(BlockLimit, NumTeams);
+  if (OMP_NumTeams > 0)
+    return std::min(BlockLimit, uint32_t(OMP_NumTeams));
   return BlockLimit;
+}
+
+/// Get the default number of blocks for a kernel in Generic-SPMD mode.
+static uint32_t
+getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
+  // Envar to override the default number of teams per compute unit for a kernel
+  // in Generic-SPMD mode. Zero uses the default number of blocks of kernels in
+  // any other execution mode.
+  static UInt32Envar OMPX_GenericSPMDTeamsPerCU(
+      "LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU", 0);
+  // Downstream: the former name of the envar, honored if the new one is unset.
+  static UInt32Envar OMPX_AMDGPUGenericSPMDTeamsPerCU(
+      "LIBOMPTARGET_AMDGPU_GENERIC_SPMD_TEAMS_PER_CU", 0);
+
+  uint32_t TeamsPerCU =
+      OMPX_GenericSPMDTeamsPerCU.isPresent() ? OMPX_GenericSPMDTeamsPerCU.get()
+      : OMPX_AMDGPUGenericSPMDTeamsPerCU.isPresent()
+          ? OMPX_AMDGPUGenericSPMDTeamsPerCU.get()
+          : llvm::omp::target::BackendConfig::get(Props.Backend)
+                .DefaultGenericSPMDTeamsPerCU;
+
+  if (!TeamsPerCU || !Props.NumComputeUnits)
+    return Props.DefaultNumBlocks;
+  return Props.NumComputeUnits * TeamsPerCU;
 }
 
 /// Threshold for the reduction data size (in bytes) above which a cross-team
@@ -1055,9 +1057,9 @@ getXTeamReductionNumBlocks(const DeviceGeometryPropsTy &Props,
   static UInt32Envar OMPX_TeamsReductionWavesPerCU(
       "LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU", 0);
   uint32_t ScalarWavesPerCU = OMPX_TeamsReductionWavesPerCU.get();
-  // Measured on MI210, MI300A, MI300X, MI350X, and MI450: scalar reductions
-  // with many iterations prefer more waves, ones with fewer iterations or more
-  // memory traffic prefer less waves. 16 waves were never far from the best.
+  // Scalar reductions with many iterations prefer more waves, ones with fewer
+  // iterations or more memory traffic prefer less waves. 16 waves were never
+  // far from the best.
   if (!ScalarWavesPerCU && Props.Backend == OL_PLATFORM_BACKEND_AMDGPU)
     ScalarWavesPerCU = 16;
   uint64_t NumCUs = Props.NumComputeUnits;
@@ -1077,28 +1079,6 @@ getXTeamReductionNumBlocks(const DeviceGeometryPropsTy &Props,
     NumBlocks = std::min(NumBlocks, TripCountNumBlocks);
   }
   return NumBlocks;
-}
-
-/// Get the default number of blocks for a kernel in Generic-SPMD mode.
-static uint32_t
-getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
-  // Envar to set the default number of blocks per compute unit for a kernel in
-  // Generic-SPMD mode. Currently only used on AMDGPU devices. Zero uses the
-  // default number of blocks of other kernels.
-  static UInt32Envar OMPX_GenericSPMDTeamsPerCU(
-      "LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU", 6);
-  // Downstream: the former name of the envar, honored if the new one is unset.
-  static UInt32Envar OMPX_AMDGPUGenericSPMDTeamsPerCU(
-      "LIBOMPTARGET_AMDGPU_GENERIC_SPMD_TEAMS_PER_CU", 6);
-  uint32_t TeamsPerCU = !OMPX_GenericSPMDTeamsPerCU.isPresent() &&
-                                OMPX_AMDGPUGenericSPMDTeamsPerCU.isPresent()
-                            ? OMPX_AMDGPUGenericSPMDTeamsPerCU.get()
-                            : OMPX_GenericSPMDTeamsPerCU.get();
-
-  if (Props.Backend != OL_PLATFORM_BACKEND_AMDGPU || !TeamsPerCU ||
-      !Props.NumComputeUnits)
-    return Props.DefaultNumBlocks;
-  return Props.NumComputeUnits * TeamsPerCU;
 }
 
 /// Get the number of blocks for each thread to run one iteration of a loop of
@@ -1187,7 +1167,7 @@ static uint64_t getLowTripCountOverrideNumBlocks(
     NumThreads >>= 1;
   if (!NumThreads)
     return 0;
-  if (KernelEnv.doesTeamsReduction())
+  if (KernelEnv.ReductionDataSize)
     NumThreads = llvm::omp::getBlockSizeAsPowerOfTwo(NumThreads);
   EffectiveNumThreads = NumThreads;
 
@@ -1519,8 +1499,9 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   KernelLaunchInfoTy KernelLaunchInfo = getKernelLaunchInfo(TgtEntryPtr);
   LaunchConfigTy Config = buildLaunchConfig(KernelArgs);
 
-  // Host kernels are only supported for the latest ABI.
-  if (KernelArgs.Version < OMP_KERNEL_ARG_VERSION && isHostDevice()) {
+  // Some backends (e.g. host) only support the latest ABI.
+  if (KernelArgs.Version < OMP_KERNEL_ARG_VERSION &&
+      getConfig().RequiresLatestKernelArgVersion) {
     REPORT() << "Incompatible kernel argument version for kernel "
              << KernelLaunchInfo.Name << " on host device";
     return OFFLOAD_FAIL;
@@ -1577,11 +1558,12 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   // Downstream: the AMDGPU kernel trace prints the execution mode and the trip
-  // count, so pass the launch info and the trip count along.
+  // count, so pass them along.
+  uint8_t ExecMode = KernelLaunchInfo.Mode;
   uint64_t Tripcount = KernelArgs.Tripcount;
   ol_kernel_launch_prop_t LaunchProps[] = {
       {OL_KERNEL_LAUNCH_PROP_TYPE_IS_COOPERATIVE, &Config.Cooperative},
-      {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_KERNEL_LAUNCH_INFO, &KernelLaunchInfo},
+      {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_EXEC_MODE, &ExecMode},
       {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_TRIPCOUNT, &Tripcount},
       OL_KERNEL_LAUNCH_PROP_END};
 

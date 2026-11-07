@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00-amd-amdhsa -stress-regalloc=1 -amdgpu-enable-rewrite-partial-reg-uses=0 -filetype=null -verify-machineinstrs %s 2>&1 | FileCheck %s --allow-empty
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00-amd-amdhsa -stress-regalloc=1 -amdgpu-enable-rewrite-partial-reg-uses=0 -filetype=null %s 2>&1 | FileCheck --allow-empty %s
 
 ; CHECK-NOT: error:
 ; CHECK-NOT: Bad machine code

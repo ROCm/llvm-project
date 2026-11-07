@@ -39,8 +39,8 @@ define amdgpu_kernel void @uniform_conditional_max_short_forward_branch(ptr addr
 ; GCN-NEXT:    s_set_pc_i64 s[2:3]
 ; GCN-NEXT:  .LBB0_1: ; %bb2
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:  .LBB0_2: ; %bb3
@@ -66,8 +66,8 @@ define amdgpu_kernel void @uniform_conditional_max_short_forward_branch(ptr addr
 ; GCN-ADD-PC64-NEXT:  .Lpost_addpc0:
 ; GCN-ADD-PC64-NEXT:  .LBB0_1: ; %bb2
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:  .LBB0_2: ; %bb3
@@ -113,8 +113,8 @@ define amdgpu_kernel void @uniform_conditional_min_long_forward_branch(ptr addrs
 ; GCN-NEXT:    s_set_pc_i64 s[2:3]
 ; GCN-NEXT:  .LBB1_1: ; %bb2
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:    s_sleep 0
@@ -141,8 +141,8 @@ define amdgpu_kernel void @uniform_conditional_min_long_forward_branch(ptr addrs
 ; GCN-ADD-PC64-NEXT:  .Lpost_addpc1:
 ; GCN-ADD-PC64-NEXT:  .LBB1_1: ; %bb2
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
@@ -356,8 +356,8 @@ define amdgpu_kernel void @long_backward_sbranch(ptr addrspace(1) %arg) #0 {
 ; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GCN-NEXT:    s_add_co_i32 s0, s0, 1
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_cmp_lt_i32 s0, 10
 ; GCN-NEXT:    s_cbranch_scc0 .LBB4_2
@@ -383,8 +383,8 @@ define amdgpu_kernel void @long_backward_sbranch(ptr addrspace(1) %arg) #0 {
 ; GCN-ADD-PC64-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GCN-ADD-PC64-NEXT:    s_add_co_i32 s0, s0, 1
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_cmp_lt_i32 s0, 10
 ; GCN-ADD-PC64-NEXT:    s_cbranch_scc0 .LBB4_2
@@ -443,8 +443,8 @@ define amdgpu_kernel void @uniform_unconditional_min_long_forward_branch(ptr add
 ; GCN-NEXT:    s_set_pc_i64 s[0:1]
 ; GCN-NEXT:  .LBB5_2: ; %bb3
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:    s_sleep 0
@@ -478,8 +478,8 @@ define amdgpu_kernel void @uniform_unconditional_min_long_forward_branch(ptr add
 ; GCN-ADD-PC64-NEXT:  .Lpost_addpc5:
 ; GCN-ADD-PC64-NEXT:  .LBB5_2: ; %bb3
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
@@ -523,8 +523,8 @@ define amdgpu_kernel void @uniform_unconditional_min_long_backward_branch(ptr ad
 ; GCN-NEXT:  .LBB6_1: ; %loop
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:    s_sleep 0
@@ -549,8 +549,8 @@ define amdgpu_kernel void @uniform_unconditional_min_long_backward_branch(ptr ad
 ; GCN-ADD-PC64-NEXT:  .LBB6_1: ; %loop
 ; GCN-ADD-PC64-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
@@ -607,17 +607,17 @@ define amdgpu_kernel void @expand_requires_expand(i32 %cond0) #0 {
 ; GCN-NEXT:    s_set_pc_i64 s[0:1]
 ; GCN-NEXT:  .LBB7_2: ; %bb2
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:  .LBB7_3: ; %bb3
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_endpgm
 ;
@@ -644,17 +644,17 @@ define amdgpu_kernel void @expand_requires_expand(i32 %cond0) #0 {
 ; GCN-ADD-PC64-NEXT:  .Lpost_addpc8:
 ; GCN-ADD-PC64-NEXT:  .LBB7_2: ; %bb2
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:  .LBB7_3: ; %bb3
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_endpgm
 bb0:
@@ -813,12 +813,12 @@ define amdgpu_kernel void @analyze_mask_branch() #0 {
 ; GCN-NEXT:  .LBB9_4: ; %loop
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:    s_sleep 0
@@ -867,12 +867,12 @@ define amdgpu_kernel void @analyze_mask_branch() #0 {
 ; GCN-ADD-PC64-NEXT:  .LBB9_4: ; %loop
 ; GCN-ADD-PC64-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
@@ -950,8 +950,8 @@ define amdgpu_kernel void @long_branch_hang(ptr addrspace(1) nocapture %arg, i32
 ; GCN-NEXT:  .LBB10_2: ; %bb13
 ; GCN-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; GCN-NEXT:    ;;#ASMSTART
-; GCN-NEXT:    v_nop
-; GCN-NEXT:    v_nop
+; GCN-NEXT:    v_nop_e64
+; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_sleep 0
 ; GCN-NEXT:    s_sleep 0
@@ -1019,8 +1019,8 @@ define amdgpu_kernel void @long_branch_hang(ptr addrspace(1) nocapture %arg, i32
 ; GCN-ADD-PC64-NEXT:  .LBB10_2: ; %bb13
 ; GCN-ADD-PC64-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; GCN-ADD-PC64-NEXT:    ;;#ASMSTART
-; GCN-ADD-PC64-NEXT:    v_nop
-; GCN-ADD-PC64-NEXT:    v_nop
+; GCN-ADD-PC64-NEXT:    v_nop_e64
+; GCN-ADD-PC64-NEXT:    v_nop_e64
 ; GCN-ADD-PC64-NEXT:    ;;#ASMEND
 ; GCN-ADD-PC64-NEXT:    s_sleep 0
 ; GCN-ADD-PC64-NEXT:    s_sleep 0

@@ -66,7 +66,7 @@ jobs:
     runs-on: ${{ inputs.test_runs_on }}
     # Running docker with cap-add and -v /lib/modiles, by recommendation of Github: https://rocm.docs.amd.com/projects/amdsmi/en/amd-staging/how-to/setup-docker-container.html
     container:
-      image: ${{ inputs.platform == 'linux' && 'ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98' || null }}
+      image: ${{ inputs.platform == 'linux' && 'ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98' || null }} # zizmor: ignore[unpinned-images]
       # --ulimit memlock=-1:-1 - Prevents memory allocation issues with ROCm inside container
       # --security-opt seccomp=unconfined - enables memory mapping, and is recommended for containers running in HPC environments
       # --env-file /etc/podinfo/gha-gpu-isolation-settings - Required for GPU isolation on OSSCI MIXXX runners
