@@ -92,11 +92,22 @@ static void addLaunchFacts(const Function &F, const GlobalValueSummary &Summary,
       .setEntry(&Summary, std::move(E));
 }
 
-static void addImplicitArgFacts(const Function &F,
-                                const GlobalValueSummary &Summary,
-                                ModuleSummaryIndex &Index) {
-  // Like the attributor, do not change an optnone function. Without facts, it
-  // and its callers can use all implicit arguments.
+/// Not used for now, so no module gets facts about implicit arguments, and
+/// AMDGPUThinLinkImplicitArgsPass does nothing. The facts describe the code
+/// at compile time, but passes in a ThinLTO backend can add uses of implicit
+/// arguments after the thin link. For example, OpenMPOpt can add the thread ID
+/// to the guards of SPMD mode, and AMDGPUPrintfRuntimeBinding replaces a call
+/// to printf with a call to __printf_alloc, which reads the implicit argument
+/// pointer. The backend trusts the amdgpu-no-* attributes of the thin link, so
+/// a kernel would not set up an argument that its code then reads. A pass in
+/// one backend cannot correct a kernel in another module. Before we use the
+/// facts again, they must cover each such pass, or the backend must find such
+/// a conflict before code generation.
+[[maybe_unused]] static void
+addImplicitArgFacts(const Function &F, const GlobalValueSummary &Summary,
+                    ModuleSummaryIndex &Index) {
+  // Like the attributor, do not change an optnone function. Without facts,
+  // it and its callers can use all implicit arguments.
   if (F.hasOptNone())
     return;
   std::optional<uint32_t> Uses = AMDGPU::getLocalImplicitArgUses(F);
@@ -116,7 +127,8 @@ void llvm::addAMDGPUThinLinkFacts(const Function &F,
                                   const GlobalValueSummary &Summary,
                                   ModuleSummaryIndex &Index) {
   addLaunchFacts(F, Summary, Index);
-  addImplicitArgFacts(F, Summary, Index);
+  // Not used for now; see addImplicitArgFacts().
+  // addImplicitArgFacts(F, Summary, Index);
 }
 
 namespace {

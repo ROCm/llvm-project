@@ -1,3 +1,7 @@
+; XFAIL: *
+; The thin link does not compute the facts about implicit arguments for now
+; (see addImplicitArgFacts() in AMDGPUThinLinkPasses.cpp).
+
 ; Test that the thin link gives a kernel the amdgpu-no-* attributes of the
 ; implicit arguments that it and the functions that it can call do not use.
 ; @kernel_y calls @device_y in another module, which uses only workitem-id-y.

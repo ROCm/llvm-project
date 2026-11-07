@@ -1,3 +1,7 @@
+; XFAIL: *
+; The thin link does not compute the facts about implicit arguments for now
+; (see addImplicitArgFacts() in AMDGPUThinLinkPasses.cpp).
+
 ; Test that the thin link follows indirect calls for the amdgpu-no-* attributes.
 ; @kernel calls a function pointer of the type void(ptr addrspace(1)). @table
 ; takes the address of @device_y, which uses only workitem-id-y, and of

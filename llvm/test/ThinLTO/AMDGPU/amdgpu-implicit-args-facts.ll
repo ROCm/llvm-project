@@ -1,3 +1,7 @@
+; XFAIL: *
+; The thin link does not compute the facts about implicit arguments for now
+; (see addImplicitArgFacts() in AMDGPUThinLinkPasses.cpp).
+
 ; Test the facts about the implicit arguments in the summary: the implicit
 ; arguments that the code of each function uses, without the functions that it
 ; calls. The attributor finds the same uses. A function without an entry can

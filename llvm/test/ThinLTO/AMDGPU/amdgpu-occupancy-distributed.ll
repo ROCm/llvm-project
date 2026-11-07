@@ -15,7 +15,6 @@
 ; The backend of device.bc defines @device_func.
 ; DEVICE:      ^[[MOD:[0-9]+]] = module: (path: "device{{(\.thinlink)?}}.bc",
 ; DEVICE-NEXT: ^[[FN:[0-9]+]] = gv: (guid: {{[0-9]+}}, summaries: (function: (module: ^[[MOD]],
-; DEVICE-NEXT: = extension: (name: "amdgpu-implicit-args",
 ; DEVICE-NEXT: = extension: (name: "fn-attrs", version: 1, required: 1, entries: ((gv: ^[[FN]], module: ^[[MOD]], ints: (0), strings: ("amdgpu-flat-work-group-size", "64,256", "amdgpu-max-num-workgroups", "16,16,1", "amdgpu-waves-per-eu", "2,8"))))
 
 ; The backend of kernel.bc imports @device_func. The kernel keeps its own
