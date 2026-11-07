@@ -11,6 +11,10 @@
 
 #include <comgr-cache-command.h>
 
+#include <llvm/ADT/SmallVector.h>
+
+#include <optional>
+
 namespace clang {
 class OffloadBundlerConfig;
 } // namespace clang
@@ -24,6 +28,8 @@ private:
   // To avoid copies, store the output of execute, such that readExecuteOutput
   // can return a reference.
   llvm::SmallString<64> OutputBuffer;
+  std::optional<llvm::SmallVector<std::unique_ptr<llvm::MemoryBuffer>>>
+      CachedOutputs;
 
 public:
   UnbundleCommand(amd_comgr_data_kind_t Kind,
@@ -36,6 +42,13 @@ public:
   /// order of Config.OutputFileNames, without writing any file.
   llvm::Error splitCachedOutput(llvm::StringRef CachedBuffer,
                                 llvm::SmallVectorImpl<llvm::StringRef> &Out);
+  llvm::Error
+  useCachedOutput(llvm::StringRef Output,
+                  std::shared_ptr<llvm::MemoryBuffer> Owner) override;
+  bool hasCachedOutputs() const { return CachedOutputs.has_value(); }
+  std::unique_ptr<llvm::MemoryBuffer> takeCachedOutput(size_t Index) {
+    return std::move((*CachedOutputs)[Index]);
+  }
   llvm::Expected<llvm::StringRef> readExecuteOutput() override;
   amd_comgr_status_t execute(llvm::raw_ostream &LogS) override;
 

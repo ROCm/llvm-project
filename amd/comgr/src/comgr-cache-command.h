@@ -16,6 +16,8 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SHA256.h>
 
+#include <memory>
+
 namespace llvm {
 class raw_ostream;
 }
@@ -41,6 +43,14 @@ public:
 
   virtual bool canCache() const = 0;
   virtual llvm::Error writeExecuteOutput(llvm::StringRef CachedBuffer) = 0;
+  /// Restore a decoded cache entry. Owner is supplied only when the backing
+  /// mapping may outlive this call. Without it, implementations must copy any
+  /// retained output. The default restores the command's output files.
+  virtual llvm::Error
+  useCachedOutput(llvm::StringRef Output,
+                  std::shared_ptr<llvm::MemoryBuffer> Owner) {
+    return writeExecuteOutput(Output);
+  }
   virtual llvm::Expected<llvm::StringRef> readExecuteOutput() = 0;
   virtual amd_comgr_status_t execute(llvm::raw_ostream &LogS) = 0;
 
