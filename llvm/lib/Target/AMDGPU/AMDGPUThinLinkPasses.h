@@ -60,7 +60,8 @@ public:
 /// Finds the implicit arguments that a function and the functions that it can
 /// call do not use, and gives the function the amdgpu-no-* attributes of these
 /// arguments. A backend cannot find them for a function that calls a function
-/// in another module.
+/// in another module. For now, no module gets the facts that this pass reads
+/// (see addImplicitArgFacts() in AMDGPUThinLinkPasses.cpp), so it does nothing.
 class AMDGPUThinLinkImplicitArgsPass
     : public RequiredPassInfoMixin<AMDGPUThinLinkImplicitArgsPass> {
 public:
