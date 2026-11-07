@@ -845,6 +845,9 @@ SUMMARY_ANALYSIS("summary-callgraph", SummaryCallGraphAnalysis())
 #ifndef SUMMARY_PASS
 #define SUMMARY_PASS(NAME, CREATE_PASS)
 #endif
+SUMMARY_PASS("thinlink-function-attrs", ThinLinkFunctionAttrsPass())
+SUMMARY_PASS("thinlink-param-access",
+             ThinLinkParamAccessPass(&Context.getLibraryOptions()))
 #undef SUMMARY_PASS
 
 #ifndef SUMMARY_PASS_WITH_PARAMS

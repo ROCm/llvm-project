@@ -15,6 +15,7 @@
 
 #include "llvm/IR/ModuleSummaryIndex.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/IR/SummaryPassManager.h"
 #include "llvm/Pass.h"
 
 namespace llvm {
@@ -176,6 +177,21 @@ LLVM_ABI bool needsParamAccessSummary(const Module &M);
 LLVM_ABI void
 generateParamAccessSummary(const cl::LibraryOptionsContext *LibraryOptions,
                            ModuleSummaryIndex &Index);
+
+/// Computes the parameter access ranges for stack safety at the ThinLTO thin
+/// link (see generateParamAccessSummary()).
+class ThinLinkParamAccessPass
+    : public RequiredPassInfoMixin<ThinLinkParamAccessPass> {
+  const cl::LibraryOptionsContext *LibraryOptions;
+
+public:
+  explicit ThinLinkParamAccessPass(
+      const cl::LibraryOptionsContext *LibraryOptions)
+      : LibraryOptions(LibraryOptions) {}
+
+  LLVM_ABI PreservedAnalyses run(ModuleSummaryIndex &Index,
+                                 SummaryAnalysisManager &AM);
+};
 
 } // end namespace llvm
 

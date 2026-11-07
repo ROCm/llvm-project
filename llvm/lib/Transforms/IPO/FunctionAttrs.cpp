@@ -493,6 +493,13 @@ bool llvm::thinLTOPropagateFunctionAttrs(
   return Changed;
 }
 
+PreservedAnalyses ThinLinkFunctionAttrsPass::run(ModuleSummaryIndex &Index,
+                                                 SummaryAnalysisManager &AM) {
+  thinLTOPropagateFunctionAttrs(
+      Index, AM.getResult<ThinLinkInfoAnalysis>(Index).IsPrevailing);
+  return PreservedAnalyses::none();
+}
+
 namespace {
 
 /// For a given pointer Argument, this retains a list of Arguments of functions

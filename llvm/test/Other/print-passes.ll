@@ -27,6 +27,8 @@
 ; CHECK: Loop analyses:
 ; CHECK: no-op-loop
 ; CHECK: Summary passes:
+; CHECK: thinlink-function-attrs
+; CHECK: thinlink-param-access
 ; CHECK: Summary passes with params:
 ; CHECK: print<summary-callgraph><indirect-calls>
 ; CHECK: Summary analyses:
