@@ -2402,6 +2402,7 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
   PB.registerSummaryAnalyses(SAM);
   // The link can assume a closed world only if all code has a summary.
   bool ClosedWorld = (Conf.ThinLinkClosedWorld || AssumeThinLinkClosedWorld) &&
+                     !Conf.LinkHasNativeCode &&
                      !RegularLTO.HasModuleWithoutSummary;
   SAM.registerPass([&] {
     return ThinLinkInfoAnalysis(GUIDPreservedSymbols, isPrevailing,
