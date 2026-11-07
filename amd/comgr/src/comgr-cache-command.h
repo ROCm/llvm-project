@@ -32,6 +32,7 @@ public:
   enum ComgrActionClass : ActionClass {
     SPIRVClass = clang::driver::Action::ActionClass::JobClassLast + 1,
     UnbundleClass,
+    UnpackageClass,
   };
 
   using HashAlgorithm = llvm::SHA256;
