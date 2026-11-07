@@ -1,4 +1,4 @@
-; RUN: opt -S -mtriple=amdgpu-unknown-unknown -passes=amdgpu-promote-alloca < %s | FileCheck -check-prefix=IR %s
+; RUN: opt -S -mtriple=amdgpu-unknown-unknown -passes=amdgpu-promote-alloca -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck -check-prefix=IR %s
 ; RUN: llc -mtriple=amdgpu8.02 < %s | FileCheck -check-prefix=ASM %s
 
 

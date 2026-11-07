@@ -1,5 +1,5 @@
-; RUN: opt -mtriple=amdgpu-- -O1 -S < %s | FileCheck %s --check-prefixes=FUNC,LOOP
-; RUN: opt -mtriple=amdgpu-- -passes='default<O1>' -S < %s | FileCheck %s --check-prefixes=FUNC,LOOP
+; RUN: opt -mtriple=amdgpu-- -O1 -S -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck %s --check-prefixes=FUNC,LOOP
+; RUN: opt -mtriple=amdgpu-- -passes='default<O1>' -S -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck %s --check-prefixes=FUNC,LOOP
 ; RUN: opt -mtriple=amdgpu-- -O1 -S -disable-promote-alloca-to-vector < %s | FileCheck %s --check-prefixes=FUNC,FULL-UNROLL
 ; RUN: opt -mtriple=amdgpu-- -passes='default<O1>' -S -disable-promote-alloca-to-vector < %s | FileCheck %s --check-prefixes=FUNC,FULL-UNROLL
 
