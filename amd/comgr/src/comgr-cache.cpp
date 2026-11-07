@@ -96,16 +96,18 @@ void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
                        StringRef CapturedLogS, raw_ostream &LogS) {
   auto ErrorHandler = getComgrCacheErrorHandler(LogS);
 
+  // Prepare the output before opening a cache stream: a stream must be
+  // committed or explicitly aborted, even when serialization fails.
+  Expected<StringRef> Buffer = C.readExecuteOutput();
+  if (!Buffer) {
+    ErrorHandler(Buffer.takeError(), "when reading command's output");
+    return;
+  }
+
   Expected<std::unique_ptr<CachedFileStream>> FileOrErr =
       AddStream(CacheTask, "");
   if (!FileOrErr) {
     ErrorHandler(FileOrErr.takeError(), "when getting the cached file stream");
-    return;
-  }
-
-  Expected<StringRef> Buffer = C.readExecuteOutput();
-  if (!Buffer) {
-    ErrorHandler(Buffer.takeError(), "when reading command's output");
     return;
   }
 
@@ -114,19 +116,26 @@ void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
   ErrorHandler(CFS->commit(), "when commiting file stream");
 }
 
-bool readEntryFromCache(CachedCommandAdaptor &C, MemoryBuffer &CachedBuffer,
-                        raw_ostream &LogS) {
+/// Decode an entry and replay its log. With Hit, transfer CachedBuffer and an
+/// output view to the caller for restoration; otherwise restore through C.
+/// Return false on decoding or immediate restoration errors so C can execute.
+bool readEntryFromCache(CachedCommandAdaptor &C,
+                        std::unique_ptr<MemoryBuffer> &CachedBuffer,
+                        raw_ostream &LogS, CommandCache::CachedOutput *Hit) {
   auto ErrorHandler = getComgrCacheErrorHandler(LogS);
 
   StringRef CachedOutputFile;
   StringRef CachedLogS;
   if (Error E =
-          deserializeCacheEntry(CachedBuffer, CachedOutputFile, CachedLogS)) {
+          deserializeCacheEntry(*CachedBuffer, CachedOutputFile, CachedLogS)) {
     ErrorHandler(std::move(E), "when reading the cache entry");
     return false;
   }
 
-  if (Error E = C.writeExecuteOutput(CachedOutputFile)) {
+  if (Hit) {
+    Hit->Output = CachedOutputFile;
+    Hit->Entry = std::move(CachedBuffer);
+  } else if (Error E = C.writeExecuteOutput(CachedOutputFile)) {
     ErrorHandler(std::move(E), "when writing the command output");
     return false;
   }
@@ -195,7 +204,7 @@ CommandCache::CommandCache(StringRef CacheDir, const CachePruningPolicy &Policy,
 CommandCache::~CommandCache() { prune(); }
 
 amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
-                                         raw_ostream &LogS) {
+                                         raw_ostream &LogS, CachedOutput *Hit) {
 
   if (!C.canCache()) {
     // Do not cache preprocessor commands.
@@ -244,7 +253,7 @@ amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
   // If the "AddStream" is nullptr, then the data was cached and we already
   // called the "AddBuffer" lambda.
   AddStreamFn &AddStream = *AddStreamOrErr;
-  if (!AddStream && readEntryFromCache(C, *CachedBuffer, LogS)) {
+  if (!AddStream && readEntryFromCache(C, CachedBuffer, LogS, Hit)) {
     if (env::shouldEmitVerboseLogs())
       LogS << "Comgr cache: found entry " << *MaybeId << " in cache.\n";
     return AMD_COMGR_STATUS_SUCCESS;

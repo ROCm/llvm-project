@@ -18,7 +18,7 @@
 // Make the size of the first unbundled output larger than the entry. The
 // entry still deserializes, but its output does not split into the outputs.
 // RUN: printf '\377\377\377\377' | dd of=$(ls %t.cache/llvmcache-*) bs=1 \
-// RUN:    seek=8 conv=notrunc 2>/dev/null
+// RUN:    seek=12 conv=notrunc 2>/dev/null
 // RUN: unbundle %t.compressed-bundle.bc hip-amdgcn-amd-amdhsa-unknown-gfx900 \
 // RUN:    %t.bad-size.bc
 // RUN: cmp %t.miss.bc %t.bad-size.bc
