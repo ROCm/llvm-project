@@ -40,6 +40,7 @@
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Options/Options.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -1825,6 +1826,24 @@ amd_comgr_status_t AMDGPUCompiler::compileToRelocatable() {
   return processFiles(AMD_COMGR_DATA_KIND_RELOCATABLE, ".o");
 }
 
+namespace {
+// A view into a slice of a shared buffer, e.g. a cache entry, handed to a
+// DataObject without copying.
+class SharedSliceMemoryBuffer final : public MemoryBuffer {
+  std::shared_ptr<MemoryBuffer> Owner;
+
+public:
+  SharedSliceMemoryBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Slice)
+      : Owner(std::move(Owner)) {
+    init(Slice.begin(), Slice.end(), /*RequiresNullTerminator=*/false);
+  }
+  StringRef getBufferIdentifier() const override {
+    return Owner->getBufferIdentifier();
+  }
+  BufferKind getBufferKind() const override { return Owner->getBufferKind(); }
+};
+} // namespace
+
 amd_comgr_status_t AMDGPUCompiler::unbundle() {
   if (auto Status = createTmpDirs()) {
     return Status;
@@ -1963,11 +1982,39 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
            << "   Input Filename: " << Input->Name << "\n";
     }
 
+    // Skip disk unless save-temps, which expects unpackaged files on disk.
+    bool PreferInPlace = !env::shouldSaveTemps();
     UnpackageCommand Unpackage(StringRef(Input->Data, Input->Size), Input->Name,
-                               ActionInfo->PackageEntryIDs, OutputDir);
+                               ActionInfo->PackageEntryIDs, OutputDir,
+                               PreferInPlace);
+
+    // Same, plus not on Windows: a mapped cache entry can't be pruned there.
+    bool PreferCachedInPlace = PreferInPlace;
+#ifdef _WIN32
+    PreferCachedInPlace = false;
+#endif
+
+    // Set when Unpackage's output comes from an in-place cache hit.
+    SmallVector<std::string> CachedNames;
+    SmallVector<amd_comgr_data_kind_t> CachedKinds;
+    SmallVector<StringRef> CachedImages;
+    CommandCache::CachedOutput Hit;
     if (Cache) {
-      if (auto Status = Cache->execute(Unpackage, LogS)) {
+      if (auto Status = Cache->execute(Unpackage, LogS,
+                                       PreferCachedInPlace ? &Hit : nullptr))
         return Status;
+
+      if (Hit.Entry) {
+        if (Error E = Unpackage.splitCachedOutput(Hit.Output, CachedNames,
+                                                  CachedKinds, CachedImages)) {
+          logAllUnhandledErrors(std::move(E), LogS,
+                                "Comgr cache: ignoring entry: ");
+          CachedNames.clear();
+          CachedKinds.clear();
+          CachedImages.clear();
+          if (auto Status = Unpackage.execute(LogS))
+            return Status;
+        }
       }
     } else {
       if (auto Status = Unpackage.execute(LogS)) {
@@ -1975,9 +2022,13 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       }
     }
 
-    for (const auto &[DataKind, OutputFilePath] : llvm::zip_equal(
-             Unpackage.getDataKinds(), Unpackage.getOutputFileNames())) {
-
+    // Creates, populates (via Populate), and adds a DataObject to OutSetT.
+    // Shared by the cached-in-place, execute()-in-place, and on-disk loops
+    // below.
+    auto addResult =
+        [&](amd_comgr_data_kind_t DataKind, StringRef OutputFileName,
+            function_ref<amd_comgr_status_t(DataObject *)> Populate)
+        -> amd_comgr_status_t {
       amd_comgr_data_t ResultT;
 
       if (auto Status = amd_comgr_create_data(DataKind, &ResultT))
@@ -1987,13 +2038,47 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       ScopedDataObjectReleaser SDOR(ResultT);
 
       DataObject *Result = DataObject::convert(ResultT);
-      if (auto Status = inputFromFile(Result, OutputFilePath))
+      if (auto Status = Populate(Result))
         return Status;
 
-      StringRef OutputFileName = sys::path::filename(OutputFilePath);
       Result->setName(OutputFileName);
 
-      if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT))
+      return amd_comgr_data_set_add(OutSetT, ResultT);
+    };
+
+    if (!CachedImages.empty()) {
+      for (const auto &[DataKind, Name, Image] :
+           llvm::zip_equal(CachedKinds, CachedNames, CachedImages)) {
+        if (auto Status = addResult(DataKind, Name, [&](DataObject *Result) {
+              return Result->setData(
+                  std::make_unique<SharedSliceMemoryBuffer>(Hit.Entry, Image));
+            }))
+          return Status;
+      }
+      continue;
+    }
+
+    if (Unpackage.isInPlace()) {
+      for (const auto &[DataKind, OutputFileName, InPlaceBuffer] :
+           llvm::zip_equal(Unpackage.getDataKinds(),
+                           Unpackage.getOutputFileNames(),
+                           Unpackage.getInPlaceBuffers())) {
+        if (auto Status =
+                addResult(DataKind, OutputFileName, [&](DataObject *Result) {
+                  return Result->setData(std::move(InPlaceBuffer));
+                }))
+          return Status;
+      }
+      continue;
+    }
+
+    for (const auto &[DataKind, OutputFilePath] : llvm::zip_equal(
+             Unpackage.getDataKinds(), Unpackage.getOutputFileNames())) {
+      if (auto Status = addResult(DataKind, sys::path::filename(OutputFilePath),
+                                  [&](DataObject *Result) {
+                                    return inputFromFile(Result,
+                                                         OutputFilePath);
+                                  }))
         return Status;
     }
   }
