@@ -14,9 +14,9 @@
 ; RUN:   -r=device.bc,device_func,p 2>&1 | FileCheck %s
 
 ; CHECK:      Running pass: ThinLinkFunctionAttrsPass on [summary index]
-; CHECK-NEXT: Running analysis: ThinLinkInfoAnalysis on [summary index]
 ; CHECK-NEXT: Running pass: AMDGPUThinLinkOccupancyPass on [summary index]
 ; CHECK-NEXT: Running analysis: SummaryCallGraphAnalysis on [summary index]
+; CHECK-NEXT: Running analysis: ThinLinkInfoAnalysis on [summary index]
 ; CHECK-NEXT: Running analysis: SummaryAddressTakenAnalysis on [summary index]
 ; CHECK-NEXT: ; *** IR Dump After AMDGPUThinLinkOccupancyPass on [summary index] ***
 ; CHECK:      ^[[MOD:[0-9]+]] = module: (path: "device.bc",

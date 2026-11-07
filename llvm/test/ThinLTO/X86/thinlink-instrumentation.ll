@@ -9,9 +9,23 @@
 ; RUN:   -r=main.bc,main,px -r=main.bc,callee, -r=callee.bc,callee,p 2>&1 \
 ; RUN:   | FileCheck %s --check-prefix=DEBUG
 
+;; By default, the function attribute propagation is off, so the thin link
+;; builds no call graph.
 ; DEBUG:      Running pass: ThinLinkFunctionAttrsPass on [summary index]
-; DEBUG-NEXT: Running analysis: ThinLinkInfoAnalysis on [summary index]
 ; DEBUG-NEXT: Running pass: ThinLinkParamAccessPass on [summary index]
+; DEBUG-NOT:  Running analysis: {{.*}} on [summary index]
+
+;; The propagation uses the call graph without the indirect calls.
+; RUN: llvm-lto2 run main.bc callee.bc -o funcattrs -debug-pass-manager \
+; RUN:   -disable-thinlto-funcattrs=0 \
+; RUN:   -r=main.bc,main,px -r=main.bc,callee, -r=callee.bc,callee,p 2>&1 \
+; RUN:   | FileCheck %s --check-prefix=FUNCATTRS
+
+; FUNCATTRS:      Running pass: ThinLinkFunctionAttrsPass on [summary index]
+; FUNCATTRS-NEXT: Running analysis: SummaryCallGraphAnalysis on [summary index]
+; FUNCATTRS-NEXT: Running analysis: ThinLinkInfoAnalysis on [summary index]
+; FUNCATTRS-NEXT: Running analysis: SummaryAddressTakenAnalysis on [summary index]
+; FUNCATTRS-NEXT: Running pass: ThinLinkParamAccessPass on [summary index]
 
 ;; -print-after selects a summary pass by its name in the pipeline text.
 ; RUN: llvm-lto2 run main.bc callee.bc -o print \
