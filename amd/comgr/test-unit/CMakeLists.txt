@@ -219,15 +219,52 @@ if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
       $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:IncludeMaterializationTest>)
 endif()
 
+# -- SetCStrTest --------------------------------------------------------------
+#
+# Tests for COMGR::setCStr (comgr-symbol.cpp), which replaces a heap string
+# that a caller may alias. The helper is not exported from amd_comgr (the shared
+# library is built -fvisibility=hidden with a version script), so its
+# implementation is compiled into the test directly, as LoggerTests does.
+# comgr-symbol.cpp pulls in LLVM's object readers, hence Object and Support.
+
+add_executable(SetCStrTest
+  SetCStrTest.cpp
+  ../src/comgr-symbol.cpp)
+
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_OBJECT_LIBS Object Support)
+
+target_compile_definitions(SetCStrTest PRIVATE GTEST_NO_LLVM_SUPPORT=true)
+
+target_link_libraries(SetCStrTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr
+  ${COMGR_TEST_UNIT_OBJECT_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(SetCStrTest PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(SetCStrTest)
+
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET SetCStrTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:SetCStrTest>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
   COMMAND $<TARGET_FILE:LoggerTests>
   COMMAND $<TARGET_FILE:MetadataCacheTest>
   COMMAND $<TARGET_FILE:SymbolIndexTest>
-  COMMAND $<TARGET_FILE:IncludeMaterializationTest>)
+  COMMAND $<TARGET_FILE:IncludeMaterializationTest>
+  COMMAND $<TARGET_FILE:SetCStrTest>)
 add_dependencies(test-unit
   DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
-  IncludeMaterializationTest)
+  IncludeMaterializationTest SetCStrTest)
 
 add_dependencies(check-comgr test-unit)
