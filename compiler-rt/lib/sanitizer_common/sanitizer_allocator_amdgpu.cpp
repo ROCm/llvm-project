@@ -137,7 +137,10 @@ void AmdgpuMemFuncs::Deallocate(void *p) {
   if (AmdgpuMemFuncs::GetPointerInfo(reinterpret_cast<uptr>(p), &DevPtrInfo)) {
     if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_HSA) {
       UNUSED hsa_status_t status = hsa_amd.memory_pool_free(p);
-    } else if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR) {
+    } else if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR ||
+               DevPtrInfo.type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
+      // Reserved ranges and hsa_amd_vmem mappings are both released with
+      // hsa_amd_vmem_address_free. ROCr reports the latter as HSA_VMEM.
       UNUSED hsa_status_t status =
           hsa_amd.vmem_address_free(p, DevPtrInfo.map_size);
     }
@@ -154,6 +157,7 @@ bool AmdgpuMemFuncs::GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info) {
   }
 
   hsa_amd_pointer_info_t info;
+  internal_memset(&info, 0, sizeof(info));
   info.size = sizeof(hsa_amd_pointer_info_t);
   hsa_status_t status =
     hsa_amd.pointer_info(reinterpret_cast<void *>(ptr), &info, 0, 0, 0);
@@ -161,14 +165,22 @@ bool AmdgpuMemFuncs::GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info) {
   if (status != HSA_STATUS_SUCCESS)
     return false;
 
-  if (info.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR)
-    ptr_info->map_beg = reinterpret_cast<uptr>(info.hostBaseAddress);
-  else if (info.type == HSA_EXT_POINTER_TYPE_HSA)
-    ptr_info->map_beg = reinterpret_cast<uptr>(info.agentBaseAddress);
+  internal_memset(ptr_info, 0, sizeof(*ptr_info));
   ptr_info->map_size = info.sizeInBytes;
   ptr_info->type = reinterpret_cast<hsa_amd_pointer_type_t>(info.type);
 
-  return true;
+  // RESERVED_ADDR and HSA_VMEM publish the mapping base in hostBaseAddress.
+  // Pool allocations (HSA) publish it in agentBaseAddress. Other pointer
+  // types are not chunks this allocator owns.
+  if (info.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR ||
+      info.type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
+    ptr_info->map_beg = reinterpret_cast<uptr>(info.hostBaseAddress);
+  else if (info.type == HSA_EXT_POINTER_TYPE_HSA)
+    ptr_info->map_beg = reinterpret_cast<uptr>(info.agentBaseAddress);
+  else
+    return false;
+
+  return ptr_info->map_beg != 0;
 }
  // Register shutdown system event handler only once
  // TODO: Register multiple event handlers if needed in future
