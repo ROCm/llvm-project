@@ -56,9 +56,11 @@ using namespace llvm::omp::target::rr;
 using namespace llvm::omp::target::debug;
 
 namespace llvm::offload::tmp {
-// Downstream: set DeviceTy::RTL and DeviceTy::RTLDeviceID.
-GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
-int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
+// Downstream: OMPT support.
+llvm::omp::target::plugin::GenericDeviceTy *
+__ol_tgt_GetPluginDevice(ol_device_handle_t Device);
+llvm::omp::target::plugin::GenericProfilerTy *
+__ol_tgt_GetProfiler(ol_device_handle_t Device);
 llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
                                          ol_device_handle_t Device,
                                          TargetAllocTy Kind, int64_t Size,
@@ -109,48 +111,46 @@ inline void setAsyncInfoSynchronous(__tgt_async_info *AI, bool SetSynchronous) {
 }
 
 llvm::Error DeviceTy::initGeometryProps() {
-  auto Query = [&](DeviceInfo Info, auto &Dest) -> llvm::Error {
-    if (auto Res =
-            olGetDeviceInfo(DeviceHandle, static_cast<ol_device_info_t>(Info),
-                            sizeof(Dest), &Dest))
+  auto Query = [&](ol_device_info_t Info, auto &Dest) -> llvm::Error {
+    if (auto Res = olGetDeviceInfo(DeviceHandle, Info, sizeof(Dest), &Dest))
       return createError(ErrorCode::BackendFailure,
                          "failed to get property %d of device %d: %s",
                          static_cast<int>(Info), DeviceID, Res->Details);
     return llvm::Error::success();
   };
 
-  if (auto Err = Query(DeviceInfo::NUM_LANES, GeometryProps.WarpSize))
+  if (auto Err = Query(OL_DEVICE_INFO_NUM_LANES, GeometryProps.WarpSize))
     return Err;
   // A block is one dimensional, so it is limited both by the maximum number of
   // threads a block can have and by the maximum size of its first dimension.
   uint32_t MaxBlockSize = 0;
-  if (auto Err = Query(DeviceInfo::MAX_WORK_GROUP_SIZE, MaxBlockSize))
+  if (auto Err = Query(OL_DEVICE_INFO_MAX_WORK_GROUP_SIZE, MaxBlockSize))
     return Err;
   ol_dimensions_t MaxBlockSizePerDim{};
-  if (auto Err = Query(DeviceInfo::MAX_WORK_GROUP_SIZE_PER_DIMENSION,
+  if (auto Err = Query(OL_DEVICE_INFO_MAX_WORK_GROUP_SIZE_PER_DIMENSION,
                        MaxBlockSizePerDim))
     return Err;
   GeometryProps.ThreadLimit = std::min(MaxBlockSize, MaxBlockSizePerDim.x);
-  if (auto Err = Query(DeviceInfo::LAUNCH_DEFAULT_WORK_GROUP_SIZE,
+  if (auto Err = Query(OL_DEVICE_INFO_LAUNCH_DEFAULT_WORK_GROUP_SIZE,
                        GeometryProps.DefaultNumThreads))
     return Err;
-  if (auto Err = Query(DeviceInfo::LAUNCH_DEFAULT_NUM_WORK_GROUPS,
+  if (auto Err = Query(OL_DEVICE_INFO_LAUNCH_DEFAULT_NUM_WORK_GROUPS,
                        GeometryProps.DefaultNumBlocks))
     return Err;
-  if (auto Err = Query(DeviceInfo::LAUNCH_MAX_NUM_WORK_GROUPS,
+  if (auto Err = Query(OL_DEVICE_INFO_LAUNCH_MAX_NUM_WORK_GROUPS,
                        GeometryProps.MaxNumBlocks))
     return Err;
   if (auto Err =
-          Query(DeviceInfo::LAUNCH_MAX_GRID_SIZE, GeometryProps.MaxGridSize))
+          Query(OL_DEVICE_INFO_LAUNCH_MAX_GRID_SIZE, GeometryProps.MaxGridSize))
     return Err;
   // This is the same property reported by omp_get_gprivate_limit().
-  if (auto Err = Query(DeviceInfo::WORK_GROUP_LOCAL_MEM_SIZE,
+  if (auto Err = Query(OL_DEVICE_INFO_WORK_GROUP_LOCAL_MEM_SIZE,
                        GeometryProps.MaxBlockSharedMemSize))
     return Err;
   // Not every device reports its number of compute units; zero turns off the
   // heuristics that need it.
   GeometryProps.NumComputeUnits =
-      getInfo<uint32_t>(DeviceInfo::NUM_COMPUTE_UNITS);
+      getInfo<uint32_t>(OL_DEVICE_INFO_NUM_COMPUTE_UNITS);
   // Some defaults depend on the backend. If it is unknown, the generic ones
   // apply.
   GeometryProps.Backend = Backend;
@@ -172,18 +172,18 @@ llvm::Error DeviceTy::init() {
                        "failed to create context for device %d: %s", DeviceID,
                        Res->Details);
 
-  // Downstream: see DeviceTy::RTL.
-  RTL = llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
-  RTLDeviceID = llvm::offload::tmp::__ol_tgt_GetPluginDeviceId(DeviceHandle);
+  // Downstream: see getProfiler() and getPluginDevice().
+  Profiler = llvm::offload::tmp::__ol_tgt_GetProfiler(DeviceHandle);
+  PluginDevice = llvm::offload::tmp::__ol_tgt_GetPluginDevice(DeviceHandle);
 
   // Needs to be initialized before the GeometryProps.
   if (olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND, sizeof(Backend),
                         &Backend))
     Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 
-  MaxDirectWriteSize = getInfo<uint64_t>(DeviceInfo::MAX_DIRECT_WRITE_SIZE);
+  MaxDirectWriteSize = getInfo<uint64_t>(OL_DEVICE_INFO_MAX_DIRECT_WRITE_SIZE);
 
-  getInfoString(DeviceInfo::UID, Uid);
+  getInfoString(OL_DEVICE_INFO_UID, Uid);
   if (Uid.empty())
     ODBG(ODT_Init) << "Failed to get UID for device " << DeviceID;
 
@@ -193,9 +193,7 @@ llvm::Error DeviceTy::init() {
   OMPT_IF_BUILT({
     // Downstream: tools get the plugin device rather than this DeviceTy, since
     // the device tracing entry points (ompt_start_trace, ...) cast it back.
-    llvm::omp::target::plugin::GenericDeviceTy &GenericDevice =
-        RTL->getDevice(RTLDeviceID);
-    auto *DevicePtr = reinterpret_cast<ompt_device_t *>(&GenericDevice);
+    auto *DevicePtr = reinterpret_cast<ompt_device_t *>(PluginDevice);
     // Register the device->user-id mapping unconditionally: a device can be
     // initialized before the tool connects, yet the plugin still needs this to
     // recover the user device number via 'ompt::getDeviceId()' when it later
@@ -203,7 +201,7 @@ llvm::Error DeviceTy::init() {
     ompt::setDeviceId(DevicePtr, DeviceID);
     performIfOmptInitialized({
       llvm::SmallString<32> ComputeUnitKind;
-      getInfoString(DeviceInfo::COMPUTE_UNIT_KIND, ComputeUnitKind);
+      getInfoString(OL_DEVICE_INFO_COMPUTE_UNIT_KIND, ComputeUnitKind);
       // 'lookupDeviceTracingFn' is the only lookup that resolves the device
       // tracing entry points (ompt_set_trace_ompt, ompt_start_trace, ...).
       performOmptCallback(device_initialize, DeviceID, ComputeUnitKind.c_str(),
@@ -280,8 +278,7 @@ llvm::Error DeviceTy::deinit() {
   OMPT_IF_BUILT({
     performIfOmptInitialized(performOmptCallback(device_finalize, DeviceID));
     // Pairs the unconditional 'setDeviceId' in DeviceTy::init().
-    ompt::removeDeviceId(
-        reinterpret_cast<ompt_device_t *>(&RTL->getDevice(RTLDeviceID)));
+    ompt::removeDeviceId(reinterpret_cast<ompt_device_t *>(PluginDevice));
   });
 
   // Keep tearing down even if record/replay fails to finish cleanly.
@@ -477,17 +474,16 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
 
   DeviceEnvironmentTy DeviceEnvironment;
   DeviceEnvironment.DeviceDebugKind = OMPX_DebugKind.get();
-  DeviceEnvironment.NumDevices = RTL->getNumDevices();
-  // TODO: The device ID used here is not the real device ID used by OpenMP.
-  DeviceEnvironment.DeviceNum = RTLDeviceID;
+  DeviceEnvironment.NumDevices = PM->getNumDevices();
+  DeviceEnvironment.DeviceNum = DeviceID;
   DeviceEnvironment.DynamicMemSize = 0;
   DeviceEnvironment.ClockFrequency =
-      getInfo<uint64_t>(DeviceInfo::TIMESTAMP_FREQUENCY);
+      getInfo<uint64_t>(OL_DEVICE_INFO_TIMESTAMP_FREQUENCY);
   DeviceEnvironment.IndirectCallTable =
       reinterpret_cast<uintptr_t>(CallTablePairOrErr->first);
   DeviceEnvironment.IndirectCallTableSize = CallTablePairOrErr->second;
   DeviceEnvironment.HardwareParallelism =
-      getInfo<uint64_t>(DeviceInfo::HARDWARE_PARALLELISM);
+      getInfo<uint64_t>(OL_DEVICE_INFO_HARDWARE_PARALLELISM);
 
   // DeviceEnvironment is on the stack, so the copy must be synchronous.
   if (submitDataSync(DeviceEnvironmentPtr, &DeviceEnvironment,
@@ -511,16 +507,15 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);
       InterfaceRAII TargetDataAllocTraceRAII(
           RegionInterface.getTraceGenerators<ompt_target_data_alloc>(),
-          RTLDeviceID, HstPtr, &TargetPtr, Size,
+          DeviceID, HstPtr, &TargetPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
   // Time the allocation here: the offload API below carries no profiler, and
   // the trace record built by the RAII above reads these timestamps. Declared
   // after that RAII, so it is destroyed -- and stamps -- first.
-  auto *Profiler = RTL->getProfiler();
   assert(Profiler && "Plugin provides no profiler instance");
-  auto ProfTimer = Profiler->getScopedDataAllocTimer(
-      &RTL->getDevice(RTLDeviceID), HstPtr, Size);
+  auto ProfTimer =
+      Profiler->getScopedDataAllocTimer(PluginDevice, HstPtr, Size);
 
   // Record-replay serves every allocation from its preallocated region so
   // recorded kernels can re-execute at their original addresses.
@@ -562,10 +557,9 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
 
   // See allocData: the trace record built by the RAII above reads these
   // timestamps, so this must be declared after it.
-  auto *Profiler = RTL->getProfiler();
   assert(Profiler && "Plugin provides no profiler instance");
-  auto ProfTimer = Profiler->getScopedDataDeleteTimer(
-      &RTL->getDevice(RTLDeviceID), TgtAllocBegin);
+  auto ProfTimer =
+      Profiler->getScopedDataDeleteTimer(PluginDevice, TgtAllocBegin);
 
   // Record/replay owns the memory: forward the deallocation to its region
   // instead of the plugin.
@@ -677,7 +671,7 @@ int32_t DeviceTy::submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin,
       TracerInterfaceRAII TargetDataSubmitTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_to_device>(),
-          AI, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
+          AI, Profiler, /*TracedDeviceId=*/DeviceID,
           /*EventType=*/ompt_callback_target_data_op, omp_initial_device,
           HstPtrBegin, DeviceID, TgtPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
@@ -743,7 +737,7 @@ int32_t DeviceTy::retrieveDataImpl(void *HstPtrBegin, void *TgtPtrBegin,
       TracerInterfaceRAII TargetDataSubmitTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_from_device>(),
-          AI, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
+          AI, Profiler, /*TracedDeviceId=*/DeviceID,
           /*EventType=*/ompt_callback_target_data_op, DeviceID, TgtPtrBegin,
           omp_initial_device, HstPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
@@ -778,7 +772,7 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
       TracerInterfaceRAII TargetDataExchangeTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_from_device>(),
-          AsyncInfo, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
+          AsyncInfo, Profiler, /*TracedDeviceId=*/DeviceID,
           /*EventType=*/ompt_callback_target_data_op, DeviceID, SrcPtr,
           DstDev.DeviceID, DstPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
@@ -1761,21 +1755,15 @@ void DeviceTy::dumpOffloadEntries() {
 bool DeviceTy::useAutoZeroCopy() {
   if (PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY)
     return false;
-
-  return RTL->use_auto_zero_copy(RTLDeviceID);
-}
-
-bool DeviceTy::checkIfAPU() { return RTL->has_apu_device(RTLDeviceID); }
-
-bool DeviceTy::supportsUnifiedMemory() {
-  return RTL->supports_unified_memory(RTLDeviceID);
-}
-
-void DeviceTy::zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
-                                           bool isAutoZeroCopy,
-                                           bool isEagerMaps) {
-  RTL->zero_copy_sanity_checks_and_diag(RTLDeviceID, isUnifiedSharedMemory,
-                                        isAutoZeroCopy, isEagerMaps);
+  bool PrefersHost = false;
+  if (auto Res =
+          olGetDeviceInfo(DeviceHandle, OL_DEVICE_INFO_PREFERRED_LOCATION_HOST,
+                          sizeof(PrefersHost), &PrefersHost)) {
+    REPORT() << "Failed to query zero-copy preference of device " << DeviceID
+             << ": " << Res->Details;
+    return false;
+  }
+  return PrefersHost;
 }
 
 bool DeviceTy::isAccessiblePtr(const void *Ptr, size_t Size) {

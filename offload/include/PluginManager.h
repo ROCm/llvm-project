@@ -13,11 +13,8 @@
 #ifndef OMPTARGET_PLUGIN_MANAGER_H
 #define OMPTARGET_PLUGIN_MANAGER_H
 
-#include "OpenMP/OMPT/OmptTracingBuffer.h"
 #include "OffloadAPI.h"
-// Downstream: must precede OmpAccError.h, which declares a conflicting
-// llvm::omp::target::error namespace; see device.h.
-#include "PluginInterface.h"
+#include "OpenMP/OMPT/OmptTracingBuffer.h"
 
 #include "DeviceImage.h"
 #include "ExclusiveAccess.h"
@@ -133,10 +130,6 @@ struct PluginManager {
   /// Eagerly initialize all plugins and their devices.
   void initializeAllDevices();
 
-  // Downstream: used to report XNACK image incompatibilities.
-  /// Iterator range for all plugins (in use or not, but always valid).
-  auto plugins() { return llvm::make_pointee_range(Plugins); }
-
   /// Return the user provided requirements.
   int64_t getRequirements() const { return Requirements.getRequirements(); }
 
@@ -164,9 +157,6 @@ private:
   // Whether init() called olInit, so deinit() must call olShutDown.
   bool LibOffloadInitialized = false;
   llvm::SmallVector<__tgt_bin_desc *> DelayedBinDesc;
-
-  // Downstream: list of all plugins, in use or not; see plugins().
-  llvm::SmallVector<GenericPluginTy *> Plugins;
 
   // Platforms reported by liboffload, indexed by their handle.
   llvm::DenseMap<ol_platform_handle_t, PlatformTy> Platforms;
