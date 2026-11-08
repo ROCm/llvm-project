@@ -557,12 +557,25 @@ public:
 /// reducing spilling or increasing occupancy is possible, it tries to
 /// rematerialize as few registers as possible to reduce potential negative
 /// effects on function latency. Uses `GCNRematStrategy` to drive
-/// rematerializations.
+/// rematerializations, on the scheduling regions with each region above its
+/// RP target split at its RP peak.
 class PreRARematStage : public GCNSchedStage {
 private:
-  /// Live-outs are not maintained in a contiguous array so we have to have one
-  /// here to give to the strategy.
-  SmallVector<GCNRPTracker::LiveRegSet> LiveOuts;
+  /// Regions given to the strategy. See \ref buildRematRegions.
+  SmallVector<RegionBoundaries> RematRegions;
+  /// Live-ins, live-outs, maximum pressure and RP peaks (invalid when unknown)
+  /// of each region in \ref RematRegions.
+  SmallVector<GCNRPTracker::LiveRegSet> RematLiveIns, RematLiveOuts;
+  SmallVector<GCNRegPressure> RematPressure;
+  SmallVector<GCNRematStrategy::RegionPeaks> RematPeaks;
+  /// Cache for \ref getRematLastDef.
+  DenseMap<Register, SlotIndex> RematLastDef;
+  /// Scheduling region of each region in \ref RematRegions.
+  SmallVector<unsigned> RematToSchedRegion;
+  /// First region in \ref RematRegions of each scheduling region.
+  SmallVector<unsigned> FirstRematRegion;
+  /// Instruction after which each scheduling region is split, or null.
+  SmallVector<MachineInstr *> SplitMIs;
   /// Rematerialization strategy.
   std::unique_ptr<GCNRematStrategy> Strategy;
   /// The target occupancy the stage is tring to achieve. Empty when the
@@ -597,6 +610,83 @@ private:
 
   /// Returns the occupancy the stage is trying to achieve.
   unsigned getStageTargetOccupancy() const;
+
+  /// Builds \ref RematRegions from the scheduling regions. Each region set in
+  /// \p TargetRegions is split after the first instruction at or after its RP
+  /// peak that may store or has unmodeled side effects, because such an
+  /// instruction is never deleted by a rematerialization. A register used in
+  /// both halves can then be rematerialized into the second half. \p
+  /// VectorExcess selects, per region, the register kind whose peak is used.
+  void buildRematRegions(const BitVector &TargetRegions,
+                         const BitVector &VectorExcess);
+
+  /// Pressure at a non-debug instruction, from an upward walk.
+  struct InstrPressure {
+    MachineInstr *MI;
+    GCNRegPressure RP;
+  };
+
+  /// Walks [\p Begin, \p End) upwards from the live-outs \p LiveOuts and
+  /// appends the pressure at each non-debug instruction to \p Walk, from the
+  /// last instruction to the first.
+  void walkRegion(MachineBasicBlock::iterator Begin,
+                  MachineBasicBlock::iterator End,
+                  const GCNRPTracker::LiveRegSet &LiveOuts,
+                  SmallVectorImpl<InstrPressure> &Walk) const;
+
+  /// Returns the maximum pressure in \p Walk and sets \p Peaks to the
+  /// earliest instructions with the highest VGPR and SGPR pressure.
+  GCNRegPressure summarizeWalk(ArrayRef<InstrPressure> Walk, bool UnifiedRF,
+                               GCNRematStrategy::RegionPeaks &Peaks) const;
+
+  /// Returns the registers live at \p Begin, walking up from the live-outs \p
+  /// LiveOuts at \p End.
+  GCNRPTracker::LiveRegSet
+  getLiveRegsBefore(MachineBasicBlock::iterator Begin,
+                    MachineBasicBlock::iterator End,
+                    const GCNRPTracker::LiveRegSet &LiveOuts) const;
+
+  /// Returns the instruction after which the region [\p Begin, \p End) is
+  /// split, or null if it is not split. \p Walk is the region's pressure from
+  /// \ref walkRegion and \p VectorExcess selects the register kind whose peak
+  /// is used.
+  MachineInstr *findRematSplit(MachineBasicBlock::iterator Begin,
+                               MachineBasicBlock::iterator End,
+                               ArrayRef<InstrPressure> Walk, bool UnifiedRF,
+                               bool VectorExcess) const;
+
+  /// Returns the slot of the last defining instruction of \p Reg if all its
+  /// defining instructions are rematerializable, and an invalid slot
+  /// otherwise.
+  SlotIndex getRematLastDef(Register Reg);
+
+  /// Returns whether [\p Begin, \p End) has a store or side-effecting
+  /// instruction followed by a use of a register whose defining instructions
+  /// are all rematerializable and before that instruction. Without such a
+  /// register, no split of the region can help. This is cheaper than
+  /// \ref findRematSplit and runs first.
+  bool mayHaveSplitCandidate(MachineBasicBlock::iterator Begin,
+                             MachineBasicBlock::iterator End);
+
+  /// Returns whether an instruction in [\p Begin, \p End), the second half of
+  /// a region split after \p Split, uses a register whose defining
+  /// instructions are all rematerializable and before the split. Without such
+  /// a register, the split cannot help.
+  bool hasSplitCandidate(const MachineInstr &Split,
+                         MachineBasicBlock::iterator Begin,
+                         MachineBasicBlock::iterator End);
+
+  /// Copies the boundaries of \ref RematRegions, which the strategy may
+  /// change, to the scheduling regions.
+  void updateSchedRegions();
+
+  /// Copies the boundaries of the scheduling regions, which rescheduling may
+  /// change, to \ref RematRegions.
+  void updateRematRegions();
+
+  /// Copies the live-ins and live-outs of \ref RematRegions to scheduling
+  /// region \p RegionIdx.
+  void updateSchedLiveMaps(unsigned RegionIdx);
 
   /// If remat alone did not increase occupancy to the target one, rollbacks all
   /// rematerializations and resets live-ins/RP in all regions impacted by the
