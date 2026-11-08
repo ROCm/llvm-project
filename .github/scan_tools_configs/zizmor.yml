@@ -46,3 +46,11 @@ rules:
       # Notifies LLVM issue subscribers. The job runs only when
       # github.repository is llvm/llvm-project.
       - subscriber.yml
+  unpinned-images:
+    ignore:
+      # Upstream MLIR SPIR-V CI. The job runs only when
+      # github.repository_owner == 'llvm', so it does not run in this fork.
+      - mlir-spirv-tests.yml
+      # Upstream compiler-rt + LLVM-libc builtins CI. The job runs only when
+      # github.repository_owner == 'llvm', so it does not run in this fork.
+      - compiler-rt-libc-builtins-tests.yml
