@@ -217,6 +217,24 @@ template <> struct GraphTraits<SummaryCallGraph::Node *> {
 
 /// Gives the SummaryCallGraph of the index in the form that a pass selects.
 /// Uses ThinLinkInfoAnalysis and SummaryAddressTakenAnalysis.
+///
+/// The graph reads these data of the index. A pass that changes them must not
+/// preserve this analysis:
+/// - the summaries of each value, and for each summary, whether it is live,
+///   its linkage, and whether it was promoted. They give the copies and the
+///   prevailing copy of a node.
+/// - the calls of a function summary (FunctionSummary::calls()), its call type
+///   IDs (FunctionSummary::getCallTypeIdInfo()), and its flag HasUnknownCall.
+/// - the aliasee of an alias summary.
+/// - the references of the summaries (GlobalValueSummary::refs()). They give
+///   the values whose address can be taken (see SummaryAddressTakenAnalysis),
+///   and the functions that the runtime can call, for example through
+///   llvm.global_ctors.
+/// The facts of ThinLinkInfoAnalysis do not change while passes run. The other
+/// data of the index do not change the graph, for example the other function
+/// flags, the parameter access ranges, and the entries of summary extensions.
+/// A pass that changes only such data can preserve this analysis. The result is
+/// also invalid if SummaryAddressTakenAnalysis is.
 class SummaryCallGraphAnalysis
     : public AnalysisInfoMixin<SummaryCallGraphAnalysis> {
 public:
@@ -255,7 +273,9 @@ private:
 /// Computes the GUIDs of the values whose address code can take: the values
 /// that a live summary refers to, and the preserved symbols. For an alias in
 /// the set, the set also holds its aliasee. A function in the set can be the
-/// target of an indirect call. Uses ThinLinkInfoAnalysis.
+/// target of an indirect call. Uses ThinLinkInfoAnalysis. A pass that changes
+/// whether a summary is live, the references of a summary, or the aliasee of an
+/// alias must not preserve this analysis.
 class SummaryAddressTakenAnalysis
     : public AnalysisInfoMixin<SummaryAddressTakenAnalysis> {
 public:
