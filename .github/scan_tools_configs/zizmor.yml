@@ -54,3 +54,9 @@ rules:
       # Upstream compiler-rt + LLVM-libc builtins CI. The job runs only when
       # github.repository_owner == 'llvm', so it does not run in this fork.
       - compiler-rt-libc-builtins-tests.yml
+      # Upstream LLVM-libc overlay CI. Both jobs run only when
+      # github.repository_owner == 'llvm', so they do not run in this fork.
+      # The matrix and qemu images are digest-pinned; zizmor flags
+      # `container: ${{ matrix.container || null }}` because it cannot
+      # see through that expression.
+      - libc-overlay-tests.yml
