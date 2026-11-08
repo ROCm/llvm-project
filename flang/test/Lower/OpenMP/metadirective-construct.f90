@@ -114,3 +114,38 @@ subroutine test_construct_combined_directive()
     !$omp end parallel
   !$omp end target
 end subroutine
+
+! Device weights also count only from the innermost TARGET. KIND is worth 2 here
+! and loses to the vendor score of 3.
+! CHECK-LABEL: func.func @_QPtest_device_weight_outside_target()
+! CHECK:         omp.parallel
+! CHECK:           omp.target
+! CHECK-NOT:         omp.taskyield
+! CHECK:             omp.taskwait
+! CHECK:         return
+subroutine test_device_weight_outside_target()
+  !$omp parallel
+    !$omp target
+      !$omp metadirective &
+      !$omp & when(device={kind(host)}: taskyield) &
+      !$omp & when(implementation={vendor(score(3): amd)}: taskwait)
+    !$omp end target
+  !$omp end parallel
+end subroutine
+
+! With PARALLEL inside TARGET, KIND is worth 4 and wins.
+! CHECK-LABEL: func.func @_QPtest_device_weight_inside_target()
+! CHECK:         omp.target
+! CHECK:           omp.parallel
+! CHECK-NOT:         omp.taskwait
+! CHECK:             omp.taskyield
+! CHECK:         return
+subroutine test_device_weight_inside_target()
+  !$omp target
+    !$omp parallel
+      !$omp metadirective &
+      !$omp & when(device={kind(host)}: taskyield) &
+      !$omp & when(implementation={vendor(score(3): amd)}: taskwait)
+    !$omp end parallel
+  !$omp end target
+end subroutine
