@@ -13,9 +13,9 @@ jobs:
     if: >-
       !contains(github.event.pull_request.head.ref, 'upstream_merge')
       && !contains(github.event.pull_request.labels.*.name, 'ci:skip')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container:
-      image: 'ghcr.io/llvm/ci-ubuntu-24.04-format'
+      image: 'ghcr.io/llvm/ci-ubuntu-26.04-format:latest@sha256:bf8fe9a3eec74b90450335e93b233097c27729f4b1041372e5dd20e6489ded68'
     timeout-minutes: 30
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
