@@ -13,8 +13,8 @@
 #ifndef OMPTARGET_PLUGIN_MANAGER_H
 #define OMPTARGET_PLUGIN_MANAGER_H
 
-#include "OpenMP/OMPT/OmptTracingBuffer.h"
 #include "OffloadAPI.h"
+#include "OpenMP/OMPT/OmptTracingBuffer.h"
 
 #include "DeviceImage.h"
 #include "ExclusiveAccess.h"
