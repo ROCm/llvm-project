@@ -9,6 +9,9 @@
 #ifndef AMD_COMGR_PERF_TIMER_H
 #define AMD_COMGR_PERF_TIMER_H
 
+#include <cstdint>
+#include <memory>
+
 namespace COMGR {
 namespace TimeStatistics {
 

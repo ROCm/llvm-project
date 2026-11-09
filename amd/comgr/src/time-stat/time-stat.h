@@ -9,6 +9,7 @@
 #ifndef AMD_COMGR_TIME_STAT_H
 #define AMD_COMGR_TIME_STAT_H
 
+#include "comgr-env.h"
 #include "perf-timer.h"
 #include "ts-interface.h"
 #include "llvm/ADT/StringMap.h"
