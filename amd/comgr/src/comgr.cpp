@@ -1131,7 +1131,7 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_block_sizes(
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
-  std::copy(ActionP->BlockSizes.begin(), ActionP->BlockSizes.end(), BlockSizes);
+  llvm::copy(ActionP->BlockSizes, BlockSizes);
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
@@ -1870,10 +1870,8 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
             }
           }
 
-          MapKey.erase(std::find(MapKey.begin(), MapKey.end(), '\0'),
-                       MapKey.end());
-          MapVal.erase(std::find(MapVal.begin(), MapVal.end(), '\0'),
-                       MapVal.end());
+          MapKey.erase(llvm::find(MapKey, '\0'), MapKey.end());
+          MapVal.erase(llvm::find(MapVal, '\0'), MapVal.end());
           if (env::shouldEmitVerboseLogs()) {
             llvm::errs() << "   Comgr NameExpressionMap[" << MapKey
                          << "] = " << MapVal << "\n";

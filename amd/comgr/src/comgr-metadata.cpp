@@ -466,7 +466,7 @@ amd_comgr_status_t getIsaIndex(StringRef TargetIDString, size_t &Index,
 
   // TargetID already validated the triple, so match only the resolved GPU kind.
   ArrayRef<IsaInfo> IsaInfos = getIsaInfos();
-  auto IsaIterator = llvm::find_if(IsaInfos, [&](const IsaInfo &Info) {
+  const auto *IsaIterator = llvm::find_if(IsaInfos, [&](const IsaInfo &Info) {
     return TID->getGPUKind() == Info.Kind;
   });
   if (IsaIterator == IsaInfos.end()) {

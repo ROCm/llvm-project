@@ -72,7 +72,7 @@ std::optional<bool> shouldUseVFS() {
   if (UseVFS) {
     if (StringRef(UseVFS) == "0")
       return false;
-    else if (StringRef(UseVFS) == "1")
+    if (StringRef(UseVFS) == "1")
       return true;
   }
 
@@ -96,7 +96,7 @@ uint32_t getGranularityUnitsPerSecond() {
   StringRef G = getTimeStatisticsGranularity();
   if (G == "us")
     return 1e6;
-  else if (G == "ns")
+  if (G == "ns")
     return 1e9;
   return 1e3;
 }

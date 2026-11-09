@@ -1387,7 +1387,7 @@ amd_comgr_status_t AMDGPUCompiler::processFile(DataObject *Input,
   }
 
   // Add SPIR-V flags
-  for (auto Flag : Input->SpirvFlags) {
+  for (const auto *Flag : Input->SpirvFlags) {
     Argv.push_back("-Xclang");
     Argv.push_back(Flag);
   }
@@ -2452,8 +2452,8 @@ amd_comgr_status_t AMDGPUCompiler::extractSpirvFlags(DataSet *BcSet) {
       // Add each valid null-terminated '\0' string to Flags
       std::string Tmp;
       StringRef CmdLineRaw = CDS->getRawDataValues();
-      std::stringstream ss(CmdLineRaw.str());
-      while (getline(ss, Tmp, '\0')) {
+      std::stringstream CmdLineStream(CmdLineRaw.str());
+      while (getline(CmdLineStream, Tmp, '\0')) {
         if (Tmp == "--hipstdpar" || Tmp == "-amdgpu-enable-hipstdpar") {
           Bc->SpirvFlags.push_back("-mllvm");
           Bc->SpirvFlags.push_back("-amdgpu-enable-hipstdpar");
@@ -2468,7 +2468,7 @@ amd_comgr_status_t AMDGPUCompiler::extractSpirvFlags(DataSet *BcSet) {
 
     if (env::shouldEmitVerboseLogs()) {
       LogS << "        SPIR-V Flags: " << Bc->Name << "\n";
-      for (auto Flag : Bc->SpirvFlags)
+      for (const auto *Flag : Bc->SpirvFlags)
         LogS << "          " << Flag << "\n";
     }
   }
