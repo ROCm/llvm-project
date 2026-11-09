@@ -523,8 +523,6 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
     if (!isEmptyModule(Mod))
       CodeGenPasses.add(
           createImmutableModuleSummaryIndexWrapperPass(&CombinedIndex));
-    if (Conf.PreCodeGenPassesHook)
-      Conf.PreCodeGenPassesHook(CodeGenPasses);
     if (TM->addPassesToEmitFile(CodeGenPasses, *Stream->OS,
                                 DwoOut ? &DwoOut->os() : nullptr,
                                 Conf.CGFileType))
