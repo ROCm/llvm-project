@@ -24,7 +24,7 @@ MATH_MANGLE(expm1)(float x)
     float p = PE5(t, 0x1.a26762p-13f, 0x1.6d2e00p-10f, 0x1.110ff2p-7f, 0x1.555502p-5f, 0x1.555556p-3f,
                     0x1.000000p-1f);
     p = BUILTIN_FMA_F32(t, t*p, t);
-    int e = fn == 128.0f ? 127 : (int)fn;
+    int e = fn == 128.0f ? 127 : (BUILTIN_ISNAN_F32(fn) ? 0 : (int)fn);
     float s = BUILTIN_FLDEXP_F32(1.0f, e);
     float z = BUILTIN_FMA_F32(s, p, s - 1.0f);
     z = fn == 128.0 ? 2.0f*z : z;

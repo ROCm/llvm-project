@@ -28,7 +28,7 @@ MATH_MANGLE(expm1)(double x)
                      0x1.0000000000000p-1);
 
     p = MATH_MAD(t, t*p, t);
-    int e = dn == 1024.0 ? 1023 : (int)dn;
+    int e = dn == 1024.0 ? 1023 : (BUILTIN_ISNAN_F64(dn) ? 0 : (int)dn);
     double s = BUILTIN_FLDEXP_F64(1.0, e);
     double z = MATH_MAD(s, p, s - 1.0);
     z = dn == 1024.0 ? 2.0*z : z;

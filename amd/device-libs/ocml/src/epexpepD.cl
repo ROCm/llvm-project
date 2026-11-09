@@ -23,6 +23,6 @@ MATH_PRIVATE(epexpep)(double2 x)
 
     double2 r = fadd(1.0, fadd(t, mul(sqr(t), p)));
 
-    return ldx(r, (int)dn);
+    return ldx(r, BUILTIN_ISNAN_F64(dn) ? 0 : (int)dn);
 }
 

@@ -23,7 +23,7 @@ MATH_PRIVATE(expep)(float2 x)
     float2 r = fadd(t, mul(sqr(t), p));
     float z = 1.0f + r.hi;
 
-    z = BUILTIN_FLDEXP_F32(z, (int)fn);
+    z = BUILTIN_FLDEXP_F32(z, BUILTIN_ISNAN_F32(fn) ? 0 : (int)fn);
 
     z = x.hi > 89.0f ? PINF_F32 : z;
     z = x.hi < -104.0f ? 0.0f : z;

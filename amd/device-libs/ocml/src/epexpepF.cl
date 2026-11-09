@@ -21,6 +21,6 @@ MATH_PRIVATE(epexpep)(float2 x)
 
     float2 r = fadd(1.0f, fadd(t, mul(sqr(t), p)));
 
-    return ldx(r, (int)fn);
+    return ldx(r, BUILTIN_ISNAN_F32(fn) ? 0 : (int)fn);
 }
 

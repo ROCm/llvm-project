@@ -25,7 +25,7 @@ MATH_PRIVATE(expep)(double2 x)
     double2 r = fadd(t, mul(sqr(t), p));
     double z = 1.0 + r.hi;
 
-    z = BUILTIN_FLDEXP_F64(z, (int)dn);
+    z = BUILTIN_FLDEXP_F64(z, BUILTIN_ISNAN_F64(dn) ? 0 : (int)dn);
 
     z = x.hi > 710.0 ? PINF_F64 : z;
     z = x.hi < -745.0 ? 0.0 : z;
