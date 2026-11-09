@@ -100,7 +100,7 @@ public:
   double getCurrentTime() { return PT.getCurrentTime(); }
 
   void addToStats(llvm::StringRef Name, double TimeTaken) {
-    std::scoped_lock Lock(Mtx);
+    std::lock_guard<std::mutex> Lock(Mtx);
     ProfileData &D = ProfileDataMap[Name];
     D.TimeTaken += TimeTaken;
     D.Counter++;
@@ -111,7 +111,7 @@ public:
   // Fold many pre-aggregated rows in under a single lock so hot-path producers
   // can accumulate lock-free and merge once.
   void mergeStats(llvm::ArrayRef<PerfStatRecord> Records) {
-    std::scoped_lock Lock(Mtx);
+    std::lock_guard<std::mutex> Lock(Mtx);
     for (const PerfStatRecord &R : Records) {
       ProfileData &D = ProfileDataMap[R.Name];
       D.TimeTaken += R.TimeTaken;
@@ -125,7 +125,7 @@ public:
   }
 
   void dumpPerfStats() {
-    std::scoped_lock Lock(Mtx);
+    std::lock_guard<std::mutex> Lock(Mtx);
     llvm::StringRef Unit = env::getTimeStatisticsGranularity();
     for (const auto &Item : ProfileDataMap) {
       const ProfileData &D = Item.getValue();
@@ -147,7 +147,7 @@ public:
   // Snapshot an aggregated row by name for unit tests; returns a zeroed
   // ProfileData when the row is absent. Locks like the other accessors.
   ProfileData lookupForTest(llvm::StringRef Name) {
-    std::scoped_lock Lock(Mtx);
+    std::lock_guard<std::mutex> Lock(Mtx);
     return ProfileDataMap.lookup(Name);
   }
 };
