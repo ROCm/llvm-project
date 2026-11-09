@@ -1256,7 +1256,7 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_do_action(
       }
     }
 
-    InitTimeStatistics(PerfLog);
+    initTimeStatistics(PerfLog);
 
     if (Log.isEnabled(LogLevel::Debug)) {
       SmallString<256> HeaderStr;

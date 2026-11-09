@@ -1,7 +1,9 @@
 # Mirrors llvm-project/.clang-tidy with some Comgr-specific deviations:
 #
 #   1. -llvm-header-guard: We want things labelled relative to COMGR, not LLVM
-#   2. HeaderFilterRegex: Scoped to Comgr source, excluding time-stat
+#   2. HeaderFilterRegex: Scoped to Comgr's own headers. Must stay narrow --
+#      the upstream default is '.*', which also diagnoses every llvm/clang
+#      header in the include graph.
 #   3. FunctionIgnoredRegexp: Exempts the C API naming convention
 HeaderFilterRegex: 'amd/comgr/(src|test-unit)/'
 Checks: >

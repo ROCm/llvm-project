@@ -46,17 +46,17 @@ struct ProfileData {
 class PerfStats {
   std::unique_ptr<llvm::raw_fd_ostream,
                   std::function<void(llvm::raw_fd_ostream *)>>
-      pLog;
+      Log;
   PerfTimer PT;
 
-  // Guards ProfileDataMap so AddToStats / mergeStats / dumpPerfStats are safe
+  // Guards ProfileDataMap so addToStats / mergeStats / dumpPerfStats are safe
   // under concurrent Comgr calls.
   std::mutex Mtx;
   llvm::StringMap<ProfileData> ProfileDataMap;
 
 public:
   PerfStats() {}
-  bool Init(std::string LogFile) {
+  bool init(std::string LogFile) {
     std::error_code EC;
     std::unique_ptr<llvm::raw_fd_ostream> LogF;
 #ifndef _WIN32
@@ -88,10 +88,10 @@ public:
                 << EC.message() << "\n ";
       return false;
     }
-    pLog = std::move(LogF);
+    Log = std::move(LogF);
 
     // Initialize Timer
-    if (!PT.Init())
+    if (!PT.init())
       return false;
 
     return true;
@@ -99,7 +99,7 @@ public:
 
   double getCurrentTime() { return PT.getCurrentTime(); }
 
-  void AddToStats(llvm::StringRef Name, double TimeTaken) {
+  void addToStats(llvm::StringRef Name, double TimeTaken) {
     std::scoped_lock Lock(Mtx);
     ProfileData &D = ProfileDataMap[Name];
     D.TimeTaken += TimeTaken;
@@ -134,13 +134,13 @@ public:
       // Keep the granularity unit last so existing consumers that anchor on it
       // (e.g. the time-statistics.cl "grep 'ms$'" check) still match; the extra
       // columns are inserted before it.
-      *pLog << llvm::format("%-50s", Item.getKey().str().c_str())
-            << llvm::format("%6d", D.Counter) << " calls "
-            << llvm::format("%10.4f", D.TimeTaken)
-            << llvm::format("  min %10.4f  max %10.4f  patches %6llu", MinT,
-                            D.MaxTime,
-                            static_cast<unsigned long long>(D.Patches))
-            << " " << Unit << "\n";
+      *Log << llvm::format("%-50s", Item.getKey().str().c_str())
+           << llvm::format("%6d", D.Counter) << " calls "
+           << llvm::format("%10.4f", D.TimeTaken)
+           << llvm::format("  min %10.4f  max %10.4f  patches %6llu", MinT,
+                           D.MaxTime,
+                           static_cast<unsigned long long>(D.Patches))
+           << " " << Unit << "\n";
     }
   }
 
