@@ -1,6 +1,6 @@
-; RUN: llc -mtriple=amdgpu8.03 < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
-; RUN: llc -mtriple=amdgpu9.00 < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
-; RUN: opt -S -mtriple=amdgpu8.03-- -passes=sroa,amdgpu-promote-alloca < %s | FileCheck -check-prefix=OPT %s
+; RUN: llc -mtriple=amdgpu8.03 -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
+; RUN: llc -mtriple=amdgpu9.00 -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
+; RUN: opt -S -mtriple=amdgpu8.03-- -passes=sroa,amdgpu-promote-alloca -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck -check-prefix=OPT %s
 
 ; GCN-LABEL: {{^}}float4_alloca_store4:
 ; OPT-LABEL: define amdgpu_kernel void @float4_alloca_store4
