@@ -1905,9 +1905,8 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
 
     UnbundleCommand Unbundle(Input->DataKind, BundlerConfig);
     if (Cache) {
-      if (auto Status = Cache->execute(Unbundle, LogS)) {
+      if (auto Status = Cache->execute(Unbundle, LogS))
         return Status;
-      }
     } else {
       if (auto Status = Unbundle.execute(LogS)) {
         return Status;
@@ -1915,7 +1914,8 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
     }
 
     // Add new bitcodes to OutSetT
-    for (StringRef OutputFilePath : BundlerConfig.OutputFileNames) {
+    for (const auto &[I, OutputFilePath] :
+         llvm::enumerate(BundlerConfig.OutputFileNames)) {
 
       amd_comgr_data_t ResultT;
 
@@ -1926,8 +1926,12 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       ScopedDataObjectReleaser SDOR(ResultT);
 
       DataObject *Result = DataObject::convert(ResultT);
-      if (auto Status = inputFromFile(Result, OutputFilePath))
+      if (Unbundle.hasCachedOutputs()) {
+        if (auto Status = Result->setData(Unbundle.takeCachedOutput(I)))
+          return Status;
+      } else if (auto Status = inputFromFile(Result, OutputFilePath)) {
         return Status;
+      }
 
       StringRef OutputFileName = sys::path::filename(OutputFilePath);
       Result->setName(OutputFileName);

@@ -12,6 +12,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <comgr-env.h>
 #include <comgr-unbundle-command.h>
 
 #include <clang/Driver/OffloadBundler.h>
@@ -23,6 +24,23 @@ using namespace llvm;
 using namespace clang;
 
 using SizeFieldType = uint32_t;
+
+namespace {
+// A view of part of a shared buffer, owned through the shared pointer.
+class SharedSliceMemoryBuffer final : public MemoryBuffer {
+  std::shared_ptr<MemoryBuffer> Owner;
+
+public:
+  SharedSliceMemoryBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Slice)
+      : Owner(std::move(Owner)) {
+    init(Slice.begin(), Slice.end(), /*RequiresNullTerminator=*/false);
+  }
+  StringRef getBufferIdentifier() const override {
+    return Owner->getBufferIdentifier();
+  }
+  BufferKind getBufferKind() const override { return Owner->getBufferKind(); }
+};
+} // namespace
 
 bool UnbundleCommand::canCache() const {
   // The header format for AR files is not the same as object files
@@ -77,6 +95,46 @@ Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
   return Error::success();
 }
 
+Error UnbundleCommand::useCachedOutput(StringRef Output,
+                                       std::shared_ptr<MemoryBuffer> Owner) {
+  CachedOutputs.reset();
+  // Save-temps requires files on disk. Preserve the file-based Windows path
+  // so mappings are released before cache pruning.
+  if (env::shouldSaveTemps())
+    return writeExecuteOutput(Output);
+#ifdef _WIN32
+  return writeExecuteOutput(Output);
+#endif
+
+  SmallVector<StringRef> Contents;
+  if (Error E = splitCachedOutput(Output, Contents))
+    return E;
+
+  SmallVector<std::unique_ptr<MemoryBuffer>> Outputs;
+  for (StringRef Content : Contents) {
+    file_magic Magic = identify_magic(Content);
+    bool IsBinary = Magic == file_magic::bitcode ||
+                    Magic == file_magic::elf_relocatable ||
+                    Magic == file_magic::elf_executable ||
+                    Magic == file_magic::elf_shared_object;
+    // Textual IR reaches the assembly parser, which requires a trailing NUL.
+    // Other unknown formats retain the ordinary MemoryBuffer contract too.
+    if (Owner && IsBinary) {
+      Outputs.push_back(
+          std::make_unique<SharedSliceMemoryBuffer>(Owner, Content));
+    } else {
+      auto Copy = MemoryBuffer::getMemBufferCopy(Content);
+      if (!Copy)
+        return createStringError(std::errc::not_enough_memory,
+                                 "Could not allocate cached unbundle output");
+      Outputs.push_back(std::move(Copy));
+    }
+  }
+  // Publish only after every member has been validated and restored.
+  CachedOutputs = std::move(Outputs);
+  return Error::success();
+}
+
 Expected<StringRef> UnbundleCommand::readExecuteOutput() {
   size_t OutputSize = 0;
   for (StringRef OutputFilename : Config.OutputFileNames) {
@@ -102,6 +160,7 @@ Expected<StringRef> UnbundleCommand::readExecuteOutput() {
 }
 
 amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
+  CachedOutputs.reset();
   assert(Config.InputFileNames.size() == 1);
 
   OffloadBundler Bundler(Config);

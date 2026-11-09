@@ -114,19 +114,28 @@ void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
   ErrorHandler(CFS->commit(), "when commiting file stream");
 }
 
-bool readEntryFromCache(CachedCommandAdaptor &C, MemoryBuffer &CachedBuffer,
-                        raw_ostream &LogS) {
+bool readEntryFromCache(CachedCommandAdaptor &C,
+                        std::shared_ptr<MemoryBuffer> CachedBuffer,
+                        raw_ostream &LogS, StringRef CacheDir) {
   auto ErrorHandler = getComgrCacheErrorHandler(LogS);
 
   StringRef CachedOutputFile;
   StringRef CachedLogS;
   if (Error E =
-          deserializeCacheEntry(CachedBuffer, CachedOutputFile, CachedLogS)) {
+          deserializeCacheEntry(*CachedBuffer, CachedOutputFile, CachedLogS)) {
     ErrorHandler(std::move(E), "when reading the cache entry");
     return false;
   }
 
-  if (Error E = C.writeExecuteOutput(CachedOutputFile)) {
+  // Preserve the existing short-lived cache read on remote filesystems, but
+  // do not let a command retain that mapping in its output data objects.
+  // Windows also needs mappings released so the cache remains removable.
+  std::shared_ptr<MemoryBuffer> Owner;
+#ifndef _WIN32
+  if (sys::fs::is_local(CacheDir))
+    Owner = CachedBuffer;
+#endif
+  if (Error E = C.useCachedOutput(CachedOutputFile, std::move(Owner))) {
     ErrorHandler(std::move(E), "when writing the command output");
     return false;
   }
@@ -206,7 +215,7 @@ amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
 
   // This lambda will get called when the data is gotten from the cache and
   // also after the data was set for a given key.
-  std::unique_ptr<MemoryBuffer> CachedBuffer;
+  std::shared_ptr<MemoryBuffer> CachedBuffer;
   auto AddBuffer = [&CachedBuffer](unsigned Task, const Twine &ModuleName,
                                    std::unique_ptr<MemoryBuffer> M) {
     CachedBuffer = std::move(M);
@@ -244,7 +253,7 @@ amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
   // If the "AddStream" is nullptr, then the data was cached and we already
   // called the "AddBuffer" lambda.
   AddStreamFn &AddStream = *AddStreamOrErr;
-  if (!AddStream && readEntryFromCache(C, *CachedBuffer, LogS)) {
+  if (!AddStream && readEntryFromCache(C, CachedBuffer, LogS, CacheDir)) {
     if (env::shouldEmitVerboseLogs())
       LogS << "Comgr cache: found entry " << *MaybeId << " in cache.\n";
     return AMD_COMGR_STATUS_SUCCESS;
