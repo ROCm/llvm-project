@@ -111,22 +111,6 @@ struct ProfileLinkOptions {
   bool HasResourceDir = false;
 };
 
-static ProfileLinkOptions getProfileLinkOptions(ArrayRef<std::string> Options) {
-  SmallVector<const char *, 16> Args;
-  for (const std::string &Option : Options)
-    Args.push_back(Option.c_str());
-
-  unsigned MissingArgIndex;
-  unsigned MissingArgCount;
-  InputArgList ParsedArgs =
-      getDriverOptTable().ParseArgs(Args, MissingArgIndex, MissingArgCount);
-  if (MissingArgCount != 0)
-    return {};
-
-  return {ToolChain::needsProfileRT(ParsedArgs),
-          ParsedArgs.hasArg(options::OPT_resource_dir)};
-}
-
 /// \brief Helper class for representing a single invocation of the assembler.
 struct AssemblerInvocation {
   /// @name Target Options
@@ -223,6 +207,22 @@ public:
                              DiagnosticsEngine &Diags);
 };
 } // namespace
+
+static ProfileLinkOptions getProfileLinkOptions(ArrayRef<std::string> Options) {
+  SmallVector<const char *, 16> Args;
+  for (const std::string &Option : Options)
+    Args.push_back(Option.c_str());
+
+  unsigned MissingArgIndex;
+  unsigned MissingArgCount;
+  InputArgList ParsedArgs =
+      getDriverOptTable().ParseArgs(Args, MissingArgIndex, MissingArgCount);
+  if (MissingArgCount != 0)
+    return {};
+
+  return {ToolChain::needsProfileRT(ParsedArgs),
+          ParsedArgs.hasArg(options::OPT_resource_dir)};
+}
 
 bool AssemblerInvocation::createFromArgs(AssemblerInvocation &Opts,
                                          ArrayRef<const char *> Argv,
@@ -352,376 +352,6 @@ bool AssemblerInvocation::createFromArgs(AssemblerInvocation &Opts,
 }
 
 namespace {
-bool needsPreprocessing(DataObject *O) {
-  if (O->DataKind != AMD_COMGR_DATA_KIND_SOURCE)
-    return false;
-  StringRef Ext = path::extension(O->Name);
-  bool IsPreprocessedSource = Ext == ".i";
-  return !IsPreprocessedSource;
-}
-
-std::unique_ptr<raw_fd_ostream> getOutputStream(AssemblerInvocation &Opts,
-                                                DiagnosticsEngine &Diags,
-                                                bool Binary) {
-  if (Opts.OutputPath.empty()) {
-    Opts.OutputPath = "-";
-  }
-
-  // Make sure that the Out file gets unlinked from the disk if we get a
-  // SIGINT.
-  if (Opts.OutputPath != "-") {
-    sys::RemoveFileOnSignal(Opts.OutputPath);
-  }
-
-  std::error_code EC;
-  auto Out = std::make_unique<raw_fd_ostream>(
-      Opts.OutputPath, EC, (Binary ? sys::fs::OF_None : sys::fs::OF_Text));
-  if (EC) {
-    Diags.Report(diag::err_fe_unable_to_open_output)
-        << Opts.OutputPath << EC.message();
-    return nullptr;
-  }
-
-  return Out;
-}
-
-// clang/tools/driver/cc1as_main.cpp,  ExecuteAssemblerImpl()
-bool executeAssemblerImpl(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
-                          raw_ostream &LogS) {
-  // Get the target specific parser.
-  std::string Error;
-  const Target *TheTarget = TargetRegistry::lookupTarget(
-    llvm::Triple(Opts.Triple), Error);
-  if (!TheTarget) {
-    return Diags.Report(diag::err_target_unknown_triple) << Opts.Triple;
-  }
-
-  ErrorOr<std::unique_ptr<MemoryBuffer>> Buffer =
-      MemoryBuffer::getFileOrSTDIN(Opts.InputFile);
-
-  if (std::error_code EC = Buffer.getError()) {
-    Error = EC.message();
-    return Diags.Report(diag::err_fe_error_reading) << Opts.InputFile;
-  }
-
-  SourceMgr SrcMgr;
-  SrcMgr.setDiagHandler(
-      [](const SMDiagnostic &SMDiag, void *LogS) {
-        SMDiag.print("", *(raw_ostream *)LogS, /* ShowColors */ false);
-      },
-      &LogS);
-
-  // Tell SrcMgr about this buffer, which is what the parser will pick up.
-  SrcMgr.AddNewSourceBuffer(std::move(*Buffer), SMLoc());
-
-  // Record the location of the include directories so that the lexer can find
-  // it later.
-  SrcMgr.setIncludeDirs(Opts.IncludePaths);
-
-  std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(
-      llvm::Triple(Opts.Triple)));
-  assert(MRI && "Unable to create target register info!");
-
-  llvm::MCTargetOptions MCOptions;
-  MCOptions.X86RelaxRelocations = Opts.RelaxELFRelocations;
-  MCOptions.CompressDebugSections = Opts.CompressDebugSections;
-  std::unique_ptr<MCAsmInfo> MAI(
-      TheTarget->createMCAsmInfo(*MRI, llvm::Triple(Opts.Triple), MCOptions));
-  assert(MAI && "Unable to create target asm info!");
-
-  // Ensure MCAsmInfo initialization occurs before any use, otherwise sections
-  // may be created with a combination of default and explicit settings.
-
-  bool IsBinary = Opts.OutputType == AssemblerInvocation::FT_Obj;
-  std::unique_ptr<raw_fd_ostream> FDOS = getOutputStream(Opts, Diags, IsBinary);
-  if (!FDOS) {
-    return true;
-  }
-
-  // Build up the feature string from the target feature list.
-  std::string FS;
-  if (!Opts.Features.empty()) {
-    FS = Opts.Features[0];
-    for (unsigned I = 1, E = Opts.Features.size(); I != E; ++I) {
-      FS += "," + Opts.Features[I];
-    }
-  }
-
-  std::unique_ptr<MCObjectFileInfo> MOFI(new MCObjectFileInfo());
-  std::unique_ptr<MCSubtargetInfo> STI(
-      TheTarget->createMCSubtargetInfo(llvm::Triple(Opts.Triple), Opts.CPU, FS));
-
-  MCContext Ctx(Triple(Opts.Triple), *MAI, *MRI, *STI, &SrcMgr);
-  Ctx.setObjectFileInfo(MOFI.get());
-
-  bool PIC = false;
-  if (Opts.RelocationModel == "static") {
-    PIC = false;
-  } else if (Opts.RelocationModel == "pic") {
-    PIC = true;
-  } else {
-    assert(Opts.RelocationModel == "dynamic-no-pic" && "Invalid PIC model!");
-    PIC = false;
-  }
-
-  MOFI->initMCObjectFileInfo(Ctx, PIC);
-  if (Opts.GenDwarfForAssembly) {
-    Ctx.setGenDwarfForAssembly(true);
-  }
-  if (!Opts.DwarfDebugFlags.empty()) {
-    Ctx.setDwarfDebugFlags(StringRef(Opts.DwarfDebugFlags));
-  }
-  if (!Opts.DwarfDebugProducer.empty()) {
-    Ctx.setDwarfDebugProducer(StringRef(Opts.DwarfDebugProducer));
-  }
-  if (!Opts.DebugCompilationDir.empty()) {
-    Ctx.setCompilationDir(Opts.DebugCompilationDir);
-  }
-  if (!Opts.MainFileName.empty()) {
-    Ctx.setMainFileName(StringRef(Opts.MainFileName));
-  }
-  Ctx.setDwarfVersion(Opts.DwarfVersion);
-
-  std::unique_ptr<MCStreamer> Str;
-  std::unique_ptr<MCInstrInfo> MCII(TheTarget->createMCInstrInfo());
-
-  raw_pwrite_stream *Out = FDOS.get();
-  std::unique_ptr<buffer_ostream> BOS;
-
-  // FIXME: There is a bit of code duplication with addPassesToEmitFile.
-  if (Opts.OutputType == AssemblerInvocation::FT_Asm) {
-    std::unique_ptr<MCInstPrinter> InstructionPrinter(
-      TheTarget->createMCInstPrinter(
-         llvm::Triple(Opts.Triple), Opts.OutputAsmVariant, *MAI, *MCII, *MRI));
-    std::unique_ptr<MCCodeEmitter> MCE;
-    std::unique_ptr<MCAsmBackend> MAB;
-    if (Opts.ShowEncoding) {
-      MCE.reset(TheTarget->createMCCodeEmitter(*MCII, Ctx));
-      MCTargetOptions Options;
-      MAB.reset(TheTarget->createMCAsmBackend(*STI, *MRI, Options));
-    }
-    auto FOut = std::make_unique<formatted_raw_ostream>(*Out);
-    Str.reset(TheTarget->createAsmStreamer(Ctx, std::move(FOut), std::move(InstructionPrinter),
-                                           std::move(MCE), std::move(MAB)));
-  } else if (Opts.OutputType == AssemblerInvocation::FT_Null) {
-    Str.reset(createNullStreamer(Ctx));
-  } else {
-    assert(Opts.OutputType == AssemblerInvocation::FT_Obj &&
-           "Invalid file type!");
-    if (!FDOS->supportsSeeking()) {
-      BOS = std::make_unique<buffer_ostream>(*FDOS);
-      Out = BOS.get();
-    }
-
-    MCCodeEmitter *CE = TheTarget->createMCCodeEmitter(*MCII, Ctx);
-    MCTargetOptions Options;
-    MCAsmBackend *MAB = TheTarget->createMCAsmBackend(*STI, *MRI, Options);
-    Triple T(Opts.Triple);
-    Str.reset(TheTarget->createMCObjectStreamer(
-        T, Ctx, std::unique_ptr<MCAsmBackend>(MAB),
-        MAB->createObjectWriter(*Out), std::unique_ptr<MCCodeEmitter>(CE),
-        *STI));
-    Str.get()->initSections(*STI);
-  }
-
-  bool Failed = false;
-
-  std::unique_ptr<MCAsmParser> Parser(
-      createMCAsmParser(SrcMgr, Ctx, *Str.get(), *MAI));
-
-  // FIXME: init MCTargetOptions from sanitizer flags here.
-  MCTargetOptions Options;
-  std::unique_ptr<MCTargetAsmParser> TAP(
-      TheTarget->createMCAsmParser(*STI, *Parser, *MCII));
-  if (!TAP) {
-    Failed = Diags.Report(diag::err_target_unknown_triple) << Opts.Triple;
-  }
-
-  // Set values for symbols, if any.
-  for (auto &S : Opts.SymbolDefs) {
-    auto Pair = StringRef(S).split('=');
-    auto Sym = Pair.first;
-    auto Val = Pair.second;
-    int64_t Value;
-    // We have already error checked this in the driver.
-    if (!Val.getAsInteger(0, Value)) {
-      Ctx.setSymbolValue(Parser->getStreamer(), Sym, Value);
-    }
-  }
-
-  if (!Failed) {
-    Parser->setTargetParser(*TAP.get());
-    Failed = Parser->Run(Opts.NoInitialTextSection);
-  }
-
-  return Failed;
-}
-
-bool executeAssembler(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
-                      raw_ostream &LogS) {
-  bool Failed = executeAssemblerImpl(Opts, Diags, LogS);
-
-  // Delete output file if there were errors.
-  if (Failed && Opts.OutputPath != "-") {
-    sys::fs::remove(Opts.OutputPath);
-  }
-
-  return Failed;
-}
-
-SmallString<128> getFilePath(DataObject *Object, StringRef Dir) {
-  SmallString<128> Path(Dir);
-  path::append(Path, Object->Name);
-  return Path;
-}
-
-// Also creates the parent directory, which only paths the in-process driver
-// writes itself need; outputToFile creates its own.
-SmallString<128> getOutputFilePath(DataObject *Object, StringRef Dir) {
-  SmallString<128> Path = getFilePath(Object, Dir);
-  if (fs::create_directories(path::parent_path(Path))) {
-    return SmallString<128>();
-  }
-  return Path;
-}
-
-// TODO: Move inputFromFile and outputToFile within AMDGPUCompiler
-//
-// Currently, we only invoke these two methods in the context of AMDGPUCompiler.
-// Moreover, member functions that deal with file I/O should not worry whether
-// the underlying filesystem being used is virtual or real.
-amd_comgr_status_t inputFromFile(DataObject *Object, StringRef Path) {
-  ProfilePoint Point("FileIO");
-  auto BufOrError = MemoryBuffer::getFile(Path);
-  if (std::error_code EC = BufOrError.getError()) {
-    return AMD_COMGR_STATUS_ERROR;
-  }
-  return Object->setData(std::move(*BufOrError));
-}
-
-amd_comgr_status_t outputToFile(StringRef Data, StringRef Path) {
-  SmallString<128> DirPath = Path;
-  path::remove_filename(DirPath);
-  {
-    ProfilePoint Point("CreateDir");
-    if (fs::create_directories(DirPath)) {
-      return AMD_COMGR_STATUS_ERROR;
-    }
-  }
-  std::error_code EC;
-  ProfilePoint Point("FileIO");
-  raw_fd_ostream OS(Path, EC, fs::OF_None);
-  if (EC) {
-    return AMD_COMGR_STATUS_ERROR;
-  }
-  OS << Data;
-  OS.close();
-  if (OS.has_error()) {
-    return AMD_COMGR_STATUS_ERROR;
-  }
-  return AMD_COMGR_STATUS_SUCCESS;
-}
-
-amd_comgr_status_t outputToFile(DataObject *Object, StringRef Path) {
-  return outputToFile(StringRef(Object->Data, Object->Size), Path);
-}
-
-void initializeCommandLineArgs(SmallVectorImpl<const char *> &Args) {
-  // Workaround for flawed Driver::BuildCompilation(...) implementation,
-  // which eliminates 1st argument, cause it actually awaits argv[0].
-  Args.clear();
-  Args.push_back("");
-}
-
-// Parse -mllvm options
-amd_comgr_status_t parseLLVMOptions(const std::vector<std::string> &Options) {
-  std::vector<const char *> LLVMArgs;
-  for (auto Option : Options) {
-    LLVMArgs.push_back("");
-    LLVMArgs.push_back(Option.c_str());
-    if (!cl::ParseCommandLineOptions(LLVMArgs.size(), &LLVMArgs[0],
-                                     "-mllvm options parsing")) {
-      return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
-    }
-    LLVMArgs.clear();
-  }
-  return AMD_COMGR_STATUS_SUCCESS;
-}
-
-amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
-                               llvm::raw_ostream &LogS,
-                               llvm::raw_ostream &LogE) {
-  ArgStringList LLDArgs(llvm::iterator_range<ArrayRef<const char *>::iterator>(
-      Args.begin(), Args.end()));
-  LLDArgs.insert(LLDArgs.begin(), "ld.lld");
-  LLDArgs.push_back("--threads=1");
-
-  ArrayRef<const char *> ArgRefs = llvm::ArrayRef(LLDArgs);
-  lld::Result LLDRet =
-      lld::lldMain(ArgRefs, LogS, LogE, {{lld::Gnu, &lld::elf::link}});
-  lld::CommonLinkerContext::destroy();
-  if (LLDRet.retCode || !LLDRet.canRunAgain) {
-    return AMD_COMGR_STATUS_ERROR;
-  }
-  return AMD_COMGR_STATUS_SUCCESS;
-}
-
-// Execute llvm-link in-process using llvm::Linker
-// TODO: refactor this implementation to use a shared infra with linkBitcodeToBitcode()
-amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
-                                   raw_ostream &LogS) {
-  // Parse args: find -o <output> and collect non-flag inputs.
-  StringRef OutputPath;
-  SmallVector<StringRef, 4> InputPaths;
-
-  for (size_t I = 0; I < Args.size(); ++I) {
-    StringRef Arg(Args[I]);
-    if (Arg == "-o" && I + 1 < Args.size()) {
-      OutputPath = Args[++I];
-    } else if (!Arg.starts_with("-")) {
-      InputPaths.push_back(Arg);
-    }
-  }
-
-  if (OutputPath.empty() || InputPaths.empty()) {
-    LogS << "llvm-link: missing input or output files\n";
-    return AMD_COMGR_STATUS_ERROR;
-  }
-
-  // Create composite module and linker
-  LLVMContext Context;
-  auto Composite = std::make_unique<llvm::Module>("llvm-link", Context);
-  Linker L(*Composite);
-
-  // Link each input BC
-  for (StringRef InputPath : InputPaths) {
-    auto BufOrErr = MemoryBuffer::getFile(InputPath);
-    if (!BufOrErr) {
-      LogS << "llvm-link: failed to read: " << InputPath << "\n";
-      return AMD_COMGR_STATUS_ERROR;
-    }
-    SMDiagnostic Err;
-    auto Mod = parseIR(BufOrErr->get()->getMemBufferRef(), Err, Context);
-    if (!Mod) {
-      Err.print("llvm-link", LogS);
-      return AMD_COMGR_STATUS_ERROR;
-    }
-    if (L.linkInModule(std::move(Mod))) {
-      LogS << "llvm-link: linking failed for: " << InputPath << "\n";
-      return AMD_COMGR_STATUS_ERROR;
-    }
-  }
-
-  // Write linked BC to output file
-  std::error_code EC;
-  raw_fd_ostream OS(OutputPath, EC);
-  if (EC) {
-    LogS << "llvm-link: failed to open output: " << OutputPath << "\n";
-    return AMD_COMGR_STATUS_ERROR;
-  }
-  WriteBitcodeToFile(*Composite, OS);
-  return AMD_COMGR_STATUS_SUCCESS;
-}
 
 #ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 namespace {
@@ -938,8 +568,382 @@ amd_comgr_status_t executeSPIRVTranslator(ArrayRef<const char *> Args,
 }
 #endif
 
-void logArgv(raw_ostream &OS, StringRef ProgramName,
-             ArrayRef<const char *> Argv) {
+} // namespace
+
+static bool needsPreprocessing(DataObject *O) {
+  if (O->DataKind != AMD_COMGR_DATA_KIND_SOURCE)
+    return false;
+  StringRef Ext = path::extension(O->Name);
+  bool IsPreprocessedSource = Ext == ".i";
+  return !IsPreprocessedSource;
+}
+
+static std::unique_ptr<raw_fd_ostream>
+getOutputStream(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
+                bool Binary) {
+  if (Opts.OutputPath.empty()) {
+    Opts.OutputPath = "-";
+  }
+
+  // Make sure that the Out file gets unlinked from the disk if we get a
+  // SIGINT.
+  if (Opts.OutputPath != "-") {
+    sys::RemoveFileOnSignal(Opts.OutputPath);
+  }
+
+  std::error_code EC;
+  auto Out = std::make_unique<raw_fd_ostream>(
+      Opts.OutputPath, EC, (Binary ? sys::fs::OF_None : sys::fs::OF_Text));
+  if (EC) {
+    Diags.Report(diag::err_fe_unable_to_open_output)
+        << Opts.OutputPath << EC.message();
+    return nullptr;
+  }
+
+  return Out;
+}
+
+// clang/tools/driver/cc1as_main.cpp,  ExecuteAssemblerImpl()
+static bool executeAssemblerImpl(AssemblerInvocation &Opts,
+                                 DiagnosticsEngine &Diags, raw_ostream &LogS) {
+  // Get the target specific parser.
+  std::string Error;
+  const Target *TheTarget = TargetRegistry::lookupTarget(
+    llvm::Triple(Opts.Triple), Error);
+  if (!TheTarget) {
+    return Diags.Report(diag::err_target_unknown_triple) << Opts.Triple;
+  }
+
+  ErrorOr<std::unique_ptr<MemoryBuffer>> Buffer =
+      MemoryBuffer::getFileOrSTDIN(Opts.InputFile);
+
+  if (std::error_code EC = Buffer.getError()) {
+    Error = EC.message();
+    return Diags.Report(diag::err_fe_error_reading) << Opts.InputFile;
+  }
+
+  SourceMgr SrcMgr;
+  SrcMgr.setDiagHandler(
+      [](const SMDiagnostic &SMDiag, void *LogS) {
+        SMDiag.print("", *(raw_ostream *)LogS, /* ShowColors */ false);
+      },
+      &LogS);
+
+  // Tell SrcMgr about this buffer, which is what the parser will pick up.
+  SrcMgr.AddNewSourceBuffer(std::move(*Buffer), SMLoc());
+
+  // Record the location of the include directories so that the lexer can find
+  // it later.
+  SrcMgr.setIncludeDirs(Opts.IncludePaths);
+
+  std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(
+      llvm::Triple(Opts.Triple)));
+  assert(MRI && "Unable to create target register info!");
+
+  llvm::MCTargetOptions MCOptions;
+  MCOptions.X86RelaxRelocations = Opts.RelaxELFRelocations;
+  MCOptions.CompressDebugSections = Opts.CompressDebugSections;
+  std::unique_ptr<MCAsmInfo> MAI(
+      TheTarget->createMCAsmInfo(*MRI, llvm::Triple(Opts.Triple), MCOptions));
+  assert(MAI && "Unable to create target asm info!");
+
+  // Ensure MCAsmInfo initialization occurs before any use, otherwise sections
+  // may be created with a combination of default and explicit settings.
+
+  bool IsBinary = Opts.OutputType == AssemblerInvocation::FT_Obj;
+  std::unique_ptr<raw_fd_ostream> FDOS = getOutputStream(Opts, Diags, IsBinary);
+  if (!FDOS) {
+    return true;
+  }
+
+  // Build up the feature string from the target feature list.
+  std::string FS;
+  if (!Opts.Features.empty()) {
+    FS = Opts.Features[0];
+    for (unsigned I = 1, E = Opts.Features.size(); I != E; ++I) {
+      FS += "," + Opts.Features[I];
+    }
+  }
+
+  std::unique_ptr<MCObjectFileInfo> MOFI(new MCObjectFileInfo());
+  std::unique_ptr<MCSubtargetInfo> STI(
+      TheTarget->createMCSubtargetInfo(llvm::Triple(Opts.Triple), Opts.CPU, FS));
+
+  MCContext Ctx(Triple(Opts.Triple), *MAI, *MRI, *STI, &SrcMgr);
+  Ctx.setObjectFileInfo(MOFI.get());
+
+  bool PIC = false;
+  if (Opts.RelocationModel == "static") {
+    PIC = false;
+  } else if (Opts.RelocationModel == "pic") {
+    PIC = true;
+  } else {
+    assert(Opts.RelocationModel == "dynamic-no-pic" && "Invalid PIC model!");
+    PIC = false;
+  }
+
+  MOFI->initMCObjectFileInfo(Ctx, PIC);
+  if (Opts.GenDwarfForAssembly) {
+    Ctx.setGenDwarfForAssembly(true);
+  }
+  if (!Opts.DwarfDebugFlags.empty()) {
+    Ctx.setDwarfDebugFlags(StringRef(Opts.DwarfDebugFlags));
+  }
+  if (!Opts.DwarfDebugProducer.empty()) {
+    Ctx.setDwarfDebugProducer(StringRef(Opts.DwarfDebugProducer));
+  }
+  if (!Opts.DebugCompilationDir.empty()) {
+    Ctx.setCompilationDir(Opts.DebugCompilationDir);
+  }
+  if (!Opts.MainFileName.empty()) {
+    Ctx.setMainFileName(StringRef(Opts.MainFileName));
+  }
+  Ctx.setDwarfVersion(Opts.DwarfVersion);
+
+  std::unique_ptr<MCStreamer> Str;
+  std::unique_ptr<MCInstrInfo> MCII(TheTarget->createMCInstrInfo());
+
+  raw_pwrite_stream *Out = FDOS.get();
+  std::unique_ptr<buffer_ostream> BOS;
+
+  // FIXME: There is a bit of code duplication with addPassesToEmitFile.
+  if (Opts.OutputType == AssemblerInvocation::FT_Asm) {
+    std::unique_ptr<MCInstPrinter> InstructionPrinter(
+      TheTarget->createMCInstPrinter(
+         llvm::Triple(Opts.Triple), Opts.OutputAsmVariant, *MAI, *MCII, *MRI));
+    std::unique_ptr<MCCodeEmitter> MCE;
+    std::unique_ptr<MCAsmBackend> MAB;
+    if (Opts.ShowEncoding) {
+      MCE.reset(TheTarget->createMCCodeEmitter(*MCII, Ctx));
+      MCTargetOptions Options;
+      MAB.reset(TheTarget->createMCAsmBackend(*STI, *MRI, Options));
+    }
+    auto FOut = std::make_unique<formatted_raw_ostream>(*Out);
+    Str.reset(TheTarget->createAsmStreamer(Ctx, std::move(FOut), std::move(InstructionPrinter),
+                                           std::move(MCE), std::move(MAB)));
+  } else if (Opts.OutputType == AssemblerInvocation::FT_Null) {
+    Str.reset(createNullStreamer(Ctx));
+  } else {
+    assert(Opts.OutputType == AssemblerInvocation::FT_Obj &&
+           "Invalid file type!");
+    if (!FDOS->supportsSeeking()) {
+      BOS = std::make_unique<buffer_ostream>(*FDOS);
+      Out = BOS.get();
+    }
+
+    MCCodeEmitter *CE = TheTarget->createMCCodeEmitter(*MCII, Ctx);
+    MCTargetOptions Options;
+    MCAsmBackend *MAB = TheTarget->createMCAsmBackend(*STI, *MRI, Options);
+    Triple T(Opts.Triple);
+    Str.reset(TheTarget->createMCObjectStreamer(
+        T, Ctx, std::unique_ptr<MCAsmBackend>(MAB),
+        MAB->createObjectWriter(*Out), std::unique_ptr<MCCodeEmitter>(CE),
+        *STI));
+    Str.get()->initSections(*STI);
+  }
+
+  bool Failed = false;
+
+  std::unique_ptr<MCAsmParser> Parser(
+      createMCAsmParser(SrcMgr, Ctx, *Str.get(), *MAI));
+
+  // FIXME: init MCTargetOptions from sanitizer flags here.
+  MCTargetOptions Options;
+  std::unique_ptr<MCTargetAsmParser> TAP(
+      TheTarget->createMCAsmParser(*STI, *Parser, *MCII));
+  if (!TAP) {
+    Failed = Diags.Report(diag::err_target_unknown_triple) << Opts.Triple;
+  }
+
+  // Set values for symbols, if any.
+  for (auto &S : Opts.SymbolDefs) {
+    auto Pair = StringRef(S).split('=');
+    auto Sym = Pair.first;
+    auto Val = Pair.second;
+    int64_t Value;
+    // We have already error checked this in the driver.
+    if (!Val.getAsInteger(0, Value)) {
+      Ctx.setSymbolValue(Parser->getStreamer(), Sym, Value);
+    }
+  }
+
+  if (!Failed) {
+    Parser->setTargetParser(*TAP.get());
+    Failed = Parser->Run(Opts.NoInitialTextSection);
+  }
+
+  return Failed;
+}
+
+static bool executeAssembler(AssemblerInvocation &Opts,
+                             DiagnosticsEngine &Diags, raw_ostream &LogS) {
+  bool Failed = executeAssemblerImpl(Opts, Diags, LogS);
+
+  // Delete output file if there were errors.
+  if (Failed && Opts.OutputPath != "-") {
+    sys::fs::remove(Opts.OutputPath);
+  }
+
+  return Failed;
+}
+
+static SmallString<128> getFilePath(DataObject *Object, StringRef Dir) {
+  SmallString<128> Path(Dir);
+  path::append(Path, Object->Name);
+  return Path;
+}
+
+// Also creates the parent directory, which only paths the in-process driver
+// writes itself need; outputToFile creates its own.
+static SmallString<128> getOutputFilePath(DataObject *Object, StringRef Dir) {
+  SmallString<128> Path = getFilePath(Object, Dir);
+  if (fs::create_directories(path::parent_path(Path))) {
+    return SmallString<128>();
+  }
+  return Path;
+}
+
+// TODO: Move inputFromFile and outputToFile within AMDGPUCompiler
+//
+// Currently, we only invoke these two methods in the context of AMDGPUCompiler.
+// Moreover, member functions that deal with file I/O should not worry whether
+// the underlying filesystem being used is virtual or real.
+static amd_comgr_status_t inputFromFile(DataObject *Object, StringRef Path) {
+  ProfilePoint Point("FileIO");
+  auto BufOrError = MemoryBuffer::getFile(Path);
+  if (std::error_code EC = BufOrError.getError()) {
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  return Object->setData(std::move(*BufOrError));
+}
+
+static amd_comgr_status_t outputToFile(StringRef Data, StringRef Path) {
+  SmallString<128> DirPath = Path;
+  path::remove_filename(DirPath);
+  {
+    ProfilePoint Point("CreateDir");
+    if (fs::create_directories(DirPath)) {
+      return AMD_COMGR_STATUS_ERROR;
+    }
+  }
+  std::error_code EC;
+  ProfilePoint Point("FileIO");
+  raw_fd_ostream OS(Path, EC, fs::OF_None);
+  if (EC) {
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  OS << Data;
+  OS.close();
+  if (OS.has_error()) {
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+static amd_comgr_status_t outputToFile(DataObject *Object, StringRef Path) {
+  return outputToFile(StringRef(Object->Data, Object->Size), Path);
+}
+
+static void initializeCommandLineArgs(SmallVectorImpl<const char *> &Args) {
+  // Workaround for flawed Driver::BuildCompilation(...) implementation,
+  // which eliminates 1st argument, cause it actually awaits argv[0].
+  Args.clear();
+  Args.push_back("");
+}
+
+// Parse -mllvm options
+static amd_comgr_status_t
+parseLLVMOptions(const std::vector<std::string> &Options) {
+  std::vector<const char *> LLVMArgs;
+  for (auto Option : Options) {
+    LLVMArgs.push_back("");
+    LLVMArgs.push_back(Option.c_str());
+    if (!cl::ParseCommandLineOptions(LLVMArgs.size(), &LLVMArgs[0],
+                                     "-mllvm options parsing")) {
+      return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    LLVMArgs.clear();
+  }
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+static amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
+                                      llvm::raw_ostream &LogS,
+                                      llvm::raw_ostream &LogE) {
+  ArgStringList LLDArgs(llvm::iterator_range<ArrayRef<const char *>::iterator>(
+      Args.begin(), Args.end()));
+  LLDArgs.insert(LLDArgs.begin(), "ld.lld");
+  LLDArgs.push_back("--threads=1");
+
+  ArrayRef<const char *> ArgRefs = llvm::ArrayRef(LLDArgs);
+  lld::Result LLDRet =
+      lld::lldMain(ArgRefs, LogS, LogE, {{lld::Gnu, &lld::elf::link}});
+  lld::CommonLinkerContext::destroy();
+  if (LLDRet.retCode || !LLDRet.canRunAgain) {
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+// Execute llvm-link in-process using llvm::Linker
+// TODO: refactor this implementation to use a shared infra with linkBitcodeToBitcode()
+static amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
+                                          raw_ostream &LogS) {
+  // Parse args: find -o <output> and collect non-flag inputs.
+  StringRef OutputPath;
+  SmallVector<StringRef, 4> InputPaths;
+
+  for (size_t I = 0; I < Args.size(); ++I) {
+    StringRef Arg(Args[I]);
+    if (Arg == "-o" && I + 1 < Args.size()) {
+      OutputPath = Args[++I];
+    } else if (!Arg.starts_with("-")) {
+      InputPaths.push_back(Arg);
+    }
+  }
+
+  if (OutputPath.empty() || InputPaths.empty()) {
+    LogS << "llvm-link: missing input or output files\n";
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  // Create composite module and linker
+  LLVMContext Context;
+  auto Composite = std::make_unique<llvm::Module>("llvm-link", Context);
+  Linker L(*Composite);
+
+  // Link each input BC
+  for (StringRef InputPath : InputPaths) {
+    auto BufOrErr = MemoryBuffer::getFile(InputPath);
+    if (!BufOrErr) {
+      LogS << "llvm-link: failed to read: " << InputPath << "\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+    SMDiagnostic Err;
+    auto Mod = parseIR(BufOrErr->get()->getMemBufferRef(), Err, Context);
+    if (!Mod) {
+      Err.print("llvm-link", LogS);
+      return AMD_COMGR_STATUS_ERROR;
+    }
+    if (L.linkInModule(std::move(Mod))) {
+      LogS << "llvm-link: linking failed for: " << InputPath << "\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+  }
+
+  // Write linked BC to output file
+  std::error_code EC;
+  raw_fd_ostream OS(OutputPath, EC);
+  if (EC) {
+    LogS << "llvm-link: failed to open output: " << OutputPath << "\n";
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  WriteBitcodeToFile(*Composite, OS);
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+static void logArgv(raw_ostream &OS, StringRef ProgramName,
+                    ArrayRef<const char *> Argv) {
   OS << "     Driver Job Args: " << ProgramName;
   for (size_t I = 0; I < Argv.size(); ++I) {
     // Skip the first argument, which we replace with ProgramName, and the last
@@ -952,7 +956,7 @@ void logArgv(raw_ostream &OS, StringRef ProgramName,
   OS.flush();
 }
 
-amd_comgr_status_t
+static amd_comgr_status_t
 executeCommand(const Command &Job, raw_ostream &LogS,
                DiagnosticOptions &DiagOpts,
                IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS) {
@@ -1046,7 +1050,7 @@ executeCommand(const Command &Job, raw_ostream &LogS,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-std::string getStableCUID(const DataSet *InSet) {
+static std::string getStableCUID(const DataSet *InSet) {
   using Hash = CachedCommandAdaptor::HashAlgorithm;
   Hash H;
   for (const DataObject *Input : InSet->DataObjects) {
@@ -1055,7 +1059,6 @@ std::string getStableCUID(const DataSet *InSet) {
   }
   return toHex(H.final());
 }
-} // namespace
 
 amd_comgr_status_t
 AMDGPUCompiler::executeInProcessDriver(ArrayRef<const char *> Args) {

@@ -44,8 +44,7 @@ namespace metadata {
 
 template <typename ELFT> using Elf_Note = typename ELFT::Note;
 
-namespace {
-Expected<std::unique_ptr<ELFObjectFileBase>>
+static Expected<std::unique_ptr<ELFObjectFileBase>>
 getELFObjectFileBase(MemoryBufferRef MB) {
   Expected<std::unique_ptr<ObjectFile>> ObjOrErr =
       ObjectFile::createELFObjectFile(MB);
@@ -57,7 +56,7 @@ getELFObjectFileBase(MemoryBufferRef MB) {
   return unique_dyn_cast<ELFObjectFileBase>(std::move(*ObjOrErr));
 }
 
-Expected<std::unique_ptr<ELFObjectFileBase>>
+static Expected<std::unique_ptr<ELFObjectFileBase>>
 getELFObjectFileBase(DataObject *DataP) {
   return getELFObjectFileBase(
       MemoryBufferRef(StringRef(DataP->Data, DataP->Size), ""));
@@ -80,11 +79,12 @@ getELFObjectFileBase(DataObject *DataP) {
 // If merge is possible the function merges Kernel records
 // to @p To and returns @c true.
 // @p DestDoc is the document into which merged nodes are deep copied.
-bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
-                      const StringRef VersionStrKey,
-                      const StringRef PrintfStrKey,
-                      const StringRef KernelStrKey,
-                      llvm::msgpack::Document &DestDoc) {
+static bool mergeNoteRecords(llvm::msgpack::DocNode &From,
+                             llvm::msgpack::DocNode &To,
+                             const StringRef VersionStrKey,
+                             const StringRef PrintfStrKey,
+                             const StringRef KernelStrKey,
+                             llvm::msgpack::Document &DestDoc) {
   if (!From.isMap()) {
     return false;
   }
@@ -149,8 +149,8 @@ bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
 }
 
 template <class ELFT>
-bool processNote(const Elf_Note<ELFT> &Note, DataMeta *MetaP,
-                 llvm::msgpack::DocNode &Root) {
+static bool processNote(const Elf_Note<ELFT> &Note, DataMeta *MetaP,
+                        llvm::msgpack::DocNode &Root) {
   auto DescString = Note.getDescAsStringRef(4);
 
   if (Note.getName() == "AMD" && Note.getType() == ELF::NT_AMD_HSA_METADATA) {
@@ -195,8 +195,8 @@ bool processNote(const Elf_Note<ELFT> &Note, DataMeta *MetaP,
 }
 
 template <class ELFT>
-llvm::Error getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
-                               DataMeta *MetaP) {
+static llvm::Error getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
+                                      DataMeta *MetaP) {
   bool Found = false;
   llvm::msgpack::DocNode Root;
   const ELFFile<ELFT> &ELFFile = Obj->getELFFile();
@@ -254,10 +254,8 @@ llvm::Error getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
   return createStringError(inconvertibleErrorCode(),
                            "no AMDGPU metadata note found in code object");
 }
-} // namespace
 
-namespace {
-llvm::Error getMetadataRoot(ELFObjectFileBase *Obj, DataMeta *MetaP) {
+static llvm::Error getMetadataRoot(ELFObjectFileBase *Obj, DataMeta *MetaP) {
   if (auto *ELF32LE = dyn_cast<ELF32LEObjectFile>(Obj)) {
     return getElfMetadataRoot(ELF32LE, MetaP);
   }
@@ -270,7 +268,6 @@ llvm::Error getMetadataRoot(ELFObjectFileBase *Obj, DataMeta *MetaP) {
   auto *ELF64BE = dyn_cast<ELF64BEObjectFile>(Obj);
   return getElfMetadataRoot(ELF64BE, MetaP);
 }
-} // namespace
 
 amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP) {
   auto ObjOrErr = getELFObjectFileBase(DataP);
@@ -290,8 +287,9 @@ struct IsaInfo {
   std::string IsaName;
   AMDGPU::GPUKind Kind;
 };
+} // namespace
 
-ArrayRef<IsaInfo> getIsaInfos() {
+static ArrayRef<IsaInfo> getIsaInfos() {
   // Own the names for the lifetime of the library: getIsaName returns pointers
   // into these strings to callers of amd_comgr_get_isa_name.
   static const auto IsaInfos = [] {
@@ -313,25 +311,25 @@ ArrayRef<IsaInfo> getIsaInfos() {
 
 // Every AMDGCN target Comgr supports ships a trap handler. Kept as a query so
 // per-processor exceptions can be added without reintroducing a table column.
-bool isTrapHandlerEnabled(AMDGPU::GPUKind Kind) {
+static bool isTrapHandlerEnabled(AMDGPU::GPUKind Kind) {
   switch (Kind) {
   default:
     return true;
   }
 }
-} // namespace
 
 size_t getIsaCount() { return getIsaInfos().size(); }
 
+namespace {
 // NOLINTNEXTLINE(readability-identifier-naming)
 typedef struct amdgpu_hsa_note_code_object_version_s {
   uint32_t major_version; // NOLINT(readability-identifier-naming)
   uint32_t minor_version; // NOLINT(readability-identifier-naming)
 } amdgpu_hsa_note_code_object_version_t;
+} // namespace
 
 // NOLINTNEXTLINE(readability-identifier-naming)
-namespace {
-bool getMachInfo(unsigned Mach, std::string &Processor) {
+static bool getMachInfo(unsigned Mach, std::string &Processor) {
   StringRef Name;
   switch (Mach) {
 #define X(NUM, ENUM, NAME)                                                     \
@@ -354,8 +352,9 @@ bool getMachInfo(unsigned Mach, std::string &Processor) {
 }
 
 template <class ELFT>
-amd_comgr_status_t getElfIsaNameFromElfHeader(const ELFObjectFile<ELFT> *Obj,
-                                              std::string &ElfIsaName) {
+static amd_comgr_status_t
+getElfIsaNameFromElfHeader(const ELFObjectFile<ELFT> *Obj,
+                           std::string &ElfIsaName) {
   auto ElfHeader = Obj->getELFFile().getHeader();
 
   if (ElfHeader.e_ident[ELF::EI_CLASS] == ELF::ELFCLASS64)
@@ -410,7 +409,6 @@ amd_comgr_status_t getElfIsaNameFromElfHeader(const ELFObjectFile<ELFT> *Obj,
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
-} // namespace
 
 static Expected<std::string> getElfIsaName(MemoryBufferRef MB) {
   auto ObjOrErr = getELFObjectFileBase(MB);
@@ -671,8 +669,7 @@ bool isValidIsaName(StringRef IsaString) {
   return parseTargetIdentifier(IsaString, Ident) == AMD_COMGR_STATUS_SUCCESS;
 }
 
-namespace {
-size_t constexpr strLiteralLength(char const *Str) {
+static size_t constexpr strLiteralLength(char const *Str) {
   size_t I = 0;
   while (Str[I]) {
     ++I;
@@ -680,6 +677,7 @@ size_t constexpr strLiteralLength(char const *Str) {
   return I;
 }
 
+namespace {
 constexpr const char *OffloadKindHip = "hip";
 constexpr const char *OffloadKindHipV4 = "hipv4";
 constexpr const char *OffloadKindHcc = "hcc";
@@ -688,7 +686,8 @@ constexpr size_t OffloadBundleMagicLen =
     strLiteralLength(ClangOffloadBundlerMagic);
 } // namespace
 
-bool isCompatibleIsaName(StringRef IsaName, StringRef CodeObjectIsaName) {
+static bool isCompatibleIsaName(StringRef IsaName,
+                                StringRef CodeObjectIsaName) {
   if (IsaName == CodeObjectIsaName) {
     return true;
   }
@@ -742,7 +741,7 @@ bool isCompatibleIsaName(StringRef IsaName, StringRef CodeObjectIsaName) {
   return true;
 }
 
-amd_comgr_status_t
+static amd_comgr_status_t
 lookUpCodeObjectInSharedObject(DataObject *DataP,
                                amd_comgr_code_object_info_t *QueryList,
                                size_t QueryListSize) {

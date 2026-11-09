@@ -144,10 +144,12 @@ static bool probeClangResourceDir(StringRef P) {
   return sys::fs::is_directory(ResourceDir);
 }
 
+namespace {
 struct ClangInstallPaths {
   std::string LLVMPrefix;
   std::string ClangBinaryPath;
 };
+} // namespace
 
 static ClangInstallPaths makeClangInstallPaths(StringRef LLVMPrefix) {
   SmallString<256> ClangBinaryPath(LLVMPrefix);

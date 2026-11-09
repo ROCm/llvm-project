@@ -48,13 +48,14 @@ namespace TimeStatistics {
 
 namespace {
 std::unique_ptr<PerfStats> PS = nullptr;
-void dump() {
+} // namespace
+
+static void dump() {
   PS->dumpPerfStats();
   PS.reset();
 }
-} // namespace
 
-void getLogFile(std::string &PerfLog) {
+static void getLogFile(std::string &PerfLog) {
   if (std::optional<StringRef> RedirectLogs = env::getRedirectLogs()) {
     PerfLog = (*RedirectLogs).str();
     return;
@@ -116,6 +117,7 @@ void mergeStats(llvm::ArrayRef<PerfStatRecord> Records) {
 }
 
 // Timer implementation
+namespace {
 #if defined _WIN64 || defined _WIN32
 class PerfTimerWindows : public PerfTimerImpl {
 
@@ -186,6 +188,7 @@ public:
   }
 };
 #endif
+} // namespace
 
 bool PerfTimer::init() {
 #if defined _WIN64 || defined _WIN32
