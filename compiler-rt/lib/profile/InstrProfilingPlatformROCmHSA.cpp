@@ -25,7 +25,6 @@ extern "C" {
 
 #include "InstrProfilingPlatformROCmInternal.h"
 #include "interception/interception.h"
-#include "sanitizer_common/sanitizer_offload_hsa.h"
 // C (not C++) headers: clang_rt.profile is built -nostdinc++.
 #include <stddef.h>
 #include <stdint.h>
@@ -35,42 +34,102 @@ extern "C" {
 
 using namespace __prof_rocm;
 
-/* Status-check shorthands, in the spirit of the thin HIP wrappers in
- * InstrProfilingPlatformROCm.cpp: every HSA entry point returns
- * hsa_status_t. hsaOkOrBreak() also accepts INFO_BREAK, which the
- * iterate_* callbacks use to stop early and is not an error. */
-static inline bool hsaOk(hsa_status_t St) { return St == HSA_STATUS_SUCCESS; }
-static inline bool hsaOkOrBreak(hsa_status_t St) {
-  return St == HSA_STATUS_SUCCESS || St == HSA_STATUS_INFO_BREAK;
-}
+// Mirrored HSA declarations the drain needs (dlopen'd, not linked). See the
+// header for the rationale; the values are HSA's stable C ABI.
+#include "InstrProfilingPlatformROCmHSADefs.h"
 
-/* 0 = not attempted, 1 = ready, -1 = unavailable. Release publishes the HSA
- * pointers to a thread that observes ready. */
-static int HsaRuntimeState = 0;
+#ifdef PROFILE_VERIFY_HSA_ABI
+// When the real ROCm headers are available at build time (developer installs
+// and the downstream GPU CI), check that the mirror above still matches them.
+#include <hsa/hsa.h>
+#include <hsa/hsa_ven_amd_loader.h>
 
-typedef decltype(&hsa_iterate_agents) hsa_iterate_agents_ty;
-typedef decltype(&hsa_agent_get_info) hsa_agent_get_info_ty;
-typedef decltype(&hsa_executable_iterate_agent_symbols)
-    hsa_executable_iterate_agent_symbols_ty;
-typedef decltype(&hsa_executable_symbol_get_info)
-    hsa_executable_symbol_get_info_ty;
-typedef decltype(LoaderApi::QuerySegmentDescriptors) hsa_query_segments_ty;
+static_assert(PROF_HSA_STATUS_SUCCESS == HSA_STATUS_SUCCESS, "HSA ABI drift");
+static_assert(PROF_HSA_STATUS_INFO_BREAK == HSA_STATUS_INFO_BREAK,
+              "HSA ABI drift");
+static_assert(PROF_HSA_AGENT_INFO_NAME == HSA_AGENT_INFO_NAME, "HSA ABI drift");
+static_assert(PROF_HSA_AGENT_INFO_DEVICE == HSA_AGENT_INFO_DEVICE,
+              "HSA ABI drift");
+static_assert(PROF_HSA_DEVICE_TYPE_GPU == HSA_DEVICE_TYPE_GPU, "HSA ABI drift");
+static_assert(PROF_HSA_SYMBOL_KIND_VARIABLE == HSA_SYMBOL_KIND_VARIABLE,
+              "HSA ABI drift");
+static_assert(PROF_HSA_EXECUTABLE_SYMBOL_INFO_TYPE ==
+                  HSA_EXECUTABLE_SYMBOL_INFO_TYPE,
+              "HSA ABI drift");
+static_assert(PROF_HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH ==
+                  HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH,
+              "HSA ABI drift");
+static_assert(PROF_HSA_EXECUTABLE_SYMBOL_INFO_NAME ==
+                  HSA_EXECUTABLE_SYMBOL_INFO_NAME,
+              "HSA ABI drift");
+static_assert(PROF_HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS ==
+                  HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS,
+              "HSA ABI drift");
+static_assert(PROF_HSA_EXTENSION_AMD_LOADER == HSA_EXTENSION_AMD_LOADER,
+              "HSA ABI drift");
+
+static_assert(sizeof(prof_hsa_agent_t) == sizeof(hsa_agent_t), "HSA ABI drift");
+static_assert(sizeof(prof_hsa_executable_t) == sizeof(hsa_executable_t),
+              "HSA ABI drift");
+static_assert(sizeof(prof_hsa_executable_symbol_t) ==
+                  sizeof(hsa_executable_symbol_t),
+              "HSA ABI drift");
+
+static_assert(sizeof(prof_hsa_loader_segment_descriptor_t) ==
+                  sizeof(hsa_ven_amd_loader_segment_descriptor_t),
+              "HSA ABI drift");
+static_assert(offsetof(prof_hsa_loader_segment_descriptor_t, agent) ==
+                  offsetof(hsa_ven_amd_loader_segment_descriptor_t, agent),
+              "HSA ABI drift");
+static_assert(offsetof(prof_hsa_loader_segment_descriptor_t, executable) ==
+                  offsetof(hsa_ven_amd_loader_segment_descriptor_t, executable),
+              "HSA ABI drift");
+static_assert(offsetof(prof_hsa_loader_segment_descriptor_t, segment_base) ==
+                  offsetof(hsa_ven_amd_loader_segment_descriptor_t,
+                           segment_base),
+              "HSA ABI drift");
+static_assert(offsetof(prof_hsa_loader_segment_descriptor_t, segment_size) ==
+                  offsetof(hsa_ven_amd_loader_segment_descriptor_t,
+                           segment_size),
+              "HSA ABI drift");
+
+// We fetch the loader pfn table by raw layout, so query_segment_descriptors
+// must sit at the same offset as in the real table.
+static_assert(offsetof(prof_hsa_loader_pfn_t, query_segment_descriptors) ==
+                  offsetof(hsa_ven_amd_loader_1_00_pfn_t,
+                           hsa_ven_amd_loader_query_segment_descriptors),
+              "HSA ABI drift");
+#endif // PROFILE_VERIFY_HSA_ABI
 
 static hsa_iterate_agents_ty pHsaIterateAgents = nullptr;
 static hsa_agent_get_info_ty pHsaAgentGetInfo = nullptr;
 static hsa_executable_iterate_agent_symbols_ty pHsaExecIterAgentSyms = nullptr;
 static hsa_executable_symbol_get_info_ty pHsaSymGetInfo = nullptr;
-static hsa_query_segments_ty pQuerySegDescs = nullptr;
+static hsa_loader_query_segment_descriptors_ty pQuerySegDescs = nullptr;
+
+/* Status-check shorthands, in the spirit of the thin HIP wrappers in
+ * InstrProfilingPlatformROCm.cpp: every HSA entry point returns
+ * prof_hsa_status_t. hsaOkOrBreak() also accepts INFO_BREAK, which the
+ * iterate_* callbacks use to stop early and is not an error. */
+static inline bool hsaOk(prof_hsa_status_t St) {
+  return St == PROF_HSA_STATUS_SUCCESS;
+}
+static inline bool hsaOkOrBreak(prof_hsa_status_t St) {
+  return St == PROF_HSA_STATUS_SUCCESS || St == PROF_HSA_STATUS_INFO_BREAK;
+}
+
+/* 0 = not attempted, 1 = ready, -1 = unavailable. Acquire/release atomics: a
+ * thread observing HsaRuntimeState==1 also sees the published p* pointers. */
+static int HsaRuntimeState = 0;
 
 static int setHsaRuntimeState(int S) {
   __atomic_store_n(&HsaRuntimeState, S, __ATOMIC_RELEASE);
   return S > 0 ? 0 : -1;
 }
 
-/* Dlopen libhsa and call its hsa_init, then keep the loader slot this drain
- * calls. Runs on the first drain, never from a constructor -- see the
- * fork-safety note at end of file. */
-static int bindHsaRuntime(void) {
+/* Resolve HSA entry points and the AMD loader extension once, and confirm HIP's
+ * hipMemcpy is reachable for the device-to-host copies. */
+static int loadHsaRuntimePointers(void) {
   int State = __atomic_load_n(&HsaRuntimeState, __ATOMIC_ACQUIRE);
   if (State)
     return State > 0 ? 0 : -1;
@@ -82,9 +141,9 @@ static int bindHsaRuntime(void) {
     return setHsaRuntimeState(-1);
   }
 
-  void *Hsa = __interception::OpenLibrary(SANITIZER_HSA_LIBRARY ".so");
+  void *Hsa = __interception::OpenLibrary("libhsa-runtime64.so");
   if (!Hsa)
-    Hsa = __interception::OpenLibrary(SANITIZER_HSA_LIBRARY ".so.1");
+    Hsa = __interception::OpenLibrary("libhsa-runtime64.so.1");
   if (!Hsa) {
     if (isVerboseMode())
       PROF_NOTE("%s", "libhsa-runtime64.so not loadable - "
@@ -92,10 +151,11 @@ static int bindHsaRuntime(void) {
     return setHsaRuntimeState(-1);
   }
 
-  auto *pHsaInit =
-      (decltype(&hsa_init))__interception::LookupSymbol(Hsa, "hsa_init");
-  auto *pGetExtTable = (decltype(&hsa_system_get_major_extension_table))
-      __interception::LookupSymbol(Hsa, "hsa_system_get_major_extension_table");
+  hsa_init_ty pHsaInit =
+      (hsa_init_ty)__interception::LookupSymbol(Hsa, "hsa_init");
+  hsa_system_get_major_extension_table_ty pGetExtTable =
+      (hsa_system_get_major_extension_table_ty)__interception::LookupSymbol(
+          Hsa, "hsa_system_get_major_extension_table");
   pHsaIterateAgents = (hsa_iterate_agents_ty)__interception::LookupSymbol(
       Hsa, "hsa_iterate_agents");
   pHsaAgentGetInfo = (hsa_agent_get_info_ty)__interception::LookupSymbol(
@@ -106,6 +166,7 @@ static int bindHsaRuntime(void) {
   pHsaSymGetInfo =
       (hsa_executable_symbol_get_info_ty)__interception::LookupSymbol(
           Hsa, "hsa_executable_symbol_get_info");
+
   if (!pHsaInit || !pGetExtTable || !pHsaIterateAgents || !pHsaAgentGetInfo ||
       !pHsaExecIterAgentSyms || !pHsaSymGetInfo) {
     PROF_WARN("%s",
@@ -113,24 +174,26 @@ static int bindHsaRuntime(void) {
     return setHsaRuntimeState(-1);
   }
 
-  hsa_status_t St = pHsaInit();
+  /* Bring HSA up lazily on the first drain (idempotent, refcounted), never from
+   * a library constructor -- see the fork-safety note at end of file. */
+  prof_hsa_status_t St = pHsaInit();
   if (!hsaOkOrBreak(St)) {
     if (isVerboseMode())
       PROF_NOTE("hsa_init failed (0x%x) - HSA device profiling disabled\n", St);
     return setHsaRuntimeState(-1);
   }
 
-  // Full 1.04 table. A shorter runtime may succeed and leave the tail null.
-  LoaderApi LoaderTable = {};
-  St = pGetExtTable(HSA_EXTENSION_AMD_LOADER, 1, sizeof(LoaderTable),
-                    &LoaderTable);
-  if (!hsaOk(St) || !LoaderTable.QuerySegmentDescriptors) {
+  prof_hsa_loader_pfn_t LoaderApi;
+  __builtin_memset(&LoaderApi, 0, sizeof(LoaderApi));
+  St = pGetExtTable(PROF_HSA_EXTENSION_AMD_LOADER, 1, sizeof(LoaderApi),
+                    &LoaderApi);
+  if (!hsaOk(St) || !LoaderApi.query_segment_descriptors) {
     PROF_WARN("AMD loader extension unavailable (0x%x) - "
               "HSA device profiling disabled\n",
               St);
     return setHsaRuntimeState(-1);
   }
-  pQuerySegDescs = LoaderTable.QuerySegmentDescriptors;
+  pQuerySegDescs = LoaderApi.query_segment_descriptors;
 
   /* The device-to-host copies go through the shared HIP loader. */
   ensureHipLoaded();
@@ -144,7 +207,9 @@ static int bindHsaRuntime(void) {
   return setHsaRuntimeState(1);
 }
 
-int __prof_rocm::hsaRuntimeAvailable(void) { return bindHsaRuntime() == 0; }
+int __prof_rocm::hsaRuntimeAvailable(void) {
+  return loadHsaRuntimePointers() == 0;
+}
 
 /* The canonical device bounds-table symbol from InstrProfilingPlatformGPU.c. */
 static const char ProfileSectionsSymbol[] = "__llvm_profile_sections";
@@ -176,7 +241,7 @@ void __prof_rocm::profRecordDrainedBounds(const void *D, const void *C,
 
 namespace {
 struct GpuAgent {
-  hsa_agent_t agent;
+  prof_hsa_agent_t agent;
   char arch[PROF_HSA_NAME_MAX];
 };
 
@@ -198,38 +263,41 @@ struct SymbolState {
 /* HSA per-symbol callback: when it finds a __llvm_profile_sections variable,
  * drain it via processDeviceOffloadPrf() unless the host-shadow path (or an
  * earlier agent) already handled the same bounds. */
-static hsa_status_t onSymbol(hsa_executable_t, hsa_agent_t,
-                             hsa_executable_symbol_t Sym, void *Data) {
+static prof_hsa_status_t onSymbol(prof_hsa_executable_t, prof_hsa_agent_t,
+                                  prof_hsa_executable_symbol_t Sym,
+                                  void *Data) {
   SymbolState *S = (SymbolState *)Data;
 
-  hsa_symbol_kind_t Kind;
-  if (!hsaOk(pHsaSymGetInfo(Sym, HSA_EXECUTABLE_SYMBOL_INFO_TYPE, &Kind)) ||
-      Kind != HSA_SYMBOL_KIND_VARIABLE)
-    return HSA_STATUS_SUCCESS;
+  prof_hsa_symbol_kind_t Kind;
+  if (!hsaOk(
+          pHsaSymGetInfo(Sym, PROF_HSA_EXECUTABLE_SYMBOL_INFO_TYPE, &Kind)) ||
+      Kind != PROF_HSA_SYMBOL_KIND_VARIABLE)
+    return PROF_HSA_STATUS_SUCCESS;
 
   uint32_t NameLen = 0;
-  if (!hsaOk(pHsaSymGetInfo(Sym, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH,
+  if (!hsaOk(pHsaSymGetInfo(Sym, PROF_HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH,
                             &NameLen)) ||
       NameLen != sizeof(ProfileSectionsSymbol) - 1)
-    return HSA_STATUS_SUCCESS;
+    return PROF_HSA_STATUS_SUCCESS;
 
   char NameBuf[PROF_HSA_NAME_MAX];
   if (NameLen + 1 > sizeof(NameBuf))
-    return HSA_STATUS_SUCCESS;
-  if (!hsaOk(pHsaSymGetInfo(Sym, HSA_EXECUTABLE_SYMBOL_INFO_NAME, NameBuf)))
-    return HSA_STATUS_SUCCESS;
+    return PROF_HSA_STATUS_SUCCESS;
+  if (!hsaOk(
+          pHsaSymGetInfo(Sym, PROF_HSA_EXECUTABLE_SYMBOL_INFO_NAME, NameBuf)))
+    return PROF_HSA_STATUS_SUCCESS;
   NameBuf[NameLen] = '\0';
 
   if (strcmp(NameBuf, ProfileSectionsSymbol) != 0)
-    return HSA_STATUS_SUCCESS;
+    return PROF_HSA_STATUS_SUCCESS;
 
   uint64_t Addr = 0;
-  if (!hsaOk(pHsaSymGetInfo(Sym, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS,
-                            &Addr)) ||
+  if (!hsaOk(pHsaSymGetInfo(
+          Sym, PROF_HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS, &Addr)) ||
       Addr == 0) {
     if (isVerboseMode())
       PROF_NOTE("%s", "failed to read __llvm_profile_sections address\n");
-    return HSA_STATUS_SUCCESS;
+    return PROF_HSA_STATUS_SUCCESS;
   }
 
   S->found++;
@@ -239,13 +307,13 @@ static hsa_status_t onSymbol(hsa_executable_t, hsa_agent_t,
   __llvm_profile_gpu_sections Sec;
   if (memcpyDeviceToHost(&Sec, (void *)(uintptr_t)Addr, sizeof(Sec)) != 0) {
     PROF_WARN("%s", "failed to copy device bounds table\n");
-    return HSA_STATUS_SUCCESS;
+    return PROF_HSA_STATUS_SUCCESS;
   }
   if (profBoundsAlreadyDrained(Sec.DataStart, Sec.CountersStart,
                                Sec.NamesStart)) {
     if (isVerboseMode())
       PROF_NOTE("%s", "device bounds already drained, skipping\n");
-    return HSA_STATUS_SUCCESS;
+    return PROF_HSA_STATUS_SUCCESS;
   }
 
   size_t DataBytes = (const char *)Sec.DataStop - (const char *)Sec.DataStart;
@@ -254,7 +322,7 @@ static hsa_status_t onSymbol(hsa_executable_t, hsa_agent_t,
   if (DataBytes == 0 || CntsBytes == 0) {
     // Empty code object: nothing to write. Mark seen so we don't revisit it.
     profRecordDrainedBounds(Sec.DataStart, Sec.CountersStart, Sec.NamesStart);
-    return HSA_STATUS_SUCCESS;
+    return PROF_HSA_STATUS_SUCCESS;
   }
 
   // Name HSA-drained objects in their own ".hsaN" suffix space so they never
@@ -273,24 +341,24 @@ static hsa_status_t onSymbol(hsa_executable_t, hsa_agent_t,
     profRecordDrainedBounds(Sec.DataStart, Sec.CountersStart, Sec.NamesStart);
   }
 
-  return HSA_STATUS_SUCCESS;
+  return PROF_HSA_STATUS_SUCCESS;
 }
 
-static hsa_status_t collectAgent(hsa_agent_t Agent, void *Data) {
-  hsa_device_type_t DevType;
-  if (!hsaOk(pHsaAgentGetInfo(Agent, HSA_AGENT_INFO_DEVICE, &DevType)) ||
-      DevType != HSA_DEVICE_TYPE_GPU)
-    return HSA_STATUS_SUCCESS;
+static prof_hsa_status_t collectAgent(prof_hsa_agent_t Agent, void *Data) {
+  prof_hsa_device_type_t DevType;
+  if (!hsaOk(pHsaAgentGetInfo(Agent, PROF_HSA_AGENT_INFO_DEVICE, &DevType)) ||
+      DevType != PROF_HSA_DEVICE_TYPE_GPU)
+    return PROF_HSA_STATUS_SUCCESS;
 
   WalkState *W = (WalkState *)Data;
   if (W->num_agents >= PROF_MAX_GPU_AGENTS)
-    return HSA_STATUS_SUCCESS;
+    return PROF_HSA_STATUS_SUCCESS;
 
   GpuAgent &GA = W->agents[W->num_agents++];
   GA.agent = Agent;
   char Name[PROF_HSA_NAME_MAX];
   __builtin_memset(Name, 0, sizeof(Name));
-  pHsaAgentGetInfo(Agent, HSA_AGENT_INFO_NAME, Name);
+  pHsaAgentGetInfo(Agent, PROF_HSA_AGENT_INFO_NAME, Name);
   size_t N = strnlen(Name, sizeof(GA.arch) - 1);
   __builtin_memcpy(GA.arch, Name, N);
   GA.arch[N] = '\0';
@@ -299,7 +367,7 @@ static hsa_status_t collectAgent(hsa_agent_t Agent, void *Data) {
 
   if (isVerboseMode())
     PROF_NOTE("GPU agent %d: %s\n", W->num_agents - 1, GA.arch);
-  return HSA_STATUS_SUCCESS;
+  return PROF_HSA_STATUS_SUCCESS;
 }
 
 /* Reentrancy guard and "drained at least once" latch (both acquire/release). */
@@ -322,12 +390,12 @@ int __prof_rocm::drainDevicesViaHsa(void) {
     }
   } _Guard;
 
-  if (bindHsaRuntime() != 0)
+  if (loadHsaRuntimePointers() != 0)
     return 0; /* Runtime unavailable: stay retryable. */
 
   WalkState W;
   __builtin_memset(&W, 0, sizeof(W));
-  hsa_status_t St = pHsaIterateAgents(collectAgent, &W);
+  prof_hsa_status_t St = pHsaIterateAgents(collectAgent, &W);
   if (!hsaOkOrBreak(St)) {
     PROF_WARN("hsa_iterate_agents failed (0x%x)\n", St);
     return -1;
@@ -353,8 +421,8 @@ int __prof_rocm::drainDevicesViaHsa(void) {
     return 0;
   }
 
-  hsa_ven_amd_loader_segment_descriptor_t *Segs =
-      (hsa_ven_amd_loader_segment_descriptor_t *)calloc(NumSegs, sizeof(*Segs));
+  prof_hsa_loader_segment_descriptor_t *Segs =
+      (prof_hsa_loader_segment_descriptor_t *)calloc(NumSegs, sizeof(*Segs));
   if (!Segs) {
     PROF_ERR("%s\n", "failed to allocate segment descriptor array");
     return -1;
@@ -416,7 +484,7 @@ int __prof_rocm::drainDevicesViaHsa(void) {
     if (isVerboseMode())
       PROF_NOTE("walking executable 0x%llx on %s\n",
                 (unsigned long long)Segs[i].executable.handle, Arch);
-    hsa_status_t IterSt =
+    prof_hsa_status_t IterSt =
         pHsaExecIterAgentSyms(Segs[i].executable, Segs[i].agent, onSymbol, &S);
     if (!hsaOkOrBreak(IterSt)) {
       PROF_WARN("hsa_executable_iterate_agent_symbols on executable 0x%llx "
@@ -447,4 +515,4 @@ int __prof_rocm::drainDevicesViaHsa(void) {
 
 /* Fork-safety: deliberately no library constructor calling hsa_init(). */
 
-#endif /* defined(__linux__) */
+#endif /* defined(__linux__) && !defined(_WIN32) -- HSA drain */

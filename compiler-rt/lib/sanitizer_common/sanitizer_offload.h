@@ -106,8 +106,6 @@ class Offload {
   LoaderApi Loader{};
 };
 
-void WarnIfHsaNotInterposed();
-
 }  // namespace __sanitizer
 
 #endif  // SANITIZER_OFFLOAD_H
