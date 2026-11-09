@@ -32,23 +32,23 @@ int main(int argc, char *argv[]) {
   size_t BlockSizeCount = 0;
   size_t *BlockSizes = NULL;
 
-  for (int i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "--isa") == 0) {
-      if (i + 1 >= argc) {
+  for (int I = 1; I < argc; I++) {
+    if (strcmp(argv[I], "--isa") == 0) {
+      if (I + 1 >= argc) {
         fprintf(stderr, "--isa requires an argument\n");
         exit(1);
       }
-      IsaName = argv[++i];
-    } else if (strcmp(argv[i], "--block-sizes") == 0) {
-      if (i + 1 >= argc) {
+      IsaName = argv[++I];
+    } else if (strcmp(argv[I], "--block-sizes") == 0) {
+      if (I + 1 >= argc) {
         fprintf(stderr, "--block-sizes requires an argument\n");
         exit(1);
       }
-      char *BlockSizesStr = argv[++i];
+      char *BlockSizesStr = argv[++I];
       // First count the number of block sizes
       BlockSizeCount = 1;
-      for (char *p = BlockSizesStr; *p; p++)
-        if (*p == ',')
+      for (char *P = BlockSizesStr; *P; P++)
+        if (*P == ',')
           BlockSizeCount++;
       BlockSizes = (size_t *)malloc(BlockSizeCount * sizeof(size_t));
       size_t Index = 0;
@@ -62,14 +62,14 @@ int main(int argc, char *argv[]) {
         BlockSizes[Index++] = BlockSize;
         Token = strtok(NULL, ",");
       }
-    } else if (strcmp(argv[i], "-o") == 0) {
-      if (i + 1 >= argc) {
+    } else if (strcmp(argv[I], "-o") == 0) {
+      if (I + 1 >= argc) {
         fprintf(stderr, "-o requires an argument\n");
         exit(1);
       }
-      OutputFile = argv[++i];
+      OutputFile = argv[++I];
     } else if (!InputFile) {
-      InputFile = argv[i];
+      InputFile = argv[I];
     } else {
       fprintf(stderr, "Usage: spirv-translator [--isa <name>] [-block-sizes "
                       "<comma-separated block sizes>] file.spv -o file.bc\n");

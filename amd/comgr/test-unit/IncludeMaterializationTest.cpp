@@ -121,6 +121,9 @@ class IncludeMaterializationTest : public ::testing::TestWithParam<bool> {};
 // Includes are written into the in-memory VFS rather than to real temp files,
 // so cover both filesystems: the contents have to reach the preprocessor
 // either way, including from nested subdirectories.
+// gtest's TEST_P declares the generated TestBody() public, while
+// Test::TestBody() is private.
+// NOLINTNEXTLINE(misc-override-with-different-visibility)
 TEST_P(IncludeMaterializationTest, SubdirectoryIncludesAreVisible) {
   const std::string Preprocessed = preprocess(GetParam());
   ASSERT_FALSE(Preprocessed.empty());

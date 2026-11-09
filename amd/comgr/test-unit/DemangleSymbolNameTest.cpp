@@ -14,6 +14,9 @@ namespace {
 class DemangleSymbolNameTest
     : public ::testing::TestWithParam<std::tuple<const char *, const char *>> {};
 
+// gtest's TEST_P declares the generated TestBody() public, while
+// Test::TestBody() is private.
+// NOLINTNEXTLINE(misc-override-with-different-visibility)
 TEST_P(DemangleSymbolNameTest, DemangleMatch) {
   auto [MangledName, ExpectedString] = GetParam();
   amd_comgr_data_t MangledData, DemangledData;

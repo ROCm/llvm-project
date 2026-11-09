@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr.h"
+#include "llvm/ADT/STLExtras.h"
 
 #include "common.h"
 #include "gtest/gtest.h"
@@ -169,8 +170,7 @@ TEST_F(SymbolIndexTest, IterationSharesTheCachedParse) {
   EXPECT_EQ(object()->SymbolIndex->size(), Names.size());
   EXPECT_EQ(std::set<std::string>(Names.begin(), Names.end()).size(),
             Names.size());
-  EXPECT_NE(Names.end(),
-            std::find(Names.begin(), Names.end(), std::string(KernelName)));
+  EXPECT_TRUE(llvm::is_contained(Names, std::string(KernelName)));
 }
 
 } // namespace

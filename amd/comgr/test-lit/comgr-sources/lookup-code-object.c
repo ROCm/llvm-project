@@ -41,10 +41,10 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_(lookup_code_object(DataObject, ObjectInfo, 3));
 
-  for (int i = 0; i < 3; ++i) {
-    printf("ObjectInfo[%d].isa: %s\n", i, ObjectInfo[i].isa);
-    printf("ObjectInfo[%d].size: %zu\n", i, ObjectInfo[i].size);
-    printf("ObjectInfo[%d].offset: %" PRIu64 "\n", i, ObjectInfo[i].offset);
+  for (int I = 0; I < 3; ++I) {
+    printf("ObjectInfo[%d].isa: %s\n", I, ObjectInfo[I].isa);
+    printf("ObjectInfo[%d].size: %zu\n", I, ObjectInfo[I].size);
+    printf("ObjectInfo[%d].offset: %" PRIu64 "\n", I, ObjectInfo[I].offset);
   }
 
   amd_comgr_(release_data(DataObject));
