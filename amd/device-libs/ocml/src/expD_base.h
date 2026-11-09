@@ -33,7 +33,6 @@ MATH_MANGLE(exp)(double x)
                      0x1.a01a014761f6ep-13, 0x1.6c16c1852b7b0p-10, 0x1.1111111122322p-7,
                      0x1.55555555502a1p-5, 0x1.5555555555511p-3, 0x1.000000000000bp-1, 1.0, 1.0);
 
-
     double z = BUILTIN_FLDEXP_F64(p, BUILTIN_ISNAN_F64(dn) ? 0 : (int)dn);
 
     if (!FINITE_ONLY_OPT()) {
