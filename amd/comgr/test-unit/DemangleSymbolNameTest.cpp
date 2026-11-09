@@ -9,6 +9,8 @@
 #include "common.h"
 #include "gtest/gtest.h"
 
+namespace {
+
 class DemangleSymbolNameTest
     : public ::testing::TestWithParam<std::tuple<const char *, const char *>> {};
 
@@ -93,3 +95,5 @@ INSTANTIATE_TEST_SUITE_P(DemangleTable, DemangleSymbolNameTest,
   std::make_tuple("_ZNSt8ios_base4InitC1Ev", "std::ios_base::Init::Init()"),
   std::make_tuple("_ZNSolsEi", "std::ostream::operator<<(int)"),
   std::make_tuple("_ZNSaIcEC1Ev", "std::allocator<char>::allocator()")));
+
+} // namespace

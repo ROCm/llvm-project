@@ -18,18 +18,16 @@ using COMGR::DataMeta;
 using COMGR::DataObject;
 using COMGR::MetaDocument;
 
-namespace {
-
 // The parsed document a metadata handle is a view into. Identity of this
 // pointer across two handles is what distinguishes a cache hit from a re-parse;
 // it is not observable through the public API.
-const MetaDocument *document(amd_comgr_metadata_node_t Node) {
+static const MetaDocument *document(amd_comgr_metadata_node_t Node) {
   return DataMeta::convert(Node)->MetaDoc.get();
 }
 
 // Reads "amdhsa.version" as "<major>.<minor>", so that a cache hit is checked
 // to carry the same contents as a fresh parse and not just the same pointer.
-std::string readVersion(amd_comgr_metadata_node_t Root) {
+static std::string readVersion(amd_comgr_metadata_node_t Root) {
   amd_comgr_metadata_node_t Version;
   EXPECT_EQ(AMD_COMGR_STATUS_SUCCESS,
             amd_comgr_metadata_lookup(Root, "amdhsa.version", &Version));
@@ -59,6 +57,8 @@ std::string readVersion(amd_comgr_metadata_node_t Root) {
   EXPECT_EQ(AMD_COMGR_STATUS_SUCCESS, amd_comgr_destroy_metadata(Version));
   return Out;
 }
+
+namespace {
 
 class MetadataCacheTest : public ::testing::Test {
 protected:
