@@ -32,12 +32,25 @@ typedef __int64 ssize_t;
 typedef long ssize_t;
 #endif
 
-void fail(const char *format, ...) {
+// fail() ends in exit(), but without this the compiler cannot see that and
+// reports locals as possibly-uninitialized on paths that end in a fail()
+// call. This header is included from both C and C++ test sources, and the C
+// ones build as C99 (C_STANDARD 99 in test/CMakeLists.txt), where _Noreturn
+// is a C11 extension, so spell it per compiler rather than using _Noreturn.
+#if defined(__cplusplus)
+#define COMGR_TEST_NORETURN [[noreturn]]
+#elif defined(_MSC_VER)
+#define COMGR_TEST_NORETURN __declspec(noreturn)
+#else
+#define COMGR_TEST_NORETURN __attribute__((noreturn))
+#endif
+
+COMGR_TEST_NORETURN void fail(const char *Format, ...) {
   va_list ap;
-  va_start(ap, format);
+  va_start(ap, Format);
 
   printf("FAILED: ");
-  vprintf(format, ap);
+  vprintf(Format, ap);
   printf("\n");
 
   va_end(ap);
