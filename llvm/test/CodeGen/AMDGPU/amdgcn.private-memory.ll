@@ -1,8 +1,8 @@
-; RUN: llc -mtriple=amdgpu6.00 < %s | FileCheck --check-prefixes=GCN,GCN-PROMOTE %s
-; RUN: llc -mattr=-flat-for-global -mtriple=amdgpu7.00--amdhsa < %s | FileCheck --check-prefixes=GCN,GCN-PROMOTE %s
+; RUN: llc -mtriple=amdgpu6.00 -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck --check-prefixes=GCN,GCN-PROMOTE %s
+; RUN: llc -mattr=-flat-for-global -mtriple=amdgpu7.00--amdhsa -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck --check-prefixes=GCN,GCN-PROMOTE %s
 ; RUN: llc -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -mtriple=amdgpu6.00 < %s | FileCheck --check-prefixes=GCN,GCN-ALLOCA %s
 ; RUN: llc -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -mattr=-flat-for-global -mtriple=amdgpu7.00-amdhsa < %s | FileCheck  --check-prefixes=GCN,GCN-ALLOCA %s
-; RUN: llc -mtriple=amdgpu8.02 -mattr=-flat-for-global < %s | FileCheck --check-prefixes=GCN,GCN-PROMOTE %s
+; RUN: llc -mtriple=amdgpu8.02 -mattr=-flat-for-global -amdgpu-promote-alloca-to-vector-max-regs=32 < %s | FileCheck --check-prefixes=GCN,GCN-PROMOTE %s
 ; RUN: llc -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -mtriple=amdgpu8.02 -mattr=-flat-for-global < %s | FileCheck --check-prefixes=GCN,GCN-ALLOCA %s
 
 
