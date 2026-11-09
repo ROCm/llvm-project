@@ -457,7 +457,6 @@ struct CodegenConfig {
     CGFileType           = Conf.CGFileType;
     DwoDir               = Conf.DwoDir;
     PreCodeGenModuleHook = Conf.PreCodeGenModuleHook;
-    PreCodeGenPassesHook = Conf.PreCodeGenPassesHook;
     SplitDwarfFile       = Conf.SplitDwarfFile;
     SplitDwarfOutput     = Conf.SplitDwarfOutput;
   }
