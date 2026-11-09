@@ -60,6 +60,7 @@
 # FULL-NEXT: numKernargPreloadSGPRs: 0
 # FULL-NEXT: isWholeWaveFunction: false
 # FULL-NEXT: minNumAGPRs: 4294967295
+# FULL-NEXT: hasExcessRegPressure: false
 # FULL-NEXT: body:
 
 # SIMPLE: machineFunctionInfo:
@@ -172,6 +173,7 @@ body:             |
 # FULL-NEXT: numKernargPreloadSGPRs: 0
 # FULL-NEXT: isWholeWaveFunction: false
 # FULL-NEXT: minNumAGPRs: 4294967295
+# FULL-NEXT: hasExcessRegPressure: false
 # FULL-NEXT: body:
 
 # SIMPLE: machineFunctionInfo:
@@ -256,6 +258,7 @@ body:             |
 # FULL-NEXT: numKernargPreloadSGPRs: 0
 # FULL-NEXT: isWholeWaveFunction: false
 # FULL-NEXT: minNumAGPRs: 4294967295
+# FULL-NEXT: hasExcessRegPressure: false
 # FULL-NEXT: body:
 
 # SIMPLE: machineFunctionInfo:
@@ -341,6 +344,7 @@ body:             |
 # FULL-NEXT: numKernargPreloadSGPRs: 0
 # FULL-NEXT: isWholeWaveFunction: false
 # FULL-NEXT: minNumAGPRs: 4294967295
+# FULL-NEXT: hasExcessRegPressure: false
 # FULL-NEXT: body:
 
 # SIMPLE: machineFunctionInfo:
