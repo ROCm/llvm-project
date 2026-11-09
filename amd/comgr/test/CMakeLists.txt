@@ -246,4 +246,25 @@ add_comgr_test(compile_hip_test c)
 add_comgr_test(compile_hip_to_relocatable c)
 #add_comgr_test(compile_hip_with_libcxx_test c)
 add_comgr_test(mangled_names_hip_test c)
+add_comgr_test(unbundle_compressed_edge_cases_test cpp)
+add_comgr_test(unbundle_cache_test cpp)
+llvm_map_components_to_libnames(COMGR_UNBUNDLE_TEST_LIBS Object Support)
+set_target_properties(unbundle_compressed_edge_cases_test unbundle_cache_test PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No)
+foreach(target unbundle_compressed_edge_cases_test unbundle_cache_test)
+  target_link_libraries(${target} ${COMGR_UNBUNDLE_TEST_LIBS})
+  target_include_directories(${target} PRIVATE ${LLVM_INCLUDE_DIRS})
+endforeach()
 #add_comgr_test(unbundle_hip_test c)
+
+add_test(NAME unbundle_cached_edge_cases_test
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_cached_unbundle.py"
+          "$<TARGET_FILE:unbundle_compressed_edge_cases_test>")
+if(WIN32)
+  set_tests_properties(unbundle_cached_edge_cases_test PROPERTIES
+    ENVIRONMENT_MODIFICATION
+      "PATH=path_list_prepend:$<TARGET_LINKER_FILE_DIR:amd_comgr>")
+endif()
