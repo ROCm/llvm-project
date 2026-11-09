@@ -11,7 +11,7 @@
 
 int main(int argc, char *argv[]) {
   amd_comgr_data_kind_t Kind;
-  switch(atoi(argv[2])) {
+  switch (atoi(argv[2])) {
   case 0:
     Kind = AMD_COMGR_DATA_KIND_EXECUTABLE;
     break;

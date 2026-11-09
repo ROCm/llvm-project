@@ -608,8 +608,8 @@ static bool executeAssemblerImpl(AssemblerInvocation &Opts,
                                  DiagnosticsEngine &Diags, raw_ostream &LogS) {
   // Get the target specific parser.
   std::string Error;
-  const Target *TheTarget = TargetRegistry::lookupTarget(
-    llvm::Triple(Opts.Triple), Error);
+  const Target *TheTarget =
+      TargetRegistry::lookupTarget(llvm::Triple(Opts.Triple), Error);
   if (!TheTarget) {
     return Diags.Report(diag::err_target_unknown_triple) << Opts.Triple;
   }
@@ -636,8 +636,8 @@ static bool executeAssemblerImpl(AssemblerInvocation &Opts,
   // it later.
   SrcMgr.setIncludeDirs(Opts.IncludePaths);
 
-  std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(
-      llvm::Triple(Opts.Triple)));
+  std::unique_ptr<MCRegisterInfo> MRI(
+      TheTarget->createMCRegInfo(llvm::Triple(Opts.Triple)));
   assert(MRI && "Unable to create target register info!");
 
   llvm::MCTargetOptions MCOptions;
@@ -666,8 +666,8 @@ static bool executeAssemblerImpl(AssemblerInvocation &Opts,
   }
 
   std::unique_ptr<MCObjectFileInfo> MOFI(new MCObjectFileInfo());
-  std::unique_ptr<MCSubtargetInfo> STI(
-      TheTarget->createMCSubtargetInfo(llvm::Triple(Opts.Triple), Opts.CPU, FS));
+  std::unique_ptr<MCSubtargetInfo> STI(TheTarget->createMCSubtargetInfo(
+      llvm::Triple(Opts.Triple), Opts.CPU, FS));
 
   MCContext Ctx(Triple(Opts.Triple), *MAI, *MRI, *STI, &SrcMgr);
   Ctx.setObjectFileInfo(MOFI.get());
@@ -709,8 +709,9 @@ static bool executeAssemblerImpl(AssemblerInvocation &Opts,
   // FIXME: There is a bit of code duplication with addPassesToEmitFile.
   if (Opts.OutputType == AssemblerInvocation::FT_Asm) {
     std::unique_ptr<MCInstPrinter> InstructionPrinter(
-      TheTarget->createMCInstPrinter(
-         llvm::Triple(Opts.Triple), Opts.OutputAsmVariant, *MAI, *MCII, *MRI));
+        TheTarget->createMCInstPrinter(llvm::Triple(Opts.Triple),
+                                       Opts.OutputAsmVariant, *MAI, *MCII,
+                                       *MRI));
     std::unique_ptr<MCCodeEmitter> MCE;
     std::unique_ptr<MCAsmBackend> MAB;
     if (Opts.ShowEncoding) {
@@ -719,7 +720,8 @@ static bool executeAssemblerImpl(AssemblerInvocation &Opts,
       MAB.reset(TheTarget->createMCAsmBackend(*STI, *MRI, Options));
     }
     auto FOut = std::make_unique<formatted_raw_ostream>(*Out);
-    Str.reset(TheTarget->createAsmStreamer(Ctx, std::move(FOut), std::move(InstructionPrinter),
+    Str.reset(TheTarget->createAsmStreamer(Ctx, std::move(FOut),
+                                           std::move(InstructionPrinter),
                                            std::move(MCE), std::move(MAB)));
   } else if (Opts.OutputType == AssemblerInvocation::FT_Null) {
     Str.reset(createNullStreamer(Ctx));
@@ -886,7 +888,8 @@ static amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
 }
 
 // Execute llvm-link in-process using llvm::Linker
-// TODO: refactor this implementation to use a shared infra with linkBitcodeToBitcode()
+// TODO: refactor this implementation to use a shared infra with
+// linkBitcodeToBitcode()
 static amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
                                           raw_ostream &LogS) {
   // Parse args: find -o <output> and collect non-flag inputs.
@@ -1092,8 +1095,8 @@ AMDGPUCompiler::executeInProcessDriver(ArrayRef<const char *> Args) {
   TheDriver.setCheckInputsExist(false);
 
   // We do not want the driver to promote -include into -include-pch.
-  // Otherwise, the driver may pick PCH in the wrong format, without permissions,
-  // in the process's CWD.
+  // Otherwise, the driver may pick PCH in the wrong format, without
+  // permissions, in the process's CWD.
   TheDriver.setProbePrecompiled(false);
 
   // Log arguments used to build compilation
@@ -2848,9 +2851,8 @@ AMDGPUCompiler::AMDGPUCompiler(DataAction *ActionInfo, DataSet *InSet,
     for (const auto &Entry : getLibcxxHeaderFiles()) {
       SmallString<128> Path(LibcxxBase);
       path::append(Path, Entry.RelativePath);
-      InMemoryFS->addFile(Path, 0,
-                          MemoryBuffer::getMemBuffer(Entry.FileContent, Path,
-                                                     false));
+      InMemoryFS->addFile(
+          Path, 0, MemoryBuffer::getMemBuffer(Entry.FileContent, Path, false));
     }
 
     // Clang builtin headers → <resource-dir>/include/<relative-path>
@@ -2860,9 +2862,8 @@ AMDGPUCompiler::AMDGPUCompiler(DataAction *ActionInfo, DataSet *InSet,
     for (const auto &Entry : getClangBuiltinHeaderFiles()) {
       SmallString<128> Path(ClangBuiltinBase);
       path::append(Path, Entry.RelativePath);
-      InMemoryFS->addFile(Path, 0,
-                          MemoryBuffer::getMemBuffer(Entry.FileContent, Path,
-                                                     false));
+      InMemoryFS->addFile(
+          Path, 0, MemoryBuffer::getMemBuffer(Entry.FileContent, Path, false));
     }
 
     HasEmbeddedHeaders = true;
