@@ -760,6 +760,10 @@ public:
 
   bool hasSubClampInsts() const { return hasGFX10_3Insts(); }
 
+  bool hasAnyBVHInsts() const {
+    return hasBVHRayTracingInsts() || hasBVHDualAndBVH8Insts();
+  }
+
   bool hasAnyPackedFP32Ops() const {
     return hasPackedFP32Ops() || hasPackedFP32SingleSGPROps();
   };

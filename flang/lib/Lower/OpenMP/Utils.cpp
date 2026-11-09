@@ -38,6 +38,7 @@
 #include <flang/Semantics/symbol.h>
 #include <flang/Semantics/tools.h>
 #include <flang/Semantics/type.h>
+#include <flang/Support/Flags.h>
 #include <flang/Utils/OpenMP.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/ADT/SmallPtrSet.h>
@@ -76,8 +77,22 @@ llvm::cl::opt<bool> treatIndexAsSection(
 namespace Fortran {
 namespace lower {
 namespace omp {
+
+static bool
+hasUserDefinedDefaultMapper(Fortran::lower::AbstractConverter &converter,
+                            const semantics::DerivedTypeSpec &typeSpec) {
+  std::string mapperName =
+      typeSpec.name().ToString() + llvm::omp::OmpDefaultMapperName;
+  if (auto *sym = converter.getCurrentScope().FindSymbol(mapperName))
+    return sym->GetUltimate().detailsIf<semantics::MapperDetails>();
+
+  return false;
+}
+
 bool requiresImplicitDefaultDeclareMapper(
-    const semantics::DerivedTypeSpec &typeSpec) {
+    lower::AbstractConverter &converter, fir::FirOpBuilder &firOpBuilder,
+    const semantics::DerivedTypeSpec &typeSpec,
+    bool enableImplicitDefaultMapperAllocatableMembers) {
   llvm::SmallPtrSet<const semantics::DerivedTypeSpec *, 8> visited;
 
   std::function<bool(const semantics::DerivedTypeSpec &)> requiresMapper =
@@ -87,13 +102,21 @@ bool requiresImplicitDefaultDeclareMapper(
 
     semantics::DirectComponentIterator directComponents{spec};
     for (const semantics::Symbol &component : directComponents) {
-      if (component.attrs().test(semantics::Attr::ALLOCATABLE))
+      if (enableImplicitDefaultMapperAllocatableMembers &&
+          component.attrs().test(semantics::Attr::ALLOCATABLE))
         return true;
 
-      if (const semantics::DeclTypeSpec *declType = component.GetType())
-        if (const auto *nested = declType->AsDerived())
-          if (requiresMapper(*nested))
-            return true;
+      if (const semantics::DeclTypeSpec *declType = component.GetType()) {
+        const auto *nested = declType->AsDerived();
+        if (!nested)
+          continue;
+
+        if (hasUserDefinedDefaultMapper(converter, *nested))
+          return true;
+
+        if (requiresMapper(*nested))
+          return true;
+      }
     }
     return false;
   };
@@ -1212,7 +1235,8 @@ findMapperIfTypeMatch(Fortran::lower::AbstractConverter &converter,
 static mlir::FlatSymbolRefAttr
 addImplicitMapper(Fortran::lower::AbstractConverter &converter,
                   mlir::Location loc, const omp::Object &object,
-                  std::string &mapperIdName, bool allowGenerate) {
+                  std::string &mapperIdName, bool allowGenerate,
+                  bool emitAllocatableMemberMaps) {
   if (!allowGenerate || mapperIdName.empty())
     return mlir::FlatSymbolRefAttr();
 
@@ -1233,7 +1257,8 @@ addImplicitMapper(Fortran::lower::AbstractConverter &converter,
       converter.getFirOpBuilder(), loc, recordType, mapperIdName,
       [&](std::string &mapperIdName, llvm::StringRef memberName) {
         defaultMangler(converter, mapperIdName, memberName);
-      });
+      },
+      emitAllocatableMemberMaps);
 }
 
 mlir::FlatSymbolRefAttr resolveMapperId(
@@ -1279,16 +1304,19 @@ mlir::FlatSymbolRefAttr resolveMapperId(
       bool isImplicitMap =
           (mapTypeBits & mlir::omp::ClauseMapFlags::implicit) ==
           mlir::omp::ClauseMapFlags::implicit;
-      bool needsDefaultMapper =
-          requiresImplicitDefaultDeclareMapper(*objectTypeSpec);
+      bool needsDefaultMapper = requiresImplicitDefaultDeclareMapper(
+          converter, firOpBuilder, *objectTypeSpec,
+          enableImplicitDefaultMapperAllocatableMembers);
       // For implicit captures, avoid synthesizing default mappers for
       // pointer entities (which can over-map pointer payloads) and for
       // plain non-allocatable/non-pointer entities. Keep implicit mapper
       // support for allocatables.
       if (isImplicitMap && (isPointer || !isAllocOrPointer))
         needsDefaultMapper = false;
-      mapperId = addImplicitMapper(converter, loc, object, mapperIdName,
-                                   /*allowGenerate=*/needsDefaultMapper);
+      mapperId =
+          addImplicitMapper(converter, loc, object, mapperIdName,
+                            /*allowGenerate=*/needsDefaultMapper,
+                            enableImplicitDefaultMapperAllocatableMembers);
     }
   }
 
@@ -1373,15 +1401,29 @@ semantics::omp::OmpVariantMatchContext makeVariantMatchContext(
 
 void collectEnclosingConstructTraits(
     mlir::Operation *op,
-    llvm::SmallVectorImpl<llvm::omp::TraitProperty> &constructTraits) {
+    llvm::SmallVectorImpl<llvm::omp::TraitProperty> &constructTraits,
+    bool excludeNearestDispatch) {
   // Collect enclosing OpenMP operations so variants chosen by an outer
   // metadirective are part of this metadirective's context. For example, an
   // inner metadirective inside `target` and an outer-selected `parallel` must
   // be able to match construct={target, parallel}. The final reverse yields
   // outermost-to-innermost order as required by OMPContext.
+  //
+  // When \p excludeNearestDispatch is set, the innermost enclosing `dispatch`
+  // construct is left out of the trait set. This implements the `nocontext`
+  // clause, which removes its own dispatch construct from the OpenMP context
+  // used for variant selection.
+  bool skippedDispatch = false;
   for (; op; op = op->getParentOp()) {
     if (mlir::isa<mlir::omp::WsloopOp>(op))
       constructTraits.push_back(llvm::omp::TraitProperty::construct_for_for);
+    if (mlir::isa<mlir::omp::DispatchOp>(op)) {
+      if (excludeNearestDispatch && !skippedDispatch)
+        skippedDispatch = true;
+      else
+        constructTraits.push_back(
+            llvm::omp::TraitProperty::construct_dispatch_dispatch);
+    }
     if (mlir::isa<mlir::omp::ParallelOp>(op))
       constructTraits.push_back(
           llvm::omp::TraitProperty::construct_parallel_parallel);
@@ -1397,7 +1439,8 @@ void collectEnclosingConstructTraits(
 
 const semantics::Symbol *
 resolveDeclareVariantCallee(const semantics::Symbol &base,
-                            AbstractConverter &converter) {
+                            AbstractConverter &converter,
+                            bool excludeDispatchContext) {
   const semantics::Symbol &ultimate{base.GetUltimate()};
 
   const auto *details{ultimate.detailsIf<semantics::SubprogramDetails>()};
@@ -1438,7 +1481,7 @@ resolveDeclareVariantCallee(const semantics::Symbol &base,
   llvm::SmallVector<llvm::omp::TraitProperty, 8> constructTraits;
   collectEnclosingConstructTraits(
       converter.getFirOpBuilder().getInsertionBlock()->getParentOp(),
-      constructTraits);
+      constructTraits, excludeDispatchContext);
   semantics::omp::OmpVariantMatchContext ompCtx =
       makeVariantMatchContext(converter.getModuleOp(), constructTraits);
 
@@ -1448,6 +1491,24 @@ resolveDeclareVariantCallee(const semantics::Symbol &base,
   if (bestIdx < 0)
     return nullptr;
   return variants[bestIdx];
+}
+
+mlir::Value getEnclosingDispatchNovariants(mlir::OpBuilder &builder) {
+  mlir::Block *block = builder.getInsertionBlock();
+  for (mlir::Operation *op = block ? block->getParentOp() : nullptr; op;
+       op = op->getParentOp())
+    if (auto dispatch = mlir::dyn_cast<mlir::omp::DispatchOp>(op))
+      return dispatch.getNovariants();
+  return {};
+}
+
+mlir::Value getEnclosingDispatchNocontext(mlir::OpBuilder &builder) {
+  mlir::Block *block = builder.getInsertionBlock();
+  for (mlir::Operation *op = block ? block->getParentOp() : nullptr; op;
+       op = op->getParentOp())
+    if (auto dispatch = mlir::dyn_cast<mlir::omp::DispatchOp>(op))
+      return dispatch.getNocontext();
+  return {};
 }
 
 } // namespace omp

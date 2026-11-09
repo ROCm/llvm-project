@@ -213,7 +213,7 @@ void cloneOrMapRegionOutsiders(
 mlir::FlatSymbolRefAttr getOrGenImplicitDefaultDeclareMapper(
     fir::FirOpBuilder &firOpBuilder, mlir::Location loc,
     fir::RecordType recordType, llvm::StringRef mapperNameStr,
-    RecordMemberMapperMangler mangler) {
+    RecordMemberMapperMangler mangler, bool emitAllocatableMemberMaps) {
   auto getKindlessDefaultMapperName =
       [](fir::RecordType recType) -> std::string {
     auto [nameKind, deconstructed] =
@@ -335,12 +335,12 @@ mlir::FlatSymbolRefAttr getOrGenImplicitDefaultDeclareMapper(
       std::string mapperIdName = getCanonicalDefaultDeclareMapperName(recType);
       if (mangler)
         mangler(mapperIdName, memberName);
-      mapperId = getOrGenImplicitDefaultDeclareMapper(
-          firOpBuilder, loc, recType, mapperIdName, mangler);
+      mapperId = getOrGenImplicitDefaultDeclareMapper(firOpBuilder, loc,
+          recType, mapperIdName, mangler, emitAllocatableMemberMaps);
     }
 
     bool isAllocatable = fir::isAllocatableType(fir::unwrapRefType(memberType));
-    if (isAllocatable ||
+    if ((isAllocatable && emitAllocatableMemberMaps) ||
         mlir::isa<fir::RecordType>(fir::getFortranElementType(memberType))) {
       auto ref =
           getFieldRef(declareOp.getBase(), memberName, memberType, recordType);

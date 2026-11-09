@@ -12,7 +12,6 @@
 
 #include "Shared/APITypes.h"
 #include "Shared/Debug.h"
-#include "Shared/Environment.h"
 
 #include "ErrorReporting.h"
 #include "GenericProfiler.h"
@@ -261,13 +260,6 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin,
       return Err;
   LoadedImages.clear();
 
-  if (RecordReplay) {
-    if (auto Err = RecordReplay->deinit())
-      return Err;
-    delete RecordReplay;
-    RecordReplay = nullptr;
-  }
-
   return deinitImpl();
 }
 
@@ -308,9 +300,6 @@ GenericDeviceTy::loadBinary(GenericPluginTy &Plugin, StringRef InputTgtImage,
   if (!ImageOrErr)
     return ImageOrErr.takeError();
   DeviceImageTy *Image = *ImageOrErr;
-
-  if (identify_magic(InputTgtImage) == file_magic::bitcode)
-    Image->setIRImage(MemoryBuffer::getMemBufferCopy(InputTgtImage));
 
   // Add the image to list.
   LoadedImages.push_back(Image);
@@ -607,32 +596,6 @@ Error GenericDeviceTy::queryAsync(__tgt_async_info *AsyncInfo,
   return Plugin::success();
 }
 
-KernelLaunchEnvironmentTy *GenericDeviceTy::getPinnedLaunchEnvBuffer() {
-  if (!hasFastTransferWithPinnedMemory())
-    return nullptr;
-
-  // While recording or replaying, dataAlloc serves every allocation kind from
-  // the record-replay device memory pool, so it cannot give us host memory.
-  if (RecordReplay && RecordReplay->isRecordingOrReplaying())
-    return nullptr;
-
-  auto AllocOrErr =
-      dataAlloc(sizeof(KernelLaunchEnvironmentTy), /*HostPtr=*/nullptr,
-                TargetAllocTy::TARGET_ALLOC_HOST, /*Alignment=*/0);
-  if (!AllocOrErr) {
-    // Staging is optional, so fall back to unpinned memory. Consume the
-    // error unconditionally: ODBG does not evaluate its operands unless
-    // debugging is enabled.
-    std::string ErrStr = toString(AllocOrErr.takeError());
-    ODBG(OLDT_Alloc) << "Failed to allocate a pinned buffer for the kernel "
-                        "launch environment, submitting it unstaged: "
-                     << ErrStr;
-    return nullptr;
-  }
-
-  return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
-}
-
 Error GenericDeviceTy::memoryVAMap(void **Addr, void *VAddr, size_t *RSize) {
   return Plugin::error(ErrorCode::UNSUPPORTED,
                        "device does not support VA Management");
@@ -653,16 +616,11 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
                                             TargetAllocTy Kind,
                                             size_t Alignment,
                                             GenericProfilerTy *ProfilerPtr) {
-  GenericProfilerTy &Profiler = ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
-
-  auto ProfTimer = Profiler.getScopedDataAllocTimer(this, HostPtr, Size);
-
+  // Timing is owned by the OpenMP layer, which surrounds this call; see
+  // DeviceTy::allocData.
   void *Alloc = nullptr;
 
   // TODO Check alignment.
-  if (RecordReplay && RecordReplay->isRecordingOrReplaying())
-    return RecordReplay->allocate(Size);
-
   auto AllocOrErr = allocate(Size, HostPtr, Kind, Alignment);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
@@ -737,13 +695,8 @@ void GenericDeviceTy::recordDeallocation(void *DevicePtr, TargetAllocTy Kind) {
 
 Error GenericDeviceTy::dataDelete(void *TgtPtr, TargetAllocTy Kind,
                                   GenericProfilerTy *ProfilerPtr) {
-  GenericProfilerTy &Profiler = ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
-
-  auto ProfTimer = Profiler.getScopedDataDeleteTimer(this, TgtPtr);
-
-  // Free is a noop when recording or replaying.
-  if (RecordReplay && RecordReplay->isRecordingOrReplaying())
-    return RecordReplay->deallocate(TgtPtr);
+  // Timing is owned by the OpenMP layer, which surrounds this call; see
+  // DeviceTy::deleteData.
 
   if (auto Err = free(TgtPtr, Kind))
     return Err;
@@ -912,12 +865,6 @@ Error ContextAllocatorTy::free(void *TgtPtr, TargetAllocTy Kind) {
 
 MemoryManagerTy *PluginContextTy::getMemoryManagerFor(GenericDeviceTy &Device,
                                                       TargetAllocTy Kind) {
-  // Record-replay hands out interior pointers into a preallocated slab so
-  // recorded kernels can re-execute at their original addresses; the pool must
-  // be bypassed for those allocations to reach the RR bump allocator.
-  if (auto *RR = Device.getRecordReplay(); RR && RR->isRecordingOrReplaying())
-    return nullptr;
-
   return Kind == TARGET_ALLOC_HOST ? getHostMemoryManager()
                                    : getDeviceMemoryManagerFor(Device, Kind);
 }
@@ -1338,23 +1285,6 @@ bool GenericPluginTy::is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId) {
   return R;
 }
 
-int32_t GenericPluginTy::initialize_record_replay(
-    int32_t DeviceId, int64_t MemorySize, void *VAddr, bool IsRecord,
-    bool IsNative, bool SaveOutput, bool EmitReport, const char *ReportFilename,
-    const char *OutputDirPath) {
-  GenericDeviceTy &Device = getDevice(DeviceId);
-
-  if (auto Err = Device.initRecordReplay(MemorySize, VAddr, IsRecord, IsNative,
-                                         SaveOutput, EmitReport, ReportFilename,
-                                         OutputDirPath)) {
-    REPORT() << "Failure to initialize RR with " << MemorySize
-             << " bytes on device " << DeviceId << ": "
-             << toString(std::move(Err));
-    return OFFLOAD_FAIL;
-  }
-  return OFFLOAD_SUCCESS;
-}
-
 #if 0//<<<<<<< HEAD
 int32_t GenericPluginTy::create_event(int32_t DeviceId, void **EventPtr) {
   auto T = logger::log<int32_t>(__func__, DeviceId, EventPtr);
@@ -1536,72 +1466,4 @@ int32_t GenericPluginTy::zero_copy_sanity_checks_and_diag(
   }();
   T.res(R);
   return R;
-}
-
-/// Create OpenMP interop with the given interop context
-omp_interop_val_t *
-GenericPluginTy::create_interop(int32_t ID, int32_t InteropContext,
-                                interop_spec_t *InteropSpec) {
-  assert(InteropSpec && "Interop spec is null");
-  auto &Device = getDevice(ID);
-  auto InteropOrErr = Device.createInterop(InteropContext, *InteropSpec);
-  if (!InteropOrErr) {
-    REPORT() << "Failure to create interop object for device " << InteropSpec
-             << ": " << toString(InteropOrErr.takeError());
-    return nullptr;
-  }
-  return *InteropOrErr;
-}
-
-/// Release OpenMP interop object
-int32_t GenericPluginTy::release_interop(int32_t ID,
-                                         omp_interop_val_t *Interop) {
-  assert(Interop && "Interop is null");
-  assert(Interop->device_id == ID && "Interop does not match device id");
-  auto &Device = getDevice(ID);
-  auto Err = Device.releaseInterop(Interop);
-  if (Err) {
-    REPORT() << "Failure to release interop object " << Interop << ": "
-             << toString(std::move(Err));
-    return OFFLOAD_FAIL;
-  }
-  return OFFLOAD_SUCCESS;
-}
-
-/// Flush the queue associated with the interop object if necessary
-int32_t GenericPluginTy::flush_queue(omp_interop_val_t *Interop) {
-  assert(Interop && "Interop is null");
-  auto Err = flushQueueImpl(Interop);
-  if (Err) {
-    REPORT() << "Failure to flush interop object " << Interop
-             << " queue: " << toString(std::move(Err));
-    return OFFLOAD_FAIL;
-  }
-  return OFFLOAD_SUCCESS;
-}
-
-/// Perform a host synchronization with the queue associated with the interop
-/// object and wait for it to complete.
-int32_t GenericPluginTy::sync_barrier(omp_interop_val_t *Interop) {
-  assert(Interop && "Interop is null");
-  auto Err = syncBarrierImpl(Interop);
-  if (Err) {
-    REPORT() << "Failure to synchronize interop object " << Interop << ": "
-             << toString(std::move(Err));
-    return OFFLOAD_FAIL;
-  }
-  return OFFLOAD_SUCCESS;
-}
-
-/// Queue an asynchronous barrier in the queue associated with the interop
-/// object and return immediately.
-int32_t GenericPluginTy::async_barrier(omp_interop_val_t *Interop) {
-  assert(Interop && "Interop is null");
-  auto Err = asyncBarrierImpl(Interop);
-  if (Err) {
-    REPORT() << "Failure to queue barrier in interop object " << Interop << ": "
-             << toString(std::move(Err));
-    return OFFLOAD_FAIL;
-  }
-  return OFFLOAD_SUCCESS;
 }

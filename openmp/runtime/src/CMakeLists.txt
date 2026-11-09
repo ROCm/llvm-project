@@ -438,16 +438,12 @@ if(WIN32)
       \"${alias}${CMAKE_STATIC_LIBRARY_SUFFIX}\" WORKING_DIRECTORY \"${outdir}\")" COMPONENT openmp)
   endforeach()
 else()
-  if(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
-    install(FILES ${LIBOMP_LIBRARY_DIR}/libomp.a DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT runtime)
-  else()
-    install(TARGETS omp ${export_to_llvmexports} EXPORT openmpTargets ${LIBOMP_INSTALL_KIND}
-            DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT openmp)
-    # Multilibs share the CMake package directory with the base build.
-    if(NOT OPENMP_LIBDIR_SUBDIR)
-      install(EXPORT openmpTargets FILE openmpTargets.cmake NAMESPACE OpenMP::
-              DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp COMPONENT openmp)
-    endif()
+
+  install(TARGETS omp ${export_to_llvmexports} EXPORT openmpTargets ${LIBOMP_INSTALL_KIND} DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT openmp)
+  # Multilibs share the CMake package directory with the base build.
+  if(NOT OPENMP_LIBDIR_SUBDIR)
+    install(EXPORT openmpTargets FILE openmpTargets.cmake NAMESPACE OpenMP::
+            DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp COMPONENT openmp)
   endif()
 
   # Create cmake configuration files
@@ -463,7 +459,6 @@ else()
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/openmp-config.cmake
             DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp COMPONENT openmp)
   endif()
-  install(TARGETS omp ${export_to_llvmexports} ${LIBOMP_INSTALL_KIND} DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT openmp)
 
   if(LIBOMP_INSTALL_ALIASES)
     # Create aliases (symlinks) of the library for backwards compatibility

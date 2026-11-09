@@ -43,7 +43,7 @@ variables. For more information about other ROCm environment variables, see
         | The HIP device library installation path.
       - Default: ``HIP_PATH/lib``
 
-    * - | ``HIP_DEVICE_LIB_PATH``
+    * - | ``DEVICE_LIB_PATH``
         | The HIP device library installation path.
       -
 

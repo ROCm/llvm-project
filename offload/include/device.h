@@ -25,6 +25,7 @@
 
 #include "ExclusiveAccess.h"
 #include "OffloadEntry.h"
+#include "OpenMP/BackendConfig.h"
 #include "omptarget.h"
 #include "rtl.h"
 
@@ -33,15 +34,11 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Frontend/OpenMP/OMPConstants.h"
 
-#include "GlobalHandler.h"
 #include "OffloadAPI.h"
-#include "PluginInterface.h"
 #include "Program.h"
 
-using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
-using DeviceInfo = llvm::omp::target::plugin::DeviceInfo;
-using InfoTreeNode = llvm::omp::target::plugin::InfoTreeNode;
 // Forward declarations.
 struct __tgt_bin_desc;
 struct __tgt_target_table;
@@ -49,8 +46,8 @@ struct __tgt_target_table;
 /// Kernel launch-geometry properties.
 struct KernelLaunchInfoTy {
   const char *Name = nullptr;
-  llvm::MemoryBufferRef Image;
-  llvm::MemoryBufferRef IRImage;
+  /// The program this kernel belongs to.
+  ProgramTy Program;
   uint32_t MaxNumThreads = 0;
   uint32_t PreferredNumThreads = 0;
   uint32_t ReductionDataSize = 0;
@@ -121,11 +118,18 @@ struct DeviceGeometryPropsTy {
 };
 
 struct PluginManager;
+// Downstream: OMPT profiler and the plugin device it times.
+namespace llvm::omp::target::plugin {
+struct GenericDeviceTy;
+class GenericProfilerTy;
+} // namespace llvm::omp::target::plugin
+namespace llvm::omp::target::rr {
+struct RecordReplayTy;
+} // namespace llvm::omp::target::rr
+using RecordReplayTy = llvm::omp::target::rr::RecordReplayTy;
 
 struct DeviceTy {
   int32_t DeviceID;
-  GenericPluginTy *RTL = nullptr;
-  int32_t RTLDeviceID = -1;
   ol_platform_handle_t Platform;
   ol_device_handle_t DeviceHandle;
   PluginManager *PM;
@@ -152,23 +156,37 @@ struct DeviceTy {
   /// Provide access to the mapping handler.
   MappingInfoTy &getMappingInfo() { return MappingInfo; }
 
-  /// Whether this device executes kernels on the host CPU.
-  bool isHostDevice() const { return IsHostDevice; }
-
   /// Get this device's backend.
   ol_platform_backend_t getBackend() const { return Backend; }
 
+  /// Get the constants of this device's backend.
+  const llvm::omp::target::BackendConfig &getConfig() const {
+    return llvm::omp::target::BackendConfig::get(Backend);
+  }
+
   /// Load \p Img onto the device and return the resulting program.
   llvm::Expected<ProgramTy> loadBinary(__tgt_device_image *Img);
+
+  /// Enable kernel record (\p IsRecord) or replay on this device by reserving
+  /// \p MemorySize bytes of device memory at \p VAddr. While active, device
+  /// allocations are served from that region.
+  llvm::Error activateRecordReplay(uint64_t MemorySize, void *VAddr,
+                                   bool IsRecord, bool IsNative,
+                                   bool SaveOutput, bool EmitReport,
+                                   const char *ReportFilename,
+                                   const char *OutputDirPath);
+
+  /// The active record/replay state, or null if neither is enabled.
+  RecordReplayTy *getRecordReplay() { return RecordReplay.get(); }
+
+  /// Whether allocations must currently be served by record/replay.
+  bool isRecordingOrReplaying() const;
 
   /// Resolve the device address of the global variable \p Name in \p Program,
   /// recording it for kernel record/replay if recording is currently active.
   llvm::Expected<void *> getAndRecordGlobalAddress(const ProgramTy &Program,
                                                    const char *Name,
                                                    size_t ExpectedSize);
-
-  /// The plugin-side context backing this device's context handle.
-  llvm::omp::target::plugin::PluginContextTy *getPluginContext();
 
   // device memory allocation/deallocation routines
   /// Allocates \p Size bytes on the device, host or shared memory space
@@ -218,6 +236,15 @@ struct DeviceTy {
                          MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr = nullptr,
                          const ident_t *Loc = nullptr,
                          const char *Name = nullptr);
+
+  /// Copy data from host to device, assuming that no pending operation in the
+  /// queue associated with \p AsyncInfo accesses this memory. E.g., a fresh
+  /// allocation. If the device can write \p Size bytes directly, the copy is
+  /// synchronous so that the host can write the memory directly. Otherwise, it
+  /// is enqueued as asynchronous operation.
+  int32_t submitDataIndependently(void *TgtPtrBegin, void *HstPtrBegin,
+                                  int64_t Size, AsyncInfoTy &AsyncInfo,
+                                  const char *Name = nullptr);
 
   // Copy data from device back to host synchronously
   int32_t
@@ -295,19 +322,16 @@ struct DeviceTy {
   /// Ask the device whether the runtime should use auto zero-copy.
   bool useAutoZeroCopy();
 
-  /// Ask the device whether it is an APU.
-  bool checkIfAPU();
+  /// The OMPT profiler of this device's plugin.
+  llvm::omp::target::plugin::GenericProfilerTy *getProfiler() const {
+    return Profiler;
+  }
 
-  bool checkIfGFX90a();
-
-  bool checkIfMI300x();
-
-  /// Ask the device whether it supports unified memory.
-  bool supportsUnifiedMemory();
-
-  /// Ask the device to perform sanity checks for zero-copy configurations.
-  void zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
-                                   bool isAutoZeroCopy, bool isEagerMaps);
+  /// The plugin device, which OMPT uses as the ompt_device_t handle and the
+  /// profiler as the timed device.
+  llvm::omp::target::plugin::GenericDeviceTy *getPluginDevice() const {
+    return PluginDevice;
+  }
   /// Ask the device whether the storage is accessible.
   bool isAccessiblePtr(const void *Ptr, size_t Size);
 
@@ -321,10 +345,9 @@ struct DeviceTy {
   llvm::StringRef getUid() const { return Uid; }
 
   /// Get information from the device.
-  template <typename T> T getInfo(DeviceInfo Info) const {
+  template <typename T> T getInfo(ol_device_info_t Info) const {
     T Value{};
-    if (olGetDeviceInfo(DeviceHandle, static_cast<ol_device_info_t>(Info),
-                        sizeof(Value), &Value))
+    if (olGetDeviceInfo(DeviceHandle, Info, sizeof(Value), &Value))
       return T{};
     return Value;
   }
@@ -332,12 +355,11 @@ struct DeviceTy {
   /// Get string information from the device into \p Out, which is left empty
   /// if the information cannot be obtained. \p Out is always null terminated.
   template <unsigned N>
-  void getInfoString(DeviceInfo Info, llvm::SmallString<N> &Out) const {
-    auto Prop = static_cast<ol_device_info_t>(Info);
+  void getInfoString(ol_device_info_t Info, llvm::SmallString<N> &Out) const {
     size_t Size = 0;
-    if (!olGetDeviceInfoSize(DeviceHandle, Prop, &Size) && Size > 0) {
+    if (!olGetDeviceInfoSize(DeviceHandle, Info, &Size) && Size > 0) {
       Out.resize(Size);
-      if (olGetDeviceInfo(DeviceHandle, Prop, Size, Out.data()))
+      if (olGetDeviceInfo(DeviceHandle, Info, Size, Out.data()))
         Out.clear();
       else
         // Drop the null terminator from the length, c_str() puts it back.
@@ -412,11 +434,18 @@ private:
   using KernelLaunchInfoMapTy = llvm::DenseMap<void *, KernelLaunchInfoTy>;
   ProtectedObj<KernelLaunchInfoMapTy> KernelLaunchInfoMap;
 
-  /// Whether this is a host device.
-  bool IsHostDevice = false;
+  /// Kernel record/replay state, if enabled.
+  std::unique_ptr<RecordReplayTy> RecordReplay;
+
+  /// Downstream: see getProfiler() and getPluginDevice().
+  llvm::omp::target::plugin::GenericProfilerTy *Profiler = nullptr;
+  llvm::omp::target::plugin::GenericDeviceTy *PluginDevice = nullptr;
 
   /// The backend of this device.
   ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;
+
+  /// The maximum size of a direct write, see submitDataIndependently.
+  uint64_t MaxDirectWriteSize = 0;
 
   /// Handler to collect and organize host-2-device mapping information.
   MappingInfoTy MappingInfo;

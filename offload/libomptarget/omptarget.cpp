@@ -2338,7 +2338,7 @@ int target(ident_t *Loc, DeviceTy &Device, void *HostPtr,
     // set and a trace record generated. Otherwise: No OMPT device tracing.
     TracerInterfaceRAII TargetTraceRAII(
         RegionInterface.getTraceGenerators<ompt_callback_target_submit>(),
-        AsyncInfo, Device.RTL->getProfiler(), /*TracedDeviceId=*/DeviceId,
+        AsyncInfo, Device.getProfiler(), /*TracedDeviceId=*/DeviceId,
         /*EventType=*/ompt_callback_target_submit, DeviceId, NumTeams);
 #endif
     Ret = Device.launchKernel(TgtEntryPtr, TgtArgs.data(), TgtOffsets.data(),
@@ -2373,10 +2373,14 @@ int target(ident_t *Loc, DeviceTy &Device, void *HostPtr,
 int target_activate_rr(DeviceTy &Device, uint64_t MemorySize, void *VAddr,
                        bool IsRecord, bool SaveOutput, bool EmitReport,
                        const char *OutputDirPath) {
-  return Device.RTL->initialize_record_replay(
-      Device.DeviceID, MemorySize, VAddr, IsRecord,
-      /*IsNative=*/true, SaveOutput, EmitReport, /*ReportFilename=*/"",
-      OutputDirPath);
+  if (auto Err =
+          Device.activateRecordReplay(MemorySize, VAddr, IsRecord,
+                                      /*IsNative=*/true, SaveOutput, EmitReport,
+                                      /*ReportFilename=*/"", OutputDirPath)) {
+    REPORT() << toString(std::move(Err));
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 /// Executes a kernel using pre-recorded information for loading to
