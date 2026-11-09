@@ -23,8 +23,7 @@ int main(int argc, char *argv[]) {
   if (strcmp(reason, argv[2])) {
     fail("INVALID: %s", reason);
   }
-  else
-    printf("OK\n");
+  printf("OK\n");
   if (Status == AMD_COMGR_STATUS_SUCCESS && argv[1][0]) {
     size_t Size;
     amd_comgr_(action_info_get_isa_name(DataAction, &Size, NULL));

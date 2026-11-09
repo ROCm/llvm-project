@@ -1862,13 +1862,14 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
     BundlerConfig.HipOpenmpCompatible = 1;
     BundlerConfig.AllowNoHost = 1;
 
-    // Generate random name if none provided
+    // Generate a unique name if none provided
     if (!strcmp(Input->Name, "")) {
-      const size_t BufSize = sizeof(char) * 30;
-      char *Buf = (char *)malloc(BufSize);
-      snprintf(Buf, BufSize, "comgr-bundle-%d.%s", std::rand() % 10000,
-               FileExtension);
-      Input->Name = Buf;
+      SmallString<32> UniqueName;
+      sys::fs::createUniquePath(Twine("comgr-bundle-%%%%%%%%.") + FileExtension,
+                                UniqueName, /*MakeAbsolute=*/false);
+      if (auto Status = Input->setName(UniqueName)) {
+        return Status;
+      }
     }
 
     // Write input file system so that OffloadBundler API can process
@@ -2100,13 +2101,16 @@ amd_comgr_status_t AMDGPUCompiler::linkBitcodeToBitcode() {
   for (auto *Input : InSet->DataObjects) {
 
     if (!strcmp(Input->Name, "")) {
-      // If the calling API doesn't provide a DataObject name, generate a random
-      // string to assign. This string is used when the DataObject is written
+      // If the calling API doesn't provide a DataObject name, generate a
+      // unique one. This string is used when the DataObject is written
       // to the file system via SAVE_TEMPS, or if the object is a bundle which
       // also needs a file system write for unpacking
-      std::string Name =
-          "comgr-anon-bitcode-" + std::to_string(std::rand() % 10000) + ".bc";
-      Input->setName(Name);
+      SmallString<32> UniqueName;
+      sys::fs::createUniquePath("comgr-anon-bitcode-%%%%%%%%.bc", UniqueName,
+                                /*MakeAbsolute=*/false);
+      if (auto Status = Input->setName(UniqueName)) {
+        return Status;
+      }
     }
 
     if (env::shouldSaveTemps()) {
