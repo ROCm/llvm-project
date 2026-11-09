@@ -47,14 +47,14 @@ void read_metadata(test_meta_data_t *MetaData, const char *File,
   }
 
   Status = amd_comgr_get_data_metadata(MetaData->Data, &MetaData->Root);
-  if (!ErrorExpected && Status) {
-    printf("Unexpected error from amd_comgr_get_data_metadata\n");
-    exit(1);
-  } else {
+  if (Status) {
+    if (!ErrorExpected) {
+      printf("Unexpected error from amd_comgr_get_data_metadata\n");
+      exit(1);
+    }
+    // The failure was expected, so there is no metadata to inspect.
     return;
   }
-
-  checkError(Status, "amd_comgr_get_data_metadata");
 
   // the root must be map
   Status = amd_comgr_get_metadata_kind(MetaData->Root, &Mkind);
@@ -86,16 +86,16 @@ void lookup_meta_data(test_meta_data_t *MetaData, const char *Key,
   checkError(Status, "amd_comgr_metadata_lookup");
 
   Status = amd_comgr_get_metadata_kind(LookupNode, &LookupKind);
-  if (!ErrorExpected && Status) {
-    printf("Unexpected error from amd_comgr_get_metadata_kind\n");
-    exit(1);
-  } else {
+  if (Status) {
+    if (!ErrorExpected) {
+      printf("Unexpected error from amd_comgr_get_metadata_kind\n");
+      exit(1);
+    }
+    // The failure was expected, so there is no kind to compare against.
     Status = amd_comgr_destroy_metadata(LookupNode);
     checkError(Status, "amd_comgr_destroy_metadata");
     return;
   }
-
-  checkError(Status, "amd_comgr_get_metadata_kind");
   if (LookupKind != Kind) {
     printf("Metadata kind mismatch in lookup\n");
     exit(1);
