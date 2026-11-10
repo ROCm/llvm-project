@@ -228,6 +228,43 @@ jobs:
             "build-comgr/test-unit/$test.exe" 2>&1 | tee -a comgr-diagnostics/fresh-unit.log
           done
 
+      - name: Compare repeated relinks with fresh DLL replacement
+        if: always() && steps.fresh_dll.outcome == 'success'
+        shell: bash
+        env:
+          AMD_COMGR_CACHE: '0'
+        run: |
+          workspace="$(cygpath -u "$GITHUB_WORKSPACE")"
+          output="$workspace/comgr-diagnostics/relink-comparison"
+          mkdir -p "$output"
+          export PATH="$workspace/build-comgr:$workspace/build/bin:$PATH"
+          raw_failures=0
+          fresh_failures=0
+          for attempt in 1 2 3 4 5; do
+            # Removing only the import library forces an in-place DLL relink.
+            rm build-comgr/amd_comgr.lib
+            ninja -d keeprsp -C build-comgr amd_comgr > "$output/build-$attempt.log" 2>&1
+            if ./comgr-diagnostics/debug.exe "$(cygpath -m "$workspace/build-comgr/test-lit/get-version.exe")" \
+                "$(cygpath -m "$output/raw-$attempt.dmp")" > "$output/raw-$attempt.log" 2>&1; then
+              echo "Relink $attempt: success"
+            else
+              raw_failures=$((raw_failures + 1))
+              echo "Relink $attempt: failure"
+            fi
+            cp build-comgr/amd_comgr.dll build-comgr/amd_comgr.ready.dll
+            mv -f build-comgr/amd_comgr.ready.dll build-comgr/amd_comgr.dll
+            if ./comgr-diagnostics/debug.exe "$(cygpath -m "$workspace/build-comgr/test-lit/get-version.exe")" \
+                "$(cygpath -m "$output/fresh-$attempt.dmp")" > "$output/fresh-$attempt.log" 2>&1; then
+              echo "Fresh file $attempt: success"
+            else
+              fresh_failures=$((fresh_failures + 1))
+              echo "Fresh file $attempt: failure"
+            fi
+          done
+          echo "Relink failures: $raw_failures / 5" | tee "$output/results.txt"
+          echo "Fresh-file failures: $fresh_failures / 5" | tee -a "$output/results.txt"
+          test "$fresh_failures" -eq 0
+
       - name: Report diagnostic outcomes
         if: always()
         shell: bash
