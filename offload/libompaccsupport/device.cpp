@@ -248,11 +248,12 @@ llvm::Expected<void *>
 DeviceTy::getAndRecordGlobalAddress(const ProgramTy &Program, const char *Name,
                                     size_t ExpectedSize) {
   size_t Size = 0;
-  auto AddrOrErr = Program.getGlobalAddress(Name, &Size);
+  auto AddrOrErr =
+      Program.getGlobalAddress(Name, ExpectedSize ? &Size : nullptr);
   if (!AddrOrErr)
     return AddrOrErr;
-  // Some backends return size 0 if the size is unknown.
-  // Only check the size if it is non-zero.
+  // If the user didn't specify an expected size or the backend returned size 0,
+  // we skip the size check.
   if (Size && Size != ExpectedSize)
     return createError(ErrorCode::InvalidBinary,
                        "size of global symbol %s does not match expected size "
@@ -1408,7 +1409,15 @@ void DeviceTy::dumpOffloadEntries() {
 bool DeviceTy::useAutoZeroCopy() {
   if (PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY)
     return false;
-  return RTL->use_auto_zero_copy(RTLDeviceID);
+  bool PrefersHost = false;
+  if (auto Res =
+          olGetDeviceInfo(DeviceHandle, OL_DEVICE_INFO_PREFERRED_LOCATION_HOST,
+                          sizeof(PrefersHost), &PrefersHost)) {
+    REPORT() << "Failed to query zero-copy preference of device " << DeviceID
+             << ": " << Res->Details;
+    return false;
+  }
+  return PrefersHost;
 }
 
 bool DeviceTy::isAccessiblePtr(const void *Ptr, size_t Size) {
