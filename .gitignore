@@ -100,3 +100,6 @@ pythonenv*
 /lldb/docs/python_api/
 # documentation artifacts
 /_build
+.depend*/
+depend*/
+CMakeUserPresets.json
