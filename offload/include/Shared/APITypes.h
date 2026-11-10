@@ -65,6 +65,9 @@ struct __tgt_target_table {
 
 // clang-format on
 
+/// Downstream: kept here instead of PluginInterface.h because libomptarget
+/// accesses ExecAsync and ProfilerData for forced synchronization and OMPT
+/// device tracing.
 /// This struct contains information exchanged between different asynchronous
 /// operations for device-dependent optimization and potential synchronization
 struct __tgt_async_info {

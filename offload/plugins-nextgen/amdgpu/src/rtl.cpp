@@ -29,7 +29,6 @@
 #include <variant>
 
 #include "ErrorReporting.h"
-#include "Shared/APITypes.h"
 #include "Shared/Debug.h"
 #include "Shared/Environment.h"
 #include "Shared/RefCnt.h"
