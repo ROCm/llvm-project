@@ -78,6 +78,11 @@ if(POLICY CMP0194)
   cmake_policy(SET CMP0194 OLD)
 endif()
 
+if(POLICY CMP0091)
+  # Required for CMAKE_MSVC_RUNTIME_LIBRARY, must be set prior the first project() or enable_language()
+  cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(LLVM
   VERSION ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}
   LANGUAGES C CXX ASM)
@@ -113,6 +118,15 @@ if(WIN32)
         if(LLVM_USE_SPECTRE_MITIGATED_LIBRARIES)
             message(WARNING "Spectre-mitigated libraries are not yet available for Clang in this project.")
         endif()
+    endif()
+
+    option(LLVM_USE_MSVC_STATIC_RUNTIME "Link MSVC runtime library statically" OFF)
+
+    if(NOT LLVM_USE_MSVC_STATIC_RUNTIME)
+        set(LLVM_MSVC_RUNTIME_SUFFIX "DLL")
+    endif()
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>${LLVM_MSVC_RUNTIME_SUFFIX}")
     endif()
 endif()
 
