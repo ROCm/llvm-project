@@ -77,25 +77,26 @@ private:
   Logger &Log;
   uint64_t Pos = 0;
 };
+} // namespace
 
-bool isLanguageValid(amd_comgr_language_t Language) {
+static bool isLanguageValid(amd_comgr_language_t Language) {
   return Language >= AMD_COMGR_LANGUAGE_NONE &&
          Language <= AMD_COMGR_LANGUAGE_LAST;
 }
 
-bool isActionValid(amd_comgr_action_kind_t ActionKind) {
+static bool isActionValid(amd_comgr_action_kind_t ActionKind) {
   return ActionKind <= AMD_COMGR_ACTION_LAST;
 }
 
-bool isSymbolInfoValid(amd_comgr_symbol_info_t SymbolInfo) {
+static bool isSymbolInfoValid(amd_comgr_symbol_info_t SymbolInfo) {
   return SymbolInfo >= AMD_COMGR_SYMBOL_INFO_NAME_LENGTH &&
          SymbolInfo <= AMD_COMGR_SYMBOL_INFO_LAST;
 }
 
-amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
-                                          DataAction *ActionInfo,
-                                          DataSet *InputSet, DataSet *ResultSet,
-                                          raw_ostream &LogS) {
+static amd_comgr_status_t
+dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
+                       DataAction *ActionInfo, DataSet *InputSet,
+                       DataSet *ResultSet, raw_ostream &LogS) {
   AMDGPUCompiler Compiler(ActionInfo, InputSet, ResultSet, LogS);
   switch (ActionKind) {
   case AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR:
@@ -136,7 +137,7 @@ amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
   }
 }
 
-StringRef getLanguageName(amd_comgr_language_t Language) {
+static StringRef getLanguageName(amd_comgr_language_t Language) {
   switch (Language) {
   case AMD_COMGR_LANGUAGE_NONE:
     return "AMD_COMGR_LANGUAGE_NONE";
@@ -154,7 +155,7 @@ StringRef getLanguageName(amd_comgr_language_t Language) {
   return "<unknown>";
 }
 
-StringRef getStatusName(amd_comgr_status_t Status) {
+static StringRef getStatusName(amd_comgr_status_t Status) {
   switch (Status) {
   case AMD_COMGR_STATUS_SUCCESS:
     return "AMD_COMGR_STATUS_SUCCESS";
@@ -173,7 +174,7 @@ StringRef getStatusName(amd_comgr_status_t Status) {
 /// Perform a simple quoting of an option to allow separating options with
 /// space in debug output. The option is surrounded by double quotes, and
 /// any embedded double quotes or backslashes are preceeded by a backslash.
-void printQuotedOption(raw_ostream &OS, StringRef Option) {
+static void printQuotedOption(raw_ostream &OS, StringRef Option) {
   OS << '"';
   for (const char C : Option) {
     if (C == '"' || C == '\\') {
@@ -183,9 +184,8 @@ void printQuotedOption(raw_ostream &OS, StringRef Option) {
   }
   OS << '"';
 }
-} // namespace
 
-StringRef getActionKindName(amd_comgr_action_kind_t ActionKind) {
+static StringRef getActionKindName(amd_comgr_action_kind_t ActionKind) {
   switch (ActionKind) {
   case AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR:
     return "AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR";
@@ -1131,7 +1131,7 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_block_sizes(
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
-  std::copy(ActionP->BlockSizes.begin(), ActionP->BlockSizes.end(), BlockSizes);
+  llvm::copy(ActionP->BlockSizes, BlockSizes);
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
@@ -1256,7 +1256,7 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_do_action(
       }
     }
 
-    InitTimeStatistics(PerfLog);
+    initTimeStatistics(PerfLog);
 
     if (Log.isEnabled(LogLevel::Debug)) {
       SmallString<256> HeaderStr;
@@ -1870,10 +1870,8 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
             }
           }
 
-          MapKey.erase(std::find(MapKey.begin(), MapKey.end(), '\0'),
-                       MapKey.end());
-          MapVal.erase(std::find(MapVal.begin(), MapVal.end(), '\0'),
-                       MapVal.end());
+          MapKey.erase(llvm::find(MapKey, '\0'), MapKey.end());
+          MapVal.erase(llvm::find(MapVal, '\0'), MapVal.end());
           if (env::shouldEmitVerboseLogs()) {
             llvm::errs() << "   Comgr NameExpressionMap[" << MapKey
                          << "] = " << MapVal << "\n";

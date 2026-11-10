@@ -13,6 +13,7 @@
 #include "llvm/ADT/StringRef.h"
 
 namespace llvm {
+// NOLINTNEXTLINE(readability-identifier-naming) -- LLVM's own type name.
 class raw_ostream;
 } // namespace llvm
 
