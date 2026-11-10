@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        shell: pwsh
+        shell: powershell
     steps:
       - name: Configure git
         run: |
@@ -56,7 +56,7 @@ jobs:
         run: |
           vcpkg install zstd:x64-windows
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          'C:\vcpkg\installed\x64-windows\bin' >> $env:GITHUB_PATH
+          'C:\vcpkg\installed\x64-windows\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install matching Ninja
         shell: bash
@@ -115,6 +115,7 @@ jobs:
           if ($failed) { exit 1 }
 
       - name: Rebuild Comgr against the archived LLVM
+        id: rebuild
         shell: bash
         run: |
           rm build-comgr/amd_comgr.dll
@@ -123,7 +124,7 @@ jobs:
           cp build-comgr/CMakeFiles/amd_comgr.rsp comgr-diagnostics/
 
       - name: Probe rebuilt DLL
-        if: always()
+        if: always() && steps.rebuild.outcome == 'success'
         continue-on-error: true
         run: |
           Get-FileHash comgr-diagnostics/rebuilt/amd_comgr.dll
