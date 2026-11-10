@@ -9,6 +9,11 @@ set (ver_minor ${CMAKE_MATCH_1})
 
 message("Comgr Version: ${ver_major}.${ver_minor}.0")
 
+if(POLICY CMP0091)
+    # Required for CMAKE_MSVC_RUNTIME_LIBRARY, must be set prior the first project() or enable_language()
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(amd_comgr VERSION "${ver_major}.${ver_minor}.0" LANGUAGES C CXX)
 set(amd_comgr_NAME "${PROJECT_NAME}")
 
@@ -35,6 +40,15 @@ if(WIN32)
         if(COMGR_USE_SPECTRE_MITIGATED_LIBRARIES)
             message(WARNING "Spectre-mitigated libraries are not yet available for Clang in this project.")
         endif()
+    endif()
+
+    option(COMGR_USE_MSVC_STATIC_RUNTIME "Link MSVC runtime library statically" OFF)
+
+    if(NOT COMGR_USE_MSVC_STATIC_RUNTIME)
+        set(COMGR_MSVC_RUNTIME_SUFFIX "DLL")
+    endif()
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>${COMGR_MSVC_RUNTIME_SUFFIX}")
     endif()
 endif()
 
