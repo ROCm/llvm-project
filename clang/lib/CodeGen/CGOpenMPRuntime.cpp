@@ -6778,6 +6778,7 @@ const Expr *CGOpenMPRuntime::getNumTeamsExprForTargetDirective(
   case OMPD_target_parallel_for_simd:
   case OMPD_target_parallel_loop:
   case OMPD_target_simd:
+  case OMPD_target_loop:
     MinTeamsVal = MaxTeamsVal = 1;
     return nullptr;
   case OMPD_parallel:
@@ -7164,6 +7165,7 @@ const Expr *CGOpenMPRuntime::getNumThreadsExprForTargetDirective(
   }
   case OMPD_target_teams_distribute_simd:
   case OMPD_target_simd:
+  case OMPD_target_loop:
     return ReturnSequential();
   default:
     break;
@@ -10761,6 +10763,7 @@ getNestedDistributeDirective(ASTContext &Ctx, const OMPExecutableDirective &D) {
       return nullptr;
     case OMPD_target_parallel:
     case OMPD_target_simd:
+    case OMPD_target_loop:
     case OMPD_target_parallel_for:
     case OMPD_target_parallel_for_simd:
       return nullptr;
@@ -11521,8 +11524,9 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
           CGM, ParentName, cast<OMPTargetParallelForSimdDirective>(E));
       break;
     case OMPD_target_simd:
+    case OMPD_target_loop:
       CodeGenFunction::EmitOMPTargetSimdDeviceFunction(
-          CGM, ParentName, cast<OMPTargetSimdDirective>(E));
+          CGM, ParentName, cast<OMPLoopDirective>(E));
       break;
     case OMPD_target_teams_distribute_parallel_for:
       CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDeviceFunction(
