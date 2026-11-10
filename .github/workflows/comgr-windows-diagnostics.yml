@@ -187,14 +187,60 @@ jobs:
           done
           exit "$failed"
 
-      - name: Run Comgr LIT serially
+      - name: Finish Comgr build and replace DLL files
+        id: fresh_dll
         if: always() && steps.rebuild.outcome == 'success'
-        continue-on-error: true
+        shell: bash
+        run: |
+          cp build-comgr/amd_comgr.dll comgr-diagnostics/suite/
+          rm build-comgr/amd_comgr.dll
+          ninja -d keeprsp -C build-comgr all 2>&1 | tee comgr-diagnostics/final-build.log
+          cp build-comgr/amd_comgr.dll build-comgr/amd_comgr.ready.dll
+          mv -f build-comgr/amd_comgr.ready.dll build-comgr/amd_comgr.dll
+          cp build-comgr/amd_comgr.dll build-comgr/test-unit/amd_comgr.ready.dll
+          mv -f build-comgr/test-unit/amd_comgr.ready.dll build-comgr/test-unit/amd_comgr.dll
+          sha256sum build-comgr/amd_comgr.dll build-comgr/test-unit/amd_comgr.dll
+
+      - name: Run Comgr LIT with fresh DLL
+        id: fresh_lit
+        if: always() && steps.fresh_dll.outcome == 'success'
         shell: bash
         env:
           AMD_COMGR_REDIRECT_LOGS: stderr
         run: |
-          python build/bin/llvm-lit.py build-comgr/test-lit -v -j 1 2>&1 | tee comgr-diagnostics/suite-serial.log
+          python build/bin/llvm-lit.py build-comgr/test-lit -v 2>&1 | tee comgr-diagnostics/fresh-lit.log
+
+      - name: Run Comgr CTests with fresh DLL
+        id: fresh_ctest
+        if: always() && steps.fresh_dll.outcome == 'success'
+        shell: bash
+        env:
+          AMD_COMGR_REDIRECT_LOGS: stderr
+        run: |
+          ctest --test-dir build-comgr --output-on-failure 2>&1 | tee comgr-diagnostics/fresh-ctest.log
+
+      - name: Run Comgr unit tests with fresh DLL
+        id: fresh_unit
+        if: always() && steps.fresh_dll.outcome == 'success'
+        shell: bash
+        run: |
+          for test in DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest IncludeMaterializationTest; do
+            "build-comgr/test-unit/$test.exe" 2>&1 | tee -a comgr-diagnostics/fresh-unit.log
+          done
+
+      - name: Report diagnostic outcomes
+        if: always()
+        shell: bash
+        env:
+          BASELINE: ${{ steps.suite.outcome }}
+          FRESH_LIT: ${{ steps.fresh_lit.outcome }}
+          FRESH_CTEST: ${{ steps.fresh_ctest.outcome }}
+          FRESH_UNIT: ${{ steps.fresh_unit.outcome }}
+        run: |
+          echo "Baseline check-comgr: $BASELINE"
+          echo "Fresh DLL LIT: $FRESH_LIT"
+          echo "Fresh DLL CTest: $FRESH_CTEST"
+          echo "Fresh DLL unit tests: $FRESH_UNIT"
 
       - name: Upload diagnostic binaries and crash evidence
         if: always()
