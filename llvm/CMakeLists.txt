@@ -90,6 +90,32 @@ endif()
 # Must go after `DEFINED LLVM_LIBDIR_SUFFIX` check.
 set(LLVM_LIBDIR_SUFFIX "" CACHE STRING "Define suffix of library directory name (32/64)" )
 
+if(WIN32)
+    option(COMGR_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS "Prepare LLVM for BinSkim Analyzer" OFF)
+    option(LLVM_USE_SPECTRE_MITIGATED_LIBRARIES "Use Spectre-mitigated libraries" OFF)
+
+    if (MSVC AND MSVC_VERSION GREATER_EQUAL 1900)
+        if(LLVM_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS)
+            message(STATUS "Control Flow Guard enabled")
+            add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/guard:cf>)
+            add_link_options(/guard:cf /DYNAMICBASE)
+        endif()
+        if(LLVM_USE_SPECTRE_MITIGATED_LIBRARIES)
+            message(STATUS "Using Spectre-mitigated libraries")
+            add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/Qsspectre>)
+        endif()
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        if(LLVM_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS)
+            message(STATUS "Control Flow Guard enabled (Clang)")
+            add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-Xclang -cfguard>")
+            add_link_options(-Wl,-guard:cf)
+        endif()
+        if(LLVM_USE_SPECTRE_MITIGATED_LIBRARIES)
+            message(WARNING "Spectre-mitigated libraries are not yet available for Clang in this project.")
+        endif()
+    endif()
+endif()
+
 # Must go after `project(..)`.
 include(GNUInstallDirs)
 
