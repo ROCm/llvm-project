@@ -2951,23 +2951,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   /// Return synchronous copy back status variable.
   bool syncCopyBack() const { return OMPX_SyncCopyBack; }
 
-  /// Returns the maximum of HSA queues to create
-  /// This reads a non-cached environment variable, don't call everywhere.
-  uint32_t getMaxNumHsaQueues() const {
-    // In case this environment variable is set: respect it and give it
-    // precendence
-    if (const char *GPUMaxHwQsEnv = getenv("GPU_MAX_HW_QUEUES")) {
-      uint32_t MaxGPUHwQueues = std::atoi(GPUMaxHwQsEnv);
-      if (MaxGPUHwQueues != OMPX_NumQueues)
-        ODBG(ODT_Tool) << "Different numbers of maximum HSA queues specified. Using "
-                       << MaxGPUHwQueues;
-
-      return MaxGPUHwQueues;
-    }
-    // Otherwise use the regular environment variable
-    return OMPX_NumQueues;
-  }
-
   uint64_t getDeviceTimeStamp() override { return getSystemTimestampInNs(); }
 
   /// Initialize the device, its resources and get its properties.
