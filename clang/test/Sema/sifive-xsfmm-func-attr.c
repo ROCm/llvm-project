@@ -1,5 +1,6 @@
 // RUN: %clang_cc1 -triple riscv64-none-linux-gnu -target-feature +xsfmmbase -Wno-error=implicit-function-declaration -fsyntax-only -verify %s
 // REQUIRES: stability
+// REQUIRES: riscv-registered-target
 
 #include <riscv_vector.h>
 
