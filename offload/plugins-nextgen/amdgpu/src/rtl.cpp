@@ -3679,8 +3679,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         return Err;
 
       if (auto Err = hsa_utils::asyncMemCopy(useMultipleSdmaEngines(), TgtPtr,
-                                         Agent, PinnedPtr, Agent, Size, 0,
-                                         nullptr, Signal.get()))
+                                             Agent, PinnedPtr, Agent, Size, 0,
+                                             nullptr, Signal.get()))
         return Err;
 
       if (auto Err = Signal.wait(getStreamBusyWaitMicroseconds()))
@@ -5497,9 +5497,8 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
   Expected<bool> isELFCompatible(uint32_t DeviceId,
                                  StringRef Image) const override {
     // Get the associated architecture and flags from the ELF.
-    auto ElfOrErr =
-        ELF64LEObjectFile::create(MemoryBufferRef(Image, /*Identifier=*/""),
-                                  /*InitContent=*/false);
+    auto ElfOrErr = ELF64LEObjectFile::create(
+        MemoryBufferRef(Image, /*Identifier=*/""), /*InitContent=*/false);
     if (!ElfOrErr)
       return ElfOrErr.takeError();
     std::optional<StringRef> Processor = ElfOrErr->tryGetCPUName();

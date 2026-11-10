@@ -906,7 +906,6 @@ prepareBlockMemory(DeviceTy &Device, const KernelLaunchInfoTy &KernelEnv,
                    uint32_t DynCGroupMem,
                    DynCGroupMemFallbackType DynCGroupMemFallback,
                    uint64_t NumBlocks) {
-
   // If the fallback is abort, don't try to adjust the block memory size.
   if (DynCGroupMemFallback == DynCGroupMemFallbackType::Abort)
     return DynBlockMemConfTy{DynCGroupMem, DynCGroupMem,

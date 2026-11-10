@@ -39,9 +39,7 @@ extern "C" {
 /******************************************************************************
  * General helper functions
  ******************************************************************************/
-  ompd_rc_t initTypeSizes(ompd_address_space_context_t *context);
-
-
+ompd_rc_t initTypeSizes(ompd_address_space_context_t *context);
 
 static const ompd_callbacks_t *callbacks = nullptr;
 
@@ -86,12 +84,12 @@ typedef struct _ompd_task_handle {
   ompd_address_space_handle_t *ah;
   ompd_address_t th;  /* target handle */
   ompd_address_t lwt; /* lwt handle */
-  _ompd_task_handle(){
-    ah=NULL;
-    th.segment=OMPD_SEGMENT_UNSPECIFIED;
-    lwt.segment=OMPD_SEGMENT_UNSPECIFIED;
-    th.address=0;
-    lwt.address=0;
+  _ompd_task_handle() {
+    ah = NULL;
+    th.segment = OMPD_SEGMENT_UNSPECIFIED;
+    lwt.segment = OMPD_SEGMENT_UNSPECIFIED;
+    th.address = 0;
+    lwt.address = 0;
   }
 } ompd_task_handle_t;
 
