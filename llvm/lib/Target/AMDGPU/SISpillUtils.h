@@ -15,10 +15,7 @@ class MachineFunction;
 class MachineInstr;
 class BitVector;
 
-enum class SISpillKind {
-  SGPRToVGPR,
-  VGPRToAGPR
-};
+enum class SISpillKind { SGPRToVGPR, VGPRToAGPR };
 
 void updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
                               const BitVector &SpillFIs, SISpillKind Kind);
