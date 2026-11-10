@@ -10,6 +10,19 @@ on:
     branches: [amd-staging]
     types: [opened, synchronize, reopened]
   workflow_dispatch:
+    inputs:
+      comgr_diagnostic_run:
+        description: Existing run whose Windows artifact should be diagnosed (empty runs normal CI)
+        type: string
+        default: ''
+      comgr_source_ref:
+        description: Source revision used by the diagnostic artifact
+        type: string
+        default: '7d7f1a4fe46d9bba9237feef278dea229a06aa7d'
+      comgr_translator_ref:
+        description: Translator revision used by the diagnostic artifact
+        type: string
+        default: 'c174b822534a31eb6b28a6de43eb76bc561db981'
 
 permissions:
   contents: read
@@ -22,15 +35,29 @@ jobs:
   linux_release:
     name: Linux::release
     if: >-
-      github.event_name != 'pull_request' ||
-      (github.event.pull_request &&
-       !contains(github.event.pull_request.labels.*.name, 'ci:skip'))
-    uses: $/.github/workflows/spirv-ci-linux-amd-staging.yml
+      !(github.event_name == 'workflow_dispatch' && inputs.comgr_diagnostic_run != '') &&
+      (github.event_name != 'pull_request' ||
+       (github.event.pull_request &&
+        !contains(github.event.pull_request.labels.*.name, 'ci:skip')))
+    uses: ./.github/workflows/spirv-ci-linux-amd-staging.yml
 
   windows_release:
     name: Windows::release
     if: >-
-      github.event_name != 'pull_request' ||
-      (github.event.pull_request &&
-       !contains(github.event.pull_request.labels.*.name, 'ci:skip'))
-    uses: $/.github/workflows/spirv-ci-windows-amd-staging.yml
+      !(github.event_name == 'workflow_dispatch' && inputs.comgr_diagnostic_run != '') &&
+      (github.event_name != 'pull_request' ||
+       (github.event.pull_request &&
+        !contains(github.event.pull_request.labels.*.name, 'ci:skip')))
+    uses: ./.github/workflows/spirv-ci-windows-amd-staging.yml
+
+  comgr_diagnostics:
+    name: Comgr Windows diagnostics
+    if: github.event_name == 'workflow_dispatch' && inputs.comgr_diagnostic_run != ''
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/comgr-windows-diagnostics.yml
+    with:
+      run_id: ${{ inputs.comgr_diagnostic_run }}
+      source_ref: ${{ inputs.comgr_source_ref }}
+      translator_ref: ${{ inputs.comgr_translator_ref }}
