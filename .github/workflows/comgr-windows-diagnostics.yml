@@ -34,6 +34,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           path: diagnostics
+          sparse-checkout: .github/scripts
           persist-credentials: false
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -138,6 +139,62 @@ jobs:
             $failed = $failed -or ($LASTEXITCODE -ne 0)
           }
           if ($failed) { exit 1 }
+
+      - name: Run original Comgr suite
+        id: suite
+        if: always() && steps.rebuild.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          AMD_COMGR_REDIRECT_LOGS: stderr
+        run: |
+          ninja -d keeprsp -C build-comgr check-comgr 2>&1 | tee comgr-diagnostics/suite-parallel.log
+
+      - name: Probe actual test binaries with the LIT search paths
+        if: always() && steps.rebuild.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          AMD_COMGR_REDIRECT_LOGS: stderr
+          AMD_COMGR_CACHE: '0'
+        run: |
+          workspace="$(cygpath -u "$GITHUB_WORKSPACE")"
+          output="$workspace/comgr-diagnostics/suite"
+          mkdir -p "$output"
+          export PATH="$workspace/build-comgr/test-lit:$workspace/build-comgr:$workspace/build/bin:$PATH"
+          export LLVM_PATH="$(cygpath -m "$workspace/build")"
+          cd build-comgr/test-lit
+          failed=0
+          for test in get-version status-string; do
+            type -a "$test"
+            cp "$test.exe" "$output/"
+            if "$test" > "$output/$test-direct.txt" 2>&1; then
+              status=0
+            else
+              status=$?
+              failed=1
+            fi
+            echo "Direct $test exit: $status" | tee -a "$output/$test-direct.txt"
+            if "$workspace/comgr-diagnostics/debug.exe" "$(cygpath -m "$PWD/$test.exe")" \
+                "$(cygpath -m "$output/$test.dmp")" > "$output/$test-debug.txt" 2>&1; then
+              status=0
+            else
+              status=$?
+              failed=1
+            fi
+            cat "$output/$test-debug.txt"
+            echo "Debugger $test exit: $status"
+          done
+          exit "$failed"
+
+      - name: Run Comgr LIT serially
+        if: always() && steps.rebuild.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          AMD_COMGR_REDIRECT_LOGS: stderr
+        run: |
+          python build/bin/llvm-lit.py build-comgr/test-lit -v -j 1 2>&1 | tee comgr-diagnostics/suite-serial.log
 
       - name: Upload diagnostic binaries and crash evidence
         if: always()

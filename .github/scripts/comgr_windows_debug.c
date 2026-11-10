@@ -3,11 +3,14 @@
 #include <windows.h>
 
 #include <dbghelp.h>
+#include <psapi.h>
 #include <stdio.h>
 
-static void print_module(HANDLE File, void *Base) {
+static void print_module(HANDLE Process, HANDLE File, void *Base) {
   wchar_t Path[32768];
-  DWORD Length = GetFinalPathNameByHandleW(File, Path, 32768, 0);
+  DWORD Length = File ? GetFinalPathNameByHandleW(File, Path, 32768, 0) : 0;
+  if (!Length || Length >= 32768)
+    Length = GetMappedFileNameW(Process, Base, Path, 32768);
   if (Length && Length < 32768)
     printf("module %p %ls\n", Base, Path);
   else
@@ -111,13 +114,14 @@ int wmain(int Argc, wchar_t **Argv) {
     DWORD ContinueStatus = DBG_CONTINUE;
     switch (Event.dwDebugEventCode) {
     case CREATE_PROCESS_DEBUG_EVENT:
-      print_module(Event.u.CreateProcessInfo.hFile,
+      print_module(Process.hProcess, Event.u.CreateProcessInfo.hFile,
                    Event.u.CreateProcessInfo.lpBaseOfImage);
       CloseHandle(Event.u.CreateProcessInfo.hFile);
       break;
     case LOAD_DLL_DEBUG_EVENT:
+      print_module(Process.hProcess, Event.u.LoadDll.hFile,
+                   Event.u.LoadDll.lpBaseOfDll);
       if (Event.u.LoadDll.hFile) {
-        print_module(Event.u.LoadDll.hFile, Event.u.LoadDll.lpBaseOfDll);
         CloseHandle(Event.u.LoadDll.hFile);
       }
       break;
