@@ -17,11 +17,13 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <mutex>
 #include <shared_mutex>
 #include <variant>
 #include <vector>
 
 #include "ExclusiveAccess.h"
+// Downstream: __tgt_async_info is defined in APITypes.h.
 #include "Shared/APITypes.h"
 #include "Shared/Debug.h"
 #include "Shared/EnvironmentVar.h"
