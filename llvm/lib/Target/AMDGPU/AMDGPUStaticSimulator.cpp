@@ -472,13 +472,10 @@ unsigned getInstrLatency(const MachineInstr &MI, const SIInstrInfo &TII,
 
 unsigned getResourceCycles(const MachineInstr &MI, const SIInstrInfo &TII,
                            InstClass IC) {
-  // Use getRepeatRate() for VALU/TRANS to get canonical long-lat VALU resource
-  // cycles getRepeatRate returns 1 for regular VALU, >1 for long-lat VALU
-  // (PK8=4, PK16=8, F64=32, etc.)
   if (IC == InstClass::VALU || IC == InstClass::TRANS) {
-    unsigned RepeatRate = TII.getRepeatRate(MI);
-    if (RepeatRate > 1)
-      return RepeatRate;
+    unsigned BlockingCycles = TII.getBlockingCycles(MI);
+    if (BlockingCycles > 1)
+      return BlockingCycles;
   }
 
   if (AMDGPU::isVOPD(MI.getOpcode()))
@@ -1085,7 +1082,7 @@ StallSources computeStallSources(const MachineInstr &MI, InstClass IC,
                                  GPUSimState &State) {
   StallSources S;
   unsigned IssueCycle = State.CurrentCycle;
-  bool IsLOLVALU = IC == InstClass::VALU && TII.getRepeatRate(MI) > 1;
+  bool IsLOLVALU = IC == InstClass::VALU && TII.getBlockingCycles(MI) > 1;
 
   // 1. Pending delay_alu from previous instruction
   unsigned PendingDelay = checkPendingDelayAlu(State);
@@ -1171,7 +1168,7 @@ StallSources computeStallSources(const MachineInstr &MI, InstClass IC,
   }
 
   if (State.inWMMAWindow() && IC != InstClass::WMMA) {
-    unsigned LongLatVALU = TII.isTRANS(MI) ? 0 : TII.getRepeatRate(MI);
+    unsigned LongLatVALU = TII.isTRANS(MI) ? 0 : TII.getBlockingCycles(MI);
     if (LongLatVALU > 1) {
       if (State.ActiveWMMA.EndCycle > IssueCycle) {
         S.LongLatVALU = State.ActiveWMMA.EndCycle - IssueCycle;
@@ -1356,7 +1353,7 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     }
     State.trackVALU(T.Latency);
     State.trackVALUForWMMA(T.IC);
-    unsigned LongLatVALU = TII.isTRANS(MI) ? 0 : TII.getRepeatRate(MI);
+    unsigned LongLatVALU = TII.isTRANS(MI) ? 0 : TII.getBlockingCycles(MI);
     if (LongLatVALU > 1) {
       State.VALUResourceBusyUntil = std::max(State.VALUResourceBusyUntil,
                                              State.CurrentCycle + LongLatVALU);

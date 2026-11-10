@@ -647,21 +647,21 @@ CoExecInfo getMFMACoExecInfo(unsigned Opcode);
 
 /// Get co-execution info for a multi-cycle instruction.
 /// For WMMA: returns detailed pattern based on opcode.
-/// For TRANS/MultiCycleVALU: returns uniform pattern based on repeat rate.
+/// For TRANS/MultiCycleVALU: returns uniform pattern based on blocking cycles.
 inline CoExecInfo getCoExecInfo(const MachineInstr &MI,
                                 const SIInstrInfo &TII) {
   // Handle TRANS and MultiCycleVALU instructions first.
   if (!TII.isMFMAorWMMA(MI)) {
-    unsigned RepeatRate = TII.getRepeatRate(MI);
-    if (RepeatRate <= 1)
+    unsigned BlockingCycles = TII.getBlockingCycles(MI);
+    if (BlockingCycles <= 1)
       return CoExecInfo();
 
     bool IsTRANS = TII.isTRANS(MI);
     // TRANS: uses 'T' slots (all except TRANS), prefers SingleCycleVALU.
     // MultiCycleVALU: uses 'E' slots (external, no VALU).
     return CoExecInfo::buildUniform(
-        RepeatRate - 1, RepeatRate - 1, IsTRANS ? 'T' : 'E',
-        IsTRANS ? RepeatRate - 2 : 0, false,
+        BlockingCycles - 1, BlockingCycles - 1, IsTRANS ? 'T' : 'E',
+        IsTRANS ? BlockingCycles - 2 : 0, false,
         IsTRANS ? flavorBit(InstructionFlavor::SingleCycleVALU) : FlavorMask(),
         FlavorMask());
   }
