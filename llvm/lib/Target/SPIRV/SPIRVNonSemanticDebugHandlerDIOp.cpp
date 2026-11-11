@@ -119,3 +119,18 @@ std::optional<MCRegister> SPIRVNonSemanticDebugHandler::emitDIOpExpression(
   It->second = Reg;
   return Reg;
 }
+
+void SPIRVNonSemanticDebugHandler::addDIOpGlobalExpression(
+    SmallVectorImpl<MCRegister> &Ops, const DIExpression *Expr,
+    MCRegister VoidTypeReg, MCRegister I32TypeReg, MCRegister ExtInstSetReg,
+    SPIRV::ModuleAnalysisInfo &MAI) {
+  if (!Expr || !Expr->holdsNewElements())
+    return;
+  std::optional<MCRegister> ExprReg =
+      emitDIOpExpression(Expr, VoidTypeReg, I32TypeReg, ExtInstSetReg, MAI);
+  if (!ExprReg)
+    return;
+  // Operand 9 is the optional Static Member Declaration.
+  Ops.resize(10, CachedDebugInfoNoneReg);
+  Ops.push_back(*ExprReg);
+}

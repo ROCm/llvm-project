@@ -1465,6 +1465,10 @@ std::optional<MCRegister> SPIRVNonSemanticDebugHandler::emitDebugGlobalVariable(
   if (StaticMemberRegOpt)
     Ops.push_back(*StaticMemberRegOpt);
 
+  if (Info.LLVMGV && VariableReg != CachedDebugInfoNoneReg)
+    addDIOpGlobalExpression(Ops, Info.Expr, VoidTypeReg, I32TypeReg,
+                            ExtInstSetReg, MAI);
+
   return emitExtInst(SPIRV::NonSemanticExtInst::DebugGlobalVariable,
                      VoidTypeReg, ExtInstSetReg, Ops, MAI);
 }

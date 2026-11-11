@@ -589,6 +589,13 @@ private:
                                      MCRegister ExtInstSetReg,
                                      SPIRV::ModuleAnalysisInfo &MAI);
 
+  /// Append a global's DIOp expression to the \c DebugGlobalVariable operands
+  /// \p Ops as operand 10, as SPIRV-LLVM-Translator does.
+  void addDIOpGlobalExpression(SmallVectorImpl<MCRegister> &Ops,
+                               const DIExpression *Expr, MCRegister VoidTypeReg,
+                               MCRegister I32TypeReg, MCRegister ExtInstSetReg,
+                               SPIRV::ModuleAnalysisInfo &MAI);
+
   /// Fill \c Records from the debug records in \p MF.
   ///
   /// Where a record may legally sit is a property of the whole function, and
