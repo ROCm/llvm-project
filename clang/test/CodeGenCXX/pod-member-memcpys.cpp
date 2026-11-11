@@ -106,6 +106,16 @@ struct __attribute__((packed)) PackedMembers {
   int w, x, y, z;
 };
 
+struct NoReturnNonPOD {
+  __attribute__((noreturn)) NoReturnNonPOD& operator=(const NoReturnNonPOD&);
+};
+
+struct NoReturnMember {
+  int a, b, c, d;
+  NoReturnNonPOD np;
+  int w, x, y, z;
+};
+
 // COPY-ASSIGNMENT OPERATORS:
 
 // Assignment operators are output in the order they're encountered.
@@ -121,6 +131,7 @@ CALL_AO(VolatileMember)
 CALL_AO(BitfieldMember)
 CALL_AO(InnerClassMember)
 CALL_AO(PackedMembers)
+CALL_AO(NoReturnMember)
 
 // Basic copy-assignment:
 // CHECK-LABEL: define linkonce_odr nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) ptr @_ZN5BasicaSERKS_(ptr {{[^,]*}} %this, ptr nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) %0)
@@ -184,6 +195,13 @@ CALL_AO(PackedMembers)
 // CHECK: call nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) ptr @_ZN6NonPODaSERKS_
 // CHECK: call void @llvm.memcpy.p0.p0.i64({{.*}} align 1 {{.*}} align 1 {{.*}}i64 16, i1 {{.*}})
 // CHECK: ret ptr
+
+// NoReturnMember copy-assignment: no memcpy after the noreturn call.
+// CHECK-LABEL: define linkonce_odr nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) ptr @_ZN14NoReturnMemberaSERKS_(ptr {{[^,]*}} %this, ptr nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) %0)
+// CHECK: call void @llvm.memcpy.p0.p0.i64({{.*}} align 4 {{.*}} align 4 {{.*}}i64 16, i1 {{.*}})
+// CHECK: call nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) ptr @_ZN14NoReturnNonPODaSERKS_
+// CHECK-NEXT: unreachable
+// CHECK-NEXT: }
 
 // COPY-CONSTRUCTORS:
 
