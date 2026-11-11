@@ -81,8 +81,7 @@ int MappingInfoTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin,
                /*HstPtrEnd=*/(uintptr_t)HstPtrBegin + Size,
                /*TgtAllocBegin=*/(uintptr_t)TgtPtrBegin,
                /*TgtPtrBegin=*/(uintptr_t)TgtPtrBegin,
-               /*UseHoldRefCount=*/false,
-               /*Name=*/nullptr,
+               /*UseHoldRefCount=*/false, /*Name=*/nullptr,
                /*IsRefCountINF=*/true))
            .first->HDTT;
   ODBG(ODT_Mapping) << "Creating new map entry: HstBase="
