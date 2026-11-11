@@ -2668,9 +2668,12 @@ CGOpenMPRuntimeGPU::emitFastFPAtomicCall(CodeGenFunction &CGF, LValue X,
   llvm::MDTuple *EmptyMD = llvm::MDNode::get(CGM.getLLVMContext(), {});
   CallInst->setMetadata("amdgpu.no.fine.grained.memory", EmptyMD);
 
-  // Setting of amdgpu.ignore.denormal.mode
-  if (Kind == llvm::AtomicRMWInst::FAdd && UpdateVal->getType()->isFloatTy())
-    CallInst->setMetadata("amdgpu.ignore.denormal.mode", EmptyMD);
+  // Setting of atomic.ignore.denormal.mode, which the fp atomics hints may
+  // override for this construct.
+  if (Kind == llvm::AtomicRMWInst::FAdd && UpdateVal->getType()->isFloatTy() &&
+      CGM.getAtomicOpts().ignore_denormal_mode)
+    CallInst->setMetadata(llvm::LLVMContext::MD_atomic_ignore_denormal_mode,
+                          EmptyMD);
 
   // Note: breaks fp_atomics test so volatile cannot be used
   // CallInst->setVolatile(true);
