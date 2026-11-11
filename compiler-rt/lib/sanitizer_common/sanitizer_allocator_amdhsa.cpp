@@ -60,11 +60,13 @@ static bool HsaSymbolsLoaded() {
   return atomic_load(&hsa_amd_symbols_loaded, memory_order_acquire) != 0;
 }
 
+// Check AMDGPU runtime shutdown state
 bool AmdHsaDeviceAllocator::IsRuntimeShutdown() {
   return static_cast<bool>(
       atomic_load(&amdhsa_runtime_shutdown, memory_order_acquire));
 }
 
+// Notify AMDGPU runtime shutdown to allocator
 void AmdHsaDeviceAllocator::NotifyRuntimeShutdown() {
   uint8_t shutdown = 0;
   if (atomic_compare_exchange_strong(&amdhsa_runtime_shutdown, &shutdown, 1,

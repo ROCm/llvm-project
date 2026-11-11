@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // Canonical HSA declarations for compiler-rt sanitizers (offload + AMDHSA).
-// On SANITIZER_AMDHSA builds, reuse the AMDGPU plugin's vendored headers so
-// compiler-rt and offload cannot drift and no ROCm install is required.
-// Loader-extension bits absent from that subset are declared locally below.
+// Minimal HSA declarations without a ROCm dependency, so no ROCm install is
+// required. This is the only HSA header compiler-rt uses; types, enumerator
+// values and signatures must match the ROCr ABI.
 //
 //===----------------------------------------------------------------------===//
 
@@ -40,22 +40,12 @@
   X(hsa_signal_store_screlease)           \
   X(hsa_signal_wait_scacquire)
 
-#if SANITIZER_AMDHSA
-#  if defined(__has_include) && \
-      __has_include(            \
-          "../../../offload/plugins-nextgen/amdgpu/dynamic_hsa/hsa.h")
-#    include "../../../offload/plugins-nextgen/amdgpu/dynamic_hsa/hsa.h"
-#    include "../../../offload/plugins-nextgen/amdgpu/dynamic_hsa/hsa_ext_amd.h"
-#    define SANITIZER_USE_VENDORD_HSA
-#  else
-#    error \
-        "AMDHSA sanitizer support requires the AMDGPU plugin's HSA headers (offload/plugins-nextgen/amdgpu/dynamic_hsa/): build compiler-rt within the LLVM monorepo, or disable AMDHSA support (SANITIZER_AMDHSA=0)."
-#  endif
-#endif
+// ROCr's hsa_ext_amd.h interface version this mirror tracks.
+#define HSA_AMD_INTERFACE_VERSION_MAJOR 1
+#define HSA_AMD_INTERFACE_VERSION_MINOR 2
 
 extern "C" {
 
-#if !SANITIZER_AMDHSA
 typedef struct hsa_agent_s {
   uint64_t handle;
 } hsa_agent_t;
@@ -92,6 +82,10 @@ typedef enum {
   HSA_STATUS_SUCCESS = 0,
   HSA_STATUS_INFO_BREAK = 0x1,
   HSA_STATUS_ERROR = 0x1000,
+  HSA_STATUS_ERROR_INVALID_ARGUMENT = 0x1001,
+  HSA_STATUS_ERROR_OUT_OF_RESOURCES = 0x1008,
+  HSA_STATUS_ERROR_NOT_INITIALIZED = 0x100B,
+  HSA_STATUS_ERROR_INVALID_RUNTIME_STATE = 0x1025,
 } hsa_status_t;
 
 typedef enum {
@@ -141,9 +135,7 @@ typedef enum {
   HSA_EXECUTABLE_SYMBOL_INFO_NAME = 2,
   HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS = 21,
 } hsa_executable_symbol_info_t;
-#endif
 
-// Loader extension types/APIs are not part of the vendored dynamic_hsa subset.
 typedef enum { HSA_EXTENSION_AMD_LOADER = 0x201 } hsa_extension_t;
 
 typedef enum {
@@ -196,6 +188,76 @@ static_assert(offsetof(hsa_ven_amd_loader_segment_descriptor_t, segment_size) ==
                   56,
               "layout drift");
 
+// Pointer queries, IPC and virtual memory, used by the ASan HSA interceptors.
+typedef enum {
+  HSA_EXT_POINTER_TYPE_UNKNOWN = 0,
+  HSA_EXT_POINTER_TYPE_HSA = 1,
+  HSA_EXT_POINTER_TYPE_LOCKED = 2,
+  HSA_EXT_POINTER_TYPE_GRAPHICS = 3,
+  HSA_EXT_POINTER_TYPE_IPC = 4,
+  HSA_EXT_POINTER_TYPE_RESERVED_ADDR = 5,
+  HSA_EXT_POINTER_TYPE_HSA_VMEM = 6,
+} hsa_amd_pointer_type_t;
+
+typedef struct hsa_amd_pointer_info_s {
+  uint32_t size;
+  hsa_amd_pointer_type_t type;
+  void* agentBaseAddress;
+  void* hostBaseAddress;
+  size_t sizeInBytes;
+  void* userData;
+  hsa_agent_t agentOwner;
+} hsa_amd_pointer_info_t;
+
+typedef struct hsa_amd_ipc_memory_s {
+  uint32_t handle[8];
+} hsa_amd_ipc_memory_t;
+
+typedef enum {
+  HSA_AMD_VMEM_ADDRESS_NO_REGISTER = 1,
+} hsa_amd_vmem_address_reserve_flag_t;
+
+typedef enum {
+  HSA_AMD_SDMA_ENGINE_0 = 0x1,
+  HSA_AMD_SDMA_ENGINE_1 = 0x2,
+  HSA_AMD_SDMA_ENGINE_2 = 0x4,
+  HSA_AMD_SDMA_ENGINE_3 = 0x8,
+  HSA_AMD_SDMA_ENGINE_4 = 0x10,
+  HSA_AMD_SDMA_ENGINE_5 = 0x20,
+  HSA_AMD_SDMA_ENGINE_6 = 0x40,
+  HSA_AMD_SDMA_ENGINE_7 = 0x80,
+  HSA_AMD_SDMA_ENGINE_8 = 0x100,
+  HSA_AMD_SDMA_ENGINE_9 = 0x200,
+  HSA_AMD_SDMA_ENGINE_10 = 0x400,
+  HSA_AMD_SDMA_ENGINE_11 = 0x800,
+  HSA_AMD_SDMA_ENGINE_12 = 0x1000,
+  HSA_AMD_SDMA_ENGINE_13 = 0x2000,
+  HSA_AMD_SDMA_ENGINE_14 = 0x4000,
+  HSA_AMD_SDMA_ENGINE_15 = 0x8000,
+} hsa_amd_sdma_engine_id_t;
+
+typedef enum {
+  HSA_AMD_GPU_MEMORY_FAULT_EVENT = 0,
+  HSA_AMD_GPU_MEMORY_ERROR_EVENT = 1,
+  HSA_AMD_SYSTEM_SHUTDOWN_EVENT = 2,
+} hsa_amd_event_type_t;
+
+typedef struct hsa_amd_gpu_memory_fault_info_s {
+  hsa_agent_t agent;
+  uint64_t virtual_address;
+  uint32_t fault_reason_mask;
+} hsa_amd_gpu_memory_fault_info_t;
+
+typedef struct hsa_amd_event_s {
+  hsa_amd_event_type_t event_type;
+  union {
+    hsa_amd_gpu_memory_fault_info_t memory_fault;
+  };
+} hsa_amd_event_t;
+
+typedef hsa_status_t (*hsa_amd_system_event_callback_t)(
+    const hsa_amd_event_t* event, void* data);
+
 // Version 1.04 of HSA_EXTENSION_AMD_LOADER. Slot order is the extension ABI.
 struct LoaderApi {
   hsa_status_t (*QueryHostAddress)(const void*, const void**);
@@ -222,7 +284,6 @@ struct LoaderApi {
 };
 static_assert(sizeof(LoaderApi) == 9 * sizeof(void*), "layout drift");
 
-#if !SANITIZER_AMDHSA
 hsa_status_t hsa_init(void);
 hsa_status_t hsa_shut_down(void);
 hsa_status_t hsa_iterate_agents(hsa_status_t (*callback)(hsa_agent_t, void*),
@@ -258,6 +319,10 @@ hsa_status_t hsa_amd_agents_allow_access(uint32_t num_agents,
                                          const hsa_agent_t* agents,
                                          const uint32_t* flags,
                                          const void* ptr);
+hsa_status_t hsa_system_get_major_extension_table(uint16_t extension,
+                                                  uint16_t version_major,
+                                                  size_t table_length,
+                                                  void* table);
 hsa_status_t hsa_memory_copy(void* dst, const void* src, size_t size);
 hsa_status_t hsa_amd_signal_create(hsa_signal_value_t initial_value,
                                    uint32_t num_consumers,
@@ -270,17 +335,35 @@ hsa_signal_value_t hsa_signal_wait_scacquire(hsa_signal_t signal,
                                              hsa_signal_value_t compare_value,
                                              uint64_t timeout_hint,
                                              hsa_wait_state_t wait_state_hint);
-#endif
-
-// Not provided by the vendored dynamic_hsa headers; needed for decltype(&fn)
-// when resolving the AMD loader extension table via dlsym.
-hsa_status_t hsa_system_get_major_extension_table(uint16_t extension,
-                                                  uint16_t version_major,
-                                                  size_t table_length,
-                                                  void* table);
+hsa_status_t hsa_amd_memory_async_copy(void* dst, hsa_agent_t dst_agent,
+                                       const void* src, hsa_agent_t src_agent,
+                                       size_t size, uint32_t num_dep_signals,
+                                       const hsa_signal_t* dep_signals,
+                                       hsa_signal_t completion_signal);
+hsa_status_t hsa_amd_memory_async_copy_on_engine(
+    void* dst, hsa_agent_t dst_agent, const void* src, hsa_agent_t src_agent,
+    size_t size, uint32_t num_dep_signals, const hsa_signal_t* dep_signals,
+    hsa_signal_t completion_signal, hsa_amd_sdma_engine_id_t engine_id,
+    bool force_copy_on_sdma);
+hsa_status_t hsa_amd_pointer_info(const void* ptr, hsa_amd_pointer_info_t* info,
+                                  void* (*alloc)(size_t),
+                                  uint32_t* num_agents_accessible,
+                                  hsa_agent_t** accessible);
+hsa_status_t hsa_amd_ipc_memory_create(void* ptr, size_t len,
+                                       hsa_amd_ipc_memory_t* handle);
+hsa_status_t hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t* handle,
+                                       size_t len, uint32_t num_agents,
+                                       const hsa_agent_t* mapping_agents,
+                                       void** mapped_ptr);
+hsa_status_t hsa_amd_ipc_memory_detach(void* mapped_ptr);
+hsa_status_t hsa_amd_vmem_address_reserve_align(void** va, size_t size,
+                                                uint64_t address,
+                                                uint64_t alignment,
+                                                uint64_t flags);
+hsa_status_t hsa_amd_vmem_address_free(void* va, size_t size);
+hsa_status_t hsa_amd_register_system_event_handler(
+    hsa_amd_system_event_callback_t callback, void* data);
 
 }  // extern "C"
-
-#undef SANITIZER_USE_VENDORD_HSA
 
 #endif  // SANITIZER_OFFLOAD_HSA_H

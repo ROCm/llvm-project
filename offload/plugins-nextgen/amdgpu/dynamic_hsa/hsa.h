@@ -6,10 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Dependency-free subset of the HSA runtime API used when the AMDGPU plugin
-// dlopen's libhsa, matching the ROCr layout/ABI. Also consumed by compiler-rt
-// sanitizers (via sanitizer_hsa.h), so keep it a strict superset for all
-// consumers: add, do not repurpose, enumerators/declarations.
+// The parts of the hsa api that are presently in use by the amdgpu plugin
 //
 //===----------------------------------------------------------------------===//
 #ifndef HSA_RUNTIME_INC_HSA_H_
@@ -17,10 +14,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
-#ifndef __cplusplus
-#include <stdbool.h>
-#endif
 
 // Detect and set large model builds.
 #undef HSA_LARGE_MODEL
@@ -61,8 +54,7 @@ typedef enum {
   HSA_STATUS_ERROR_INVALID_SYMBOL_NAME = 0x1013,
   HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED = 0x1014,
   HSA_STATUS_ERROR_VARIABLE_UNDEFINED = 0x1015,
-  HSA_STATUS_ERROR_EXCEPTION = 0x1016,
-  HSA_STATUS_ERROR_INVALID_RUNTIME_STATE = 0x1025
+  HSA_STATUS_ERROR_EXCEPTION = 0x1016
 } hsa_status_t;
 
 hsa_status_t hsa_status_string(hsa_status_t status, const char **status_string);

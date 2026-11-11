@@ -26,6 +26,10 @@ enum DeviceAllocFailure {
   DEV_ALLOC_FAILURE_OUT_OF_RESOURCES,
 };
 
+// Device memory allocation usually requires additional information, we can put
+// all the additional information into a data structure DeviceAllocationInfo.
+// This is only a parent structure since different vendors may require
+// different allocation info.
 struct DeviceAllocationInfo {
   explicit DeviceAllocationInfo(DeviceAllocationType type = DAT_UNKNOWN)
       : type_(type) {}
@@ -353,15 +357,21 @@ class DeviceAllocatorT {
   }
 
   Header* GetHeader(uptr chunk, Header* h) const {
-    // Device allocator depends on the device runtime. Query the authoritative
-    // shutdown state directly (a cheap atomic). It is reset by
-    // ClearRuntimeShutdownState() on hsa re-init, so header lookup self-heals
-    // after a shutdown/re-init cycle without a sticky per-allocator flag.
+    // Device allocator has dependency on device runtime. If device runtime
+    // is unloaded, GetPointerInfo() will fail. For such case, we can still
+    // return a valid value for map_beg, map_size will be limited to one page
+    //
+    // Query the authoritative shutdown state directly (a cheap atomic). It is
+    // reset by ClearRuntimeShutdownState() on hsa re-init, so header lookup
+    // self-heals after a shutdown/re-init cycle without a sticky flag.
     if (LIKELY(!DeviceBackend::IsRuntimeShutdown())) {
       if (DeviceBackend::GetPointerInfo(chunk, h))
         return h;
+      // If GetPointerInfo() fails, we don't assume the runtime is unloaded yet.
+      // We just return a conservative single-page header.
     }
-    // Runtime down (or GetPointerInfo failed): conservative single-page header.
+    // If we reach here, device runtime is unloaded.
+    // Fallback: conservative single-page header
     h->map_beg = chunk;
     h->map_size = page_size_;
     return h;
@@ -377,7 +387,7 @@ class DeviceAllocatorT {
   bool mem_funcs_inited_;
   // Maximum of mem_funcs_init_count_ is 2:
   //   1. The initial init called from Init(...), it could fail if
-  //      the device runtime is dynamically loaded with dlopen()
+  //      libhsa-runtime64.so is dynamically loaded with dlopen()
   //   2. A potential deferred init called by Allocate(...)
   u32 mem_funcs_init_count_;
   uptr kMetadataSize_;
