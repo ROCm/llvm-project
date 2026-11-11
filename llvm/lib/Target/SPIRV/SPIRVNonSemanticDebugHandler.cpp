@@ -351,6 +351,7 @@ void SPIRVNonSemanticDebugHandler::beginModule(Module *M) {
   ScalarConstantCache.clear();
   ConstantValueRegs.clear();
   DebugOperationCache.clear();
+  DIOpOperationCache.clear();
   DebugExpressionCache.clear();
   ModuleScopeIds.clear();
   GlobalDIEmitted = false;
@@ -1368,6 +1369,10 @@ std::optional<MCRegister> SPIRVNonSemanticDebugHandler::emitDebugExpression(
     const DIExpression *Expr, MCRegister VoidTypeReg, MCRegister I32TypeReg,
     MCRegister ExtInstSetReg, SPIRV::ModuleAnalysisInfo &MAI) {
   assert(Expr && "Expr must not be null in emitDebugExpression");
+
+  if (Expr->holdsNewElements())
+    return emitDIOpExpression(Expr, VoidTypeReg, I32TypeReg, ExtInstSetReg,
+                              MAI);
 
   SmallVector<MCRegister> OperationRegs;
   for (const DIExpression::ExprOperand &Op : Expr->expr_ops()) {

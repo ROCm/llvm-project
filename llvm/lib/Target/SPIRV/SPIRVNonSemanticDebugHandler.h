@@ -242,6 +242,9 @@ class SPIRVNonSemanticDebugHandler : public DebugHandlerBase {
   // spec maximum (opcode plus at most two operands: BitPiece, Fragment).
   DenseMap<SmallVector<uint32_t, 3>, MCRegister> DebugOperationCache;
 
+  // DIOp DebugOperation ids, keyed by operand ids.
+  DenseMap<SmallVector<MCRegister, 3>, MCRegister> DIOpOperationCache;
+
   // Cache of already-emitted DebugExpression instructions, keyed by the
   // DebugOperation result ids in operand order. Useful for debug values
   // and global-variable init expressions.
@@ -569,6 +572,22 @@ private:
                                                 MCRegister I32TypeReg,
                                                 MCRegister ExtInstSetReg,
                                                 SPIRV::ModuleAnalysisInfo &MAI);
+
+  /// \c emitDebugExpression for a heterogeneous-DWARF expression, whose
+  /// elements are DIOps (\c holdsNewElements()).
+  std::optional<MCRegister> emitDIOpExpression(const DIExpression *Expr,
+                                               MCRegister VoidTypeReg,
+                                               MCRegister I32TypeReg,
+                                               MCRegister ExtInstSetReg,
+                                               SPIRV::ModuleAnalysisInfo &MAI);
+
+  /// One \c DebugOperation for a DIOp.
+  /// Returns \c std::nullopt if an operand cannot be emitted.
+  std::optional<MCRegister> emitDIOp(const DIOp::Variant &Op,
+                                     MCRegister VoidTypeReg,
+                                     MCRegister I32TypeReg,
+                                     MCRegister ExtInstSetReg,
+                                     SPIRV::ModuleAnalysisInfo &MAI);
 
   /// Fill \c Records from the debug records in \p MF.
   ///
