@@ -183,8 +183,14 @@ findLastFunctionOpVariableDeclaration(const MachineFunction &MF,
 } // namespace
 
 SPIRVNonSemanticDebugHandler::SPIRVNonSemanticDebugHandler(AsmPrinter &AP)
-    : DebugHandlerBase(&AP),
-      CLOpts(static_cast<const SPIRVTargetMachine &>(AP.TM).getCLOpts()) {}
+    : DebugHandlerBase(&AP) {
+  const auto &TM = static_cast<const SPIRVTargetMachine &>(AP.TM);
+  const SPIRVOptions &CLOpts = TM.getCLOpts();
+  bool IsAMD = TM.getTargetTriple().getVendor() == Triple::AMD;
+  UseLexicalBlockDiscriminatorScope =
+      CLOpts.debug_lexical_block_discriminator_scope || IsAMD;
+  UseScopeForwardRefs = CLOpts.debug_scope_forward_refs || IsAMD;
+}
 
 // Map DWARF source language codes to NonSemantic.Shader.DebugInfo.100 source
 // language codes. Values are from the SourceLanguage enum in the
@@ -458,7 +464,7 @@ void SPIRVNonSemanticDebugHandler::prepareModuleOutput(
   MAI.Reqs.addExtension(SPIRV::Extension::SPV_KHR_non_semantic_info);
 
   HasRelaxedExtInst =
-      CLOpts.debug_scope_forward_refs &&
+      UseScopeForwardRefs &&
       ST.canUseExtension(
           SPIRV::Extension::SPV_KHR_relaxed_extended_instruction);
   if (HasRelaxedExtInst)
@@ -1075,7 +1081,7 @@ auto SPIRVNonSemanticDebugHandler::emitDebugTypeFunctionForSubroutineType(
 auto SPIRVNonSemanticDebugHandler::resolveScope(const DIScope *Scope,
                                                 const DICompileUnit *FallbackCU)
     -> EmitResult<MCRegister> {
-  if (!CLOpts.debug_lexical_block_discriminator_scope)
+  if (!UseLexicalBlockDiscriminatorScope)
     while (const auto *LBF = dyn_cast_or_null<DILexicalBlockFile>(Scope))
       Scope = LBF->getScope();
 
