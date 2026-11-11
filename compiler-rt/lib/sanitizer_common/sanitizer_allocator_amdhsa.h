@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// HSA device memory backend for DeviceAllocatorT.
+// Part of the Sanitizer Allocator. HSA device memory backend for
+// DeviceAllocatorT.
 //
 //===----------------------------------------------------------------------===//
 #ifndef SANITIZER_ALLOCATOR_H

@@ -52,6 +52,11 @@ DECLARE_REAL(hsa_status_t, hsa_amd_pointer_info, const void* ptr,
 // Always align to page boundary to match current ROCr behavior.
 static const size_t kPageSize_ = 4096;
 
+// For asan allocator, kMetadataSize is 0 and maximum redzone size is 2048. This
+// implies for device allocation, the gap between user_beg and GetBlockBegin()
+// is always one kPageSize_
+// IPC calls use static_assert to make sure kMetadataSize = 0
+//
 #  if SANITIZER_CAN_USE_ALLOCATOR64
 static_assert(AP64<LocalAddressSpaceView>::kMetadataSize == 0,
               "HSA IPC/VMem wrappers require zero allocator metadata");
@@ -281,9 +286,8 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
   if (!AsanHsaGetLiveMappingInfo(ptr, &hsa_map_base, &used_size, &offset)) {
     hsa_status_t status = REAL(hsa_amd_pointer_info)(
         ptr, info, alloc, num_agents_accessible, accessible);
-    // A quarantined block is still mapped, so ROCr reports the freed user
-    // allocation as live HSA memory. Report it as unowned instead, which keeps
-    // a freed pointer distinguishable from a live one.
+    // Quarantine keeps the block mapped in ROCr, but the user allocation is
+    // gone. Report it as unowned, as ROCr does for memory it does not own.
     if (status == HSA_STATUS_SUCCESS && info && AsanHsaIsFreedChunk(ptr))
       SetPointerInfoUnknown(info);
     return status;
@@ -292,6 +296,11 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
   hsa_status_t status = REAL(hsa_amd_pointer_info)(
       hsa_map_base, info, alloc, num_agents_accessible, accessible);
   if (status == HSA_STATUS_SUCCESS && info) {
+    // Adjust base address of agent,host and sizeInBytes so as to return
+    // the actual pointer information of user allocation rather than asan
+    // allocation. Asan allocation pointer info can be acquired using internal
+    // 'GetPointerInfo'
+    //
     // User VA may be above hsa_map_base when VMem API's(i.e
     // hsa_amd_vmem_address_reserve_align())  uses alignment > page size (device
     // allocator padding and ASan redzones/headers).
