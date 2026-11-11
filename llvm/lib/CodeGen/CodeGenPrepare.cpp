@@ -1200,6 +1200,7 @@ simplifyRelocatesOffABase(GCRelocateInst *RelocatedBase,
 
     // Insert after RelocatedBase
     IRBuilder<> Builder(RelocatedBase->getNextNode());
+    Builder.disableGEPCanonicalization();
     Builder.SetCurrentDebugLocation(ToReplace->getDebugLoc());
 
     Value *Replacement = Builder.CreateGEP(Derived->getSourceElementType(),
@@ -6236,6 +6237,7 @@ bool CodeGenPrepare::optimizeGatherScatterInst(Instruction *MemoryInst,
     auto NumElts = cast<VectorType>(Ptr->getType())->getElementCount();
 
     IRBuilder<> Builder(MemoryInst);
+    Builder.disableGEPCanonicalization();
 
     Type *SourceTy = GEP->getSourceElementType();
     Type *ScalarIndexTy = DL->getIndexType(Ops[0]->getType()->getScalarType());
@@ -6276,6 +6278,7 @@ bool CodeGenPrepare::optimizeGatherScatterInst(Instruction *MemoryInst,
     auto NumElts = cast<VectorType>(Ptr->getType())->getElementCount();
 
     IRBuilder<> Builder(MemoryInst);
+    Builder.disableGEPCanonicalization();
 
     // Emit a vector GEP with a scalar pointer and all 0s vector index.
     Type *ScalarIndexTy = DL->getIndexType(V->getType()->getScalarType());
@@ -8517,6 +8520,7 @@ static bool splitMergedValStore(StoreInst &SI, const DataLayout &DL,
 
   // Start to split store.
   IRBuilder<> Builder(&SI);
+  Builder.disableGEPCanonicalization();
 
   // If LValue/HValue is a bitcast in another BB, create a new one in current
   // BB so it may be merged with the splitted stores by dag combiner.
