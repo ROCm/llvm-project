@@ -874,9 +874,6 @@ struct AMDGPUDeviceImageTy : public DeviceImageTy {
 private:
   /// The executable loaded on the agent.
   hsa_executable_t Executable;
-#if SANITIZER_AMDHSA
-  hsa_code_object_reader_t CodeObjectReader;
-#endif
   StringMap<offloading::amdgpu::AMDGPUKernelMetaData> KernelInfoMap;
   uint16_t ELFABIVersion;
 };
@@ -999,7 +996,6 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   /// Get group and private segment kernel size.
   uint32_t getGroupSize() const { return GroupSize; }
   uint32_t getPrivateSize() const { return PrivateSize; }
-  uint16_t getConstWGSize() const { return ConstWGSize; }
 
   /// Get the HSA kernel object representing the kernel function.
   uint64_t getKernelObject() const { return KernelObject; }
@@ -1459,13 +1455,6 @@ private:
   struct ReleaseSignalArgsTy {
     AMDGPUSignalTy *Signal;
     AMDGPUSignalManagerTy *SignalManager;
-  };
-
-  /// Utility struct holding arguments for OMPT-based kernel timing.
-  struct OmptKernelTimingArgsTy {
-    hsa_agent_t Agent;
-    AMDGPUSignalTy *Signal;
-    double TicksToTime;
   };
 
   struct KernelDurationTracingArgsTy {
@@ -3159,10 +3148,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = checkIfGFX90a())
       return Err;
 
-    // detect if device is an MI300X.
-    if (auto Err = checkIfMI300x())
-      return Err;
-
     // detect special cases for MI200
     specialBehaviorHandling();
 
@@ -4520,11 +4505,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     AMDGPUStreamManager.setHSAQueueProfiling(Enable);
   }
 
-  /// Get the address of pointer to the preallocated device memory pool.
-  void *getPreAllocatedDeviceMemoryPool() {
-    return PreAllocatedDeviceMemoryPool;
-  }
-
   /// Allocate and zero initialize a small memory pool from the coarse grained
   /// device memory of each device.
   Error preAllocateDeviceMemoryPool() {
@@ -4649,25 +4629,6 @@ private:
     return Plugin::success();
   }
 
-  Error checkIfMI300x() {
-    llvm::StringRef StrGfxName(ComputeUnitKind);
-
-    bool isMI300 = llvm::StringSwitch<bool>(StrGfxName)
-                       .Case("gfx942", true)
-                       .Default(false);
-    if (!isMI300)
-      return Plugin::success();
-
-    // Can be MI300A or MI300X
-    uint32_t ChipID = 0;
-    if (auto Err = getDeviceAttr(HSA_AMD_AGENT_INFO_CHIP_ID, ChipID))
-      return Err;
-
-    if (ChipID & 0x1)
-      IsEquippedWithMI300X = true;
-    return Plugin::success();
-  }
-
   bool checkIfCoarseGrainMemoryNearOrAbove64GB() {
     for (AMDGPUMemoryPoolTy *Pool : AllMemoryPools) {
       if (!Pool->isGlobal() || !Pool->isCoarseGrained())
@@ -4715,9 +4676,6 @@ private:
   }
 
   bool hasAPUDeviceImpl() override final { return IsAPU; }
-
-  // TODO: move the following function in private section.
-  bool hasMI300xDevice() { return IsEquippedWithMI300X; }
 
   /// Returns whether the device is a gfx90a.
   bool hasGfx90aDeviceImpl() override final { return IsEquippedWithGFX90A; }
@@ -4893,9 +4851,6 @@ private:
 
   /// Is the plugin associated with an APU?
   bool IsAPU = false;
-
-  // Is the device an MI300X?
-  bool IsEquippedWithMI300X = false;
 
   // Is the device an MI200?
   bool IsEquippedWithGFX90A = false;
@@ -5375,10 +5330,6 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
     // The initialization of HSA was successful. It should be safe to call
     // HSA functions from now on, e.g., hsa_shut_down.
     Initialized = true;
-
-    // This should probably be ASO-only
-    UInt32Envar KernTrace("LIBOMPTARGET_KERNEL_TRACE", 0);
-    llvm::omp::target::plugin::PrintKernelTrace = KernTrace.get();
 
     // Register event handler to detect memory errors on the devices.
     Status = hsa_amd_register_system_event_handler(eventHandler, this);
@@ -6250,15 +6201,6 @@ void setHSAQueueProfiling(void *Device, int Enable) {
 } // namespace llvm
 
 #ifdef OMPT_SUPPORT
-namespace llvm::omp::target::plugin {
-
-/// Enable/disable kernel profiling for the given device.
-void setOmptQueueProfile(void *Device, int Enable) {
-  setHSAQueueProfiling(Device, Enable);
-}
-
-} // namespace llvm::omp::target::plugin
-
 /// Enable/disable kernel profiling for the given device.
 void setGlobalOmptKernelProfile(void *Device, int Enable) {
   llvm::omp::target::plugin::setHSAQueueProfiling(Device, Enable);

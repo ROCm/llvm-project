@@ -38,12 +38,6 @@ using namespace plugin;
 using namespace error;
 using namespace llvm::offload::debug;
 
-namespace llvm::omp::target::plugin {
-// Used for kernel tracing implementation
-int PrintKernelTrace = 0;
-} // namespace llvm::omp::target::plugin
-
-
 AsyncInfoWrapperTy::AsyncInfoWrapperTy(GenericDeviceTy &Device,
                                        __tgt_async_info *AsyncInfoPtr)
     : Device(Device),
