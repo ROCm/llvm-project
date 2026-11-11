@@ -466,8 +466,20 @@ jobs:
           rm build-comgr/amd_comgr.dll
           touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
 
-      - name: Test - Comgr (check-comgr)
+      - name: Test - Comgr
         id: check_comgr
         env:
           AMD_COMGR_REDIRECT_LOGS: stderr
-        run: ninja -C build-comgr check-comgr
+        run: |
+          ninja -C build-comgr all
+          # Relinked DLLs can load with zeroed code pages on these runners.
+          cp build-comgr/amd_comgr.dll build-comgr/amd_comgr.ready.dll
+          mv -f build-comgr/amd_comgr.ready.dll build-comgr/amd_comgr.dll
+          cp build-comgr/amd_comgr.dll build-comgr/test-unit/amd_comgr.ready.dll
+          mv -f build-comgr/test-unit/amd_comgr.ready.dll build-comgr/test-unit/amd_comgr.dll
+          # Run directly: check-comgr can regenerate embedded files and relink.
+          python build/bin/llvm-lit.py build-comgr/test-lit -v
+          for test in build-comgr/test-unit/*.exe; do
+            "$test"
+          done
+          ctest --test-dir build-comgr --output-on-failure
