@@ -1,0 +1,29 @@
+/*===--------------------------------------------------------------------------
+ *                   ROCm Device Libraries
+ *
+ * This file is distributed under the University of Illinois Open Source
+ * License. See LICENSE.TXT for details.
+ *===------------------------------------------------------------------------*/
+
+#include "mathH.h"
+
+CONSTATTR BGEN(scalb)
+
+CONSTATTR half
+MATH_MANGLE(scalb)(half x, half y)
+{
+    half t = BUILTIN_MIN_F16(BUILTIN_MAX_F16(y, -0x1.0p+6h), 0x1.0p+6h);
+    half n = BUILTIN_FLOOR_F16(t);
+    half f = t - n;
+    half ret = BUILTIN_FLDEXP_F16(x, (int)n);
+    ret = f == 0.0h ? ret : ret * MATH_MANGLE(exp2)(f);
+
+    if (!FINITE_ONLY_OPT()) {
+        ret = BUILTIN_ISUNORDERED_F16(x, y) ? QNAN_F16 : ret;
+        ret = ((x == 0.0h) & (y == PINF_F16)) ? QNAN_F16 : ret;
+        ret = (BUILTIN_ISINF_F16(x) & (y == NINF_F16)) ? QNAN_F16 : ret;
+    }
+
+    return ret;
+}
+
