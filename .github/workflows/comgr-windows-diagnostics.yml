@@ -18,12 +18,56 @@ permissions:
   actions: read
 
 jobs:
-  diagnose:
+  pilot:
+    name: Trial ${{ matrix.trial }} / ${{ matrix.arm }}
     runs-on: azure-windows-scale-rocm
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        # Randomized within ten A/B/C blocks, fixed before dispatch.
+        include:
+          - {trial: 1, arm: B}
+          - {trial: 1, arm: A}
+          - {trial: 1, arm: C}
+          - {trial: 2, arm: C}
+          - {trial: 2, arm: B}
+          - {trial: 2, arm: A}
+          - {trial: 3, arm: C}
+          - {trial: 3, arm: A}
+          - {trial: 3, arm: B}
+          - {trial: 4, arm: A}
+          - {trial: 4, arm: C}
+          - {trial: 4, arm: B}
+          - {trial: 5, arm: A}
+          - {trial: 5, arm: C}
+          - {trial: 5, arm: B}
+          - {trial: 6, arm: C}
+          - {trial: 6, arm: A}
+          - {trial: 6, arm: B}
+          - {trial: 7, arm: A}
+          - {trial: 7, arm: B}
+          - {trial: 7, arm: C}
+          - {trial: 8, arm: A}
+          - {trial: 8, arm: B}
+          - {trial: 8, arm: C}
+          - {trial: 9, arm: B}
+          - {trial: 9, arm: A}
+          - {trial: 9, arm: C}
+          - {trial: 10, arm: A}
+          - {trial: 10, arm: B}
+          - {trial: 10, arm: C}
     defaults:
       run:
-        shell: powershell
+        shell: bash
+    env:
+      LC_ALL: C
+      PYTHONIOENCODING: utf-8
+      PILOT_ARTIFACT_RUN: ${{ inputs.run_id }}
+      PILOT_SOURCE_REF: ${{ inputs.source_ref }}
+      PILOT_TRANSLATOR_REF: ${{ inputs.translator_ref }}
+
     steps:
       - name: Configure git
         run: |
@@ -31,19 +75,22 @@ jobs:
           git config --global core.autocrlf false
           git config --global core.eol lf
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout pilot harness
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           path: diagnostics
           sparse-checkout: .github/scripts
           persist-credentials: false
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout artifact source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.source_ref }}
           path: llvm-project
           persist-credentials: false
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout artifact translator
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ROCm/SPIRV-LLVM-Translator
           ref: ${{ inputs.translator_ref }}
@@ -56,11 +103,9 @@ jobs:
       - name: Install link dependency
         run: |
           vcpkg install zstd:x64-windows
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          'C:\vcpkg\installed\x64-windows\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo 'C:\vcpkg\installed\x64-windows\bin' >> "$GITHUB_PATH"
 
       - name: Install matching Ninja
-        shell: bash
         run: |
           ninja_dir="$(cygpath -u "$GITHUB_WORKSPACE")/.ninja"
           mkdir -p "$ninja_dir" && cd "$ninja_dir"
@@ -70,219 +115,97 @@ jobs:
           "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip
           cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
 
-      - name: Download existing build
+      - name: Download fixed build artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-build-tree
           run-id: ${{ inputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Restore build and preserve original DLL
-        shell: bash
+      - name: Restore untouched build trees
         run: |
+          test ! -e build
+          test ! -e build-comgr
+          test ! -e build-device-libs
           tar -xmf windows-build-tree.tar
-          touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
-          mkdir -p comgr-diagnostics/original comgr-diagnostics/rebuilt
-          cp build-comgr/amd_comgr.dll comgr-diagnostics/original/
-
-      - name: Build native debugger and existing smoke tests
-        run: |
-          cl /nologo /W4 /O2 /MD diagnostics/.github/scripts/comgr_windows_debug.c `
-            /Focomgr-diagnostics/debug.obj /Fecomgr-diagnostics/debug.exe `
-            /link dbghelp.lib
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          foreach ($test in @('get-version', 'status-string')) {
-            cl /nologo /O2 /Ob2 /MD /DNDEBUG /DWIN32 /D_WINDOWS /Ibuild-comgr/include `
-              "llvm-project/amd/comgr/test-lit/comgr-sources/$test.c" `
-              "/Focomgr-diagnostics/$test.obj" "/Fecomgr-diagnostics/original/$test.exe" `
-              /link build-comgr/amd_comgr.lib /INCREMENTAL:NO
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            Copy-Item "comgr-diagnostics/original/$test.exe" comgr-diagnostics/rebuilt/
-          }
-
-      - name: Probe original DLL
-        continue-on-error: true
-        run: |
-          Get-FileHash comgr-diagnostics/original/amd_comgr.dll
-          $failed = $false
-          foreach ($test in @('get-version', 'status-string')) {
-            & "./comgr-diagnostics/original/$test.exe"
-            "Direct $test exit: $LASTEXITCODE" | Tee-Object "comgr-diagnostics/original/$test-direct.txt"
-            $failed = $failed -or ($LASTEXITCODE -ne 0)
-            & ./comgr-diagnostics/debug.exe "comgr-diagnostics/original/$test.exe" `
-              "comgr-diagnostics/original/$test.dmp" 2>&1 | Tee-Object "comgr-diagnostics/original/$test-debug.txt"
-            $failed = $failed -or ($LASTEXITCODE -ne 0)
-          }
-          if ($failed) { exit 1 }
-
-      - name: Rebuild Comgr against the archived LLVM
-        id: rebuild
-        shell: bash
-        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for build, source in (
+              ("build", "llvm-project/llvm"),
+              ("build-comgr", "llvm-project/amd/comgr"),
+              ("build-device-libs", "llvm-project/amd/device-libs"),
+          ):
+              lines = Path(build, "CMakeCache.txt").read_text().splitlines()
+              cache = {
+                  line.split(":", 1)[0]: line.split("=", 1)[1]
+                  for line in lines
+                  if not line.startswith(("#", "//")) and ":" in line and "=" in line
+              }
+              if cache["CMAKE_HOME_DIRECTORY"].lower() != Path(source).resolve().as_posix().lower():
+                  raise ValueError(f"{build}: wrong source checkout")
+              if cache["CMAKE_BUILD_TYPE"] != "Release":
+                  raise ValueError(f"{build}: unexpected build type")
+              if build == "build" and set(cache["LLVM_TARGETS_TO_BUILD"].split(";")) != {"AMDGPU", "X86", "SPIRV"}:
+                  raise ValueError("Unexpected LLVM targets")
+              if build == "build-comgr" and cache["BUILD_TESTING"] != "ON":
+                  raise ValueError("Comgr testing is disabled")
+              print(build, {key: value for key, value in cache.items() if key in (
+                  "CMAKE_HOME_DIRECTORY", "CMAKE_BUILD_TYPE", "LLVM_TARGETS_TO_BUILD",
+                  "LLVM_ENABLE_PROJECTS", "BUILD_TESTING")})
+          PY
+          # Match the existing production restore in every arm.
           rm build-comgr/amd_comgr.dll
-          ninja -d keeprsp -C build-comgr amd_comgr 2>&1 | tee comgr-diagnostics/rebuild.log
-          cp build-comgr/amd_comgr.dll comgr-diagnostics/rebuilt/
-          cp build-comgr/CMakeFiles/amd_comgr.rsp comgr-diagnostics/
+          touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
 
-      - name: Probe rebuilt DLL
-        if: always() && steps.rebuild.outcome == 'success'
-        continue-on-error: true
-        run: |
-          Get-FileHash comgr-diagnostics/rebuilt/amd_comgr.dll
-          $failed = $false
-          foreach ($test in @('get-version', 'status-string')) {
-            & "./comgr-diagnostics/rebuilt/$test.exe"
-            "Direct $test exit: $LASTEXITCODE" | Tee-Object "comgr-diagnostics/rebuilt/$test-direct.txt"
-            $failed = $failed -or ($LASTEXITCODE -ne 0)
-            & ./comgr-diagnostics/debug.exe "comgr-diagnostics/rebuilt/$test.exe" `
-              "comgr-diagnostics/rebuilt/$test.dmp" 2>&1 | Tee-Object "comgr-diagnostics/rebuilt/$test-debug.txt"
-            $failed = $failed -or ($LASTEXITCODE -ne 0)
-          }
-          if ($failed) { exit 1 }
-
-      - name: Run original Comgr suite
-        id: suite
-        if: always() && steps.rebuild.outcome == 'success'
-        continue-on-error: true
-        shell: bash
+      - name: Run one trial
+        id: trial
         env:
           AMD_COMGR_REDIRECT_LOGS: stderr
+          PILOT_ARM: ${{ matrix.arm }}
+          PILOT_TRIAL: ${{ matrix.trial }}
         run: |
-          ninja -d keeprsp -C build-comgr check-comgr 2>&1 | tee comgr-diagnostics/suite-parallel.log
+          python diagnostics/.github/scripts/comgr_windows_pilot.py \
+            --arm "$PILOT_ARM" --trial "$PILOT_TRIAL" --output pilot-results
 
-      - name: Probe actual test binaries with the LIT search paths
-        if: always() && steps.rebuild.outcome == 'success'
-        continue-on-error: true
-        shell: bash
+      # These probes happen only after the measured trial has failed.
+      - name: Build debugger after failure
+        id: debugger
+        if: failure() && steps.trial.outcome == 'failure'
+        shell: powershell
+        run: |
+          cl /nologo /W4 /O2 /MD diagnostics/.github/scripts/comgr_windows_debug.c /Fopilot-results/debug.obj /Fepilot-results/debug.exe /link dbghelp.lib
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Capture post-failure probes
+        if: failure() && steps.trial.outcome == 'failure' && steps.debugger.outcome == 'success'
         env:
           AMD_COMGR_REDIRECT_LOGS: stderr
           AMD_COMGR_CACHE: '0'
         run: |
           workspace="$(cygpath -u "$GITHUB_WORKSPACE")"
-          output="$workspace/comgr-diagnostics/suite"
-          mkdir -p "$output"
           export PATH="$workspace/build-comgr/test-lit:$workspace/build-comgr:$workspace/build/bin:$PATH"
           export LLVM_PATH="$(cygpath -m "$workspace/build")"
-          cd build-comgr/test-lit
-          failed=0
           for test in get-version status-string; do
-            type -a "$test"
-            cp "$test.exe" "$output/"
-            if "$test" > "$output/$test-direct.txt" 2>&1; then
+            if test -f "build-comgr/test-lit/$test.exe"; then
               status=0
-            else
-              status=$?
-              failed=1
-            fi
-            echo "Direct $test exit: $status" | tee -a "$output/$test-direct.txt"
-            if "$workspace/comgr-diagnostics/debug.exe" "$(cygpath -m "$PWD/$test.exe")" \
-                "$(cygpath -m "$output/$test.dmp")" > "$output/$test-debug.txt" 2>&1; then
-              status=0
-            else
-              status=$?
-              failed=1
-            fi
-            cat "$output/$test-debug.txt"
-            echo "Debugger $test exit: $status"
-          done
-          exit "$failed"
-
-      - name: Finish Comgr build and replace DLL files
-        id: fresh_dll
-        if: always() && steps.rebuild.outcome == 'success'
-        shell: bash
-        run: |
-          cp build-comgr/amd_comgr.dll comgr-diagnostics/suite/
-          rm build-comgr/amd_comgr.dll
-          ninja -d keeprsp -C build-comgr all 2>&1 | tee comgr-diagnostics/final-build.log
-          cp build-comgr/amd_comgr.dll build-comgr/amd_comgr.ready.dll
-          mv -f build-comgr/amd_comgr.ready.dll build-comgr/amd_comgr.dll
-          cp build-comgr/amd_comgr.dll build-comgr/test-unit/amd_comgr.ready.dll
-          mv -f build-comgr/test-unit/amd_comgr.ready.dll build-comgr/test-unit/amd_comgr.dll
-          sha256sum build-comgr/amd_comgr.dll build-comgr/test-unit/amd_comgr.dll
-
-      - name: Run Comgr LIT with fresh DLL
-        id: fresh_lit
-        if: always() && steps.fresh_dll.outcome == 'success'
-        shell: bash
-        env:
-          AMD_COMGR_REDIRECT_LOGS: stderr
-        run: |
-          python build/bin/llvm-lit.py build-comgr/test-lit -v 2>&1 | tee comgr-diagnostics/fresh-lit.log
-
-      - name: Run Comgr CTests with fresh DLL
-        id: fresh_ctest
-        if: always() && steps.fresh_dll.outcome == 'success'
-        shell: bash
-        env:
-          AMD_COMGR_REDIRECT_LOGS: stderr
-        run: |
-          ctest --test-dir build-comgr --output-on-failure 2>&1 | tee comgr-diagnostics/fresh-ctest.log
-
-      - name: Run Comgr unit tests with fresh DLL
-        id: fresh_unit
-        if: always() && steps.fresh_dll.outcome == 'success'
-        shell: bash
-        run: |
-          for test in DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest IncludeMaterializationTest; do
-            "build-comgr/test-unit/$test.exe" 2>&1 | tee -a comgr-diagnostics/fresh-unit.log
-          done
-
-      - name: Compare repeated relinks with fresh DLL replacement
-        if: always() && steps.fresh_dll.outcome == 'success'
-        shell: bash
-        env:
-          AMD_COMGR_CACHE: '0'
-        run: |
-          workspace="$(cygpath -u "$GITHUB_WORKSPACE")"
-          output="$workspace/comgr-diagnostics/relink-comparison"
-          mkdir -p "$output"
-          export PATH="$workspace/build-comgr:$workspace/build/bin:$PATH"
-          raw_failures=0
-          fresh_failures=0
-          for attempt in 1 2 3 4 5; do
-            # Removing only the import library forces an in-place DLL relink.
-            rm build-comgr/amd_comgr.lib
-            ninja -d keeprsp -C build-comgr amd_comgr > "$output/build-$attempt.log" 2>&1
-            if ./comgr-diagnostics/debug.exe "$(cygpath -m "$workspace/build-comgr/test-lit/get-version.exe")" \
-                "$(cygpath -m "$output/raw-$attempt.dmp")" > "$output/raw-$attempt.log" 2>&1; then
-              echo "Relink $attempt: success"
-            else
-              raw_failures=$((raw_failures + 1))
-              echo "Relink $attempt: failure"
-            fi
-            cp build-comgr/amd_comgr.dll build-comgr/amd_comgr.ready.dll
-            mv -f build-comgr/amd_comgr.ready.dll build-comgr/amd_comgr.dll
-            if ./comgr-diagnostics/debug.exe "$(cygpath -m "$workspace/build-comgr/test-lit/get-version.exe")" \
-                "$(cygpath -m "$output/fresh-$attempt.dmp")" > "$output/fresh-$attempt.log" 2>&1; then
-              echo "Fresh file $attempt: success"
-            else
-              fresh_failures=$((fresh_failures + 1))
-              echo "Fresh file $attempt: failure"
+              ./pilot-results/debug.exe \
+                "$(cygpath -m "$workspace/build-comgr/test-lit/$test.exe")" \
+                "$(cygpath -m "$workspace/pilot-results/$test.dmp")" \
+                > "pilot-results/$test-debug.txt" 2>&1 || status=$?
+              echo "Post-failure $test debugger status: $status"
             fi
           done
-          echo "Relink failures: $raw_failures / 5" | tee "$output/results.txt"
-          echo "Fresh-file failures: $fresh_failures / 5" | tee -a "$output/results.txt"
-          test "$fresh_failures" -eq 0
 
-      - name: Report diagnostic outcomes
-        if: always()
-        shell: bash
-        env:
-          BASELINE: ${{ steps.suite.outcome }}
-          FRESH_LIT: ${{ steps.fresh_lit.outcome }}
-          FRESH_CTEST: ${{ steps.fresh_ctest.outcome }}
-          FRESH_UNIT: ${{ steps.fresh_unit.outcome }}
-        run: |
-          echo "Baseline check-comgr: $BASELINE"
-          echo "Fresh DLL LIT: $FRESH_LIT"
-          echo "Fresh DLL CTest: $FRESH_CTEST"
-          echo "Fresh DLL unit tests: $FRESH_UNIT"
-
-      - name: Upload diagnostic binaries and crash evidence
+      - name: Upload trial evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: comgr-windows-diagnostics
-          path: comgr-diagnostics
+          name: comgr-pilot-${{ matrix.trial }}-${{ matrix.arm }}
+          path: |
+            pilot-results/*.json
+            pilot-results/*.log
+            pilot-results/*.txt
+            pilot-results/*.sh
+            pilot-results/*.dmp
           if-no-files-found: warn
+          retention-days: 7
