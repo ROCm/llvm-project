@@ -15,23 +15,15 @@ namespace COMGR {
 // getLibcxxHeaderFiles() and getClangBuiltinHeaderFiles() are defined in
 // the generated libcxx_headers.cpp (built as embed-libcxx-headers-lib).
 
-bool hasEmbeddedLibcxxHeaders() {
-  return !getLibcxxHeaderFiles().empty();
-}
+bool hasEmbeddedLibcxxHeaders() { return !getLibcxxHeaderFiles().empty(); }
 
 #else // !COMGR_HAS_LIBCXX_HEADERS
 
-bool hasEmbeddedLibcxxHeaders() {
-  return false;
-}
+bool hasEmbeddedLibcxxHeaders() { return false; }
 
-llvm::ArrayRef<ResourceDirResource> getLibcxxHeaderFiles() {
-  return {};
-}
+llvm::ArrayRef<ResourceDirResource> getLibcxxHeaderFiles() { return {}; }
 
-llvm::ArrayRef<ResourceDirResource> getClangBuiltinHeaderFiles() {
-  return {};
-}
+llvm::ArrayRef<ResourceDirResource> getClangBuiltinHeaderFiles() { return {}; }
 
 #endif // COMGR_HAS_LIBCXX_HEADERS
 
