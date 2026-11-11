@@ -46,6 +46,12 @@ rules:
       # Notifies LLVM issue subscribers. The job runs only when
       # github.repository is llvm/llvm-project.
       - subscriber.yml
+  github-app:
+    ignore:
+      # Labels new issues for the LLVM community. The job runs only when
+      # github.repository is llvm/llvm-project, so it does not run in this
+      # fork. The workflow is maintained upstream.
+      - new-issues.yml
   unpinned-images:
     ignore:
       # Upstream MLIR SPIR-V CI. The job runs only when
