@@ -9150,17 +9150,11 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
   case NxNonSPMD:
     StatusMsg += "Non-SPMD mode not supported";
     break;
-  case NxOptionDisabled:
-    StatusMsg += "Command line option disabled";
-    break;
   case NxOptionDisabledOrHasCall:
     StatusMsg += "Command line option disabled or has a nested call";
     break;
   case NxUnsupportedDirective:
     StatusMsg += "Unsupported directive";
-    break;
-  case NxUnsupportedSplitDirective:
-    StatusMsg += "Unsupported split directive";
     break;
   case NxNoStmt:
     StatusMsg += "No statement found";
@@ -9170,12 +9164,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
     break;
   case NxNotLoopDirective:
     StatusMsg += "Not a loop directive";
-    break;
-  case NxNotCapturedStmt:
-    StatusMsg += "Not a captured statement";
-    break;
-  case NxNotExecutableStmt:
-    StatusMsg += "Not an executable directive";
     break;
   case NxUnsupportedNestedSplitDirective:
     StatusMsg += "Unsupported nested split directive";
@@ -9210,64 +9198,8 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
   case NxNonConcurrentOrder:
     StatusMsg += "Non-concurrent order not supported";
     break;
-  case NxUnsupportedRedType:
-    StatusMsg += "Unsupported reduction variable type";
-    break;
-  case NxUnsupportedRedIntSize:
-    StatusMsg +=
-        "Integer reduction variable with the specified size not supported";
-    break;
-  case NxNotScalarRed:
-    StatusMsg += "Non-scalar reduction variable";
-    break;
-  case NxNotBinOpRed:
-    StatusMsg += "Only binary reduction operator supported";
-    break;
-  case NxUnsupportedRedOp:
-    StatusMsg += "Unsupported reduction operator";
-    break;
-  case NxNoRedVar:
-    StatusMsg += "No reduction variable found";
-    break;
-  case NxMultRedVar:
-    StatusMsg += "Multiple reduction variables in the same loop not supported";
-    break;
-  case NxUnsupportedRedExpr:
-    StatusMsg += "Unsupported reduction expression found";
-    break;
-  case NxUnsupportedXteamRedThreadLimit:
-    StatusMsg += "Thread Limit less than 256 not supported";
-    break;
   case NxUnsupportedPseudoObject:
     StatusMsg += "Unsupported pseudo object found";
-    break;
-  case NxNotRedVarInBinOpRHS:
-    StatusMsg += "Reduction variable not found in RHS of binary operator";
-    break;
-  case NxNotAddOpInBinOpRHs:
-    StatusMsg += "Add operator not found in RHS of binary operator";
-    break;
-  case NxRhsOfAssignNotBinOpOrCall:
-    StatusMsg += "RHS of assignment is not a binary operator or call";
-    break;
-  case NxBinOpNotAddAssignOrAssign:
-    StatusMsg += "Binary operator is neither += nor =";
-    break;
-  case NxNotBinOpOrCallButAccessesRedVar:
-    StatusMsg +=
-        "RHS is not binary operator or call but accesses reduction variable";
-    break;
-  case NxNotArgScalarEval:
-    StatusMsg += "Arg of call does not evaluate to scalar";
-    break;
-  case NxReductionOpNotBinAssign:
-    StatusMsg += "Reduction ops not binary assignment";
-    break;
-  case NxReductionOpRhsNotBinOrCond:
-    StatusMsg += "Reduction ops rhs is not binary or conditional operator";
-    break;
-  case NxReductionOpRhsNotMinMaxSum:
-    StatusMsg += "Reduction ops rhs is not sum, min, or max";
     break;
   case NxNotBuiltinByNameInHostCompile:
     StatusMsg += "Not recognized as builtin in host compile";
@@ -9280,22 +9212,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
     break;
   case NxPOSemanticExprNotCall:
     StatusMsg += "Pseudo-expression semantic expression is not a call";
-    break;
-  case NxChildOfCallIsNull:
-    StatusMsg += "Child of call is null";
-    break;
-  case NxMultiDeviceMinMaxNotSupported:
-    StatusMsg +=
-        "Xteam min/max reduction not supported with multi-device compilation";
-    break;
-  case NxFastReductionMinMaxNotSupported:
-    StatusMsg += "Xteam min/max reduction not supported with fast reduction";
-    break;
-  case NxScanMinMaxNotSupported:
-    StatusMsg += "Xteam min/max reduction not supported with scan";
-    break;
-  case NxAmbiguousRedKind:
-    StatusMsg += "Could not determine reduction kind";
     break;
   }
 
