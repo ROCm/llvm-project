@@ -1971,7 +1971,8 @@ getDebugDeclareStorageReg(const MachineInstr &MI) {
   // because LiveDebugVariables normally clears it, but this pipeline has no
   // register allocation, so LiveDebugVariables never runs.
   const MachineInstr *Def = MI.getMF()->getRegInfo().getUniqueVRegDef(LocReg);
-  if (!Def || Def->getOpcode() != SPIRV::OpVariable)
+  if (!Def || (Def->getOpcode() != SPIRV::OpVariable &&
+               Def->getOpcode() != SPIRV::OpUntypedVariableKHR))
     return std::nullopt;
 
   return LocReg;
