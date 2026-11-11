@@ -219,7 +219,7 @@ struct ol_context_impl_t {
   }
 
   llvm::Expected<void *> allocate(ol_device_handle_t Device, int64_t Size,
-                                  ol_alloc_type_t Kind, size_t Alignment) {
+                                  TargetAllocTy Kind, size_t Alignment) {
     if (auto Err = requireDevice(Device))
       return std::move(Err);
     auto AllocOrErr = PluginCtx->allocate(*Device->Device, Size,
@@ -854,13 +854,39 @@ Error olGetContextInfoSize_impl(ol_context_handle_t Context,
   return olGetContextInfoImplDetail(Context, PropName, 0, nullptr, PropSizeRet);
 }
 
+TargetAllocTy convertOlToPluginAllocTy(ol_alloc_type_t Type) {
+  switch (Type) {
+  case OL_ALLOC_TYPE_DEVICE:
+    return TARGET_ALLOC_DEVICE;
+  case OL_ALLOC_TYPE_HOST:
+    return TARGET_ALLOC_HOST;
+  case OL_ALLOC_TYPE_MANAGED:
+  default:
+    return TARGET_ALLOC_SHARED;
+  }
+}
+
+ol_alloc_type_t convertPluginToOlAllocTy(TargetAllocTy Kind) {
+  switch (Kind) {
+  case TARGET_ALLOC_HOST:
+    return OL_ALLOC_TYPE_HOST;
+  case TARGET_ALLOC_SHARED:
+    return OL_ALLOC_TYPE_MANAGED;
+  case TARGET_ALLOC_DEVICE:
+  case TARGET_ALLOC_DEFAULT:
+    return OL_ALLOC_TYPE_DEVICE;
+  }
+  llvm_unreachable("unhandled TargetAllocTy");
+}
+
 Error olMemAlloc_impl(ol_context_handle_t Context, ol_device_handle_t Device,
                       ol_alloc_type_t Type, size_t Size, void **AllocationOut) {
   if (Type == OL_ALLOC_TYPE_HOST)
     return createOffloadError(ErrorCode::INVALID_ENUMERATION,
                               "use olMemAllocHost for host allocations");
-  auto AllocOrErr = Context->allocate(Device, static_cast<int64_t>(Size), Type,
-                                      /*Alignment=*/0);
+  auto AllocOrErr =
+      Context->allocate(Device, static_cast<int64_t>(Size),
+                        convertOlToPluginAllocTy(Type), /*Alignment=*/0);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
   *AllocationOut = *AllocOrErr;
@@ -871,7 +897,7 @@ Error olMemAllocHost_impl(ol_context_handle_t Context,
                           ol_device_handle_t Device, size_t Size,
                           void **AllocationOut) {
   auto AllocOrErr = Context->allocate(Device, static_cast<int64_t>(Size),
-                                      OL_ALLOC_TYPE_HOST, /*Alignment=*/0);
+                                      TARGET_ALLOC_HOST, /*Alignment=*/0);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
   *AllocationOut = *AllocOrErr;
@@ -886,7 +912,8 @@ Error olMemAllocAligned_impl(ol_context_handle_t Context,
     return createOffloadError(ErrorCode::INVALID_ENUMERATION,
                               "use olMemAllocAlignedHost for host allocations");
   auto AllocOrErr =
-      Context->allocate(Device, static_cast<int64_t>(Size), Type, Alignment);
+      Context->allocate(Device, static_cast<int64_t>(Size),
+                        convertOlToPluginAllocTy(Type), Alignment);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
   *AllocationOut = *AllocOrErr;
@@ -897,7 +924,7 @@ Error olMemAllocAlignedHost_impl(ol_context_handle_t Context,
                                  ol_device_handle_t Device, size_t Size,
                                  size_t Alignment, void **AllocationOut) {
   auto AllocOrErr = Context->allocate(Device, static_cast<int64_t>(Size),
-                                      OL_ALLOC_TYPE_HOST, Alignment);
+                                      TARGET_ALLOC_HOST, Alignment);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
   *AllocationOut = *AllocOrErr;
@@ -924,7 +951,7 @@ Error olGetMemInfoImplDetail(ol_context_handle_t Context, const void *Ptr,
     // allocation has no per-device affinity. This does not affect the
     // size-only query (PropValue == nullptr): the answer is always
     // sizeof(ol_device_handle_t).
-    if (PropValue && Alloc.Kind == OL_ALLOC_TYPE_HOST)
+    if (PropValue && Alloc.Kind == TARGET_ALLOC_HOST)
       return createOffloadError(
           ErrorCode::INVALID_ARGUMENT,
           "OL_MEM_INFO_DEVICE is not valid for host allocations");
@@ -942,7 +969,7 @@ Error olGetMemInfoImplDetail(ol_context_handle_t Context, const void *Ptr,
   case OL_MEM_INFO_SIZE:
     return Info.write<size_t>(Alloc.Size);
   case OL_MEM_INFO_TYPE:
-    return Info.write<ol_alloc_type_t>(Alloc.Kind);
+    return Info.write<ol_alloc_type_t>(convertPluginToOlAllocTy(Alloc.Kind));
   default:
     return createOffloadError(ErrorCode::INVALID_ENUMERATION,
                               "olGetMemInfo enum '%i' is invalid", PropName);
@@ -1684,7 +1711,7 @@ Error olMemIsAccessible_impl(ol_context_handle_t Context,
       size_t Offset = Begin - AllocBegin;
       bool InRange = Begin >= AllocBegin && Offset <= AllocOrErr->Size &&
                      Size <= AllocOrErr->Size - Offset;
-      if (InRange && (AllocOrErr->Kind != OL_ALLOC_TYPE_DEVICE ||
+      if (InRange && (AllocOrErr->Kind != TARGET_ALLOC_DEVICE ||
                       AllocOrErr->Device == Device->Device)) {
         *IsAccessible = true;
         return Error::success();
@@ -1800,7 +1827,7 @@ Error __ol_tgt_DeallocWithVirtualAddress(ol_device_handle_t Device, void *VAddr,
 // hint for diagnostics and profiling that the public API cannot express.
 llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
                                          ol_device_handle_t Device,
-                                         ol_alloc_type_t Kind, int64_t Size,
+                                         TargetAllocTy Kind, int64_t Size,
                                          void *HostPtr) {
   if (auto Err = Context->requireDevice(Device))
     return std::move(Err);
@@ -1813,7 +1840,7 @@ llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
 // which olMemFree, resolving the kind from the allocation, cannot.
 llvm::Error __ol_tgt_MemFree(ol_context_handle_t Context,
                              ol_device_handle_t Device, void *Ptr,
-                             ol_alloc_type_t Kind) {
+                             TargetAllocTy Kind) {
   if (auto Err = Context->requireDevice(Device))
     return Err;
   return Context->PluginCtx->deallocate(*Device->Device, Ptr, Kind);

@@ -15,7 +15,6 @@
 #define OMPTARGET_SHARED_API_TYPES_H
 
 #include "Environment.h"
-#include "OffloadAPI.h"
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -32,6 +31,8 @@
 #endif
 #include <mutex>
 #include <utility>
+
+enum TargetAllocTy : int32_t;
 
 extern "C" {
 

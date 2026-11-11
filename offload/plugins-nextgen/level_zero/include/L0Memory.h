@@ -21,7 +21,6 @@
 
 #include "L0Defs.h"
 #include "L0Trace.h"
-#include "OffloadAPI.h"
 #include "PluginInterface.h"
 
 namespace llvm::omp::target::plugin {
@@ -33,7 +32,7 @@ struct L0OptionsTy;
 class L0DeviceTy;
 class L0DriverTy;
 
-constexpr static int32_t MaxMemKind = OL_ALLOC_TYPE_LAST;
+constexpr static int32_t MaxMemKind = TARGET_ALLOC_LAST + 1;
 
 /// Memory allocation information used in memory allocation/deallocation.
 struct MemAllocInfoTy {
@@ -43,8 +42,8 @@ struct MemAllocInfoTy {
   size_t ReqSize = 0;
   /// Allocation size known to the plugin (can be larger than ReqSize).
   size_t AllocSize = 0;
-  /// Allocation kind.
-  int32_t Kind = OL_ALLOC_TYPE_DEVICE;
+  /// TARGET_ALLOC kind.
+  int32_t Kind = TARGET_ALLOC_DEFAULT;
   /// Is the allocation from a pool?
   bool InPool = false;
   /// Is an implicit argument?
@@ -129,7 +128,7 @@ class MemAllocatorTy {
     }; // BlockTy
 
     /// Allocation kind for the current pool.
-    int32_t AllocKind = OL_ALLOC_TYPE_DEVICE;
+    int32_t AllocKind = TARGET_ALLOC_DEFAULT;
     /// Access to the allocator.
     MemAllocatorTy *Allocator = nullptr;
     /// Minimum supported memory allocation size from pool.
@@ -398,11 +397,11 @@ public:
   ze_kernel_indirect_access_flags_t getIndirectFlags() {
     std::lock_guard<std::mutex> Lock(Mtx);
     ze_kernel_indirect_access_flags_t Ret = 0;
-    if (AllocInfo.getNumImplicitArgs(OL_ALLOC_TYPE_DEVICE) > 0)
+    if (AllocInfo.getNumImplicitArgs(TARGET_ALLOC_DEVICE) > 0)
       Ret |= ZE_KERNEL_INDIRECT_ACCESS_FLAG_DEVICE;
-    if (AllocInfo.getNumImplicitArgs(OL_ALLOC_TYPE_HOST) > 0)
+    if (AllocInfo.getNumImplicitArgs(TARGET_ALLOC_HOST) > 0)
       Ret |= ZE_KERNEL_INDIRECT_ACCESS_FLAG_HOST;
-    if (AllocInfo.getNumImplicitArgs(OL_ALLOC_TYPE_MANAGED) > 0)
+    if (AllocInfo.getNumImplicitArgs(TARGET_ALLOC_SHARED) > 0)
       Ret |= ZE_KERNEL_INDIRECT_ACCESS_FLAG_SHARED;
     return Ret;
   }

@@ -43,11 +43,11 @@ public:
                           AsyncInfoWrapperTy &AsyncInfoWrapper) override;
 
   llvm::Expected<void *> allocateImpl(GenericDeviceTy &Device, int64_t Size,
-                                      void *HostPtr, ol_alloc_type_t Kind,
+                                      void *HostPtr, TargetAllocTy Kind,
                                       size_t Alignment,
                                       GenericProfilerTy *ProfilerPtr) override;
   llvm::Error deallocateImpl(GenericDeviceTy &Device, void *Ptr,
-                             ol_alloc_type_t Kind,
+                             TargetAllocTy Kind,
                              GenericProfilerTy *ProfilerPtr) override;
   Expected<PluginAllocInfoTy> getAllocInfo(const void *Ptr) override;
 

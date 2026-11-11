@@ -107,7 +107,7 @@ class L0DeviceTy final : public GenericDeviceTy {
   ze_device_module_properties_t ModuleProperties{};
 
   /// Devices' default target allocation kind for internal allocation.
-  int32_t AllocKind = OL_ALLOC_TYPE_DEVICE;
+  int32_t AllocKind = TARGET_ALLOC_DEVICE;
 
   DeviceArchTy DeviceArch = DeviceArchTy::DeviceArch_None;
 
@@ -496,7 +496,7 @@ public:
   MemAllocatorTy &getDeviceMemAllocator() { return MemAllocator; }
 
   MemAllocatorTy &getMemAllocator(int32_t Kind) {
-    if (Kind == OL_ALLOC_TYPE_HOST)
+    if (Kind == TARGET_ALLOC_HOST)
       return L0Driver.getHostMemAllocator();
     return getDeviceMemAllocator();
   }
@@ -514,10 +514,9 @@ public:
   loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage, int32_t ImageId,
                  PluginContextTy *UserCtx) override;
   Error unloadBinaryImpl(DeviceImageTy *Image) override;
-  Expected<void *> allocate(size_t Size, void *HstPtr, ol_alloc_type_t Kind,
+  Expected<void *> allocate(size_t Size, void *HstPtr, TargetAllocTy Kind,
                             size_t Alignment) override;
-  Error free(void *TgtPtr,
-             ol_alloc_type_t Kind = OL_ALLOC_TYPE_DEVICE) override;
+  Error free(void *TgtPtr, TargetAllocTy Kind = TARGET_ALLOC_DEFAULT) override;
 
   /// This plugin does nothing to lock buffers. Do not return an error, just
   /// return the same pointer as the device pointer.

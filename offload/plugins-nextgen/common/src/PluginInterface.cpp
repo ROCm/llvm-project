@@ -18,12 +18,9 @@
 #include "JIT.h"
 #include "Shared/Utils.h"
 #include "Utils/ELF.h"
-<<<<<<< HEAD
 #include "omptarget.h"
 #include "print_tracing.h"
 #include "trace.h"
-=======
->>>>>>> 84c624ecc129
 
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
@@ -546,7 +543,7 @@ Error GenericDeviceTy::synchronize(__tgt_async_info *AsyncInfo,
     return Plugin::error(ErrorCode::INVALID_ARGUMENT,
                          "invalid async info queue");
 
-  SmallVector<std::pair<void *, ol_alloc_type_t>> AllocsToDelete{};
+  SmallVector<std::pair<void *, TargetAllocTy>> AllocsToDelete{};
   {
     std::lock_guard<std::mutex> AllocationGuard{AsyncInfo->Mutex};
 
@@ -574,7 +571,7 @@ Error GenericDeviceTy::queryAsync(__tgt_async_info *AsyncInfo,
                          "invalid async info queue");
 
   bool WorkCompleted = false;
-  SmallVector<std::pair<void *, ol_alloc_type_t>> AllocsToDelete{};
+  SmallVector<std::pair<void *, TargetAllocTy>> AllocsToDelete{};
 
   {
     // Query and collect under the mutex, as synchronize does. Querying outside
@@ -610,7 +607,7 @@ Error GenericDeviceTy::getDeviceMemorySize(uint64_t &DSize) {
 }
 
 Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
-                                            ol_alloc_type_t Kind,
+                                            TargetAllocTy Kind,
                                             size_t Alignment,
                                             GenericProfilerTy *ProfilerPtr) {
   // Timing is owned by the OpenMP layer, which surrounds this call; see
@@ -638,7 +635,7 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
 }
 
 void GenericDeviceTy::recordAllocation(void *DevicePtr, void *HostPtr,
-                                       int64_t Size, ol_alloc_type_t Kind) {
+                                       int64_t Size, TargetAllocTy Kind) {
   if (!OMPX_TrackAllocationTraces)
     return;
 
@@ -659,8 +656,7 @@ void GenericDeviceTy::recordAllocation(void *DevicePtr, void *HostPtr,
   MapATI = ATI;
 }
 
-void GenericDeviceTy::recordDeallocation(void *DevicePtr,
-                                         ol_alloc_type_t Kind) {
+void GenericDeviceTy::recordDeallocation(void *DevicePtr, TargetAllocTy Kind) {
   if (!OMPX_TrackAllocationTraces)
     return;
 
@@ -691,7 +687,7 @@ void GenericDeviceTy::recordDeallocation(void *DevicePtr,
   ATI->DeallocationTrace = StackTrace;
 }
 
-Error GenericDeviceTy::dataDelete(void *TgtPtr, ol_alloc_type_t Kind,
+Error GenericDeviceTy::dataDelete(void *TgtPtr, TargetAllocTy Kind,
                                   GenericProfilerTy *ProfilerPtr) {
   // Timing is owned by the OpenMP layer, which surrounds this call; see
   // DeviceTy::deleteData.
@@ -790,15 +786,17 @@ PluginContextTy::~PluginContextTy() {
 
 MemoryManagerTy *
 PluginContextTy::getDeviceMemoryManagerFor(GenericDeviceTy &Device,
-                                           ol_alloc_type_t Kind) {
+                                           TargetAllocTy Kind) {
   if (Device.OMPX_TrackAllocationTraces)
     return nullptr;
 
-  assert((Kind == OL_ALLOC_TYPE_DEVICE || Kind == OL_ALLOC_TYPE_MANAGED) &&
+  if (Kind == TARGET_ALLOC_DEFAULT)
+    Kind = TARGET_ALLOC_DEVICE;
+  assert((Kind == TARGET_ALLOC_DEVICE || Kind == TARGET_ALLOC_SHARED) &&
          "host allocations are not device-bound");
 
   size_t Threshold;
-  if (Kind == OL_ALLOC_TYPE_DEVICE) {
+  if (Kind == TARGET_ALLOC_DEVICE) {
     auto [EnvThreshold, EnableMM] = MemoryManagerTy::getSizeThresholdFromEnv();
     if (!EnableMM)
       return nullptr;
@@ -838,7 +836,7 @@ MemoryManagerTy *PluginContextTy::getHostMemoryManager() {
       std::make_unique<ContextAllocatorTy>(*this, *Devices.front());
   HostMemoryManager.Manager = std::make_unique<MemoryManagerTy>(
       *HostMemoryManager.Allocator, MemoryManagerTy::DefaultSizeThreshold,
-      OL_ALLOC_TYPE_HOST);
+      TARGET_ALLOC_HOST);
   return HostMemoryManager.Manager.get();
 }
 
@@ -850,25 +848,24 @@ void PluginContextTy::releaseMemoryManagers() {
 }
 
 Expected<void *> ContextAllocatorTy::allocate(size_t Size, void *HstPtr,
-                                              ol_alloc_type_t Kind,
+                                              TargetAllocTy Kind,
                                               size_t Alignment) {
   return Context.allocateImpl(Device, Size, HstPtr, Kind, Alignment);
 }
 
-Error ContextAllocatorTy::free(void *TgtPtr, ol_alloc_type_t Kind) {
+Error ContextAllocatorTy::free(void *TgtPtr, TargetAllocTy Kind) {
   return Context.deallocateImpl(Device, TgtPtr, Kind);
 }
 
 MemoryManagerTy *PluginContextTy::getMemoryManagerFor(GenericDeviceTy &Device,
-                                                      ol_alloc_type_t Kind) {
-  return Kind == OL_ALLOC_TYPE_HOST ? getHostMemoryManager()
-                                    : getDeviceMemoryManagerFor(Device, Kind);
+                                                      TargetAllocTy Kind) {
+  return Kind == TARGET_ALLOC_HOST ? getHostMemoryManager()
+                                   : getDeviceMemoryManagerFor(Device, Kind);
 }
 
 Expected<void *> PluginContextTy::allocate(GenericDeviceTy &Device,
                                            int64_t Size, void *HostPtr,
-                                           ol_alloc_type_t Kind,
-                                           size_t Alignment,
+                                           TargetAllocTy Kind, size_t Alignment,
                                            GenericProfilerTy *ProfilerPtr) {
   MemoryManagerTy *Manager = getMemoryManagerFor(Device, Kind);
   auto AllocOrErr = Manager ? Manager->allocate(Size, HostPtr, Alignment)
@@ -887,7 +884,7 @@ Expected<void *> PluginContextTy::allocate(GenericDeviceTy &Device,
 
 Expected<void *> PluginContextTy::allocateImpl(GenericDeviceTy &Device,
                                                int64_t Size, void *HostPtr,
-                                               ol_alloc_type_t Kind,
+                                               TargetAllocTy Kind,
                                                size_t Alignment,
                                                GenericProfilerTy *ProfilerPtr) {
   return Device.dataAlloc(Size, HostPtr, Kind, Alignment, ProfilerPtr);
@@ -905,7 +902,7 @@ Error PluginContextTy::deallocate(void *Ptr, GenericProfilerTy *ProfilerPtr) {
 }
 
 Error PluginContextTy::deallocate(GenericDeviceTy &Device, void *Ptr,
-                                  ol_alloc_type_t Kind,
+                                  TargetAllocTy Kind,
                                   GenericProfilerTy *ProfilerPtr) {
   Device.recordDeallocation(Ptr, Kind);
   untrackAllocation(Ptr);
@@ -917,7 +914,7 @@ Error PluginContextTy::deallocate(GenericDeviceTy &Device, void *Ptr,
 }
 
 Error PluginContextTy::deallocateImpl(GenericDeviceTy &Device, void *Ptr,
-                                      ol_alloc_type_t Kind,
+                                      TargetAllocTy Kind,
                                       GenericProfilerTy *ProfilerPtr) {
   return Device.dataDelete(Ptr, Kind, ProfilerPtr);
 }
