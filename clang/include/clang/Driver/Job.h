@@ -145,9 +145,6 @@ class Command {
   /// See Command::setEnvironment
   std::vector<const char *> Environment;
 
-  /// Dependent actions
-  llvm::SmallVector<const Action *, 4> DependentActions;
-
   /// Optional redirection for stdin, stdout, stderr.
   std::vector<std::optional<std::string>> RedirectFiles;
 
@@ -245,9 +242,6 @@ public:
 
   const llvm::opt::ArgStringList &getArguments() const { return Arguments; }
 
-  const llvm::SmallVector<const Action *, 4> &getDependentActions() const {
-    return DependentActions;
-  }
   const std::vector<InputInfo> &getInputInfos() const { return InputInfoList; }
 
   const std::vector<std::string> &getOutputFilenames() const {

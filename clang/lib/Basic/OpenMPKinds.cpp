@@ -970,15 +970,6 @@ void clang::getOpenMPCaptureRegions(
   assert(unsigned(DKind) < llvm::omp::Directive_enumSize);
   assert(isOpenMPCapturingDirective(DKind) && "Expecting capturing directive");
 
-  auto IsTeamsLoop = [&]() {
-    // Assume the current leaf is OMPD_loop, check if the CaptureRegions
-    // contains only OMPD_teams.
-    // Upstream OMPD_teams_loop has two regions: OMPD_teams, OMPD_parallel.
-    // Downstream, it has only one: OMPD_teams. Avoid adding the parallel
-    // region in this specific case.
-    return CaptureRegions.size() == 1 && CaptureRegions[0] == OMPD_teams;
-  };
-
   auto GetRegionsForLeaf = [&](OpenMPDirectiveKind LKind) {
     assert(isLeafConstruct(LKind) && "Epecting leaf directive");
     // Whether a leaf would require OMPD_unknown if it occurred on its own.
@@ -1053,7 +1044,7 @@ void clang::getOpenMPCaptureRegions(
   // constructs were present. Push a single OMPD_unknown as the capture
   /// region.
   if (CaptureRegions.empty() && MayNeedUnknownRegion)
-    CaptureRegions.push_back(OMPD_unknown);  
+    CaptureRegions.push_back(OMPD_unknown);
 
   // OMPD_unknown is only expected as the only region. If other regions
   // are present OMPD_unknown should not be present.

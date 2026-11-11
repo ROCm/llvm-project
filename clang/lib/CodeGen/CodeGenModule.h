@@ -790,7 +790,6 @@ public:
   ~CodeGenModule();
 
   void clear();
-  const OMPExecutableDirective *OMPPresentScanDirective = nullptr;
 
   /// Finalize LLVM code generation.
   void Release();
