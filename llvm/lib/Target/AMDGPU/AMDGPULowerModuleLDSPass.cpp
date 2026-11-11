@@ -954,7 +954,7 @@ public:
 
       std::string StructName =
           F->hasLocalLinkage()
-              ? ("__amdgpu_lds." + F->getName() + ModuleId).str()
+              ? ("__amdgpu_lds." + F->getName() + "." + ModuleId).str()
               : ("__amdgpu_lds." + F->getName()).str();
       LDSVariableReplacement Replacement =
           createLDSVariableReplacement(M, StructName, FuncScopeVars);
@@ -978,7 +978,7 @@ public:
     // different TUs). Pack them into a single per-module struct with a
     // module-unique name so the linker treats them as one allocation unit.
     if (!InternalMultiUserVars.empty()) {
-      std::string StructName = "__amdgpu_lds.__internal" + ModuleId;
+      std::string StructName = "__amdgpu_lds.__internal." + ModuleId;
       LDSVariableReplacement Replacement =
           createLDSVariableReplacement(M, StructName, InternalMultiUserVars);
 

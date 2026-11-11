@@ -1222,10 +1222,13 @@ struct AMDGPUQueueTy {
   }
 
   /// Returns the number of streams, this queue is currently assigned to.
-  bool getUserCount() const { return NumUsers; }
+  uint32_t getUserCount() const { return NumUsers; }
 
   /// Returns if the underlying HSA queue is initialized.
   bool isInitialized() { return Queue != nullptr; }
+
+  /// Returns the underlying HSA queue.
+  hsa_queue_t *getHsaQueue() const { return Queue; }
 
   /// Decrement user count of the queue object.
   void removeUser() { --NumUsers; }
@@ -3981,6 +3984,19 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return Plugin::error(ErrorCode::UNKNOWN, "Failed to prepopulate GPU page table.");
     }
     return Plugin::success();
+  }
+
+  /// The HSA queue that \p AsyncInfo's stream is bound to.  A stream is bound
+  /// to a queue when it is first needed, so this binds one if necessary.
+  /// Several streams can share an HSA queue.
+  Expected<void *> getNativeQueueHandle(__tgt_async_info *AsyncInfo) override {
+    AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
+    AMDGPUStreamTy *Stream = nullptr;
+    Error Err = getStream(AsyncInfoWrapper, Stream);
+    AsyncInfoWrapper.finalize(Err);
+    if (Err)
+      return std::move(Err);
+    return Stream->getQueue()->getHsaQueue();
   }
 
   Expected<void *> getNativeHandle() override {
