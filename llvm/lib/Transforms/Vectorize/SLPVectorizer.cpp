@@ -10353,12 +10353,10 @@ class InstructionsCompatibilityAnalysis {
   /// lanes are inserted into it. A single-index scalar GEP is supported: the
   /// copyable lanes are modeled as zero-index GEPs of the lane values
   /// themselves. A scalar zext is supported: the copyable lanes are constants
-  /// modeled as zexts of truncated constants. A freeze is supported: the
-  /// copyable lanes are modeled as freezes of the lane values, which refine
-  /// them.
+  /// modeled as zexts of truncated constants.
   static bool isSupportedMainOp(Instruction *I) {
-    return isSupportedOpcode(I->getOpcode()) ||
-           isa<MinMaxIntrinsic, FreezeInst>(I) || isFMAOrFMulAdd(I) ||
+    return isSupportedOpcode(I->getOpcode()) || isa<MinMaxIntrinsic>(I) ||
+           isFMAOrFMulAdd(I) ||
            (isa<ExtractElementInst>(I) && isVectorLikeInstWithConstOps(I) &&
             isa<FixedVectorType>(I->getOperand(0)->getType())) ||
            (isa<GetElementPtrInst>(I) && I->getNumOperands() == 2 &&
@@ -10435,27 +10433,22 @@ class InstructionsCompatibilityAnalysis {
             return Operands.contains(I);
           }))
         continue;
-      // On a tie, keep the outer binary op or freeze as MainOp rather than
-      // replacing it with an inner op that appears as its direct operand. For
-      // example, in (2.0f * A) + B the fadd and fmul each appear once in VL;
-      // without this check the fmul could win and prevent vectorization of the
-      // fadd pair.
+      // On a tie, keep the outer binary op as MainOp rather than replacing it
+      // with an inner op that appears as its direct operand. For example, in
+      // (2.0f * A) + B the fadd and fmul each appear once in VL; without this
+      // check the fmul could win and prevent vectorization of the fadd pair.
       if (P.second.size() == BestOpcodeNum) {
         auto *I = P.second.front();
-        auto HasOperandLike = [](Instruction *Outer, Instruction *Inner) {
-          return any_of(Outer->operands(), [&](Value *Op) {
-            auto *OpI = dyn_cast<Instruction>(Op);
-            return OpI && OpI->getOpcode() == Inner->getOpcode() &&
-                   OpI->getParent() == Inner->getParent();
-          });
-        };
-        if (isa<BinaryOperator, FreezeInst>(MainOp) &&
-            HasOperandLike(MainOp, I))
-          continue;
-        // A freeze replaces another op only as its outer op, so the choice
-        // does not depend on the order of the lanes.
-        if (isa<FreezeInst>(I) && !HasOperandLike(I, MainOp))
-          continue;
+        if (auto *MainBO = dyn_cast<BinaryOperator>(MainOp)) {
+          auto *MainBOOp0 = dyn_cast<Instruction>(MainBO->getOperand(0));
+          auto *MainBOOp1 = dyn_cast<Instruction>(MainBO->getOperand(1));
+          if (MainBOOp0 && MainBOOp0->getOpcode() == I->getOpcode() &&
+              MainBOOp0->getParent() == I->getParent())
+            continue;
+          if (MainBOOp1 && MainBOOp1->getOpcode() == I->getOpcode() &&
+              MainBOOp1->getParent() == I->getParent())
+            continue;
+        }
         // Keep fmuladd over fmul/fadd on a tie only when every copyable is
         // an absorbed fmul/fadd.
         if (RecurrenceDescriptor::isFMulAddIntrinsic(MainOp) &&
@@ -10604,9 +10597,6 @@ class InstructionsCompatibilityAnalysis {
     if (MainOpcode == Instruction::ZExt)
       return {ConstantExpr::getTrunc(cast<Constant>(V),
                                      cast<CastInst>(MainOp)->getSrcTy())};
-    // freeze(V) refines V.
-    if (MainOpcode == Instruction::Freeze)
-      return {V};
     assert(isSupportedMainOp(MainOp) && "Unsupported opcode");
     Type *Ty = V->getType();
     if (PoisonPlaceholder &&
@@ -11260,17 +11250,6 @@ public:
       InstructionsState OpS = Analysis.buildInstructionsState(Ops, R);
       if (!OpS || (OpS.getOpcode() == Instruction::PHI && !allSameBlock(Ops)))
         return false;
-      // Loads have a valid state even if gathered; a freeze of gathered loads
-      // only freezes the copyable lanes needlessly.
-      if (MainOpcode == Instruction::Freeze &&
-          OpS.getOpcode() == Instruction::Load) {
-        BoUpSLP::OrdersType Order;
-        SmallVector<Value *> PointerOps;
-        BoUpSLP::StridedPtrInfo SPtrInfo;
-        if (R.canVectorizeLoads(Ops, OpS.getMainOp(), Order, PointerOps,
-                                SPtrInfo) == BoUpSLP::LoadsState::Gather)
-          return false;
-      }
       unsigned CopyableNum =
           count_if(Ops, [&](Value *V) { return OpS.isCopyableElement(V); });
       return CopyableNum <= VL.size() / 2;
@@ -11279,10 +11258,7 @@ public:
     // matching lanes and the values of the copyable lanes. It is profitable
     // only if that base vector is cheap (a splat, constants or vectorizable),
     // otherwise it is a gather not cheaper than the gather of the pointers.
-    // The same applies to a copyable freeze node: the freeze of a gathered
-    // operand only freezes the copyable lanes needlessly.
-    if ((MainOpcode == Instruction::GetElementPtr ||
-         MainOpcode == Instruction::Freeze) &&
+    if (MainOpcode == Instruction::GetElementPtr &&
         !CheckOperand(Operands.front()))
       return OrigS;
     auto BuildCandidates =
@@ -11298,12 +11274,11 @@ public:
           Candidates.emplace_back(V1, (I1 || I2) ? V2 : V1);
         };
     if (VL.size() == 2) {
-      // The operand-pairing heuristic below does not apply to calls, GEPs,
-      // casts and freezes; defer to the full tree cost computation instead of
+      // The operand-pairing heuristic below does not apply to calls, GEPs
+      // and casts; defer to the full tree cost computation instead of
       // pre-rejecting here.
       if (MainOpcode == Instruction::Call ||
-          MainOpcode == Instruction::GetElementPtr ||
-          isa<CastInst, FreezeInst>(MainOp))
+          MainOpcode == Instruction::GetElementPtr || isa<CastInst>(MainOp))
         return S;
       // Check if the operands allow better vectorization.
       SmallVector<std::pair<Value *, Value *>, 4> Candidates1, Candidates2;
@@ -11357,10 +11332,10 @@ public:
         return OrigS;
       return S;
     }
-    // Casts and freezes are the only 1-operand and fma/fmuladd are the only
-    // 3-operand copyables.
+    // Casts are the only 1-operand and fma/fmuladd are the only 3-operand
+    // copyables.
     assert((Operands.size() == 2 ||
-            (Operands.size() == 1 && isa<CastInst, FreezeInst>(MainOp)) ||
+            (Operands.size() == 1 && isa<CastInst>(MainOp)) ||
             (Operands.size() == 3 && isFMAOrFMulAdd(MainOp))) &&
            "Unexpected number of operands!");
     if (CopyableNum < VL.size() / 2)
@@ -11425,7 +11400,7 @@ public:
       return OrigS;
     // Check the operand holding the copyable values.
     if (!CheckOperand(Operands[S.getCopyableOpIdx()])) {
-      if (!isFMAOrFMulAdd(MainOp))
+      if (Operands.size() == 2)
         return OrigS;
       // Retry with the copyable modeled as the first multiplicand.
       S.setCopyableOpIdx(0);
