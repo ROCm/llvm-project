@@ -343,7 +343,9 @@
 // allocator tier). Enabled by default on Linux hosts; inert at runtime unless
 // the HSA runtime is dlopen'd.
 #ifndef SANITIZER_AMDHSA
-#  if SANITIZER_LINUX && !SANITIZER_ANDROID
+// The ROCr/HSA host runtime is 64-bit (LP64) only, so AMDHSA host
+// support is never enabled for 32-bit sanitizer runtimes.
+#  if SANITIZER_LINUX && !SANITIZER_ANDROID && SANITIZER_WORDSIZE == 64
 #    define SANITIZER_AMDHSA 1
 #  else
 #    define SANITIZER_AMDHSA 0
