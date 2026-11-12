@@ -15,6 +15,7 @@
 #define OMPTARGET_BACKENDCONFIG_H
 
 #include "OffloadAPI.h"
+#include "OpenMP/InteropAPI.h"
 
 namespace llvm::omp::target {
 
@@ -40,6 +41,22 @@ struct BackendConfig {
   bool ChecksZeroCopyConfig = false;
   /// Whether the plugin explains why no image is compatible (XNACK mode).
   bool ExplainsIncompatibleImages = false;
+
+  BackendConfig() = default;
+  BackendConfig(const BackendConfig &) = default;
+  BackendConfig(BackendConfig &&) = default;
+  BackendConfig &operator=(const BackendConfig &) = default;
+  BackendConfig &operator=(BackendConfig &&) = default;
+  virtual ~BackendConfig() = default;
+
+  /// Return the interop specification supported by the backend for the given
+  /// interop type, or NoInteropSpec if the backend supports none.
+  /// TODO: the user-provided preference list is not honored yet.
+  virtual interop_spec_t
+  selectInteropPreference(int32_t InteropType, int32_t NumPrefers,
+                          interop_spec_t *Prefers) const {
+    return NoInteropSpec;
+  }
 
   /// Get the configuration of \p Backend.
   static const BackendConfig &get(ol_platform_backend_t Backend);
