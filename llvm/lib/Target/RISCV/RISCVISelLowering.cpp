@@ -618,9 +618,8 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::SPLAT_VECTOR, P64VecVTs, Legal);
       setOperationAction(ISD::BUILD_VECTOR, MVT::v2i32, Legal);
       setOperationAction(ISD::BUILD_VECTOR, {MVT::v4i16, MVT::v8i8}, Custom);
-      setOperationAction(ISD::EXTRACT_VECTOR_ELT, MVT::v2i32, Legal);
       setOperationAction({ISD::EXTRACT_VECTOR_ELT, ISD::INSERT_VECTOR_ELT},
-                         {MVT::v4i16, MVT::v8i8}, Custom);
+                         P64VecVTs, Custom);
       setOperationAction(ISD::CONCAT_VECTORS, {MVT::v4i16, MVT::v8i8}, Legal);
       setOperationAction(ISD::EXTRACT_SUBVECTOR, {MVT::v2i16, MVT::v4i8},
                          Legal);
@@ -11692,6 +11691,11 @@ SDValue RISCVTargetLowering::lowerINSERT_VECTOR_ELT(SDValue Op,
     unsigned NumElts = VecVT.getVectorNumElements();
     MVT EltVT = VecVT.getVectorElementType();
 
+    // v2i32 on RV32 lives in a GPR pair; constant index inserts are selected
+    // with INSERT_SUBREG.
+    if (!Subtarget.is64Bit() && VecVT == MVT::v2i32)
+      return Op;
+
     if (!Subtarget.is64Bit() && (VecVT == MVT::v4i16 || VecVT == MVT::v8i8)) {
       unsigned HalfNumElts = NumElts / 2;
       auto [Lo, Hi] = DAG.SplitVector(Vec, DL);
@@ -11974,10 +11978,30 @@ SDValue RISCVTargetLowering::lowerEXTRACT_VECTOR_ELT(SDValue Op,
         VecVT != MVT::v4i8 && VecVT != MVT::v2i32)
       return SDValue();
 
-    if (!Subtarget.is64Bit() && (VecVT == MVT::v4i16 || VecVT == MVT::v8i8)) {
+    // v2i32 on RV32 lives in a GPR pair; constant index extracts are selected
+    // with EXTRACT_SUBREG.
+    if (!Subtarget.is64Bit() && VecVT.getSizeInBits() == 64) {
       auto *IdxC = dyn_cast<ConstantSDNode>(Idx);
-      if (!IdxC)
-        return SDValue();
+      if (!IdxC) {
+        // Shift the pair right by the bit offset of the element. NSRL reads 6
+        // bits of shift amount so it handles offsets >= 32.
+        SDValue Lo, Hi;
+        if (VecVT == MVT::v2i32) {
+          Lo = DAG.getExtractVectorElt(DL, MVT::i32, Vec, 0);
+          Hi = DAG.getExtractVectorElt(DL, MVT::i32, Vec, 1);
+        } else {
+          std::tie(Lo, Hi) = DAG.SplitVector(Vec, DL);
+          Lo = DAG.getBitcast(XLenVT, Lo);
+          Hi = DAG.getBitcast(XLenVT, Hi);
+        }
+        unsigned ElemWidth = VecVT.getVectorElementType().getSizeInBits();
+        SDValue Shamt = DAG.getNode(ISD::MUL, DL, XLenVT, Idx,
+                                    DAG.getConstant(ElemWidth, DL, XLenVT));
+        return DAG.getNode(RISCVISD::NSRL, DL, XLenVT, Lo, Hi, Shamt);
+      }
+      // v2i32 constant index extracts are selected with EXTRACT_SUBREG.
+      if (VecVT == MVT::v2i32)
+        return Op;
       unsigned IdxVal = IdxC->getZExtValue();
       unsigned HalfNumElts = VecVT.getVectorNumElements() / 2;
       auto [Lo, Hi] = DAG.SplitVector(Vec, DL);
@@ -12501,6 +12525,8 @@ static unsigned getRVPScalarOpcode(unsigned IntNo) {
     return ISD::AVGSUBFLOORS;
   case Intrinsic::riscv_asubu_u32:
     return ISD::AVGSUBFLOORU;
+  case Intrinsic::riscv_ssh1sadd_i32:
+    return RISCVISD::SSH1SADD;
   case Intrinsic::riscv_mulhr_i32:
     return RISCVISD::MULHR;
   case Intrinsic::riscv_mulhru_u32:
@@ -13488,6 +13514,7 @@ SDValue RISCVTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   case Intrinsic::riscv_aaddu_u32:
   case Intrinsic::riscv_asub_i32:
   case Intrinsic::riscv_asubu_u32:
+  case Intrinsic::riscv_ssh1sadd_i32:
   case Intrinsic::riscv_mulhr_i32:
   case Intrinsic::riscv_mulhru_u32:
   case Intrinsic::riscv_mulhsu_i32:
@@ -14738,20 +14765,18 @@ SDValue RISCVTargetLowering::lowerINSERT_SUBVECTOR(SDValue Op,
   unsigned OrigIdx = Op.getConstantOperandVal(2);
   const RISCVRegisterInfo *TRI = Subtarget.getRegisterInfo();
 
-  bool IsPExtInsert =
-      Subtarget.hasStdExtP() &&
-      (!Subtarget.is64Bit() && (VecVT == MVT::v4i16 || VecVT == MVT::v8i8));
-
-  // Fold insert of a 32-bit packed type into a zero-filled 64-bit packed vector
-  // at index 0 (a zero-extend) to avoid scalarizing it into a byte-wise repack.
-  if (IsPExtInsert) {
-    if ((VecVT != MVT::v4i16 && VecVT != MVT::v8i8) ||
-        SubVecVT.getSizeInBits() != 32 || OrigIdx != 0 ||
-        !ISD::isConstantSplatVectorAllZeros(Vec.getNode()))
+  // Lower a 32-bit insert into a 64-bit packed vector on RV32 to an
+  // extract_subvector of the other half and a concat_vectors.
+  if (Subtarget.hasStdExtP() && !Subtarget.is64Bit() &&
+      (VecVT == MVT::v4i16 || VecVT == MVT::v8i8)) {
+    unsigned HalfElts = VecVT.getVectorNumElements() / 2;
+    if (SubVecVT.getSizeInBits() != 32 || (OrigIdx != 0 && OrigIdx != HalfElts))
       return SDValue();
-
-    SDValue Zero = DAG.getConstant(0, DL, SubVecVT);
-    return DAG.getNode(ISD::CONCAT_VECTORS, DL, VecVT, SubVec, Zero);
+    SDValue Other =
+        DAG.getExtractSubvector(DL, SubVecVT, Vec, OrigIdx == 0 ? HalfElts : 0);
+    return OrigIdx == 0
+               ? DAG.getNode(ISD::CONCAT_VECTORS, DL, VecVT, SubVec, Other)
+               : DAG.getNode(ISD::CONCAT_VECTORS, DL, VecVT, Other, SubVec);
   }
 
   if (OrigIdx == 0 && Vec.isUndef())
@@ -18578,6 +18603,7 @@ void RISCVTargetLowering::ReplaceNodeResults(SDNode *N,
     case Intrinsic::riscv_aaddu_u32:
     case Intrinsic::riscv_asub_i32:
     case Intrinsic::riscv_asubu_u32:
+    case Intrinsic::riscv_ssh1sadd_i32:
     case Intrinsic::riscv_mulhr_i32:
     case Intrinsic::riscv_mulhru_u32:
     case Intrinsic::riscv_mulhsu_i32:
@@ -18590,9 +18616,9 @@ void RISCVTargetLowering::ReplaceNodeResults(SDNode *N,
     case Intrinsic::riscv_mhraccu_u32:
     case Intrinsic::riscv_mhaccsu_i32:
     case Intrinsic::riscv_mhraccsu_i32: {
-      // RV64 has no scalar averaging, mulh, mulq or mhacc instructions; reuse
-      // the packed .w family on the low words, whose element 0 is the scalar
-      // result.
+      // RV64 has no scalar averaging, shift-add, mulh, mulq or mhacc
+      // instructions; reuse the packed .w family on the low words, whose
+      // element 0 is the scalar result.
       assert(Subtarget.is64Bit() && N->getValueType(0) == MVT::i32 &&
              "Unexpected subtarget or result type");
       unsigned Opc = getRVPScalarOpcode(IntNo);
