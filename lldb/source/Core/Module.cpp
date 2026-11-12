@@ -289,6 +289,7 @@ Module::~Module() {
 
 ObjectFile *Module::GetMemoryObjectFile(const lldb::ProcessSP &process_sp,
                                         lldb::addr_t header_addr, Status &error,
+                                        bool disable_memory_symtab_caching,
                                         size_t size_to_read) {
   if (m_objfile_sp) {
     error = Status::FromErrorString("object file already exists");
@@ -309,6 +310,8 @@ ObjectFile *Module::GetMemoryObjectFile(const lldb::ProcessSP &process_sp,
                                               header_addr, data_sp);
         if (m_objfile_sp) {
           m_memory_module_addr = header_addr;
+          m_objfile_sp->SetDisableMemorySymtabCaching(
+              disable_memory_symtab_caching);
 
           // Once we get the object file, update our module with the object
           // file's architecture since it might differ in vendor/os if some
@@ -1526,7 +1529,7 @@ bool Module::FindSourceFile(const FileSpec &orig_spec, FileSpec &new_spec) {
 
 void Module::AddPrefixMapSearchDir(FileSpec dir) {
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
-  m_prefix_map_search_dirs.insert(ConstString(dir.GetPath()));
+  m_prefix_map_search_dirs.insert(dir.GetPath());
 }
 
 void Module::LoadPrefixMapsIfNeeded() {
@@ -1538,11 +1541,10 @@ void Module::LoadPrefixMapsIfNeeded() {
   llvm::vfs::FileSystem &vfs = *llvm::vfs::getRealFileSystem();
   // Track visited directories so two starting paths that share ancestors
   // don't redundantly walk the same directory.
-  llvm::DenseSet<ConstString> searched;
-  for (ConstString start_cs : m_prefix_map_search_dirs) {
-    for (FileSpec current(start_cs.GetStringRef());;) {
-      ConstString directory_cs(current.GetPath());
-      if (!searched.insert(directory_cs).second)
+  llvm::StringSet<> searched;
+  for (const auto &start : m_prefix_map_search_dirs) {
+    for (FileSpec current(start.getKey());;) {
+      if (!searched.insert(current.GetPath()).second)
         break;
       FileSpec map_file(current);
       map_file.AppendPathComponent("compilation-prefix-map.json");
@@ -1682,12 +1684,14 @@ std::string Module::GetCacheKey() {
   return key;
 }
 
-DataFileCache *Module::GetIndexCache(bool memory_module) {
+DataFileCache *Module::GetIndexCache(LLDBIndexType type) {
   bool lldb_index_enabled = false;
-  if (ModuleList::GetGlobalModuleListProperties().GetEnableLLDBIndexCache())
+  if (ModuleList::GetGlobalModuleListProperties().GetEnableLLDBIndexCache() &&
+      (type == eLLDBIndexTypeSymtab || type == eLLDBIndexTypeDwarfIndex))
     lldb_index_enabled = true;
-  if (memory_module && ModuleList::GetGlobalModuleListProperties()
-                           .GetEnableLLDBIndexCacheMemoryModules())
+  if (ModuleList::GetGlobalModuleListProperties()
+          .GetEnableLLDBIndexCacheMemoryModules() &&
+      type == eLLDBIndexTypeMemoryModuleSymtab)
     lldb_index_enabled = true;
   if (!lldb_index_enabled)
     return nullptr;

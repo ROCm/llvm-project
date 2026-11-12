@@ -18,8 +18,7 @@ int main(int argc, char *argv[]) {
 
   // ---- set_language, get_language
   amd_comgr_language_t Language;
-  amd_comgr_(
-      action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_NONE));
+  amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_NONE));
   amd_comgr_(action_info_get_language(DataAction, &Language));
   if (Language != AMD_COMGR_LANGUAGE_NONE)
     fail("AMD_COMGR_LANGUAGE_NONE not returned!");
@@ -31,19 +30,17 @@ int main(int argc, char *argv[]) {
     fail("AMD_COMGR_LANGUAGE_OPENCL_1_2 not returned!");
 
   amd_comgr_(
-    action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_OPENCL_2_0));
+      action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_OPENCL_2_0));
   amd_comgr_(action_info_get_language(DataAction, &Language));
   if (Language != AMD_COMGR_LANGUAGE_OPENCL_2_0)
     fail("AMD_COMGR_LANGUAGE_OPENCL_2_0 not returned!");
 
-  amd_comgr_(
-    action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_HIP));
+  amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_HIP));
   amd_comgr_(action_info_get_language(DataAction, &Language));
   if (Language != AMD_COMGR_LANGUAGE_HIP)
     fail("AMD_COMGR_LANGUAGE_HIP not returned!");
 
-  amd_comgr_(
-    action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_LLVM_IR));
+  amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_LLVM_IR));
   amd_comgr_(action_info_get_language(DataAction, &Language));
   if (Language != AMD_COMGR_LANGUAGE_LLVM_IR)
     fail("AMD_COMGR_LANGUAGE_LLVM_IR not returned!");
@@ -79,8 +76,8 @@ int main(int argc, char *argv[]) {
     free(Option);
   }
 
-  fail_amd_comgr_(action_info_get_option_list_item(DataAction, OptionsCount,
-                                                   &Size, NULL));
+  fail_amd_comgr_(
+      action_info_get_option_list_item(DataAction, OptionsCount, &Size, NULL));
   fail_amd_comgr_(action_info_get_option_list_count(DataAction, NULL));
   fail_amd_comgr_(action_info_get_option_list_item(DataAction, 0, NULL, NULL));
 
@@ -91,11 +88,10 @@ int main(int argc, char *argv[]) {
   const char *Path = "/path/to/my/directory";
   amd_comgr_(action_info_set_working_directory_path(DataAction, Path));
 
-  amd_comgr_(action_info_get_working_directory_path(DataAction, &Size,
-                                                    NULL));
+  amd_comgr_(action_info_get_working_directory_path(DataAction, &Size, NULL));
   char *GetPath = calloc(Size, sizeof(char));
-  amd_comgr_(action_info_get_working_directory_path(DataAction, &Size,
-                                                    GetPath));
+  amd_comgr_(
+      action_info_get_working_directory_path(DataAction, &Size, GetPath));
 
   if (strcmp(Path, GetPath))
     fail("incorrect path string: expected '%s', saw '%s'", Path, GetPath);

@@ -17,6 +17,7 @@ add_library(omptarget SHARED
   OpenMP/OMPT/OmptTracingBuffer.cpp
 
   ../libompaccsupport/AsyncInfo.cpp
+  ../libompaccsupport/BackendConfig.cpp
   ../libompaccsupport/device.cpp
   ../libompaccsupport/PluginManager.cpp
   ../libompaccsupport/DeviceImage.cpp
@@ -24,6 +25,7 @@ add_library(omptarget SHARED
   ../libompaccsupport/OmpAccError.cpp
   ../libompaccsupport/Platform.cpp
   ../libompaccsupport/Program.cpp
+  ../libompaccsupport/RecordReplay.cpp
 
   KernelLanguage/API.cpp
 )
@@ -36,6 +38,7 @@ endif()
 target_link_libraries(omptarget PRIVATE omp ${llvm_libs})
 target_include_directories(omptarget PRIVATE
   ${LIBOMPTARGET_INCLUDE_DIR} ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
+  # Downstream: GenericProfiler.h for the OMPT profiler.
   ${CMAKE_CURRENT_SOURCE_DIR}/../plugins-nextgen/common/include
   ${CMAKE_CURRENT_BINARY_DIR}/../plugins-nextgen/common/include
 )

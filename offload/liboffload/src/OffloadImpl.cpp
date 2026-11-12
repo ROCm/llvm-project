@@ -222,8 +222,18 @@ struct ol_context_impl_t {
                                   TargetAllocTy Kind, size_t Alignment) {
     if (auto Err = requireDevice(Device))
       return std::move(Err);
-    return PluginCtx->allocate(*Device->Device, Size, /*HostPtr=*/nullptr, Kind,
-                               Alignment);
+    auto AllocOrErr = PluginCtx->allocate(*Device->Device, Size,
+                                          /*HostPtr=*/nullptr, Kind, Alignment);
+    if (!AllocOrErr)
+      return AllocOrErr.takeError();
+
+    // Check max alignment only when no explicit alignment was requested.
+    if (Alignment == 0)
+      assert(reinterpret_cast<uintptr_t>(*AllocOrErr) %
+                     alignof(std::max_align_t) ==
+                 0 &&
+             "allocation does not meet max_align_t alignment");
+    return *AllocOrErr;
   }
 
   llvm::Error deallocate(void *Ptr) { return PluginCtx->deallocate(Ptr); }
@@ -594,6 +604,13 @@ Error olGetDeviceInfoImplDetail(ol_device_handle_t Device,
 
   case OL_DEVICE_INFO_LAUNCH_MAX_GRID_SIZE:
     return Info.write<uint64_t>(Device->Device->getMaxGridSize());
+
+  case OL_DEVICE_INFO_NATIVE_PLATFORM_HANDLE: {
+    auto HandleOrErr = Device->Device->getNativePlatformHandle();
+    if (!HandleOrErr)
+      return HandleOrErr.takeError();
+    return Info.write<void *>(*HandleOrErr);
+  }
 
   case OL_DEVICE_INFO_PREFERRED_LOCATION_HOST:
     return Info.write<bool>(Device->Device->useAutoZeroCopy());
@@ -1623,6 +1640,36 @@ Error olGetSymbolInfoSize_impl(ol_symbol_handle_t Symbol,
   return olGetSymbolInfoImplDetail(Symbol, PropName, 0, nullptr, PropSizeRet);
 }
 
+Error olGetProgramInfoImplDetail(ol_program_handle_t Program,
+                                 ol_program_info_t PropName, size_t PropSize,
+                                 void *PropValue, size_t *PropSizeRet) {
+  InfoWriter Info(PropSize, PropValue, PropSizeRet);
+
+  switch (PropName) {
+  case OL_PROGRAM_INFO_IMAGE_BASE:
+    return Info.write<void *>(const_cast<void *>(Program->Image->getStart()));
+  case OL_PROGRAM_INFO_IMAGE_SIZE:
+    return Info.write<size_t>(Program->Image->getSize());
+  default:
+    return createOffloadError(ErrorCode::INVALID_ENUMERATION,
+                              "olGetProgramInfo enum '%i' is invalid",
+                              PropName);
+  }
+}
+
+Error olGetProgramInfo_impl(ol_program_handle_t Program,
+                            ol_program_info_t PropName, size_t PropSize,
+                            void *PropValue) {
+  return olGetProgramInfoImplDetail(Program, PropName, PropSize, PropValue,
+                                    nullptr);
+}
+
+Error olGetProgramInfoSize_impl(ol_program_handle_t Program,
+                                ol_program_info_t PropName,
+                                size_t *PropSizeRet) {
+  return olGetProgramInfoImplDetail(Program, PropName, 0, nullptr, PropSizeRet);
+}
+
 Error olLaunchHostFunction_impl(ol_queue_handle_t Queue,
                                 ol_host_function_cb_t Callback,
                                 void *UserData) {
@@ -1696,12 +1743,59 @@ Error olQueryQueue_impl(ol_queue_handle_t Queue, bool *IsQueueWorkCompleted) {
 
 namespace tmp {
 // Temporary helpers to help transition of libomptarget to liboffload
-GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform) {
-  return Platform->Plugin.get();
+// Downstream: AMD-specific device queries and OMPT support for libomptarget.
+GenericDeviceTy *__ol_tgt_GetPluginDevice(ol_device_handle_t Device) {
+  return Device->Device;
 }
 
-int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device) {
-  return Device->DeviceNum;
+GenericProfilerTy *__ol_tgt_GetProfiler(ol_device_handle_t Device) {
+  return Device->Platform.Plugin->getProfiler();
+}
+
+void __ol_tgt_CheckInvalidImage(ol_platform_handle_t Platform,
+                                __tgt_device_image *Image) {
+  Platform->Plugin->check_invalid_image(Image);
+}
+
+bool __ol_tgt_IsAPU(ol_device_handle_t Device) {
+  return Device->Platform.Plugin->has_apu_device(Device->DeviceNum);
+}
+
+void __ol_tgt_ZeroCopySanityChecksAndDiag(ol_device_handle_t Device,
+                                          bool IsUnifiedSharedMemory,
+                                          bool IsAutoZeroCopy,
+                                          bool IsEagerMaps) {
+  Device->Platform.Plugin->zero_copy_sanity_checks_and_diag(
+      Device->DeviceNum, IsUnifiedSharedMemory, IsAutoZeroCopy, IsEagerMaps);
+}
+
+bool __ol_tgt_IsGfx90aCoarseGrainUsmMapEnabled(ol_device_handle_t Device) {
+  auto &Plugin = *Device->Platform.Plugin;
+  return Plugin.is_gfx90a(Device->DeviceNum) &&
+         Plugin.is_gfx90a_coarse_grain_usm_map_enabled(Device->DeviceNum);
+}
+
+void __ol_tgt_SetCoarseGrainMemRegion(ol_device_handle_t Device, void *Ptr,
+                                      int64_t Size) {
+  Device->Platform.Plugin->set_coarse_grain_mem_region(Device->DeviceNum, Ptr,
+                                                       Size);
+}
+
+void __ol_tgt_SetCoarseGrainMem(ol_device_handle_t Device, const void *Ptr,
+                                int64_t Size, bool SetAttr) {
+  Device->Platform.Plugin->set_coarse_grain_mem(Device->DeviceNum, Ptr, Size,
+                                                SetAttr);
+}
+
+int32_t __ol_tgt_QueryCoarseGrainMemRegion(ol_device_handle_t Device,
+                                           const void *Ptr, int64_t Size) {
+  return Device->Platform.Plugin->query_coarse_grain_mem_region(
+      Device->DeviceNum, Ptr, Size);
+}
+
+void __ol_tgt_PrepopulatePageTable(ol_device_handle_t Device, void *Ptr,
+                                   int64_t Size) {
+  Device->Platform.Plugin->prepopulate_page_table(Device->DeviceNum, Ptr, Size);
 }
 
 // Downstream: used by libomptarget for OMPT device tracing and forced
@@ -1710,17 +1804,46 @@ __tgt_async_info *__ol_tgt_GetAsyncInfoFromQueue(ol_queue_handle_t Queue) {
   return Queue ? Queue->AsyncInfo : nullptr;
 }
 
-plugin::PluginContextTy *
-__ol_tgt_GetPluginContext(ol_context_handle_t Context) {
-  return Context ? Context->PluginCtx.get() : nullptr;
-}
-
 DeviceImageTy *__ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program) {
   return Program->Image;
 }
 
-RecordReplayTy *__ol_tgt_GetRecordReplay(ol_device_impl_t *Device) {
-  return Device->Device->getRecordReplay();
+void *__ol_tgt_GetSuggestedVirtualAddress(ol_device_handle_t Device) {
+  return Device->Device->getSuggestedVirtualAddress();
+}
+
+Expected<void *> __ol_tgt_AllocWithVirtualAddress(ol_device_handle_t Device,
+                                                  uint64_t Size, void *VAddr) {
+  return Device->Device->allocateWithVirtualAddress(Size, VAddr);
+}
+
+Error __ol_tgt_DeallocWithVirtualAddress(ol_device_handle_t Device, void *VAddr,
+                                         uint64_t Size) {
+  return Device->Device->deallocateWithVirtualAddress(VAddr, Size);
+}
+
+// Same as olMemAlloc/olMemAllocHost, but takes the plugin allocation kind and
+// also passes on the host pointer the allocation is made for, which is only a
+// hint for diagnostics and profiling that the public API cannot express.
+llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
+                                         ol_device_handle_t Device,
+                                         TargetAllocTy Kind, int64_t Size,
+                                         void *HostPtr) {
+  if (auto Err = Context->requireDevice(Device))
+    return std::move(Err);
+  return Context->PluginCtx->allocate(*Device->Device, Size, HostPtr, Kind,
+                                      /*Alignment=*/0);
+}
+
+// Same as olMemFree, but for a caller that knows the kind of memory it is
+// freeing: the plugin diagnoses a kind that differs from the allocated one,
+// which olMemFree, resolving the kind from the allocation, cannot.
+llvm::Error __ol_tgt_MemFree(ol_context_handle_t Context,
+                             ol_device_handle_t Device, void *Ptr,
+                             TargetAllocTy Kind) {
+  if (auto Err = Context->requireDevice(Device))
+    return Err;
+  return Context->PluginCtx->deallocate(*Device->Device, Ptr, Kind);
 }
 
 } // namespace tmp

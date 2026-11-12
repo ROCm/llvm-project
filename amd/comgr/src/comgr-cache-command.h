@@ -18,7 +18,7 @@
 
 namespace llvm {
 class raw_ostream;
-}
+} // namespace llvm
 
 namespace COMGR {
 class CachedCommandAdaptor {

@@ -584,13 +584,13 @@ sub-projects. Nearly all of these variable names begin with `LLVM_`.
     is passed to invocations of both so that the project is built using libc++
     instead of stdlibc++. Defaults to OFF.
 
-**LLVM_ENABLE_LIBEDIT**:BOOL
+**LLVM_ENABLE_LIBEDIT**:STRING
 
 :   Controls whether to enable libedit support for command-line editing and
-    history in LLVM tools. When `ON`, forces libedit support to be enabled and
-    will cause a CMake configuration error if libedit cannot be found. When
-    `OFF`, disables libedit support entirely. If not specified, LLVM will
-    auto-detect libedit availability. Defaults to auto-detection.
+    history in LLVM tools. When `FORCE_ON`, forces libedit support to be
+    enabled and will cause a CMake configuration error if libedit cannot be
+    found. When `OFF`, disables libedit support entirely. If not specified or
+    set to `ON`, LLVM will auto-detect libedit availability. Defaults to `ON`.
 
 **LLVM_ENABLE_LIBPFM**:BOOL
 
@@ -652,6 +652,21 @@ sub-projects. Nearly all of these variable names begin with `LLVM_`.
     parallel to llvm instead of nested in `llvm/tools`. This feature allows
     having one build for only LLVM and another for clang+llvm using the same
     source checkout.
+
+    When Flang enables Clang and MLIR automatically as dependencies, they
+    contribute only targets needed by Flang to the default build. Their test
+    suites are disabled by default, and installation includes the libraries,
+    headers, and resources needed by Flang's installed binaries and CMake
+    package. Listing Clang or MLIR explicitly restores that project's complete
+    default build, test, and install behavior. Clang also retains its normal
+    behavior when LLDB or clang-tools-extra is enabled.
+
+    Flang's dependency libraries and headers can be selected in distributions
+    with `flang-dependencies` and `flang-dependency-headers`. Their CMake targets
+    are included in Flang's usual exports; an SDK distribution also needs the
+    corresponding LLVM libraries, headers, and CMake exports. Toolchain-only
+    installations omit dependency SDK libraries and headers, but retain shared
+    libraries, runtime tools, and compiler resource headers.
 
     The full list is:
 

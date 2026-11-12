@@ -35,8 +35,6 @@
 
 #define OFFLOAD_DEVICE_DEFAULT -1
 
-#define HOST_DEVICE                -10
-
 /// return flags of __tgt_target_XXX public APIs
 enum __tgt_target_return_t : int {
   /// successful offload executed on a target device

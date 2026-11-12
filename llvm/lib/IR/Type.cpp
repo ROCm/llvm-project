@@ -1093,6 +1093,9 @@ static TargetTypeInfo getTargetTypeInfo(const TargetExtType *Ty) {
     return TargetTypeInfo(Type::getInt8Ty(C), TargetExtType::CanBeGlobal);
   if (Name == "amdgpu.stridemark")
     return TargetTypeInfo(Type::getVoidTy(C), TargetExtType::IsTokenLike);
+  if (Name == "amdgpu.debug.whole.vreg")
+    return TargetTypeInfo(
+        ArrayType::get(Ty->getTypeParameter(0), Ty->getIntParameter(0)));
 
   // Type used to test vector element target extension property.
   // Can be removed once a public target extension type uses CanBeVectorElement.

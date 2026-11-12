@@ -1947,7 +1947,7 @@ static LogicalResult createReductionsAndCleanup(
     return op->emitOpError() << "failed to convert reductions";
 
   llvm::OpenMPIRBuilder::InsertPointTy afterIP = *contInsertPoint;
-  if (!isTeamsReduction) {
+  if (!isTeamsReduction && !isNowait) {
     llvm::OpenMPIRBuilder::InsertPointOrErrorTy barrierIP =
         ompBuilder->createBarrier({*contInsertPoint, reductionLoc},
                                   llvm::omp::OMPD_for);
@@ -3120,6 +3120,8 @@ public:
           moduleTranslation.lookupValue(itersOp.getLoopSteps()[d]);
       assert(lb && ub && st &&
              "Expect lowerBounds, upperBounds, and steps in IteratorOp");
+      assert(lb->getType() == ub->getType() && lb->getType() == st->getType() &&
+             "Expect matching iterator range types");
       assert((!llvm::isa<llvm::ConstantInt>(st) ||
               !llvm::cast<llvm::ConstantInt>(st)->isZero()) &&
              "Expect non-zero step in IteratorOp");
@@ -3137,9 +3139,9 @@ public:
       llvm::Value *step = builder.CreateSExt(st, countTy);
       llvm::Value *count =
           getOpenMPBuilder(moduleTranslation)
-              ->calculateCanonicalLoopTripCount(builder, start, stop, step,
-                                                /*IsSigned=*/true,
-                                                /*InclusiveStop=*/true);
+              ->calculateCanonicalLoopTripCount(
+                  builder, start, stop, step,
+                  /*IsSigned=*/true, itersOp.getLoopInclusive(), "iterator");
       trips[d] = builder.CreateZExtOrTrunc(count, builder.getInt64Ty());
     }
 
@@ -3274,10 +3276,16 @@ static mlir::LogicalResult convertIteratorRegion(
   llvm::Value *tmp = linearIV;
   for (int d = (int)iterInfo.getDims() - 1; d >= 0; --d) {
     llvm::Value *trip = iterInfo.getTrips()[d];
-    // idx_d = tmp % trip_d
-    llvm::Value *idx = builder.CreateURem(tmp, trip);
-    // tmp = tmp / trip_d
-    tmp = builder.CreateUDiv(tmp, trip);
+    llvm::Value *zero = llvm::ConstantInt::get(trip->getType(), 0);
+    llvm::Value *one = llvm::ConstantInt::get(trip->getType(), 1);
+    // A zero trip count makes the linearized loop empty. Use one in its
+    // unreachable IV decoder so the generated IR contains no division by zero.
+    llvm::Value *divisor =
+        builder.CreateSelect(builder.CreateICmpEQ(trip, zero), one, trip);
+    // idx_d = tmp % divisor_d
+    llvm::Value *idx = builder.CreateURem(tmp, divisor);
+    // tmp = tmp / divisor_d
+    tmp = builder.CreateUDiv(tmp, divisor);
 
     // physIV_d = lb_d + idx_d * step_d
     idx =
@@ -5700,11 +5708,6 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
     moduleTranslation.mapValue(
         loopOp.getRegion().front().getArgument(loopInfos.size()), iv);
 
-    // Capture the body insertion point for use in nested loops. BodyIP of the
-    // CanonicalLoopInfo always points to the beginning of the entry block of
-    // the body.
-    bodyInsertPoints.push_back(ip);
-
     // For the outermost loop when parent is distribute, set up allocation frame
     // so nested parallel regions don't end up using allocate frame of the
     // distribute operation.
@@ -5712,15 +5715,23 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
     bool needsAllocationFrame = isOutermostLoop && parentIsDistribute;
 
     if (needsAllocationFrame) {
-      // Use the loop body entry for allocations
-      // For deallocations, use empty array for now - the deallocation will be
-      // handled by the outlined function's exit blocks
+      // Use the loop body entry for allocations and deallocations.
+      // Add new block at the end of the loop body for the deallocations.
       SmallVector<llvm::BasicBlock *> deallocBlocks;
       llvm::BasicBlock *allocBlock = ip.getNodeParent();
+      deallocBlocks.push_back(allocBlock->splitBasicBlock(
+          allocBlock->getTerminator(), "omp.loop_nest.dealloc"));
       llvm::OpenMPIRBuilder::InsertPointTy allocaIP(
           allocBlock->getFirstInsertionPt());
       allocFrame.emplace(moduleTranslation, allocaIP.getNodeParent(), deallocBlocks);
+      // The insertion point should point to the loop body block.
+      ip = allocBlock->getTerminator()->getIterator();
     }
+
+    // Capture the body insertion point for use in nested loops. BodyIP of the
+    // CanonicalLoopInfo always points to the beginning of the entry block of
+    // the body.
+    bodyInsertPoints.push_back(ip);
 
     if (loopInfos.size() != loopOp.getNumLoops() - 1)
       return llvm::Error::success();

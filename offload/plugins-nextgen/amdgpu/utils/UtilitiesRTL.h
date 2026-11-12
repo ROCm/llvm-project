@@ -50,10 +50,6 @@ struct alignas(alignof(void *)) AMDGPUImplicitArgsTy {
   uint32_t DynamicLdsSize;
   uint8_t Unused2[132]; // 132 byte offset.
 };
-// Dummy struct for COV4 implicitargs.
-struct AMDGPUImplicitArgsTyCOV4 {
-  uint8_t Unused[56];
-};
 
 /// Returns the size in bytes of the implicit arguments of AMDGPU kernels.
 /// `Version` is the ELF ABI version, e.g. COV5.

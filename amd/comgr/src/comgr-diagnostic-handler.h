@@ -15,7 +15,8 @@ namespace COMGR {
 struct AMDGPUCompilerDiagnosticHandler : public llvm::DiagnosticHandler {
   llvm::raw_ostream &LogS;
 
-  AMDGPUCompilerDiagnosticHandler(llvm::raw_ostream &LogS) : LogS(LogS) {}
+  explicit AMDGPUCompilerDiagnosticHandler(llvm::raw_ostream &LogS)
+      : LogS(LogS) {}
 
   bool handleDiagnostics(const llvm::DiagnosticInfo &DI) override;
 };

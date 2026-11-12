@@ -13,15 +13,15 @@
 #ifndef OMPTARGET_PLUGIN_MANAGER_H
 #define OMPTARGET_PLUGIN_MANAGER_H
 
-#include "OpenMP/OMPT/OmptTracingBuffer.h"
 #include "OffloadAPI.h"
-#include "PluginInterface.h"
+#include "OpenMP/OMPT/OmptTracingBuffer.h"
 
 #include "DeviceImage.h"
 #include "ExclusiveAccess.h"
 #include "OmpAccError.h"
 #include "Shared/APITypes.h"
 #include "Shared/Requirements.h"
+#include "Shared/Utils.h"
 
 #include "Platform.h"
 #include "device.h"
@@ -39,8 +39,6 @@
 #include <memory>
 #include <mutex>
 #include <string>
-
-using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
 
 /// Struct for the data required to handle plugins
 struct PluginManager {
@@ -132,12 +130,6 @@ struct PluginManager {
   /// Eagerly initialize all plugins and their devices.
   void initializeAllDevices();
 
-  /// Iterator range for all plugins (in use or not, but always valid).
-  auto plugins() { return llvm::make_pointee_range(Plugins); }
-
-  /// Iterator range for all plugins (in use or not, but always valid).
-  auto plugins() const { return llvm::make_pointee_range(Plugins); }
-
   /// Return the user provided requirements.
   int64_t getRequirements() const { return Requirements.getRequirements(); }
 
@@ -165,9 +157,6 @@ private:
   // Whether init() called olInit, so deinit() must call olShutDown.
   bool LibOffloadInitialized = false;
   llvm::SmallVector<__tgt_bin_desc *> DelayedBinDesc;
-
-  // List of all plugins, in use or not.
-  llvm::SmallVector<GenericPluginTy *> Plugins;
 
   // Platforms reported by liboffload, indexed by their handle.
   llvm::DenseMap<ol_platform_handle_t, PlatformTy> Platforms;
