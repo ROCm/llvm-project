@@ -20,8 +20,8 @@ typedef struct TestMetaDataS {
   amd_comgr_metadata_node_t Root;
 } test_meta_data_t;
 
-void read_metadata(test_meta_data_t *MetaData, const char *File,
-                   bool ErrorExpected, bool Display) {
+static void read_metadata(test_meta_data_t *MetaData, const char *File,
+                          bool ErrorExpected, bool Display) {
   long Size;
   amd_comgr_status_t Status;
   amd_comgr_metadata_kind_t Mkind = AMD_COMGR_METADATA_KIND_NULL;
@@ -75,9 +75,9 @@ void read_metadata(test_meta_data_t *MetaData, const char *File,
   }
 }
 
-void lookup_meta_data(test_meta_data_t *MetaData, const char *Key,
-                      amd_comgr_metadata_kind_t Kind, void *Data,
-                      bool ErrorExpected) {
+static void lookup_meta_data(test_meta_data_t *MetaData, const char *Key,
+                             amd_comgr_metadata_kind_t Kind, void *Data,
+                             bool ErrorExpected) {
   amd_comgr_status_t Status;
   amd_comgr_metadata_node_t LookupNode;
   amd_comgr_metadata_kind_t LookupKind;
@@ -124,7 +124,7 @@ void lookup_meta_data(test_meta_data_t *MetaData, const char *Key,
   checkError(Status, "amd_comgr_destroy_metadata");
 }
 
-void close_meta_data(test_meta_data_t *MetaData) {
+static void close_meta_data(test_meta_data_t *MetaData) {
   amd_comgr_status_t Status;
 
   Status = amd_comgr_destroy_metadata(MetaData->Root);

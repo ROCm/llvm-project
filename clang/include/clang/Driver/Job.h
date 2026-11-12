@@ -145,9 +145,6 @@ class Command {
   /// See Command::setEnvironment
   std::vector<const char *> Environment;
 
-  /// Dependent actions
-  llvm::SmallVector<const Action *, 4> DependentActions;
-
   /// Optional redirection for stdin, stdout, stderr.
   std::vector<std::optional<std::string>> RedirectFiles;
 
@@ -245,9 +242,6 @@ public:
 
   const llvm::opt::ArgStringList &getArguments() const { return Arguments; }
 
-  const llvm::SmallVector<const Action *, 4> &getDependentActions() const {
-    return DependentActions;
-  }
   const std::vector<InputInfo> &getInputInfos() const { return InputInfoList; }
 
   const std::vector<std::string> &getOutputFilenames() const {
@@ -265,13 +259,7 @@ protected:
 
 /// Use the CC1 tool callback when available, to avoid creating a new process
 class CC1Command : public Command {
-  static bool CanRunAgain;
-
 public:
-  /// Whether this process can run cc1 again after crash recovery.
-  /// Embedding hosts must discard it if this returns false.
-  static bool canRunAgain();
-
   CC1Command(const Action &Source, const Tool &Creator,
              ResponseFileSupport ResponseSupport, const char *Executable,
              const llvm::opt::ArgStringList &Arguments,

@@ -42,12 +42,9 @@ Command::Command(const Action &Source, const Tool &Creator,
                  const char *PrependArg)
     : Source(Source), Creator(Creator), ResponseSupport(ResponseSupport),
       Executable(Executable), PrependArg(PrependArg), Arguments(Arguments) {
-  for (const auto &II : Inputs) {
-    if (II.isFilename()) {
+  for (const auto &II : Inputs)
+    if (II.isFilename())
       InputInfoList.push_back(II);
-      DependentActions.push_back(II.getAction());
-    }
-  }
   for (const auto &II : Outputs)
     if (II.isFilename())
       OutputFilenames.push_back(II.getFilename());
@@ -390,10 +387,6 @@ int Command::Execute(ArrayRef<std::optional<StringRef>> Redirects,
                                    ErrMsg, ExecutionFailed, &ProcStat);
 }
 
-bool CC1Command::CanRunAgain = true;
-
-bool CC1Command::canRunAgain() { return CanRunAgain; }
-
 CC1Command::CC1Command(const Action &Source, const Tool &Creator,
                        ResponseFileSupport ResponseSupport,
                        const char *Executable,
@@ -407,15 +400,17 @@ CC1Command::CC1Command(const Action &Source, const Tool &Creator,
 
 void CC1Command::Print(raw_ostream &OS, const char *Terminator, bool Quote,
                        CrashReportInfo *CrashInfo) const {
-  if (InProcess && canRunAgain())
+  if (InProcess)
     OS << " (in-process)\n";
   Command::Print(OS, Terminator, Quote, CrashInfo);
 }
 
 int CC1Command::Execute(ArrayRef<std::optional<StringRef>> Redirects,
                         std::string *ErrMsg, bool *ExecutionFailed) const {
-  // Use a separate process for crash diagnostics after an in-process crash.
-  if (!InProcess || !canRunAgain())
+  // FIXME: Currently, if there're more than one job, we disable
+  // -fintegrate-cc1. If we're no longer a integrated-cc1 job, fallback to
+  // out-of-process execution. See discussion in https://reviews.llvm.org/D74447
+  if (!InProcess)
     return Command::Execute(Redirects, ErrMsg, ExecutionFailed);
 
   PrintFileNames();
@@ -445,7 +440,6 @@ int CC1Command::Execute(ArrayRef<std::optional<StringRef>> Redirects,
   int R = 0;
   // Enter ExecuteCC1Tool() instead of starting up a new process
   if (!CRC.RunSafely([&]() { R = D.CC1Main(Argv); })) {
-    CanRunAgain = false;
     llvm::RestorePrettyStackState(PrettyState);
     return CRC.RetCode;
   }

@@ -10,7 +10,6 @@
 
 #include "PluginInterface.h"
 
-#include "Shared/APITypes.h"
 #include "Shared/Debug.h"
 
 #include "ErrorReporting.h"
@@ -38,12 +37,6 @@ using namespace target;
 using namespace plugin;
 using namespace error;
 using namespace llvm::offload::debug;
-
-namespace llvm::omp::target::plugin {
-// Used for kernel tracing implementation
-int PrintKernelTrace = 0;
-} // namespace llvm::omp::target::plugin
-
 
 AsyncInfoWrapperTy::AsyncInfoWrapperTy(GenericDeviceTy &Device,
                                        __tgt_async_info *AsyncInfoPtr)
@@ -90,6 +83,13 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
                            AsyncInfoPtr->Queue != nullptr, (bool)Err))
     Err = Device.synchronize(AsyncInfoPtr, /*ReleaseQueue=*/false);
 
+  // The local async info is about to be destroyed; make sure no kernel trace
+  // entry keeps pointing to it. This is done after synchronizing so that a trap
+  // raised while waiting for the kernel can still be attributed to it.
+  if (KernelTraced && AsyncInfoPtr == &LocalAsyncInfo)
+    Device.KernelLaunchTraces.getExclusiveAccessor()->clearAsyncInfo(
+        &LocalAsyncInfo);
+
   // Invalidate the wrapper object.
 
   AsyncInfoPtr = nullptr;
@@ -129,8 +129,12 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
 
     auto KernelTraceInfoRecord =
         GenericDevice.KernelLaunchTraces.getExclusiveAccessor();
+    // For a synchronous launch this is the wrapper's stack-local async info;
+    // finalize() removes the reference before that object is destroyed as
+    // otherwise it could be accessed from the trap handlers.
     (*KernelTraceInfoRecord)
         .emplace(this, std::move(StackTrace), AsyncInfoWrapper);
+    AsyncInfoWrapper.setKernelTraced();
   }
 
   uint32_t EffectiveNumThreads[3] = {LaunchArgs.UserThreadLimit[0],
@@ -1275,88 +1279,6 @@ bool GenericPluginTy::is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId) {
   return R;
 }
 
-#if 0//<<<<<<< HEAD
-int32_t GenericPluginTy::create_event(int32_t DeviceId, void **EventPtr) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, EventPtr);
-  auto R = [&]() {
-    auto Err = getDevice(DeviceId).createEvent(EventPtr);
-    if (Err) {
-      REPORT() << "Failure to create event: " << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-
-    return OFFLOAD_SUCCESS;
-  }();
-  T.res(R);
-  return R;
-}
-
-int32_t GenericPluginTy::record_event(int32_t DeviceId, void *EventPtr,
-                                      __tgt_async_info *AsyncInfoPtr) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, EventPtr, AsyncInfoPtr);
-  auto R = [&]() {
-    auto Err = getDevice(DeviceId).recordEvent(EventPtr, AsyncInfoPtr);
-    if (Err) {
-      REPORT() << "Failure to record event " << EventPtr << ": "
-               << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-
-    return OFFLOAD_SUCCESS;
-  }();
-  T.res(R);
-  return R;
-}
-
-int32_t GenericPluginTy::wait_event(int32_t DeviceId, void *EventPtr,
-                                    __tgt_async_info *AsyncInfoPtr) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, EventPtr, AsyncInfoPtr);
-  auto R = [&]() {
-    auto Err = getDevice(DeviceId).waitEvent(EventPtr, AsyncInfoPtr);
-    if (Err) {
-      REPORT() << "Failure to wait event " << EventPtr << ": "
-               << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-
-    return OFFLOAD_SUCCESS;
-  }();
-  T.res(R);
-  return R;
-}
-
-int32_t GenericPluginTy::sync_event(int32_t DeviceId, void *EventPtr) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, EventPtr);
-  auto R = [&]() {
-    auto Err = getDevice(DeviceId).syncEvent(EventPtr);
-    if (Err) {
-      REPORT() << "Failure to synchronize event " << EventPtr << ": "
-               << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-
-    return OFFLOAD_SUCCESS;
-  }();
-  T.res(R);
-  return OFFLOAD_SUCCESS;
-}
-
-int32_t GenericPluginTy::destroy_event(int32_t DeviceId, void *EventPtr) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, EventPtr);
-  auto R = [&]() {
-    auto Err = getDevice(DeviceId).destroyEvent(EventPtr);
-    if (Err) {
-      REPORT() << "Failure to destroy event " << EventPtr << ": "
-               << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-
-    return OFFLOAD_SUCCESS;
-  }();
-  T.res(R);
-  return R;
-}
-#endif
 // Register mapped or allocated memory (with omp_target_alloc or omp_alloc)
 // as coarse grain
 // \arg DeviceId is the ID of the device for which the memory should be switched

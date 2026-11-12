@@ -17,11 +17,13 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <mutex>
 #include <shared_mutex>
 #include <variant>
 #include <vector>
 
 #include "ExclusiveAccess.h"
+// Downstream: __tgt_async_info is defined in APITypes.h.
 #include "Shared/APITypes.h"
 #include "Shared/Debug.h"
 #include "Shared/EnvironmentVar.h"
@@ -128,6 +130,11 @@ struct AsyncInfoWrapperTy {
   /// provide a __tgt_async_info.
   bool isSynchronous() const { return AsyncInfoPtr == &LocalAsyncInfo; }
 
+  /// Note that a kernel trace entry referencing this wrapper's async info was
+  /// recorded. If the async info is the wrapper's local one, finalize() will
+  /// drop that reference before the local object is destroyed.
+  void setKernelTraced() { KernelTraced = true; }
+
   /// Get the queue.
   template <typename Ty> Ty getQueueAs() {
     static_assert(sizeof(Ty) == sizeof(AsyncInfoPtr->Queue),
@@ -161,6 +168,7 @@ private:
   GenericDeviceTy &Device;
   __tgt_async_info LocalAsyncInfo;
   __tgt_async_info *AsyncInfoPtr;
+  bool KernelTraced = false;
 };
 
 enum class DeviceInfo {
@@ -509,6 +517,15 @@ struct KernelTraceInfoRecordTy {
                __tgt_async_info *AsyncInfo) {
     KTIs[Idx] = {Kernel, std::move(StackTrace), AsyncInfo};
     Idx = (Idx + 1) % size();
+  }
+
+  /// Drop the references to \p AsyncInfo from all entries, keeping the rest of
+  /// the information (kernel, launch trace) available for error reporting.
+  void clearAsyncInfo(const __tgt_async_info *AsyncInfo) {
+    for (auto &KTI : KTIs) {
+      if (KTI.AsyncInfo == AsyncInfo)
+        KTI.AsyncInfo = nullptr;
+    }
   }
 
   /// Return the \p I'th last kernel trace info.
@@ -1388,10 +1405,6 @@ protected:
 
   /// The total per-block native shared memory that a kernel may use.
   size_t MaxBlockSharedMemSize = 0;
-private:
-  /// Return the kernel environment object for kernel \p Name.
-  Expected<KernelEnvironmentTy>
-  getKernelEnvironmentForKernel(StringRef Name, DeviceImageTy &Image);
 };
 
 /// Class implementing common functionalities of offload plugins. Each plugin
@@ -1589,9 +1602,6 @@ public:
   /// Returns if GFX90A coarse graining of OpenMP mapped
   /// variables is enabled under unified shared memory.
   bool is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId);
-
-  /// Creates an asynchronous queue for the given plugin.
-  int32_t init_async_info(int32_t DeviceId, __tgt_async_info **AsyncInfoPtr);
 
   /// Sets the region of memory that is considered coarse grained.
   int set_coarse_grain_mem_region(int32_t DeviceId, void *ptr, int64_t size);

@@ -1200,6 +1200,7 @@ simplifyRelocatesOffABase(GCRelocateInst *RelocatedBase,
 
     // Insert after RelocatedBase
     IRBuilder<> Builder(RelocatedBase->getNextNode());
+    Builder.disableGEPCanonicalization();
     Builder.SetCurrentDebugLocation(ToReplace->getDebugLoc());
 
     Value *Replacement = Builder.CreateGEP(Derived->getSourceElementType(),
@@ -2112,6 +2113,8 @@ static bool foldURemOfLoopIncrement(Instruction *Rem, const DataLayout *DL,
   Value *RemCmp = Builder.CreateICmp(ICmpInst::ICMP_EQ, RemAdd, RemAmt);
   Value *RemSel =
       Builder.CreateSelect(RemCmp, Constant::getNullValue(Ty), RemAdd);
+  if (auto *SI = dyn_cast<SelectInst>(RemSel))
+    setExplicitlyUnknownBranchWeightsIfProfiled(*SI, DEBUG_TYPE);
 
   NewRem->addIncoming(Start, L->getLoopPreheader());
   NewRem->addIncoming(RemSel, L->getLoopLatch());
@@ -6234,6 +6237,7 @@ bool CodeGenPrepare::optimizeGatherScatterInst(Instruction *MemoryInst,
     auto NumElts = cast<VectorType>(Ptr->getType())->getElementCount();
 
     IRBuilder<> Builder(MemoryInst);
+    Builder.disableGEPCanonicalization();
 
     Type *SourceTy = GEP->getSourceElementType();
     Type *ScalarIndexTy = DL->getIndexType(Ops[0]->getType()->getScalarType());
@@ -6274,6 +6278,7 @@ bool CodeGenPrepare::optimizeGatherScatterInst(Instruction *MemoryInst,
     auto NumElts = cast<VectorType>(Ptr->getType())->getElementCount();
 
     IRBuilder<> Builder(MemoryInst);
+    Builder.disableGEPCanonicalization();
 
     // Emit a vector GEP with a scalar pointer and all 0s vector index.
     Type *ScalarIndexTy = DL->getIndexType(V->getType()->getScalarType());
@@ -8515,6 +8520,7 @@ static bool splitMergedValStore(StoreInst &SI, const DataLayout &DL,
 
   // Start to split store.
   IRBuilder<> Builder(&SI);
+  Builder.disableGEPCanonicalization();
 
   // If LValue/HValue is a bitcast in another BB, create a new one in current
   // BB so it may be merged with the splitted stores by dag combiner.
@@ -8886,7 +8892,7 @@ static bool strengthReduceVectorPhiUsers(PHINode *Phi, LoopInfo *LI) {
   // Multiply the start by the size of the struct, and add the base pointer.
   Type *Int8Ty = IntegerType::getInt8Ty(ITy->getContext());
   IRBuilder<> Builder(PreHeader->getTerminator());
-  Value *StructSize = ConstantInt::get(ITy, APInt(64, Size));
+  Value *StructSize = ConstantInt::get(ITy, Size);
   Value *SizeSplat =
       Builder.CreateVectorSplat(VTy->getElementCount(), StructSize);
   Value *NewStart = Builder.CreateMul(Start, SizeSplat);

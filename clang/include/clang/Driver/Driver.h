@@ -432,10 +432,6 @@ public:
   /// Get the path to the main driver executable.
   const char *getDriverProgramPath() const { return DriverExecutable.c_str(); }
 
-    /// Get the path to where the clang executable was installed.
-  const char *getInstalledDir() const {
-    return Dir.c_str();
-  }
 
   StringRef getPreferredLinker() const { return PreferredLinker; }
   void setPreferredLinker(std::string Value) {
@@ -472,15 +468,11 @@ public:
   /// BuildCompilation - Construct a compilation object for a command
   /// line argument vector.
   ///
-  /// \param CC1MainIsReusable Whether the in-process cc1 callback supports
-  /// repeated invocation and therefore requires normal per-job cleanup.
-  ///
   /// \return A compilation, or 0 if none was built for the given
   /// argument vector. A null return value does not necessarily
   /// indicate an error condition, the diagnostics should be queried
   /// to determine if an error occurred.
-  Compilation *BuildCompilation(ArrayRef<const char *> Args,
-                                bool CC1MainIsReusable = false);
+  Compilation *BuildCompilation(ArrayRef<const char *> Args);
 
   /// ParseArgStrings - Parse the given list of strings into an
   /// ArgList.

@@ -1,4 +1,5 @@
-//===- parse-isa-name.c ------------------------------------------------------===//
+//===- parse-isa-name.c
+//------------------------------------------------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -12,16 +13,16 @@
 int main(int argc, char *argv[]) {
   amd_comgr_action_info_t DataAction;
   amd_comgr_status_t Status;
-  const char *reason = "";
+  const char *Reason = "";
 
   if (argc != 3) {
     fail("Usage: parse-isa-name <isa-name> <expected-status>");
   }
   amd_comgr_(create_action_info(&DataAction));
   Status = amd_comgr_action_info_set_isa_name(DataAction, argv[1]);
-  amd_comgr_status_string(Status, &reason);
-  if (strcmp(reason, argv[2])) {
-    fail("INVALID: %s", reason);
+  amd_comgr_status_string(Status, &Reason);
+  if (strcmp(Reason, argv[2])) {
+    fail("INVALID: %s", Reason);
   }
   printf("OK\n");
   if (Status == AMD_COMGR_STATUS_SUCCESS && argv[1][0]) {

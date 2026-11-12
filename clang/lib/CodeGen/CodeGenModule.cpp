@@ -55,6 +55,7 @@
 #include "llvm/ABI/IRTypeMapper.h"
 #include "llvm/ABI/TargetInfo.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -3512,6 +3513,17 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(GlobalDecl GD,
   const auto *SD = FD ? FD->getAttr<CPUSpecificAttr>() : nullptr;
   const auto *TC = FD ? FD->getAttr<TargetClonesAttr>() : nullptr;
   bool AddedAttr = false;
+  auto GetTargetFeaturesAttr = [&](llvm::ArrayRef<std::string> Features) {
+    llvm::SmallVector<StringRef, 16> CanonicalFeatures;
+    for (StringRef Feature : Features)
+      if (!getTarget().isReadOnlyFeature(Feature.drop_front()))
+        CanonicalFeatures.push_back(Feature);
+    if (CanonicalFeatures.empty())
+      return llvm::Attribute();
+    llvm::sort(CanonicalFeatures);
+    return llvm::Attribute::get(getLLVMContext(), "target-features",
+                                llvm::join(CanonicalFeatures, ","));
+  };
   if (TD || TV || SD || TC) {
     llvm::StringMap<bool> FeatureMap;
     getContext().getFunctionFeatureMap(FeatureMap, GD);
@@ -3570,8 +3582,14 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(GlobalDecl GD,
       // The AMDGCN-flavored SPIR-V target unions every GPU's features so it can
       // report all builtins as supported, but that union is meaningless in the
       // emitted IR.
-    } else {
-      Features = getTarget().getTargetOpts().Features;
+    } else if (SetTargetFeatures) {
+      if (!DefaultTargetFeatures)
+        DefaultTargetFeatures =
+            GetTargetFeaturesAttr(getTarget().getTargetOpts().Features);
+      if (DefaultTargetFeatures->isValid()) {
+        Attrs.addAttribute(*DefaultTargetFeatures);
+        AddedAttr = true;
+      }
     }
   }
 
@@ -3584,12 +3602,9 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(GlobalDecl GD,
     AddedAttr = true;
   }
   if (!Features.empty() && SetTargetFeatures) {
-    llvm::erase_if(Features, [&](const std::string& F) {
-       return getTarget().isReadOnlyFeature(F.substr(1));
-    });
-    if (!Features.empty()) {
-      llvm::sort(Features);
-      Attrs.addAttribute("target-features", llvm::join(Features, ","));
+    llvm::Attribute FeatureAttr = GetTargetFeaturesAttr(Features);
+    if (FeatureAttr.isValid()) {
+      Attrs.addAttribute(FeatureAttr);
       AddedAttr = true;
     }
   }
@@ -9150,17 +9165,11 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
   case NxNonSPMD:
     StatusMsg += "Non-SPMD mode not supported";
     break;
-  case NxOptionDisabled:
-    StatusMsg += "Command line option disabled";
-    break;
   case NxOptionDisabledOrHasCall:
     StatusMsg += "Command line option disabled or has a nested call";
     break;
   case NxUnsupportedDirective:
     StatusMsg += "Unsupported directive";
-    break;
-  case NxUnsupportedSplitDirective:
-    StatusMsg += "Unsupported split directive";
     break;
   case NxNoStmt:
     StatusMsg += "No statement found";
@@ -9170,12 +9179,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
     break;
   case NxNotLoopDirective:
     StatusMsg += "Not a loop directive";
-    break;
-  case NxNotCapturedStmt:
-    StatusMsg += "Not a captured statement";
-    break;
-  case NxNotExecutableStmt:
-    StatusMsg += "Not an executable directive";
     break;
   case NxUnsupportedNestedSplitDirective:
     StatusMsg += "Unsupported nested split directive";
@@ -9210,64 +9213,8 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
   case NxNonConcurrentOrder:
     StatusMsg += "Non-concurrent order not supported";
     break;
-  case NxUnsupportedRedType:
-    StatusMsg += "Unsupported reduction variable type";
-    break;
-  case NxUnsupportedRedIntSize:
-    StatusMsg +=
-        "Integer reduction variable with the specified size not supported";
-    break;
-  case NxNotScalarRed:
-    StatusMsg += "Non-scalar reduction variable";
-    break;
-  case NxNotBinOpRed:
-    StatusMsg += "Only binary reduction operator supported";
-    break;
-  case NxUnsupportedRedOp:
-    StatusMsg += "Unsupported reduction operator";
-    break;
-  case NxNoRedVar:
-    StatusMsg += "No reduction variable found";
-    break;
-  case NxMultRedVar:
-    StatusMsg += "Multiple reduction variables in the same loop not supported";
-    break;
-  case NxUnsupportedRedExpr:
-    StatusMsg += "Unsupported reduction expression found";
-    break;
-  case NxUnsupportedXteamRedThreadLimit:
-    StatusMsg += "Thread Limit less than 256 not supported";
-    break;
   case NxUnsupportedPseudoObject:
     StatusMsg += "Unsupported pseudo object found";
-    break;
-  case NxNotRedVarInBinOpRHS:
-    StatusMsg += "Reduction variable not found in RHS of binary operator";
-    break;
-  case NxNotAddOpInBinOpRHs:
-    StatusMsg += "Add operator not found in RHS of binary operator";
-    break;
-  case NxRhsOfAssignNotBinOpOrCall:
-    StatusMsg += "RHS of assignment is not a binary operator or call";
-    break;
-  case NxBinOpNotAddAssignOrAssign:
-    StatusMsg += "Binary operator is neither += nor =";
-    break;
-  case NxNotBinOpOrCallButAccessesRedVar:
-    StatusMsg +=
-        "RHS is not binary operator or call but accesses reduction variable";
-    break;
-  case NxNotArgScalarEval:
-    StatusMsg += "Arg of call does not evaluate to scalar";
-    break;
-  case NxReductionOpNotBinAssign:
-    StatusMsg += "Reduction ops not binary assignment";
-    break;
-  case NxReductionOpRhsNotBinOrCond:
-    StatusMsg += "Reduction ops rhs is not binary or conditional operator";
-    break;
-  case NxReductionOpRhsNotMinMaxSum:
-    StatusMsg += "Reduction ops rhs is not sum, min, or max";
     break;
   case NxNotBuiltinByNameInHostCompile:
     StatusMsg += "Not recognized as builtin in host compile";
@@ -9280,22 +9227,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
     break;
   case NxPOSemanticExprNotCall:
     StatusMsg += "Pseudo-expression semantic expression is not a call";
-    break;
-  case NxChildOfCallIsNull:
-    StatusMsg += "Child of call is null";
-    break;
-  case NxMultiDeviceMinMaxNotSupported:
-    StatusMsg +=
-        "Xteam min/max reduction not supported with multi-device compilation";
-    break;
-  case NxFastReductionMinMaxNotSupported:
-    StatusMsg += "Xteam min/max reduction not supported with fast reduction";
-    break;
-  case NxScanMinMaxNotSupported:
-    StatusMsg += "Xteam min/max reduction not supported with scan";
-    break;
-  case NxAmbiguousRedKind:
-    StatusMsg += "Could not determine reduction kind";
     break;
   }
 

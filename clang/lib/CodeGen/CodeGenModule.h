@@ -354,15 +354,11 @@ public:
   enum NoLoopXteamErr {
     NxSuccess,
     NxNonSPMD,
-    NxOptionDisabled,
     NxOptionDisabledOrHasCall,
     NxUnsupportedDirective,
-    NxUnsupportedSplitDirective,
     NxNoStmt,
     NxUnsupportedTargetClause,
     NxNotLoopDirective,
-    NxNotCapturedStmt,
-    NxNotExecutableStmt,
     NxUnsupportedNestedSplitDirective,
     NxSplitConstructImproperlyNested,
     NxNestedOmpParallelDirective,
@@ -374,34 +370,11 @@ public:
     NxGuidedOrRuntimeSched,
     NxNonUnitStaticChunk,
     NxNonConcurrentOrder,
-    NxUnsupportedRedType,
-    NxUnsupportedRedIntSize,
-    NxNotScalarRed,
-    NxNotBinOpRed,
-    NxUnsupportedRedOp,
-    NxNoRedVar,
-    NxMultRedVar,
-    NxUnsupportedRedExpr,
-    NxUnsupportedXteamRedThreadLimit,
     NxUnsupportedPseudoObject,
-    NxNotRedVarInBinOpRHS,
-    NxNotAddOpInBinOpRHs,
-    NxRhsOfAssignNotBinOpOrCall,
-    NxBinOpNotAddAssignOrAssign,
-    NxNotBinOpOrCallButAccessesRedVar,
-    NxNotArgScalarEval,
-    NxReductionOpNotBinAssign,
-    NxReductionOpRhsNotBinOrCond,
-    NxReductionOpRhsNotMinMaxSum,
     NxNotBuiltinByNameInHostCompile,
     NxNotBuiltinByNameInDeviceCompile,
     NxPOExprCountNotOne,
-    NxPOSemanticExprNotCall,
-    NxChildOfCallIsNull,
-    NxMultiDeviceMinMaxNotSupported,
-    NxFastReductionMinMaxNotSupported,
-    NxScanMinMaxNotSupported,
-    NxAmbiguousRedKind
+    NxPOSemanticExprNotCall
   };
 
   using Stmt2StmtMap = llvm::DenseMap<const Stmt *, const Stmt *>;
@@ -431,6 +404,10 @@ private:
   llvm::Module &TheModule;
   DiagnosticsEngine &Diags;
   const TargetInfo &Target;
+  /// Lazily cached target features for functions without a target attribute.
+  /// An invalid attribute means that the defaults were computed but no
+  /// target-features attribute needs to be emitted.
+  std::optional<llvm::Attribute> DefaultTargetFeatures;
   std::unique_ptr<CGCXXABI> ABI;
   llvm::LLVMContext &VMContext;
   std::string ModuleNameHash;
@@ -817,7 +794,6 @@ public:
   ~CodeGenModule();
 
   void clear();
-  const OMPExecutableDirective *OMPPresentScanDirective = nullptr;
 
   /// Finalize LLVM code generation.
   void Release();

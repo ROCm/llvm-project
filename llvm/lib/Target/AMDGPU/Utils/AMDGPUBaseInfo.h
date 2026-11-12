@@ -1792,6 +1792,12 @@ bool isIntrinsicSourceOfDivergence(unsigned IntrID);
 /// \returns true if the intrinsic is uniform
 bool isIntrinsicAlwaysUniform(unsigned IntrID);
 
+/// Return true if we can easily prove that \p V is uniform at \p CtxI.
+bool isTriviallyUniform(const Value *V, const Instruction *CtxI);
+
+/// Return true if we can easily prove that use \p U is uniform.
+bool isTriviallyUniform(const Use &U);
+
 /// \returns true if the intrinsic executes an LDSDMA operation
 bool isLDSDMAIntrinsic(unsigned IntrID);
 

@@ -16,22 +16,22 @@
 
 // Not const: its address is handed to the disassembler as the void *user_data
 // callback argument, and casting away const to do that is a defect.
-int ExpectedUserData;
+static int ExpectedUserData;
 
-void checkUserData(const void *UserData) {
+static void checkUserData(const void *UserData) {
   if (UserData != (const void *)&ExpectedUserData) {
     fail("user_data changed");
   }
 }
 
-const char *skipspace(const char *S) {
+static const char *skipspace(const char *S) {
   while (isspace(*S)) {
     ++S;
   }
   return S;
 }
 
-size_t strlenWithoutTrailingWhitespace(const char *S) {
+static size_t strlenWithoutTrailingWhitespace(const char *S) {
   size_t I = strlen(S);
   while (I && isspace(S[--I])) {
     ;
@@ -39,7 +39,7 @@ size_t strlenWithoutTrailingWhitespace(const char *S) {
   return I + 1;
 }
 
-const char Program[] = {
+static const char Program[] = {
     '\x02', '\x00', '\x06', '\xC0', '\x00', '\x00', '\x00', '\x00', '\x7f',
     '\xC0', '\x8c', '\xbf', '\x00', '\x80', '\x12', '\xbf', '\x05', '\x00',
     '\x85', '\xbf', '\x00', '\x02', '\x00', '\x7e', '\xc0', '\x02', '\x04',
@@ -47,7 +47,7 @@ const char Program[] = {
     '\x00', '\x02', '\x7f', '\x00', '\x00', '\x00', '\x81', '\xbf',
 };
 
-const char *Instructions[] = {
+static const char *Instructions[] = {
     "s_load_dwordx2 s[0:1], s[4:5], 0x0",
     "s_waitcnt lgkmcnt(0)",
     "s_cmp_eq_u64 s[0:1], 0",
@@ -58,13 +58,14 @@ const char *Instructions[] = {
     "global_store_dword v[0:1], v2, off",
     "s_endpgm",
 };
-const size_t InstructionsLen = sizeof(Instructions) / sizeof(*Instructions);
-size_t InstructionsIdx = 0;
-const size_t BrInstructionIdx = 3;
-const size_t BrInstructionAddr = 40;
+static const size_t InstructionsLen =
+    sizeof(Instructions) / sizeof(*Instructions);
+static size_t InstructionsIdx = 0;
+static const size_t BrInstructionIdx = 3;
+static const size_t BrInstructionAddr = 40;
 
-uint64_t readMemoryCallback(uint64_t From, char *To, uint64_t Size,
-                            void *UserData) {
+static uint64_t readMemoryCallback(uint64_t From, char *To, uint64_t Size,
+                                   void *UserData) {
   checkUserData(UserData);
   if (From >= sizeof(Program)) {
     return 0;
@@ -76,7 +77,7 @@ uint64_t readMemoryCallback(uint64_t From, char *To, uint64_t Size,
   return Size;
 }
 
-void printInstructionCallback(const char *Instruction, void *UserData) {
+static void printInstructionCallback(const char *Instruction, void *UserData) {
   checkUserData(UserData);
   if (InstructionsIdx == InstructionsLen) {
     fail("too many instructions");
@@ -88,7 +89,7 @@ void printInstructionCallback(const char *Instruction, void *UserData) {
   }
 }
 
-void printAddressCallback(uint64_t Address, void *UserData) {
+static void printAddressCallback(uint64_t Address, void *UserData) {
   checkUserData(UserData);
   size_t ActualIdx = InstructionsIdx - 1;
   if (ActualIdx != BrInstructionIdx) {
