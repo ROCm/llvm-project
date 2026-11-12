@@ -15,6 +15,7 @@
 #define OMPTARGET_SHARED_API_TYPES_H
 
 #include "Environment.h"
+#include "OffloadAPI.h"
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -31,8 +32,6 @@
 #endif
 #include <mutex>
 #include <utility>
-
-enum TargetAllocTy : int32_t;
 
 extern "C" {
 
@@ -78,7 +77,8 @@ struct __tgt_async_info {
 
   /// A collection of allocations that are associated with this stream and that
   /// should be freed after finalization. Also store the type of the allocation.
-  llvm::SmallVector<std::pair<void *, TargetAllocTy>, 2> AssociatedAllocations;
+  llvm::SmallVector<std::pair<void *, ol_alloc_type_t>, 2>
+      AssociatedAllocations;
 
   /// Mutex to guard access to AssociatedAllocations and the Queue.
   std::mutex Mutex;

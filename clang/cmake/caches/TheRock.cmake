@@ -15,6 +15,9 @@
 #       Required. Source of the SPIR-V translator, ROCm/SPIRV-LLVM-Translator.
 #   SANITIZER_HSA_INCLUDE_PATH
 #       Directory containing hsa.h. Enables GPU support in the host sanitizers.
+#   THEROCK_SANITIZER
+#       Optional. When ASAN, HOST_ASAN, or TSAN, host runtimes are built with
+#       -gdwarf-4 so dwz can process the packages.
 
 if(NOT LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR)
   message(FATAL_ERROR "LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR must point to the SPIR-V translator source")
@@ -51,6 +54,20 @@ if(NOT CMAKE_HOST_WIN32)
   # Builds compiler-rt for every architecture the host compiler supports.
   set(BUILTINS_${ROCM_HOST_TRIPLE}_COMPILER_RT_DEFAULT_TARGET_ONLY OFF CACHE BOOL "")
   set(RUNTIMES_${ROCM_HOST_TRIPLE}_COMPILER_RT_DEFAULT_TARGET_ONLY OFF CACHE BOOL "")
+
+  # Prefer CONFIG mode for runtime ExternalProjects. LLVM's FindZSTD.cmake is
+  # found in module mode and fails to locate TheRock's zstd package.
+  # Must use RUNTIMES_<triple>_* (not RUNTIMES_CMAKE_ARGS): with
+  # LLVM_RUNTIME_TARGETS set, only runtime_register_target() runs, and that
+  # path never expands RUNTIMES_CMAKE_ARGS.
+  set(RUNTIMES_${ROCM_HOST_TRIPLE}_CMAKE_FIND_PACKAGE_PREFER_CONFIG ON CACHE BOOL "")
+
+  # dwz does not fully support DWARF5 ("Unknown debugging section
+  # .debug_str_offsets"). Force DWARF4 for sanitizer host runtimes.
+  if(THEROCK_SANITIZER STREQUAL "ASAN" OR THEROCK_SANITIZER STREQUAL "HOST_ASAN" OR THEROCK_SANITIZER STREQUAL "TSAN")
+    set(RUNTIMES_${ROCM_HOST_TRIPLE}_CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -gdwarf-4" CACHE STRING "" FORCE)
+    set(RUNTIMES_${ROCM_HOST_TRIPLE}_CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gdwarf-4" CACHE STRING "" FORCE)
+  endif()
 
   # libomp is loaded from several depths below <rocm>, e.g. lib/llvm/lib/<triple>.
   set(RUNTIMES_${ROCM_HOST_TRIPLE}_LIBOMP_INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib:$ORIGIN/../../lib:$ORIGIN/../../../lib:$ORIGIN/../../../../lib" CACHE STRING "")
