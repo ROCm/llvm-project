@@ -68,9 +68,7 @@ def compiler_has_amdgpu(cfg):
     ]
     try:
         return (
-            subprocess.call(
-                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
+            subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             == 0
         )
     except OSError:
