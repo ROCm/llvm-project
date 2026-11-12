@@ -412,7 +412,6 @@ static VGPRRegisterRegAlloc greedyRegAllocVGPR(
 
 static VGPRRegisterRegAlloc fastRegAllocVGPR(
   "fast", "fast register allocator", createFastVGPRRegisterAllocator);
-
 static WWMRegisterRegAlloc basicRegAllocWWMReg("basic",
                                                "basic register allocator",
                                                createBasicWWMRegisterAllocator);
@@ -1790,7 +1789,7 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
   addPass(&SILowerWWMCopiesLegacyID);
   addPass(&AMDGPUReserveWWMRegsLegacyID);
 
-  // For allocating regular VGPRs.
+  // For allocating per-thread VGPRs.
   addPass(createVGPRAllocPass(false));
 
   return true;
@@ -1827,7 +1826,7 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
   addPass(createVirtRegRewriter(false));
   addPass(&AMDGPUReserveWWMRegsLegacyID);
 
-  // For allocating regular VGPRs.
+  // For allocating per-thread VGPRs.
   addPass(createVGPRAllocPass(true));
 
   addPreRewrite();
