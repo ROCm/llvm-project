@@ -277,11 +277,11 @@ body: |
   ; CHECK-NEXT:   [[DS_READ_B128_gfx9_1:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF2]], 16, 0, implicit $exec
   ; CHECK-NEXT:   [[V_ADD_F32_e32_:%[0-9]+]]:vgpr_32 = V_ADD_F32_e32 [[DEF2]], [[DEF2]], implicit $mode, implicit $exec
   ; CHECK-NEXT:   [[DS_READ_B128_gfx9_2:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF2]], 32, 0, implicit $exec
-  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_3:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF2]], 48, 0, implicit $exec
   ; CHECK-NEXT:   [[DEF4:%[0-9]+]]:vreg_512_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   [[DEF5:%[0-9]+]]:vreg_512_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   [[DEF6:%[0-9]+]]:vreg_256_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   early-clobber %14:vreg_256_align2 = V_WMMA_SCALE_F32_16X16X128_F8F6F4_f8_f8_w32_threeaddr [[DEF4]], [[DEF5]], 0, [[DEF6]], [[DEF]], [[DEF1]], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, implicit $exec
+  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_3:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF2]], 48, 0, implicit $exec
   ; CHECK-NEXT:   [[DEF7:%[0-9]+]]:vreg_128 = IMPLICIT_DEF
   ; CHECK-NEXT:   [[COPY:%[0-9]+]]:vreg_128 = COPY [[DEF7]]
   ; CHECK-NEXT:   S_ENDPGM 0, implicit [[DS_READ_B128_gfx9_]], implicit [[DS_READ_B128_gfx9_1]], implicit [[V_ADD_F32_e32_]], implicit [[DS_READ_B128_gfx9_2]], implicit [[DS_READ_B128_gfx9_3]], implicit [[COPY]], implicit %14

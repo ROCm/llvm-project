@@ -188,7 +188,7 @@ public:
   auto rbegin() { return AllSUs.rbegin(); }
   auto rend() { return AllSUs.rend(); }
 
-  unsigned size() const { return AllSUs.size(); }
+  size_t size() const { return AllSUs.size(); }
 
   unsigned getTotalCycles() const { return TotalCycles; }
 
@@ -235,7 +235,7 @@ public:
 
   /// \returns the most recently scheduled SU for this HardwareUnit.
   SUnit *getLastScheduledSU() const {
-    unsigned ScheduledCount = ScheduledSUs.size();
+    size_t ScheduledCount = ScheduledSUs.size();
     if (!ScheduledCount)
       return nullptr;
 

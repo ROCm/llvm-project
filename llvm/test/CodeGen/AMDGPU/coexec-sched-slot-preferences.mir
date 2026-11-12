@@ -65,19 +65,19 @@ body: |
   ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1:
-  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF7]], 0, 0, implicit $exec
-  ; CHECK-NEXT:   [[V_EXP_F32_e32_:%[0-9]+]]:vgpr_32 = nofpexcept V_EXP_F32_e32 [[DEF8]], implicit $mode, implicit $exec
-  ; CHECK-NEXT:   [[S_ADD_I32_:%[0-9]+]]:sreg_32 = S_ADD_I32 [[DEF10]], [[DEF10]], implicit-def dead $scc
-  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_1:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF7]], 16, 0, implicit $exec
-  ; CHECK-NEXT:   [[S_ADD_I32_1:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_]], [[DEF10]], implicit-def dead $scc
-  ; CHECK-NEXT:   [[V_ADD_F32_e32_:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e32 [[DEF8]], [[DEF9]], implicit $mode, implicit $exec
-  ; CHECK-NEXT:   [[S_ADD_I32_2:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_1]], [[DEF10]], implicit-def dead $scc
   ; CHECK-NEXT:   [[DEF11:%[0-9]+]]:vreg_512_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   [[DEF12:%[0-9]+]]:vreg_512_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   early-clobber %22:vreg_256_align2 = V_WMMA_SCALE_F32_16X16X128_F8F6F4_f8_f8_w32_threeaddr [[DEF11]], [[DEF12]], 0, [[DEF]], [[DEF1]], [[DEF2]], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, implicit $exec
-  ; CHECK-NEXT:   [[S_ADD_I32_3:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_2]], [[DEF10]], implicit-def dead $scc
+  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF7]], 0, 0, implicit $exec
+  ; CHECK-NEXT:   [[S_ADD_I32_:%[0-9]+]]:sreg_32 = S_ADD_I32 [[DEF10]], [[DEF10]], implicit-def dead $scc
+  ; CHECK-NEXT:   [[V_EXP_F32_e32_:%[0-9]+]]:vgpr_32 = nofpexcept V_EXP_F32_e32 [[DEF8]], implicit $mode, implicit $exec
+  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_1:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF7]], 16, 0, implicit $exec
+  ; CHECK-NEXT:   [[S_ADD_I32_1:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_]], [[DEF10]], implicit-def dead $scc
+  ; CHECK-NEXT:   [[V_ADD_F32_e32_:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e32 [[DEF8]], [[DEF9]], implicit $mode, implicit $exec
   ; CHECK-NEXT:   [[DEF13:%[0-9]+]]:vreg_512_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   early-clobber %23:vreg_256_align2 = V_WMMA_SCALE_F32_16X16X128_F8F6F4_f8_f8_w32_threeaddr [[DEF13]], [[DEF3]], 0, [[DEF4]], [[DEF5]], [[DEF6]], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, implicit $exec
+  ; CHECK-NEXT:   [[S_ADD_I32_2:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_1]], [[DEF10]], implicit-def dead $scc
+  ; CHECK-NEXT:   [[S_ADD_I32_3:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_2]], [[DEF10]], implicit-def dead $scc
   ; CHECK-NEXT:   S_ENDPGM 0, implicit [[DS_READ_B128_gfx9_]], implicit [[DS_READ_B128_gfx9_1]], implicit [[V_EXP_F32_e32_]], implicit [[V_ADD_F32_e32_]], implicit [[S_ADD_I32_3]], implicit %22, implicit %23
   bb.0:
     successors: %bb.1
@@ -143,19 +143,19 @@ body: |
   ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1:
-  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF7]], 0, 0, implicit $exec
-  ; CHECK-NEXT:   [[V_EXP_F32_e32_:%[0-9]+]]:vgpr_32 = nofpexcept V_EXP_F32_e32 [[DEF8]], implicit $mode, implicit $exec
-  ; CHECK-NEXT:   [[S_ADD_I32_:%[0-9]+]]:sreg_32 = S_ADD_I32 [[DEF10]], [[DEF10]], implicit-def dead $scc
-  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_1:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF7]], 16, 0, implicit $exec
-  ; CHECK-NEXT:   [[S_ADD_I32_1:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_]], [[DEF10]], implicit-def dead $scc
-  ; CHECK-NEXT:   [[V_ADD_F32_e32_:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e32 [[DEF8]], [[DEF9]], implicit $mode, implicit $exec
-  ; CHECK-NEXT:   [[S_ADD_I32_2:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_1]], [[DEF10]], implicit-def dead $scc
   ; CHECK-NEXT:   [[DEF11:%[0-9]+]]:vreg_512_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   [[DEF12:%[0-9]+]]:vreg_512_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   early-clobber %22:vreg_256_align2 = V_WMMA_SCALE_F32_16X16X128_F8F6F4_f8_f8_w32_threeaddr [[DEF11]], [[DEF12]], 0, [[DEF]], [[DEF1]], [[DEF2]], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, implicit $exec
-  ; CHECK-NEXT:   [[S_ADD_I32_3:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_2]], [[DEF10]], implicit-def dead $scc
+  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF7]], 0, 0, implicit $exec
+  ; CHECK-NEXT:   [[S_ADD_I32_:%[0-9]+]]:sreg_32 = S_ADD_I32 [[DEF10]], [[DEF10]], implicit-def dead $scc
+  ; CHECK-NEXT:   [[V_EXP_F32_e32_:%[0-9]+]]:vgpr_32 = nofpexcept V_EXP_F32_e32 [[DEF8]], implicit $mode, implicit $exec
+  ; CHECK-NEXT:   [[DS_READ_B128_gfx9_1:%[0-9]+]]:vreg_128_lo256_align2 = DS_READ_B128_gfx9 [[DEF7]], 16, 0, implicit $exec
+  ; CHECK-NEXT:   [[S_ADD_I32_1:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_]], [[DEF10]], implicit-def dead $scc
+  ; CHECK-NEXT:   [[V_ADD_F32_e32_:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e32 [[DEF8]], [[DEF9]], implicit $mode, implicit $exec
   ; CHECK-NEXT:   [[DEF13:%[0-9]+]]:vreg_512_align2 = IMPLICIT_DEF
   ; CHECK-NEXT:   early-clobber %23:vreg_256_align2 = V_WMMA_SCALE_F32_16X16X128_F8F6F4_f8_f8_w32_threeaddr [[DEF13]], [[DEF3]], 0, [[DEF4]], [[DEF5]], [[DEF6]], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, implicit $exec
+  ; CHECK-NEXT:   [[S_ADD_I32_2:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_1]], [[DEF10]], implicit-def dead $scc
+  ; CHECK-NEXT:   [[S_ADD_I32_3:%[0-9]+]]:sreg_32 = S_ADD_I32 [[S_ADD_I32_2]], [[DEF10]], implicit-def dead $scc
   ; CHECK-NEXT:   S_ENDPGM 0, implicit [[DS_READ_B128_gfx9_]], implicit [[DS_READ_B128_gfx9_1]], implicit [[V_EXP_F32_e32_]], implicit [[V_ADD_F32_e32_]], implicit [[S_ADD_I32_3]], implicit %22, implicit %23
   bb.0:
     successors: %bb.1

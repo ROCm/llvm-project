@@ -7,7 +7,7 @@
 
 ;-----------------------------------------------------------------------------
 ; Test with waves-per-eu=2 (128 VGPRs available per wave)
-; Default VGPRCriticalLimit = 125, VGPRExcessLimit = 125
+; Default VGPRCriticalLimit = 125, UnifiedVGPRCriticalLimit = 125, VGPRExcessLimit = 125
 ;-----------------------------------------------------------------------------
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx906 -debug-only=machine-scheduler -filetype=null \
 ; RUN:   < %s 2>&1 | FileCheck -check-prefix=W2-DEFAULT %s
@@ -46,7 +46,7 @@
 
 ;-----------------------------------------------------------------------------
 ; Test with waves-per-eu=8 (32 VGPRs available per wave)
-; Default VGPRCriticalLimit = 29, VGPRExcessLimit = 29
+; Default VGPRCriticalLimit = 29, UnifiedVGPRCriticalLimit = 29, VGPRExcessLimit = 29
 ;-----------------------------------------------------------------------------
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx906 -amdgpu-vgpr-excess-threshold-percent=90 \
 ; RUN:   -debug-only=machine-scheduler -filetype=null < %s 2>&1 \
@@ -64,47 +64,47 @@
 ; RUN:   -debug-only=machine-scheduler -filetype=null < %s 2>&1 \
 ; RUN:   | FileCheck -check-prefix=W8-T10 %s
 
-; W2-DEFAULT: VGPRCriticalLimit = 125, VGPRExcessLimit = 125
+; W2-DEFAULT: VGPRCriticalLimit = 125, UnifiedVGPRCriticalLimit = 125, VGPRExcessLimit = 125
 ; W2-DEFAULT-NOT: Applied VGPR excess threshold
 
 ; At 90%, VGPRExcessLimit (116) < VGPRCriticalLimit (125), so critical is adjusted
 ; W2-T90: Applied VGPR excess threshold 90%, VGPRExcessLimit: 128 -> 116
-; W2-T90: VGPRCriticalLimit = 116, VGPRExcessLimit = 116
+; W2-T90: VGPRCriticalLimit = 116, UnifiedVGPRCriticalLimit = 116, VGPRExcessLimit = 116
 
 ; At 50%, VGPRExcessLimit (64) < VGPRCriticalLimit (125), so critical is adjusted
 ; W2-T50: Applied VGPR excess threshold 50%, VGPRExcessLimit: 128 -> 64
-; W2-T50: VGPRCriticalLimit = 64, VGPRExcessLimit = 64
+; W2-T50: VGPRCriticalLimit = 64, UnifiedVGPRCriticalLimit = 64, VGPRExcessLimit = 64
 
 ; At 10%, VGPRExcessLimit (13) < VGPRCriticalLimit (125), so critical is adjusted
 ; W2-T10: Applied VGPR excess threshold 10%, VGPRExcessLimit: 128 -> 13
-; W2-T10: VGPRCriticalLimit = 13, VGPRExcessLimit = 13
+; W2-T10: VGPRCriticalLimit = 13, UnifiedVGPRCriticalLimit = 13, VGPRExcessLimit = 13
 
 ; waves=4 tests (64 VGPRs available, default critical = 61)
 ; At 90%, VGPRExcessLimit (58) < VGPRCriticalLimit (61), so critical is adjusted
 ; W4-T90-DAG: Applied VGPR excess threshold 90%, VGPRExcessLimit: 64 -> 58
-; W4-T90-DAG: VGPRCriticalLimit = 58, VGPRExcessLimit = 58
+; W4-T90-DAG: VGPRCriticalLimit = 58, UnifiedVGPRCriticalLimit = 58, VGPRExcessLimit = 58
 
 ; W4-T50-DAG: Applied VGPR excess threshold 50%, VGPRExcessLimit: 64 -> 32
-; W4-T50-DAG: VGPRCriticalLimit = 32, VGPRExcessLimit = 32
+; W4-T50-DAG: VGPRCriticalLimit = 32, UnifiedVGPRCriticalLimit = 32, VGPRExcessLimit = 32
 
 ; W4-T30-DAG: Applied VGPR excess threshold 30%, VGPRExcessLimit: 64 -> 20
-; W4-T30-DAG: VGPRCriticalLimit = 20, VGPRExcessLimit = 20
+; W4-T30-DAG: VGPRCriticalLimit = 20, UnifiedVGPRCriticalLimit = 20, VGPRExcessLimit = 20
 
 ; W4-T10-DAG: Applied VGPR excess threshold 10%, VGPRExcessLimit: 64 -> 7
-; W4-T10-DAG: VGPRCriticalLimit = 7, VGPRExcessLimit = 7
+; W4-T10-DAG: VGPRCriticalLimit = 7, UnifiedVGPRCriticalLimit = 7, VGPRExcessLimit = 7
 
 ; waves=8 tests (32 VGPRs available, default critical = 29)
 ; W8-T90-DAG: Applied VGPR excess threshold 90%, VGPRExcessLimit: 32 -> 29
-; W8-T90-DAG: VGPRCriticalLimit = 29, VGPRExcessLimit = 29
+; W8-T90-DAG: VGPRCriticalLimit = 29, UnifiedVGPRCriticalLimit = 29, VGPRExcessLimit = 29
 
 ; W8-T70-DAG: Applied VGPR excess threshold 70%, VGPRExcessLimit: 32 -> 23
-; W8-T70-DAG: VGPRCriticalLimit = 23, VGPRExcessLimit = 23
+; W8-T70-DAG: VGPRCriticalLimit = 23, UnifiedVGPRCriticalLimit = 23, VGPRExcessLimit = 23
 
 ; W8-T50-DAG: Applied VGPR excess threshold 50%, VGPRExcessLimit: 32 -> 16
-; W8-T50-DAG: VGPRCriticalLimit = 16, VGPRExcessLimit = 16
+; W8-T50-DAG: VGPRCriticalLimit = 16, UnifiedVGPRCriticalLimit = 16, VGPRExcessLimit = 16
 
 ; W8-T10-DAG: Applied VGPR excess threshold 10%, VGPRExcessLimit: 32 -> 4
-; W8-T10-DAG: VGPRCriticalLimit = 4, VGPRExcessLimit = 4
+; W8-T10-DAG: VGPRCriticalLimit = 4, UnifiedVGPRCriticalLimit = 4, VGPRExcessLimit = 4
 
 ; Test kernel targeting waves-per-eu=2
 define amdgpu_kernel void @test_waves2(ptr addrspace(3) nocapture readonly %arg, ptr addrspace(1) nocapture %arg1) #0 {

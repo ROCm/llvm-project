@@ -31,24 +31,33 @@
 ; RUN:   -debug-only=machine-scheduler -filetype=null < %s 2>&1 \
 ; RUN:   | FileCheck -check-prefix=THRESH5 %s
 
-; DEFAULT: VGPRCriticalLimit = 21, VGPRExcessLimit = 253
+; gfx1250 has a unified VGPR file, so the scheduler checks
+; UnifiedVGPRCriticalLimit. It is capped the same way.
+; RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-vgpr-excess-threshold-percent=5 \
+; RUN:   -debug-only=machine-scheduler -filetype=null < %s 2>&1 \
+; RUN:   | FileCheck -check-prefix=GFX1250-THRESH5 %s
+
+; DEFAULT: VGPRCriticalLimit = 21, UnifiedVGPRCriticalLimit = 21, VGPRExcessLimit = 253
 ; DEFAULT-NOT: Applied VGPR excess threshold
 
 ; THRESH90: Applied VGPR excess threshold 90%, VGPRExcessLimit: 256 -> 231
-; THRESH90: VGPRCriticalLimit = 21, VGPRExcessLimit = 231
+; THRESH90: VGPRCriticalLimit = 21, UnifiedVGPRCriticalLimit = 21, VGPRExcessLimit = 231
 
 ; THRESH50: Applied VGPR excess threshold 50%, VGPRExcessLimit: 256 -> 128
-; THRESH50: VGPRCriticalLimit = 21, VGPRExcessLimit = 128
+; THRESH50: VGPRCriticalLimit = 21, UnifiedVGPRCriticalLimit = 21, VGPRExcessLimit = 128
 
 ; THRESH30: Applied VGPR excess threshold 30%, VGPRExcessLimit: 256 -> 77
-; THRESH30: VGPRCriticalLimit = 21, VGPRExcessLimit = 77
+; THRESH30: VGPRCriticalLimit = 21, UnifiedVGPRCriticalLimit = 21, VGPRExcessLimit = 77
 
 ; THRESH10: Applied VGPR excess threshold 10%, VGPRExcessLimit: 256 -> 26
-; THRESH10: VGPRCriticalLimit = 21, VGPRExcessLimit = 26
+; THRESH10: VGPRCriticalLimit = 21, UnifiedVGPRCriticalLimit = 21, VGPRExcessLimit = 26
 
 ; At 5%, VGPRExcessLimit (13) < VGPRCriticalLimit (21), so critical limit is adjusted
 ; THRESH5: Applied VGPR excess threshold 5%, VGPRExcessLimit: 256 -> 13
-; THRESH5: VGPRCriticalLimit = 13, VGPRExcessLimit = 13
+; THRESH5: VGPRCriticalLimit = 13, UnifiedVGPRCriticalLimit = 13, VGPRExcessLimit = 13
+
+; GFX1250-THRESH5: Applied VGPR excess threshold 5%, VGPRExcessLimit: 512 -> 26
+; GFX1250-THRESH5: VGPRCriticalLimit = 26, UnifiedVGPRCriticalLimit = 26, VGPRExcessLimit = 26
 
 define amdgpu_kernel void @test_threshold(ptr addrspace(3) nocapture readonly %arg, ptr addrspace(1) nocapture %arg1) #0 {
 bb:

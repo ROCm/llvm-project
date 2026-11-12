@@ -132,7 +132,7 @@ body: |
 # CHECK: V_DUAL_MOV_B32
 # CHECK: Stalls: (none)
 # CHECK: V_ADD_F32_e32 $vgpr0, $vgpr0
-# CHECK: Stalls: FU=1
+# CHECK: Stalls: (none)
 
 ---
 name: wmma_no_bank_conflict_test

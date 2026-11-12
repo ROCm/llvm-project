@@ -1119,7 +1119,7 @@ void HardwareUnitInfo::finalizeCycles() {
 
   // We estimate the amount of cycles it takes to free up a slot in the buffer
   // as the average cycles per SU.
-  BufferCycles = TotalCycles / AllSUs.size();
+  BufferCycles = static_cast<unsigned>(TotalCycles / AllSUs.size());
   // A single-entry buffer does not reduce TotalCycles.
   if (BufferSize == 1)
     return;
@@ -1942,17 +1942,21 @@ void CandidateHeuristics::initExposedGreedy() {
       HWUInfo[(int)InstructionFlavor::SingleCycleVALU].getTotalCycles();
   unsigned TRANSCycles = HWUInfo[(int)InstructionFlavor::TRANS].getTotalCycles();
 
-  unsigned WMMACount = HWUInfo[(int)InstructionFlavor::WMMA].size();
-  unsigned MultiVALUCount =
-      HWUInfo[(int)InstructionFlavor::MultiCycleVALU].size();
-  unsigned DSCount = HWUInfo[(int)InstructionFlavor::DS].size();
-  unsigned SALUCount = HWUInfo[(int)InstructionFlavor::SALU].size();
+  unsigned WMMACount =
+      static_cast<unsigned>(HWUInfo[(int)InstructionFlavor::WMMA].size());
+  unsigned MultiVALUCount = static_cast<unsigned>(
+      HWUInfo[(int)InstructionFlavor::MultiCycleVALU].size());
+  unsigned DSCount =
+      static_cast<unsigned>(HWUInfo[(int)InstructionFlavor::DS].size());
+  unsigned SALUCount =
+      static_cast<unsigned>(HWUInfo[(int)InstructionFlavor::SALU].size());
   // FIXME: the prior PipelinedScheduler reads EXPCount from
   // InstructionFlavor::DS; preserved verbatim for behavior parity. Almost
   // certainly intended to be TRANS::size().
-  unsigned EXPCount = HWUInfo[(int)InstructionFlavor::DS].size();
-  unsigned SingleCycleVALUCount =
-      HWUInfo[(int)InstructionFlavor::SingleCycleVALU].size();
+  unsigned EXPCount =
+      static_cast<unsigned>(HWUInfo[(int)InstructionFlavor::DS].size());
+  unsigned SingleCycleVALUCount = static_cast<unsigned>(
+      HWUInfo[(int)InstructionFlavor::SingleCycleVALU].size());
 
   // Slot subcategories from the first WMMA's stage template. Assumes a
   // single WMMA shape per region (matches prior FIXME). Our CoExecInfo
