@@ -5850,7 +5850,7 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
     // the same filename and overwriting each other.
     // HIP offload uses getOffloadingArch(); CUDA/other uses BoundArch.
     const char *OffloadArch = JA.getOffloadingArch();
-    StringRef ArchSuffix = OffloadArch ? StringRef(OffloadArch) : BoundArch;
+    StringRef ArchSuffix = OffloadArch ? StringRef(OffloadArch) : BoundArchStr;
     if (MultipleArchs && !ArchSuffix.empty()) {
       llvm::sys::path::replace_extension(Filename, "");
       Filename += "-";
