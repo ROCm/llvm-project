@@ -61,13 +61,6 @@ llvm::omp::target::plugin::GenericDeviceTy *
 __ol_tgt_GetPluginDevice(ol_device_handle_t Device);
 llvm::omp::target::plugin::GenericProfilerTy *
 __ol_tgt_GetProfiler(ol_device_handle_t Device);
-llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
-                                         ol_device_handle_t Device,
-                                         ol_alloc_type_t Kind, int64_t Size,
-                                         void *HostPtr);
-llvm::Error __ol_tgt_MemFree(ol_context_handle_t Context,
-                             ol_device_handle_t Device, void *Ptr,
-                             ol_alloc_type_t Kind);
 } // namespace llvm::offload::tmp
 
 int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
@@ -497,21 +490,6 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
   return Program;
 }
 
-/// Map a libomptarget allocation kind onto the liboffload one. There is no
-/// liboffload notion of a default allocation; it is a device allocation.
-static ol_alloc_type_t toOlAllocTy(int32_t Kind) {
-  switch (Kind) {
-  case TARGET_ALLOC_HOST:
-    return OL_ALLOC_TYPE_HOST;
-  case TARGET_ALLOC_SHARED:
-    return OL_ALLOC_TYPE_MANAGED;
-  case TARGET_ALLOC_DEVICE:
-  case TARGET_ALLOC_DEFAULT:
-    return OL_ALLOC_TYPE_DEVICE;
-  }
-  llvm_unreachable("unhandled TargetAllocTy");
-}
-
 void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
   /// RAII to establish tool anchors before and after data allocation
   void *TargetPtr = nullptr;
@@ -529,8 +507,7 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
   // the trace record built by the RAII above reads these timestamps. Declared
   // after that RAII, so it is destroyed -- and stamps -- first.
   assert(Profiler && "Plugin provides no profiler instance");
-  auto ProfTimer =
-      Profiler->getScopedDataAllocTimer(PluginDevice, HstPtr, Size);
+  auto ProfTimer = Profiler->getScopedDataAllocTimer(PluginDevice, Size);
 
   // Record-replay serves every allocation from its preallocated region so
   // recorded kernels can re-execute at their original addresses.
@@ -545,20 +522,33 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
     return TargetPtr = *AllocOrErr;
   }
 
-  auto AllocOrErr = llvm::offload::tmp::__ol_tgt_MemAlloc(
-      Context, DeviceHandle, toOlAllocTy(Kind), Size, HstPtr);
-  if (!AllocOrErr) {
-    REPORT() << "Failure to allocate device memory: "
-             << llvm::toString(AllocOrErr.takeError());
+  // liboffload has no default allocation kind; it is a device allocation.
+  ol_result_t Res = OL_SUCCESS;
+  switch (Kind) {
+  case TARGET_ALLOC_HOST:
+    Res = olMemAllocHost(Context, DeviceHandle, Size, &TargetPtr);
+    break;
+  case TARGET_ALLOC_SHARED:
+    Res = olMemAlloc(Context, DeviceHandle, OL_ALLOC_TYPE_MANAGED, Size,
+                     &TargetPtr);
+    break;
+  case TARGET_ALLOC_DEVICE:
+  case TARGET_ALLOC_DEFAULT:
+    Res = olMemAlloc(Context, DeviceHandle, OL_ALLOC_TYPE_DEVICE, Size,
+                     &TargetPtr);
+    break;
+  default:
+    llvm_unreachable("unhandled TargetAllocTy");
+  }
+  if (Res) {
+    REPORT() << "Failure to allocate device memory: " << Res->Details;
     return nullptr;
   }
-  assert(*AllocOrErr && "Null pointer upon successful allocation");
-
-  TargetPtr = *AllocOrErr;
+  assert(TargetPtr && "Null pointer upon successful allocation");
   return TargetPtr;
 }
 
-int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
+int32_t DeviceTy::deleteData(void *TgtAllocBegin) {
   /// RAII to establish tool anchors before and after data deletion
   OMPT_IF_BUILT(
       InterfaceRAII TargetDataDeleteRAII(
@@ -587,10 +577,9 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
     return OFFLOAD_SUCCESS;
   }
 
-  if (auto Err = llvm::offload::tmp::__ol_tgt_MemFree(
-          Context, DeviceHandle, TgtAllocBegin, toOlAllocTy(Kind))) {
+  if (auto Res = olMemFree(Context, TgtAllocBegin)) {
     REPORT() << "Failure to deallocate device pointer " << TgtAllocBegin << ": "
-             << llvm::toString(std::move(Err));
+             << Res->Details;
     return OFFLOAD_FAIL;
   }
 
