@@ -28,6 +28,10 @@
 #include <dlfcn.h>
 #endif
 
+#ifdef __linux__
+#include <sys/vfs.h>
+#endif
+
 using namespace llvm;
 
 namespace COMGR {
@@ -214,6 +218,24 @@ StringRef getCachePolicy() {
   return EnvCachePolicy ? EnvCachePolicy : "";
 }
 
+static bool isLocalCacheDirectory(const Twine &Path) {
+#ifdef __linux__
+  // LLVM's is_local does not recognize these shared HPC filesystems.
+  struct statfs Stat;
+  if (::statfs(Path.str().c_str(), &Stat))
+    return false;
+  switch (static_cast<uint32_t>(Stat.f_type)) {
+  case 0x3e3f:     // DVS_FTYPE_MAGIC
+  case 0x0bd00bd0: // LUSTRE_SUPER_MAGIC
+  case 0x47504653: // GPFS_SUPER_MAGIC
+    return false;
+  default:
+    break;
+  }
+#endif
+  return sys::fs::is_local(Path);
+}
+
 std::optional<SmallString<256>> getCacheDirectory(raw_ostream &LogS) {
   // By default the cache is enabled
   static const char *Enable = getEnv("AMD_COMGR_CACHE");
@@ -232,7 +254,7 @@ std::optional<SmallString<256>> getCacheDirectory(raw_ostream &LogS) {
   // If the cache directory is mounted on a remote filesystem, disable the
   // cache due to concurrency issues. We saw some issues where a SIGBUS was
   // thrown when there was contention on the cache.
-  if (!sys::fs::is_local(Result)) {
+  if (!isLocalCacheDirectory(Result)) {
     if (shouldEmitVerboseLogs())
       LogS << "Comgr cache: default directory '" << Result
            << "' is not on a local filesystem; disabling cache.\n";

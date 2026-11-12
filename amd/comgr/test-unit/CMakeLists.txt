@@ -231,4 +231,29 @@ add_dependencies(test-unit
   DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
   IncludeMaterializationTest)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(CacheDirectoryTest
+    CacheDirectoryTest.cpp
+    ../src/comgr-env.cpp)
+
+  target_link_libraries(CacheDirectoryTest PRIVATE
+    ${COMGR_GTEST_LIBS}
+    ${COMGR_TEST_UNIT_SUPPORT_LIBS}
+    ${LLVM_PTHREAD_LIB})
+
+  target_include_directories(CacheDirectoryTest PRIVATE
+    ${LLVM_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${COMGR_GTEST_INCLUDE_DIRS})
+
+  # Simulate remote mounts without requiring filesystem drivers or privileges.
+  target_link_options(CacheDirectoryTest PRIVATE "-Wl,--wrap=statfs")
+  comgr_configure_test_target(CacheDirectoryTest)
+
+  add_custom_target(test-cache-directory
+    COMMAND $<TARGET_FILE:CacheDirectoryTest>
+    DEPENDS CacheDirectoryTest)
+  add_dependencies(test-unit test-cache-directory)
+endif()
+
 add_dependencies(check-comgr test-unit)

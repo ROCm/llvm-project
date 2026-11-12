@@ -202,8 +202,9 @@ By default, the cache is enabled.
   "$USER/.cache/comgr" on Linux, and "%LOCALAPPDATA%\cache\comgr"
   on Microsoft Windows).
   When resolving this default location, if the system's cache directory resides
-  on a remote filesystem (e.g. NFS), the cache is disabled to avoid concurrency
-  issues on shared storage.
+  on a remote filesystem (including NFS, DVS, Lustre, and GPFS on Linux), the
+  cache is disabled to avoid concurrency issues on shared storage. Setting
+  `AMD_COMGR_CACHE_DIR` explicitly overrides this check.
 * `AMD_COMGR_CACHE_POLICY`: If assigned a value, the string is interpreted and
   applied to the cache pruning policy. The cache is pruned only upon program
   termination. The string format aligns with [Clang's ThinLTO cache pruning policy](https://clang.llvm.org/docs/ThinLTO.html#cache-pruning).
