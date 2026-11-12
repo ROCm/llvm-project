@@ -37,7 +37,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 120
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
     steps:
       # ---- Checkout ---------------------------------------------------------
       # llvm-project at PR head (this repo) provides LLVM/Clang/LLD + amd/
@@ -162,6 +162,23 @@ jobs:
         env:
           ROCM_PATH: ${{ github.workspace }}/${{ env.STAGING }}
         run: ninja -C "$ROCR_BUILD" install
+
+      # CLR configure imports Python packages listed in TheRock requirements.txt
+      # (cxxheaderparser today). The manylinux image does not install that file,
+      # so take the list from TheRock main and install it here.
+      - name: Checkout TheRock Python requirements
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/TheRock
+          ref: main
+          path: TheRock
+          sparse-checkout: requirements.txt
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install TheRock Python requirements
+        run: python3 -m pip install -r TheRock/requirements.txt
 
       - name: Configure CLR (HIP runtime)
         run: |
@@ -403,7 +420,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
     permissions:
       contents: read
 
@@ -470,7 +487,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 15
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
 
     steps:
       - name: Checkout llvm-project (PR head)
@@ -518,7 +535,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
 
     steps:
       - name: Checkout llvm-project (PR head)
@@ -640,7 +657,7 @@ jobs:
     # slow/contended and 45m was cutting the job before it could finish.
     timeout-minutes: 240
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
       options: |
         --device=/dev/kfd --device=/dev/dri  --group-add video
 
@@ -755,7 +772,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
       options: |
         --device=/dev/kfd --device=/dev/dri  --group-add video
 
