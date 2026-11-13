@@ -4393,8 +4393,7 @@ bool SIRegisterInfo::isRegWithinOccupancyBudget(
   else
     MaxVGPR = std::max(MaxVGPR, RegEndIndex);
 
-  return static_cast<unsigned>(
-             AMDGPU::getTotalNumVGPRs(ST.hasGFX90AInsts(), MaxAGPR, MaxVGPR)) <=
+  return AMDGPU::getTotalNumVGPRs(ST.hasGFX90AInsts(), MaxAGPR, MaxVGPR) <=
          MaxVGPRsForCurrentOccupancy;
 }
 
