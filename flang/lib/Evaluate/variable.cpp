@@ -28,13 +28,10 @@ Triplet::Triplet(std::optional<Expr<SubscriptInteger>> &&l,
     std::optional<Expr<SubscriptInteger>> &&u,
     std::optional<Expr<SubscriptInteger>> &&s)
     : stride_{s ? std::move(*s) : MakeSubscriptIntExpr(1)} {
-  CHECK(IsSubscriptIntegerKind(stride_.value()));
   if (l) {
-    CHECK(IsSubscriptIntegerKind(*l));
     lower_.emplace(std::move(*l));
   }
   if (u) {
-    CHECK(IsSubscriptIntegerKind(*u));
     upper_.emplace(std::move(*u));
   }
 }
@@ -47,7 +44,6 @@ std::optional<Expr<SubscriptInteger>> Triplet::lower() const {
 }
 
 Triplet &Triplet::set_lower(Expr<SubscriptInteger> &&expr) {
-  CHECK(IsSubscriptIntegerKind(expr));
   lower_.emplace(std::move(expr));
   return *this;
 }
@@ -60,7 +56,6 @@ std::optional<Expr<SubscriptInteger>> Triplet::upper() const {
 }
 
 Triplet &Triplet::set_upper(Expr<SubscriptInteger> &&expr) {
-  CHECK(IsSubscriptIntegerKind(expr));
   upper_.emplace(std::move(expr));
   return *this;
 }
@@ -68,24 +63,13 @@ Triplet &Triplet::set_upper(Expr<SubscriptInteger> &&expr) {
 Expr<SubscriptInteger> Triplet::stride() const { return stride_.value(); }
 
 Triplet &Triplet::set_stride(Expr<SubscriptInteger> &&expr) {
-  CHECK(IsSubscriptIntegerKind(expr));
   stride_.value() = std::move(expr);
   return *this;
 }
 
-Subscript::Subscript(Expr<SubscriptInteger> &&s)
-    : u{IndirectSubscriptIntegerExpr::Make(std::move(s))} {
-  CHECK(IsSubscriptIntegerKind(
-      std::get<IndirectSubscriptIntegerExpr>(u).value()));
-}
-
 CoarrayRef::CoarrayRef(
     DataRef &&base, std::vector<Expr<SubscriptInteger>> &&css)
-    : base_{std::move(base)}, cosubscript_(std::move(css)) {
-  for (const auto &cosubscript : cosubscript_) {
-    CHECK(IsSubscriptIntegerKind(cosubscript));
-  }
-}
+    : base_{std::move(base)}, cosubscript_(std::move(css)) {}
 
 std::optional<Expr<Type<TypeCategory::Integer>>> CoarrayRef::stat() const {
   if (stat_) {
@@ -154,7 +138,6 @@ Expr<SubscriptInteger> Substring::lower() const {
 }
 
 Substring &Substring::set_lower(Expr<SubscriptInteger> &&expr) {
-  CHECK(IsSubscriptIntegerKind(expr));
   lower_.emplace(std::move(expr));
   return *this;
 }
@@ -176,7 +159,6 @@ std::optional<Expr<SubscriptInteger>> Substring::upper() const {
 }
 
 Substring &Substring::set_upper(Expr<SubscriptInteger> &&expr) {
-  CHECK(IsSubscriptIntegerKind(expr));
   upper_.emplace(std::move(expr));
   return *this;
 }

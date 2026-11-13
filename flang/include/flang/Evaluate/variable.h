@@ -195,7 +195,8 @@ private:
 // R919 subscript when rank 0, R923 vector-subscript when rank 1
 struct Subscript {
   EVALUATE_UNION_CLASS_BOILERPLATE(Subscript)
-  explicit Subscript(Expr<SubscriptInteger> &&);
+  explicit Subscript(Expr<SubscriptInteger> &&s)
+      : u{IndirectSubscriptIntegerExpr::Make(std::move(s))} {}
   int Rank() const;
   llvm::raw_ostream &AsFortran(llvm::raw_ostream &) const;
   std::variant<IndirectSubscriptIntegerExpr, Triplet> u;

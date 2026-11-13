@@ -252,7 +252,6 @@ Subscript FoldOperation(FoldingContext &context, Subscript &&subscript) {
       common::visitors{
           [&](IndirectSubscriptIntegerExpr &&expr) {
             expr.value() = Fold(context, std::move(expr.value()));
-            CHECK(IsSubscriptIntegerKind(expr.value()));
             return Subscript(std::move(expr));
           },
           [&](Triplet &&triplet) {
