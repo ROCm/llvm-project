@@ -4049,8 +4049,6 @@ static void emitDistributeParallelForDistributeInnerBoundParams(
       CGF.Builder.CreateLoad(UB.getAddress()), CGF.SizeTy, /*isSigned=*/false);
   CapturedVars.push_back(UBCast);
 }
-static bool emitWorksharingDirective(CodeGenFunction &CGF,
-                                     const OMPLoopDirective &S, bool HasCancel);
 
 static void
 emitInnerParallelForWhenCombined(CodeGenFunction &CGF,
@@ -4470,8 +4468,7 @@ static void emitScanBasedDirectiveDecls(
                   ->getSizeExpr()),
           RValue::get(OMPScanNumIterations));
       // Emit temp buffer.
-      auto TempVarDecl = cast<VarDecl>(cast<DeclRefExpr>(*ITA)->getDecl());
-      CGF.EmitVarDecl(*TempVarDecl);
+      CGF.EmitVarDecl(*cast<VarDecl>(cast<DeclRefExpr>(*ITA)->getDecl()));
       ++ITA;
       ++Count;
     }
@@ -8293,12 +8290,6 @@ static void emitTargetTeamsDistributeParallelForRegion(
     CGF.EmitOMPReductionClauseFinal(S, /*ReductionKind=*/OMPD_teams);
   };
 
-  auto &&NumIteratorsGen = [&S](CodeGenFunction &CGF) {
-    CodeGenFunction::OMPLocalDeclMapRAII Scope(CGF);
-    OMPLoopScope LoopScope(CGF, S);
-    return CGF.EmitScalarExpr(S.getNumIterations());
-  };
-
   emitCommonOMPTeamsDirective(CGF, S, OMPD_distribute_parallel_for,
                               CodeGenTeams);
 
@@ -8328,31 +8319,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDirective(
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetTeamsDistributeParallelForRegion(CGF, S, Action);
   };
-  {
-    const auto &&NumIteratorsGen = [&S](CodeGenFunction &CGF) {
-      CodeGenFunction::OMPLocalDeclMapRAII Scope(CGF);
-      CGCapturedStmtInfo CGSI(CR_OpenMP);
-      CodeGenFunction::CGCapturedStmtRAII CapInfoRAII(CGF, &CGSI);
-      OMPLoopScope LoopScope(CGF, S);
-      // Emit the size 0 to emit a dummy alloca just so that the LocalDeclMap
-      // contains the respective VarDecl. We later emit the actual alloca during
-      // host fallback generation for Xteam Scan kernels.
-      return CGF.Builder.getInt32(0);
-    };
-    bool IsInscan =
-        llvm::any_of(S.getClausesOfKind<OMPReductionClause>(),
-                     [](const OMPReductionClause *C) {
-                       return C->getModifier() == OMPC_REDUCTION_inscan;
-                     });
-    if (IsInscan)
-      emitScanBasedDirectiveDecls(*this, S, NumIteratorsGen);
-    auto LPCRegion =
-        CGOpenMPRuntime::LastprivateConditionalRAII::disable(*this, S);
-    emitCommonOMPTargetDirective(*this, S, CodeGen);
-
-    if (IsInscan)
-      emitScanBasedDirectiveFinals(*this, S, NumIteratorsGen);
-  }
+  emitCommonOMPTargetDirective(*this, S, CodeGen);
 }
 
 static void emitTargetTeamsDistributeParallelForSimdRegion(
