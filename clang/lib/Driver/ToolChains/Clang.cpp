@@ -7305,7 +7305,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       // backward compatibility, and emit a deprecation notice when explicitly
       // specified. Note that '-fopenmp-target-xteam-reduction-blocksize=' is
       // *not* deprecated: it still selects the block size of cross-team
-      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDHelper().
+      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDForNest().
       for (Arg *A :
            Args.filtered(options::OPT_fopenmp_target_xteam_reduction,
                          options::OPT_fno_openmp_target_xteam_reduction))

@@ -73,8 +73,7 @@ llvm::Value *CodeGenFunction::applyNoLoopInc(const Expr *Inc,
 }
 
 std::pair<const VarDecl *, Address>
-CodeGenFunction::EmitBigJumpLoopStartingIndex(const ForStmt &FStmt,
-                                              const FunctionArgList *Args) {
+CodeGenFunction::EmitBigJumpLoopStartingIndex(const ForStmt &FStmt) {
   const CodeGenModule::OptKernelNestDirectives &Directives =
       CGM.getBigJumpLoopNestDirs(&FStmt);
   assert(Directives.size() > 0 && isa<OMPLoopDirective>(Directives.back()) &&
@@ -228,8 +227,7 @@ CodeGenModule::getOptKernelDirectives(
 
 void CodeGenFunction::EmitOptKernel(
     const OMPExecutableDirective &D, const ForStmt *CapturedForStmt,
-    llvm::omp::OMPTgtExecModeFlags OptKernelMode, SourceLocation Loc,
-    const FunctionArgList *Args) {
+    llvm::omp::OMPTgtExecModeFlags OptKernelMode, SourceLocation Loc) {
   if (!HaveInsertPoint())
     EnsureInsertPoint();
 
@@ -248,7 +246,7 @@ void CodeGenFunction::EmitOptKernel(
     EmitOMPPrivateClause(*NestDirs[0], PrivateScope);
     (void)PrivateScope.Privatize();
 
-    EmitOptKernelCode(*NestDirs[0], CapturedForStmt, OptKernelMode, Loc, Args);
+    EmitOptKernelCode(*NestDirs[0], CapturedForStmt, OptKernelMode, Loc);
   } else if (NestDirs.size() == 2) {
     OMPPrivateScope PrivateScopeZero(*this);
     EmitOMPFirstprivateClause(*NestDirs[0], PrivateScopeZero);
@@ -260,7 +258,7 @@ void CodeGenFunction::EmitOptKernel(
     EmitOMPPrivateClause(*NestDirs[1], PrivateScopeOne);
     (void)PrivateScopeOne.Privatize();
 
-    EmitOptKernelCode(*NestDirs[1], CapturedForStmt, OptKernelMode, Loc, Args);
+    EmitOptKernelCode(*NestDirs[1], CapturedForStmt, OptKernelMode, Loc);
   } else {
     OMPPrivateScope PrivateScopeZero(*this);
     EmitOMPFirstprivateClause(*NestDirs[0], PrivateScopeZero);
@@ -277,15 +275,13 @@ void CodeGenFunction::EmitOptKernel(
     EmitOMPPrivateClause(*NestDirs[2], PrivateScopeTwo);
     (void)PrivateScopeTwo.Privatize();
 
-    EmitOptKernelCode(*NestDirs[2], CapturedForStmt, OptKernelMode, Loc, Args);
+    EmitOptKernelCode(*NestDirs[2], CapturedForStmt, OptKernelMode, Loc);
   }
 }
 
 void CodeGenFunction::EmitOptKernelCode(
     const OMPExecutableDirective &D, const ForStmt *CapturedForStmt,
-    llvm::omp::OMPTgtExecModeFlags OptKernelMode, SourceLocation Loc,
-    const FunctionArgList *Args) {
-  (void)Args;
+    llvm::omp::OMPTgtExecModeFlags OptKernelMode, SourceLocation Loc) {
   assert(
       OptKernelMode ==
           llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP ||
@@ -1580,9 +1576,8 @@ void CodeGenFunction::EmitDoStmt(const DoStmt &S,
     ConvergenceTokenStack.pop_back();
 }
 
-void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
-                                          const FunctionArgList *Args,
-                                          ArrayRef<const Attr *> ForAttrs) {
+void CodeGenFunction::EmitForStmt(const ForStmt &S,
+                                  ArrayRef<const Attr *> ForAttrs) {
   std::optional<LexicalScope> ForScope;
   JumpDest LoopExit;
   const bool HasForScope = getLangOpts().C99 || getLangOpts().CPlusPlus;
@@ -1602,7 +1597,7 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     BigJumpLoopLD = cast<OMPLoopDirective>(Directives.back());
 
     std::pair<const VarDecl *, Address> LoopVarInfo =
-        EmitBigJumpLoopStartingIndex(S, Args);
+        EmitBigJumpLoopStartingIndex(S);
     LoopVar = LoopVarInfo.first;
     BigJumpLoopIvAddr = LoopVarInfo.second;
   } else {
@@ -1766,11 +1761,6 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     // match existing behaviour.
     addInstToNewSourceAtom(FinalBodyBB->getTerminator(), nullptr);
   }
-}
-
-void CodeGenFunction::EmitForStmt(const ForStmt &S,
-                                  ArrayRef<const Attr *> ForAttrs) {
-  CodeGenFunction::EmitForStmtWithArgs(S, nullptr, ForAttrs);
 }
 
 void
