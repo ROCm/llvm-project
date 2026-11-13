@@ -1672,21 +1672,26 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     // As long as the condition is true, iterate the loop.
     llvm::BasicBlock *ForBody = createBasicBlock("for.body");
 
-    {
-      // C99 6.8.5p2/p4: The first substatement is executed if the expression
-      // compares unequal to 0.  The condition must be a scalar type.
-      llvm::Value *BoolCondVal = EvaluateExprAsBool(CondExpr);
+    // C99 6.8.5p2/p4: The first substatement is executed if the expression
+    // compares unequal to 0.  The condition must be a scalar type.
+    llvm::Value *BoolCondVal = EvaluateExprAsBool(CondExpr);
 
-      MaybeEmitDeferredVarDeclInit(S.getConditionVariable());
+    MaybeEmitDeferredVarDeclInit(S.getConditionVariable());
 
-      llvm::MDNode *Weights =
-          createProfileWeightsForLoop(CondExpr, getProfileCount(S.getBody()));
-      if (!Weights && CGM.getCodeGenOpts().OptimizationLevel)
-        BoolCondVal = emitCondLikelihoodViaExpectIntrinsic(
-            BoolCondVal, Stmt::getLikelihood(S.getBody()));
+    llvm::MDNode *Weights =
+        createProfileWeightsForLoop(CondExpr, getProfileCount(S.getBody()));
+    if (!Weights && CGM.getCodeGenOpts().OptimizationLevel)
+      BoolCondVal = emitCondLikelihoodViaExpectIntrinsic(
+          BoolCondVal, Stmt::getLikelihood(S.getBody()));
 
-      Builder.CreateCondBr(BoolCondVal, ForBody, ExitBlock, Weights);
-    }
+    auto *I = Builder.CreateCondBr(BoolCondVal, ForBody, ExitBlock, Weights);
+    // Key Instructions: Emit the condition and branch as separate atoms to
+    // match existing loop stepping behaviour. FIXME: We could have the branch
+    // as the backup location for the condition, which would probably be a
+    // better experience (no jumping to the brace).
+    if (auto *CondI = dyn_cast<llvm::Instruction>(BoolCondVal))
+      addInstToNewSourceAtom(CondI, nullptr);
+    addInstToNewSourceAtom(I, nullptr);
 
     if (ExitBlock != LoopExit.getBlock()) {
       EmitBlock(ExitBlock);
