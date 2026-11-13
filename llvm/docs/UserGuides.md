@@ -41,6 +41,7 @@ Instrumentor
 InstrRefDebugInfo
 RemoveDIsDebugInfo
 KeyInstructionsDebugInfo
+DIExpressionReworkPlan
 DynamicDebugging
 InstrProfileFormat
 InstCombineContributorGuide
