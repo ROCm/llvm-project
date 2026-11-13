@@ -119,6 +119,7 @@
 #include "llvm/Transforms/IPO/ExpandVariadics.h"
 #include "llvm/Transforms/IPO/GlobalDCE.h"
 #include "llvm/Transforms/IPO/Internalize.h"
+#include "llvm/Transforms/IPO/MSSAArgPromotion.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/EarlyCSE.h"
 #include "llvm/Transforms/Scalar/FlattenCFG.h"
@@ -914,6 +915,10 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         // manage to eliminate allocas before unroll we may choose to unroll
         // less.
         FPM.addPass(AMDGPUPromoteAllocaToVectorPass(*this));
+
+        // Add pass to promote arguments passed by reference
+        if (Level.getSpeedupLevel() >= OptimizationLevel::O3.getSpeedupLevel())
+          PM.addPass(MSSAArgPromotionPass());
 
         PM.addPass(createCGSCCToFunctionPassAdaptor(std::move(FPM)));
       });
