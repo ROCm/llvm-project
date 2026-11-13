@@ -389,6 +389,13 @@ public:
   /// \returns Whether a work-group runs on all of the block's SIMDs.
   bool isFullSIMDMode() const { return !hasSupportsWGP() || !EnableCuMode; }
 
+  // Disable local reassignment when the number available VGPRs is very large.
+  // canReassign() walks the whole allocation order of the evictee on every
+  // local eviction query, which is expensive with a very large VGPR file.
+  bool enableRALocalReassignment(CodeGenOptLevel OptLevel) const override {
+    return !hasVGPRMSBs();
+  }
+
   bool isPreciseMemoryEnabled() const { return EnablePreciseMemory; }
 
   bool hasFlatScrRegister() const { return hasFlatAddressSpace(); }
