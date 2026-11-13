@@ -4534,8 +4534,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
           return Plugin::error(ErrorCode::UNKNOWN,
               "Zero initialization of preallocated device memory pool failed");
 
-        PreAllocatedDeviceMemoryPool = DevPtr;
-
         // Ensure slab is 2MB aligned
         uintptr_t BaseAddr = reinterpret_cast<uintptr_t>(DevPtr);
         uintptr_t HeapEnd = BaseAddr + hsa_utils::PER_DEVICE_PREALLOC_SIZE;
@@ -4823,9 +4821,6 @@ private:
   // Data structure used to keep track of coarse grain memory regions
   // on MI200 in unified_shared_memory programs only.
   AMDGPUMemTypeBitFieldTable *CoarseGrainMemoryTable = nullptr;
-
-  /// Pointer to the preallocated device memory pool
-  void *PreAllocatedDeviceMemoryPool;
 
   /// Whether the host can map this device's memory (large BAR) and write small
   /// transfers into it directly.
