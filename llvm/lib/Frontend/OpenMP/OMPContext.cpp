@@ -405,14 +405,9 @@ static APInt getVariantMatchScore(const VariantMatchInfo &VMI,
 int llvm::omp::getBestVariantMatchForContext(
     const SmallVectorImpl<VariantMatchInfo> &VMIs, const OMPContext &Ctx) {
 
-<<<<<<< HEAD
   APInt BestScore(64, 0);
   int BestVMIIdx = -1;
   const VariantMatchInfo *BestVMI = nullptr;
-=======
-  APInt BestScore(1, 0);
-  SmallVector<unsigned, 4> BestVMIIdxs;
->>>>>>> 56adb6e7a7e3
 
   for (unsigned u = 0, e = VMIs.size(); u < e; ++u) {
     const VariantMatchInfo &VMI = VMIs[u];
@@ -427,31 +422,22 @@ int llvm::omp::getBestVariantMatchForContext(
     APInt Score = getVariantMatchScore(VMI, Ctx, ConstructMatches);
     if (Score.ult(BestScore))
       continue;
-    if (Score.ugt(BestScore)) {
-      BestScore = Score;
-      BestVMIIdxs.clear();
+    // Equal score need subset checks.
+    if (Score.eq(BestScore)) {
+      // Strict subset are never best.
+      if (isStrictSubset(VMI, *BestVMI))
+        continue;
+      // Same score and the current best is no strict subset so we keep it.
+      if (!isStrictSubset(*BestVMI, VMI))
+        continue;
     }
-    BestVMIIdxs.push_back(u);
+    // New best found.
+    BestVMI = &VMI;
+    BestVMIIdx = u;
+    BestScore = Score;
   }
 
-  // A strict subset of another tied variant is never best; otherwise the first
-  // one wins. Tied variants often share a few supersets, so try the ones found
-  // so far before scanning all of them.
-  SmallVector<const VariantMatchInfo *, 4> Supersets;
-  for (unsigned Idx : BestVMIIdxs) {
-    const VariantMatchInfo &VMI = VMIs[Idx];
-    if (llvm::any_of(Supersets, [&](const VariantMatchInfo *Superset) {
-          return isStrictSubset(VMI, *Superset);
-        }))
-      continue;
-    auto *It = llvm::find_if(BestVMIIdxs, [&](unsigned OtherIdx) {
-      return isStrictSubset(VMI, VMIs[OtherIdx]);
-    });
-    if (It == BestVMIIdxs.end())
-      return Idx;
-    Supersets.push_back(&VMIs[*It]);
-  }
-  return -1;
+  return BestVMIIdx;
 }
 
 TraitSet llvm::omp::getOpenMPContextTraitSetKind(StringRef S) {
