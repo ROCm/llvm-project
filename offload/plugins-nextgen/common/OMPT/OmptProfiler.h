@@ -73,8 +73,8 @@ public:
 
   bool isProfilingEnabled() override;
 
-  void handleDataAlloc(uint64_t StartNanos, uint64_t EndNanos, void *HostPtr,
-                       uint64_t Size, void *Data) override;
+  void handleDataAlloc(uint64_t StartNanos, uint64_t EndNanos, uint64_t Size,
+                       void *Data) override;
   void handleDataDelete(uint64_t StartNanos, uint64_t EndNanos, void *TgtPtr,
                         void *Data) override;
 
