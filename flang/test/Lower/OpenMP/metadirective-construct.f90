@@ -1,5 +1,4 @@
 ! Test lowering of OpenMP metadirective with construct selectors.
-! XFAIL: *
 
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir -fopenmp-version=50 %s -o - | FileCheck %s
 
@@ -89,7 +88,7 @@ end subroutine
 subroutine test_begin_construct_selected_parent()
   !$omp target
     !$omp begin metadirective &
-    !$omp & when(implementation={vendor(llvm)}: parallel)
+    !$omp & when(implementation={vendor(amd)}: parallel)
       !$omp metadirective &
       !$omp & when(construct={target, parallel}: barrier) &
       !$omp & default(taskyield)
@@ -148,7 +147,7 @@ subroutine test_construct_inside_target()
       !$omp parallel
         !$omp metadirective &
         !$omp & when(construct={parallel, target}, &
-        !$omp &      implementation={vendor(score(10): llvm)}: barrier) &
+        !$omp &      implementation={vendor(score(10): amd)}: barrier) &
         !$omp & when(construct={target, parallel}: taskwait) &
         !$omp & default(taskyield)
       !$omp end parallel
@@ -186,7 +185,7 @@ subroutine test_device_weight_outside_target()
     !$omp target
       !$omp metadirective &
       !$omp & when(device={kind(host)}: taskyield) &
-      !$omp & when(implementation={vendor(score(3): llvm)}: taskwait)
+      !$omp & when(implementation={vendor(score(3): amd)}: taskwait)
     !$omp end target
   !$omp end parallel
 end subroutine
@@ -203,7 +202,7 @@ subroutine test_device_weight_inside_target()
     !$omp parallel
       !$omp metadirective &
       !$omp & when(device={kind(host)}: taskyield) &
-      !$omp & when(implementation={vendor(score(3): llvm)}: taskwait)
+      !$omp & when(implementation={vendor(score(3): amd)}: taskwait)
     !$omp end parallel
   !$omp end target
 end subroutine
@@ -223,9 +222,9 @@ subroutine test_repeated_construct_subset()
     !$omp parallel
       !$omp metadirective &
       !$omp & when(construct={parallel do}, &
-      !$omp &      implementation={vendor(score(4): llvm)}: taskyield) &
+      !$omp &      implementation={vendor(score(4): amd)}: taskyield) &
       !$omp & when(construct={parallel do, parallel}, &
-      !$omp &      implementation={vendor(llvm)}: taskwait)
+      !$omp &      implementation={vendor(amd)}: taskwait)
     !$omp end parallel
   end do
   !$omp end parallel do
@@ -244,9 +243,9 @@ subroutine test_repeated_construct_superset_first()
     !$omp parallel
       !$omp metadirective &
       !$omp & when(construct={parallel do, parallel}, &
-      !$omp &      implementation={vendor(llvm)}: taskwait) &
+      !$omp &      implementation={vendor(amd)}: taskwait) &
       !$omp & when(construct={parallel do}, &
-      !$omp &      implementation={vendor(score(4): llvm)}: taskyield)
+      !$omp &      implementation={vendor(score(4): amd)}: taskyield)
     !$omp end parallel
   end do
   !$omp end parallel do
@@ -274,9 +273,9 @@ subroutine test_repeated_construct_conditions(a, b)
     !$omp parallel
       !$omp metadirective &
       !$omp & when(construct={parallel do}, user={condition(a)}, &
-      !$omp &      implementation={vendor(score(4): llvm)}: taskyield) &
+      !$omp &      implementation={vendor(score(4): amd)}: taskyield) &
       !$omp & when(construct={parallel do, parallel}, user={condition(b)}, &
-      !$omp &      implementation={vendor(llvm)}: taskwait)
+      !$omp &      implementation={vendor(amd)}: taskwait)
     !$omp end parallel
   end do
   !$omp end parallel do
