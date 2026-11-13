@@ -237,7 +237,7 @@ jobs:
           python3 build_tools/github_actions/detect_failed_logs.py
 
       - name: LIT (llvm, clang, flang, mlir, lld)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd-staging # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd/dev/fix_zizmor_lit_comgr_template_injection # zizmor: ignore[unpinned-uses] temporary validation pin; revert to @amd-staging before merge
         continue-on-error: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         env:
           BUILD_DIR: ${{ env.BUILD_DIR }}
