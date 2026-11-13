@@ -86,7 +86,6 @@
 #endif
 
 using namespace llvm::omp::target;
-using namespace llvm::omp::xteam_red;
 using namespace llvm::offload::debug;
 using namespace error;
 

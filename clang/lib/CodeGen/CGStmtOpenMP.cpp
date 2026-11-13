@@ -497,8 +497,7 @@ llvm::Value *CodeGenFunction::getTypeSize(QualType Ty) {
 }
 
 void CodeGenFunction::GenerateOpenMPCapturedVars(
-    const CapturedStmt &S, SmallVectorImpl<llvm::Value *> &CapturedVars,
-    const Stmt *OptKernelNestKey) {
+    const CapturedStmt &S, SmallVectorImpl<llvm::Value *> &CapturedVars) {
   const RecordDecl *RD = S.getCapturedRecordDecl();
   auto CurField = RD->field_begin();
   auto CurCap = S.captures().begin();
@@ -547,7 +546,6 @@ void CodeGenFunction::GenerateOpenMPCapturedVars(
       CapturedVars.push_back(Addr);
     }
   }
-  (void)OptKernelNestKey;
 }
 
 static Address castValueFromUintptr(CodeGenFunction &CGF, SourceLocation Loc,
@@ -615,14 +613,13 @@ struct FunctionOptions {
 } // namespace
 
 static llvm::Function *emitOutlinedFunctionPrologue(
-    CodeGenFunction &CGF, const OMPExecutableDirective &D,
-    FunctionArgList &Args,
+    CodeGenFunction &CGF, FunctionArgList &Args,
     llvm::MapVector<const Decl *, std::pair<const VarDecl *, Address>>
         &LocalAddrs,
     llvm::DenseMap<const Decl *, std::pair<const Expr *, llvm::Value *>>
         &VLASizes,
     llvm::Value *&CXXThisValue, const FunctionOptions &FO,
-    bool argsNeedAddrSpace, bool isXteamKernel) {
+    bool argsNeedAddrSpace) {
   const CapturedDecl *CD = FO.S->getCapturedDecl();
   const RecordDecl *RD = FO.S->getCapturedRecordDecl();
   assert(CD->hasBody() && "missing CapturedDecl body");
@@ -700,9 +697,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
             : CGM.getOpenMPRuntime().translateParameter(FD, Arg));
     ++I;
   }
-
-  (void)isXteamKernel;
-
   Args.append(std::next(CD->param_begin(), CD->getContextParamPosition() + 1),
               CD->param_end());
   TargetArgs.append(
@@ -958,8 +952,9 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
       CapturedStmtInfo &&
       "CapturedStmtInfo should be set when generating the captured function");
   const CapturedDecl *CD = S.getCapturedDecl();
-
   // Build the argument list.
+  bool NeedWrapperFunction =
+      getDebugInfo() && CGM.getCodeGenOpts().hasReducedDebugInfo();
   FunctionArgList Args, WrapperArgs;
   llvm::MapVector<const Decl *, std::pair<const VarDecl *, Address>> LocalAddrs,
       WrapperLocalAddrs;
@@ -971,27 +966,15 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
 
   bool isKernel = (Out.str().find("__omp_offloading_") != std::string::npos);
 
-  // Downstream Xteam cross-team reduction codegen has been removed; reductions
-  // now use the upstream path. No kernel is tagged as an Xteam reduction
-  // kernel, so this is always false (kept for the no-loop/big-jump dispatch
-  // below and the outlined-function signature, which stays identical on host
-  // and device).
   const ForStmt *FStmt = nullptr;
   const Stmt *OptKernelKey = CGM.getOptKernelKey(D);
   if (OptKernelKey)
     FStmt = CGM.getSingleForStmt(OptKernelKey);
-  bool isXteamKernel = false;
-
-  // Xteam reduction does not use wrapper kernels.
-  bool NeedWrapperFunction =
-      !isXteamKernel &&
-      (getDebugInfo() && CGM.getCodeGenOpts().hasReducedDebugInfo());
 
   OpenMPDirectiveKind EKind = getEffectiveDirectiveKind(D);
   bool IsDeviceKernel = CGM.getOpenMPRuntime().isGPU() &&
                         isOpenMPTargetExecutionDirective(EKind) &&
                         D.getCapturedStmt(OMPD_target) == &S;
-
   CodeGenFunction WrapperCGF(CGM, /*suppressNewContext=*/true);
   llvm::Function *WrapperF = nullptr;
   if (NeedWrapperFunction) {
@@ -1002,17 +985,16 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
                               CapturedStmtInfo->getHelperName(), Loc,
                               IsDeviceKernel);
     WrapperCGF.CapturedStmtInfo = CapturedStmtInfo;
-    WrapperF = emitOutlinedFunctionPrologue(
-        WrapperCGF, D, Args, LocalAddrs, VLASizes, WrapperCGF.CXXThisValue,
-        WrapperFO, isKernel, isXteamKernel);
+    WrapperF = emitOutlinedFunctionPrologue(WrapperCGF, Args, LocalAddrs,
+                                            VLASizes, WrapperCGF.CXXThisValue,
+                                            WrapperFO, isKernel);
     Out << "_debug__";
   }
   FunctionOptions FO(&S, !NeedWrapperFunction, /*RegisterCastedArgsOnly=*/false,
                      Out.str(), Loc, !NeedWrapperFunction && IsDeviceKernel);
-                     
-  llvm::Function *F = emitOutlinedFunctionPrologue(
-      *this, D, WrapperArgs, WrapperLocalAddrs, WrapperVLASizes, CXXThisValue,
-      FO, isKernel, isXteamKernel);
+  llvm::Function *F =
+      emitOutlinedFunctionPrologue(*this, WrapperArgs, WrapperLocalAddrs,
+                                   WrapperVLASizes, CXXThisValue, FO, isKernel);
   CodeGenFunction::OMPPrivateScope LocalScope(*this);
   for (const auto &LocalAddrPair : WrapperLocalAddrs) {
     if (LocalAddrPair.second.first) {
@@ -1032,13 +1014,12 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
     if (CGM.isNoLoopKernel(FStmt))
       EmitOptKernel(
           D, FStmt,
-          llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP, Loc,
-          /*WrapperArgs=*/nullptr);
+          llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP, Loc);
     else
       EmitOptKernel(
           D, FStmt,
           llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP,
-          Loc, /*WrapperArgs=*/nullptr);
+          Loc);
   } else {
     CapturedStmtInfo->EmitBody(*this, CD->getBody());
   }
@@ -1123,9 +1104,9 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunctionAggregate(
     FunctionOptions FO(&S, /*UIntPtrCastRequired=*/false,
                        /*RegisterCastedArgsOnly=*/false, Out.str(), Loc,
                        /*IsDeviceKernel=*/false);
-    F = emitOutlinedFunctionPrologue(
-        *this, D, Args, LocalAddrs, VLASizes, CXXThisValue, FO,
-        /*argsNeedAddrSpace=*/false, /*isXteamKernel=*/false);
+    F = emitOutlinedFunctionPrologue(*this, Args, LocalAddrs, VLASizes,
+                                     CXXThisValue, FO,
+                                     /*argsNeedAddrSpace=*/false);
   } else {
     llvm::Value *ContextV = nullptr;
     F = emitOutlinedFunctionPrologueAggregate(*this, Args, LocalAddrs, VLASizes,
@@ -2271,7 +2252,7 @@ static void emitCommonOMPParallelDirective(
   // The following lambda takes care of appending the lower and upper bound
   // parameters when necessary
   CodeGenBoundParameters(CGF, S, CapturedVars);
-  CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars, CGF.CGM.getOptKernelKey(S));
+  CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars);
   CGF.CGM.getOpenMPRuntime().emitParallelCall(CGF, S.getBeginLoc(), OutlinedFn,
                                               CapturedVars, IfCond, NumThreads,
                                               Modifier, Severity, Message);
@@ -4049,8 +4030,6 @@ static void emitDistributeParallelForDistributeInnerBoundParams(
       CGF.Builder.CreateLoad(UB.getAddress()), CGF.SizeTy, /*isSigned=*/false);
   CapturedVars.push_back(UBCast);
 }
-static bool emitWorksharingDirective(CodeGenFunction &CGF,
-                                     const OMPLoopDirective &S, bool HasCancel);
 
 static void
 emitInnerParallelForWhenCombined(CodeGenFunction &CGF,
@@ -4470,8 +4449,7 @@ static void emitScanBasedDirectiveDecls(
                   ->getSizeExpr()),
           RValue::get(OMPScanNumIterations));
       // Emit temp buffer.
-      auto TempVarDecl = cast<VarDecl>(cast<DeclRefExpr>(*ITA)->getDecl());
-      CGF.EmitVarDecl(*TempVarDecl);
+      CGF.EmitVarDecl(*cast<VarDecl>(cast<DeclRefExpr>(*ITA)->getDecl()));
       ++ITA;
       ++Count;
     }
@@ -6961,7 +6939,7 @@ void CodeGenFunction::EmitOMPOrderedBlockAssocDirective(
         llvm::BasicBlock *FiniBB = splitBBWithSuffix(
             Builder, /*CreateBranch=*/false, ".ordered.after");
         llvm::SmallVector<llvm::Value *, 16> CapturedVars;
-        GenerateOpenMPCapturedVars(*CS, CapturedVars, CGM.getOptKernelKey(S));
+        GenerateOpenMPCapturedVars(*CS, CapturedVars);
         llvm::Function *OutlinedFn = emitOutlinedOrderedFunction(CGM, CS, S);
         assert(S.getBeginLoc().isValid() &&
                "Outlined function call location must be valid.");
@@ -6988,7 +6966,7 @@ void CodeGenFunction::EmitOMPOrderedBlockAssocDirective(
     const CapturedStmt *CS = S.getInnermostCapturedStmt();
     if (C) {
       llvm::SmallVector<llvm::Value *, 16> CapturedVars;
-      CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars, CGM.getOptKernelKey(S));
+      CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars);
       llvm::Function *OutlinedFn =
           emitOutlinedOrderedFunction(CGM, CS, S);
 
@@ -7952,7 +7930,7 @@ static void emitCommonOMPTeamsDirective(CodeGenFunction &CGF,
   }
 
   llvm::SmallVector<llvm::Value *, 16> CapturedVars;
-  CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars, CGF.CGM.getOptKernelKey(S));
+  CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars);
   CGF.CGM.getOpenMPRuntime().emitTeamsCall(CGF, S, S.getBeginLoc(), OutlinedFn,
                                            CapturedVars);
 }
@@ -8293,12 +8271,6 @@ static void emitTargetTeamsDistributeParallelForRegion(
     CGF.EmitOMPReductionClauseFinal(S, /*ReductionKind=*/OMPD_teams);
   };
 
-  auto &&NumIteratorsGen = [&S](CodeGenFunction &CGF) {
-    CodeGenFunction::OMPLocalDeclMapRAII Scope(CGF);
-    OMPLoopScope LoopScope(CGF, S);
-    return CGF.EmitScalarExpr(S.getNumIterations());
-  };
-
   emitCommonOMPTeamsDirective(CGF, S, OMPD_distribute_parallel_for,
                               CodeGenTeams);
 
@@ -8328,31 +8300,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDirective(
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetTeamsDistributeParallelForRegion(CGF, S, Action);
   };
-  {
-    const auto &&NumIteratorsGen = [&S](CodeGenFunction &CGF) {
-      CodeGenFunction::OMPLocalDeclMapRAII Scope(CGF);
-      CGCapturedStmtInfo CGSI(CR_OpenMP);
-      CodeGenFunction::CGCapturedStmtRAII CapInfoRAII(CGF, &CGSI);
-      OMPLoopScope LoopScope(CGF, S);
-      // Emit the size 0 to emit a dummy alloca just so that the LocalDeclMap
-      // contains the respective VarDecl. We later emit the actual alloca during
-      // host fallback generation for Xteam Scan kernels.
-      return CGF.Builder.getInt32(0);
-    };
-    bool IsInscan =
-        llvm::any_of(S.getClausesOfKind<OMPReductionClause>(),
-                     [](const OMPReductionClause *C) {
-                       return C->getModifier() == OMPC_REDUCTION_inscan;
-                     });
-    if (IsInscan)
-      emitScanBasedDirectiveDecls(*this, S, NumIteratorsGen);
-    auto LPCRegion =
-        CGOpenMPRuntime::LastprivateConditionalRAII::disable(*this, S);
-    emitCommonOMPTargetDirective(*this, S, CodeGen);
-
-    if (IsInscan)
-      emitScanBasedDirectiveFinals(*this, S, NumIteratorsGen);
-  }
+  emitCommonOMPTargetDirective(*this, S, CodeGen);
 }
 
 static void emitTargetTeamsDistributeParallelForSimdRegion(

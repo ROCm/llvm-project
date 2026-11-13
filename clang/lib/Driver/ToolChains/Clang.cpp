@@ -7305,7 +7305,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       // backward compatibility, and emit a deprecation notice when explicitly
       // specified. Note that '-fopenmp-target-xteam-reduction-blocksize=' is
       // *not* deprecated: it still selects the block size of cross-team
-      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDHelper().
+      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDForNest().
       for (Arg *A :
            Args.filtered(options::OPT_fopenmp_target_xteam_reduction,
                          options::OPT_fno_openmp_target_xteam_reduction))
@@ -7331,10 +7331,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       if (Args.hasFlag(options::OPT_fopenmp_cuda_mode,
                        options::OPT_fno_openmp_cuda_mode, /*Default=*/false))
         CmdArgs.push_back("-fopenmp-cuda-mode");
-
-      // When in OpenMP offloading mode, enable or disable the new device
-      // runtime.
-      CmdArgs.push_back("-fopenmp-target-new-runtime");
 
       // When in OpenMP offloading mode, enable debugging on the device.
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_target_debug_EQ);
