@@ -1077,7 +1077,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   // Returns true if coarse graining of mapped variables is
   // enabled on MI200 GPUs.
-  // virtual bool IsGfx90aCoarseGrainUsmMapEnabled() { return false; }
   bool IsGfx90aCoarseGrainUsmMapEnabled();
   virtual bool IsGfx90aCoarseGrainUsmMapEnabledImpl() { return false; }
 
