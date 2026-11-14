@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 //  This file implements the TargetInfo interface.
+//  cci-bisect conformance exercise inner commit 4/4 (harmless).
 //
 //===----------------------------------------------------------------------===//
 
