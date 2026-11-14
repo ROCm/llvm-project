@@ -4253,44 +4253,44 @@ extern "C" __device__ long int test_lround(double x) {
 // DEFAULT-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
 // DEFAULT-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14:[0-9]+]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    [[CALL_I:%.*]] = call contract noundef float @__ocml_modf_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17:![0-9]+]]
 // DEFAULT-NEXT:    store float [[TMP0]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
-// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    ret float [[CALL_I]]
 //
 // FINITEONLY-LABEL: define dso_local noundef nofpclass(nan inf) float @test_modff(
 // FINITEONLY-SAME: float noundef nofpclass(nan inf) [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // FINITEONLY-NEXT:  [[ENTRY:.*:]]
 // FINITEONLY-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14:[0-9]+]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    [[CALL_I:%.*]] = call nnan ninf contract noundef nofpclass(nan inf) float @__ocml_modf_f32(float noundef nofpclass(nan inf) [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17:![0-9]+]]
 // FINITEONLY-NEXT:    store float [[TMP0]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
-// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    ret float [[CALL_I]]
 //
 // APPROX-LABEL: define dso_local noundef float @test_modff(
 // APPROX-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // APPROX-NEXT:  [[ENTRY:.*:]]
 // APPROX-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14:[0-9]+]]
+// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    [[CALL_I:%.*]] = call contract noundef float @__ocml_modf_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // APPROX-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17:![0-9]+]]
 // APPROX-NEXT:    store float [[TMP0]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
-// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    ret float [[CALL_I]]
 //
 // NCRDIV-LABEL: define dso_local noundef float @test_modff(
 // NCRDIV-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
 // NCRDIV-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14:[0-9]+]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = call contract noundef float @__ocml_modf_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // NCRDIV-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA18:![0-9]+]]
 // NCRDIV-NEXT:    store float [[TMP0]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA18]]
-// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    ret float [[CALL_I]]
 //
 // AMDGCNSPIRV-LABEL: define spir_func noundef float @test_modff(
@@ -4298,11 +4298,11 @@ extern "C" __device__ long int test_lround(double x) {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4
 // AMDGCNSPIRV-NEXT:    [[__TMP_ASCAST_I:%.*]] = addrspacecast ptr [[__TMP_I]] to ptr addrspace(4)
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14:[0-9]+]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    [[CALL_I:%.*]] = call contract spir_func noundef addrspace(4) float @__ocml_modf_f32(float noundef [[X]], ptr noundef nonnull [[__TMP_I]]) #[[ATTR13]]
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(4) [[__TMP_ASCAST_I]], align 4, !tbaa [[FLOAT_TBAA18:![0-9]+]]
 // AMDGCNSPIRV-NEXT:    store float [[TMP0]], ptr addrspace(4) [[Y]], align 4, !tbaa [[FLOAT_TBAA18]]
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test_modff(float x, float* y) {
@@ -4313,44 +4313,44 @@ extern "C" __device__ float test_modff(float x, float* y) {
 // DEFAULT-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
 // DEFAULT-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    [[CALL_I:%.*]] = call contract noundef double @__ocml_modf_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19:![0-9]+]]
 // DEFAULT-NEXT:    store double [[TMP0]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    ret double [[CALL_I]]
 //
 // FINITEONLY-LABEL: define dso_local noundef nofpclass(nan inf) double @test_modf(
 // FINITEONLY-SAME: double noundef nofpclass(nan inf) [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // FINITEONLY-NEXT:  [[ENTRY:.*:]]
 // FINITEONLY-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    [[CALL_I:%.*]] = call nnan ninf contract noundef nofpclass(nan inf) double @__ocml_modf_f64(double noundef nofpclass(nan inf) [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19:![0-9]+]]
 // FINITEONLY-NEXT:    store double [[TMP0]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    ret double [[CALL_I]]
 //
 // APPROX-LABEL: define dso_local noundef double @test_modf(
 // APPROX-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // APPROX-NEXT:  [[ENTRY:.*:]]
 // APPROX-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    [[CALL_I:%.*]] = call contract noundef double @__ocml_modf_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // APPROX-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19:![0-9]+]]
 // APPROX-NEXT:    store double [[TMP0]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    ret double [[CALL_I]]
 //
 // NCRDIV-LABEL: define dso_local noundef double @test_modf(
 // NCRDIV-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
 // NCRDIV-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = call contract noundef double @__ocml_modf_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // NCRDIV-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA20:![0-9]+]]
 // NCRDIV-NEXT:    store double [[TMP0]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA20]]
-// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    ret double [[CALL_I]]
 //
 // AMDGCNSPIRV-LABEL: define spir_func noundef double @test_modf(
@@ -4358,11 +4358,11 @@ extern "C" __device__ float test_modff(float x, float* y) {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8
 // AMDGCNSPIRV-NEXT:    [[__TMP_ASCAST_I:%.*]] = addrspacecast ptr [[__TMP_I]] to ptr addrspace(4)
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    [[CALL_I:%.*]] = call contract spir_func noundef addrspace(4) double @__ocml_modf_f64(double noundef [[X]], ptr noundef nonnull [[__TMP_I]]) #[[ATTR13]]
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(4) [[__TMP_ASCAST_I]], align 8, !tbaa [[DOUBLE_TBAA20:![0-9]+]]
 // AMDGCNSPIRV-NEXT:    store double [[TMP0]], ptr addrspace(4) [[Y]], align 8, !tbaa [[DOUBLE_TBAA20]]
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test_modf(double x, double* y) {
@@ -6195,44 +6195,44 @@ extern "C" __device__ double test_remainder(double x, double y) {
 // DEFAULT-SAME: float noundef [[X:%.*]], float noundef [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
 // DEFAULT-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4, addrspace(5)
-// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    [[CALL_I:%.*]] = call contract noundef float @__ocml_remquo_f32(float noundef [[X]], float noundef [[Y]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[INT_TBAA14]]
 // DEFAULT-NEXT:    store i32 [[TMP0]], ptr [[Z]], align 4, !tbaa [[INT_TBAA14]]
-// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    ret float [[CALL_I]]
 //
 // FINITEONLY-LABEL: define dso_local noundef nofpclass(nan inf) float @test_remquof(
 // FINITEONLY-SAME: float noundef nofpclass(nan inf) [[X:%.*]], float noundef nofpclass(nan inf) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // FINITEONLY-NEXT:  [[ENTRY:.*:]]
 // FINITEONLY-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4, addrspace(5)
-// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    [[CALL_I:%.*]] = call nnan ninf contract noundef nofpclass(nan inf) float @__ocml_remquo_f32(float noundef nofpclass(nan inf) [[X]], float noundef nofpclass(nan inf) [[Y]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[INT_TBAA14]]
 // FINITEONLY-NEXT:    store i32 [[TMP0]], ptr [[Z]], align 4, !tbaa [[INT_TBAA14]]
-// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    ret float [[CALL_I]]
 //
 // APPROX-LABEL: define dso_local noundef float @test_remquof(
 // APPROX-SAME: float noundef [[X:%.*]], float noundef [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // APPROX-NEXT:  [[ENTRY:.*:]]
 // APPROX-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4, addrspace(5)
-// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    [[CALL_I:%.*]] = call contract noundef float @__ocml_remquo_f32(float noundef [[X]], float noundef [[Y]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // APPROX-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[INT_TBAA14]]
 // APPROX-NEXT:    store i32 [[TMP0]], ptr [[Z]], align 4, !tbaa [[INT_TBAA14]]
-// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    ret float [[CALL_I]]
 //
 // NCRDIV-LABEL: define dso_local noundef float @test_remquof(
 // NCRDIV-SAME: float noundef [[X:%.*]], float noundef [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
 // NCRDIV-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4, addrspace(5)
-// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = call contract noundef float @__ocml_remquo_f32(float noundef [[X]], float noundef [[Y]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // NCRDIV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[INT_TBAA15]]
 // NCRDIV-NEXT:    store i32 [[TMP0]], ptr [[Z]], align 4, !tbaa [[INT_TBAA15]]
-// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    ret float [[CALL_I]]
 //
 // AMDGCNSPIRV-LABEL: define spir_func noundef float @test_remquof(
@@ -6240,11 +6240,11 @@ extern "C" __device__ double test_remainder(double x, double y) {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4
 // AMDGCNSPIRV-NEXT:    [[__TMP_ASCAST_I:%.*]] = addrspacecast ptr [[__TMP_I]] to ptr addrspace(4)
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    [[CALL_I:%.*]] = call contract spir_func noundef addrspace(4) float @__ocml_remquo_f32(float noundef [[X]], float noundef [[Y]], ptr noundef nonnull [[__TMP_I]]) #[[ATTR13]]
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(4) [[__TMP_ASCAST_I]], align 4, !tbaa [[INT_TBAA15]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP0]], ptr addrspace(4) [[Z]], align 4, !tbaa [[INT_TBAA15]]
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test_remquof(float x, float y, int* z) {
@@ -6255,44 +6255,44 @@ extern "C" __device__ float test_remquof(float x, float y, int* z) {
 // DEFAULT-SAME: double noundef [[X:%.*]], double noundef [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
 // DEFAULT-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4, addrspace(5)
-// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    [[CALL_I:%.*]] = call contract noundef double @__ocml_remquo_f64(double noundef [[X]], double noundef [[Y]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[INT_TBAA14]]
 // DEFAULT-NEXT:    store i32 [[TMP0]], ptr [[Z]], align 4, !tbaa [[INT_TBAA14]]
-// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    ret double [[CALL_I]]
 //
 // FINITEONLY-LABEL: define dso_local noundef nofpclass(nan inf) double @test_remquo(
 // FINITEONLY-SAME: double noundef nofpclass(nan inf) [[X:%.*]], double noundef nofpclass(nan inf) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // FINITEONLY-NEXT:  [[ENTRY:.*:]]
 // FINITEONLY-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4, addrspace(5)
-// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    [[CALL_I:%.*]] = call nnan ninf contract noundef nofpclass(nan inf) double @__ocml_remquo_f64(double noundef nofpclass(nan inf) [[X]], double noundef nofpclass(nan inf) [[Y]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[INT_TBAA14]]
 // FINITEONLY-NEXT:    store i32 [[TMP0]], ptr [[Z]], align 4, !tbaa [[INT_TBAA14]]
-// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    ret double [[CALL_I]]
 //
 // APPROX-LABEL: define dso_local noundef double @test_remquo(
 // APPROX-SAME: double noundef [[X:%.*]], double noundef [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // APPROX-NEXT:  [[ENTRY:.*:]]
 // APPROX-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4, addrspace(5)
-// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    [[CALL_I:%.*]] = call contract noundef double @__ocml_remquo_f64(double noundef [[X]], double noundef [[Y]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // APPROX-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[INT_TBAA14]]
 // APPROX-NEXT:    store i32 [[TMP0]], ptr [[Z]], align 4, !tbaa [[INT_TBAA14]]
-// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    ret double [[CALL_I]]
 //
 // NCRDIV-LABEL: define dso_local noundef double @test_remquo(
 // NCRDIV-SAME: double noundef [[X:%.*]], double noundef [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
 // NCRDIV-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4, addrspace(5)
-// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = call contract noundef double @__ocml_remquo_f64(double noundef [[X]], double noundef [[Y]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // NCRDIV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[INT_TBAA15]]
 // NCRDIV-NEXT:    store i32 [[TMP0]], ptr [[Z]], align 4, !tbaa [[INT_TBAA15]]
-// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    ret double [[CALL_I]]
 //
 // AMDGCNSPIRV-LABEL: define spir_func noundef double @test_remquo(
@@ -6300,11 +6300,11 @@ extern "C" __device__ float test_remquof(float x, float y, int* z) {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    [[__TMP_I:%.*]] = alloca i32, align 4
 // AMDGCNSPIRV-NEXT:    [[__TMP_ASCAST_I:%.*]] = addrspacecast ptr [[__TMP_I]] to ptr addrspace(4)
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    [[CALL_I:%.*]] = call contract spir_func noundef addrspace(4) double @__ocml_remquo_f64(double noundef [[X]], double noundef [[Y]], ptr noundef nonnull [[__TMP_I]]) #[[ATTR13]]
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(4) [[__TMP_ASCAST_I]], align 4, !tbaa [[INT_TBAA15]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP0]], ptr addrspace(4) [[Z]], align 4, !tbaa [[INT_TBAA15]]
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test_remquo(double x, double y, int* z) {
@@ -7180,48 +7180,48 @@ extern "C" __device__ BOOL_TYPE test___signbit(double x) {
 // DEFAULT-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
 // DEFAULT-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    [[CALL_I:%.*]] = call contract float @__ocml_sincos_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // DEFAULT-NEXT:    store float [[CALL_I]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17]]
 // DEFAULT-NEXT:    store float [[TMP0]], ptr [[Z]], align 4, !tbaa [[FLOAT_TBAA17]]
-// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    ret void
 //
 // FINITEONLY-LABEL: define dso_local void @test_sincosf(
 // FINITEONLY-SAME: float noundef nofpclass(nan inf) [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // FINITEONLY-NEXT:  [[ENTRY:.*:]]
 // FINITEONLY-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    [[CALL_I:%.*]] = call nnan ninf contract nofpclass(nan inf) float @__ocml_sincos_f32(float noundef nofpclass(nan inf) [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // FINITEONLY-NEXT:    store float [[CALL_I]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17]]
 // FINITEONLY-NEXT:    store float [[TMP0]], ptr [[Z]], align 4, !tbaa [[FLOAT_TBAA17]]
-// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    ret void
 //
 // APPROX-LABEL: define dso_local void @test_sincosf(
 // APPROX-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // APPROX-NEXT:  [[ENTRY:.*:]]
 // APPROX-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    [[CALL_I:%.*]] = call contract float @__ocml_sincos_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // APPROX-NEXT:    store float [[CALL_I]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
 // APPROX-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17]]
 // APPROX-NEXT:    store float [[TMP0]], ptr [[Z]], align 4, !tbaa [[FLOAT_TBAA17]]
-// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    ret void
 //
 // NCRDIV-LABEL: define dso_local void @test_sincosf(
 // NCRDIV-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
 // NCRDIV-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = call contract float @__ocml_sincos_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // NCRDIV-NEXT:    store float [[CALL_I]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA18]]
 // NCRDIV-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA18]]
 // NCRDIV-NEXT:    store float [[TMP0]], ptr [[Z]], align 4, !tbaa [[FLOAT_TBAA18]]
-// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @test_sincosf(
@@ -7229,12 +7229,12 @@ extern "C" __device__ BOOL_TYPE test___signbit(double x) {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4
 // AMDGCNSPIRV-NEXT:    [[__TMP_ASCAST_I:%.*]] = addrspacecast ptr [[__TMP_I]] to ptr addrspace(4)
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    [[CALL_I:%.*]] = call contract spir_func addrspace(4) float @__ocml_sincos_f32(float noundef [[X]], ptr noundef nonnull [[__TMP_I]]) #[[ATTR13]]
 // AMDGCNSPIRV-NEXT:    store float [[CALL_I]], ptr addrspace(4) [[Y]], align 4, !tbaa [[FLOAT_TBAA18]]
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(4) [[__TMP_ASCAST_I]], align 4, !tbaa [[FLOAT_TBAA18]]
 // AMDGCNSPIRV-NEXT:    store float [[TMP0]], ptr addrspace(4) [[Z]], align 4, !tbaa [[FLOAT_TBAA18]]
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    ret void
 //
 extern "C" __device__ void test_sincosf(float x, float *y, float *z) {
@@ -7245,48 +7245,48 @@ extern "C" __device__ void test_sincosf(float x, float *y, float *z) {
 // DEFAULT-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
 // DEFAULT-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    [[CALL_I:%.*]] = call contract double @__ocml_sincos_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // DEFAULT-NEXT:    store double [[CALL_I]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // DEFAULT-NEXT:    store double [[TMP0]], ptr [[Z]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    ret void
 //
 // FINITEONLY-LABEL: define dso_local void @test_sincos(
 // FINITEONLY-SAME: double noundef nofpclass(nan inf) [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // FINITEONLY-NEXT:  [[ENTRY:.*:]]
 // FINITEONLY-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    [[CALL_I:%.*]] = call nnan ninf contract nofpclass(nan inf) double @__ocml_sincos_f64(double noundef nofpclass(nan inf) [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // FINITEONLY-NEXT:    store double [[CALL_I]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // FINITEONLY-NEXT:    store double [[TMP0]], ptr [[Z]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    ret void
 //
 // APPROX-LABEL: define dso_local void @test_sincos(
 // APPROX-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // APPROX-NEXT:  [[ENTRY:.*:]]
 // APPROX-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    [[CALL_I:%.*]] = call contract double @__ocml_sincos_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // APPROX-NEXT:    store double [[CALL_I]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // APPROX-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // APPROX-NEXT:    store double [[TMP0]], ptr [[Z]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    ret void
 //
 // NCRDIV-LABEL: define dso_local void @test_sincos(
 // NCRDIV-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
 // NCRDIV-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = call contract double @__ocml_sincos_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // NCRDIV-NEXT:    store double [[CALL_I]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA20]]
 // NCRDIV-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA20]]
 // NCRDIV-NEXT:    store double [[TMP0]], ptr [[Z]], align 8, !tbaa [[DOUBLE_TBAA20]]
-// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @test_sincos(
@@ -7294,12 +7294,12 @@ extern "C" __device__ void test_sincosf(float x, float *y, float *z) {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8
 // AMDGCNSPIRV-NEXT:    [[__TMP_ASCAST_I:%.*]] = addrspacecast ptr [[__TMP_I]] to ptr addrspace(4)
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    [[CALL_I:%.*]] = call contract spir_func addrspace(4) double @__ocml_sincos_f64(double noundef [[X]], ptr noundef nonnull [[__TMP_I]]) #[[ATTR13]]
 // AMDGCNSPIRV-NEXT:    store double [[CALL_I]], ptr addrspace(4) [[Y]], align 8, !tbaa [[DOUBLE_TBAA20]]
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(4) [[__TMP_ASCAST_I]], align 8, !tbaa [[DOUBLE_TBAA20]]
 // AMDGCNSPIRV-NEXT:    store double [[TMP0]], ptr addrspace(4) [[Z]], align 8, !tbaa [[DOUBLE_TBAA20]]
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    ret void
 //
 extern "C" __device__ void test_sincos(double x, double *y, double *z) {
@@ -7310,48 +7310,48 @@ extern "C" __device__ void test_sincos(double x, double *y, double *z) {
 // DEFAULT-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
 // DEFAULT-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    [[CALL_I:%.*]] = call contract float @__ocml_sincospi_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // DEFAULT-NEXT:    store float [[CALL_I]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17]]
 // DEFAULT-NEXT:    store float [[TMP0]], ptr [[Z]], align 4, !tbaa [[FLOAT_TBAA17]]
-// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    ret void
 //
 // FINITEONLY-LABEL: define dso_local void @test_sincospif(
 // FINITEONLY-SAME: float noundef nofpclass(nan inf) [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // FINITEONLY-NEXT:  [[ENTRY:.*:]]
 // FINITEONLY-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    [[CALL_I:%.*]] = call nnan ninf contract nofpclass(nan inf) float @__ocml_sincospi_f32(float noundef nofpclass(nan inf) [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // FINITEONLY-NEXT:    store float [[CALL_I]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17]]
 // FINITEONLY-NEXT:    store float [[TMP0]], ptr [[Z]], align 4, !tbaa [[FLOAT_TBAA17]]
-// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    ret void
 //
 // APPROX-LABEL: define dso_local void @test_sincospif(
 // APPROX-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // APPROX-NEXT:  [[ENTRY:.*:]]
 // APPROX-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    [[CALL_I:%.*]] = call contract float @__ocml_sincospi_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // APPROX-NEXT:    store float [[CALL_I]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA17]]
 // APPROX-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA17]]
 // APPROX-NEXT:    store float [[TMP0]], ptr [[Z]], align 4, !tbaa [[FLOAT_TBAA17]]
-// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    ret void
 //
 // NCRDIV-LABEL: define dso_local void @test_sincospif(
 // NCRDIV-SAME: float noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 4)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
 // NCRDIV-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4, addrspace(5)
-// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = call contract float @__ocml_sincospi_f32(float noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // NCRDIV-NEXT:    store float [[CALL_I]], ptr [[Y]], align 4, !tbaa [[FLOAT_TBAA18]]
 // NCRDIV-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(5) [[__TMP_I]], align 4, !tbaa [[FLOAT_TBAA18]]
 // NCRDIV-NEXT:    store float [[TMP0]], ptr [[Z]], align 4, !tbaa [[FLOAT_TBAA18]]
-// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @test_sincospif(
@@ -7359,12 +7359,12 @@ extern "C" __device__ void test_sincos(double x, double *y, double *z) {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    [[__TMP_I:%.*]] = alloca float, align 4
 // AMDGCNSPIRV-NEXT:    [[__TMP_ASCAST_I:%.*]] = addrspacecast ptr [[__TMP_I]] to ptr addrspace(4)
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    [[CALL_I:%.*]] = call contract spir_func addrspace(4) float @__ocml_sincospi_f32(float noundef [[X]], ptr noundef nonnull [[__TMP_I]]) #[[ATTR13]]
 // AMDGCNSPIRV-NEXT:    store float [[CALL_I]], ptr addrspace(4) [[Y]], align 4, !tbaa [[FLOAT_TBAA18]]
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(4) [[__TMP_ASCAST_I]], align 4, !tbaa [[FLOAT_TBAA18]]
 // AMDGCNSPIRV-NEXT:    store float [[TMP0]], ptr addrspace(4) [[Z]], align 4, !tbaa [[FLOAT_TBAA18]]
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    ret void
 //
 extern "C" __device__ void test_sincospif(float x, float *y, float *z) {
@@ -7375,48 +7375,48 @@ extern "C" __device__ void test_sincospif(float x, float *y, float *z) {
 // DEFAULT-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
 // DEFAULT-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    [[CALL_I:%.*]] = call contract double @__ocml_sincospi_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // DEFAULT-NEXT:    store double [[CALL_I]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // DEFAULT-NEXT:    store double [[TMP0]], ptr [[Z]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // DEFAULT-NEXT:    ret void
 //
 // FINITEONLY-LABEL: define dso_local void @test_sincospi(
 // FINITEONLY-SAME: double noundef nofpclass(nan inf) [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // FINITEONLY-NEXT:  [[ENTRY:.*:]]
 // FINITEONLY-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    [[CALL_I:%.*]] = call nnan ninf contract nofpclass(nan inf) double @__ocml_sincospi_f64(double noundef nofpclass(nan inf) [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // FINITEONLY-NEXT:    store double [[CALL_I]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // FINITEONLY-NEXT:    store double [[TMP0]], ptr [[Z]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // FINITEONLY-NEXT:    ret void
 //
 // APPROX-LABEL: define dso_local void @test_sincospi(
 // APPROX-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // APPROX-NEXT:  [[ENTRY:.*:]]
 // APPROX-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    [[CALL_I:%.*]] = call contract double @__ocml_sincospi_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // APPROX-NEXT:    store double [[CALL_I]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // APPROX-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA19]]
 // APPROX-NEXT:    store double [[TMP0]], ptr [[Z]], align 8, !tbaa [[DOUBLE_TBAA19]]
-// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// APPROX-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // APPROX-NEXT:    ret void
 //
 // NCRDIV-LABEL: define dso_local void @test_sincospi(
 // NCRDIV-SAME: double noundef [[X:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Y:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[Z:%.*]]) local_unnamed_addr #[[ATTR4]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
 // NCRDIV-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8, addrspace(5)
-// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = call contract double @__ocml_sincospi_f64(double noundef [[X]], ptr addrspace(5) noundef [[__TMP_I]]) #[[ATTR13]]
 // NCRDIV-NEXT:    store double [[CALL_I]], ptr [[Y]], align 8, !tbaa [[DOUBLE_TBAA20]]
 // NCRDIV-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(5) [[__TMP_I]], align 8, !tbaa [[DOUBLE_TBAA20]]
 // NCRDIV-NEXT:    store double [[TMP0]], ptr [[Z]], align 8, !tbaa [[DOUBLE_TBAA20]]
-// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]]) #[[ATTR14]]
+// NCRDIV-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[__TMP_I]])
 // NCRDIV-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @test_sincospi(
@@ -7424,12 +7424,12 @@ extern "C" __device__ void test_sincospif(float x, float *y, float *z) {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    [[__TMP_I:%.*]] = alloca double, align 8
 // AMDGCNSPIRV-NEXT:    [[__TMP_ASCAST_I:%.*]] = addrspacecast ptr [[__TMP_I]] to ptr addrspace(4)
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.start.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    [[CALL_I:%.*]] = call contract spir_func addrspace(4) double @__ocml_sincospi_f64(double noundef [[X]], ptr noundef nonnull [[__TMP_I]]) #[[ATTR13]]
 // AMDGCNSPIRV-NEXT:    store double [[CALL_I]], ptr addrspace(4) [[Y]], align 8, !tbaa [[DOUBLE_TBAA20]]
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load double, ptr addrspace(4) [[__TMP_ASCAST_I]], align 8, !tbaa [[DOUBLE_TBAA20]]
 // AMDGCNSPIRV-NEXT:    store double [[TMP0]], ptr addrspace(4) [[Z]], align 8, !tbaa [[DOUBLE_TBAA20]]
-// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]]) #[[ATTR14]]
+// AMDGCNSPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[__TMP_I]])
 // AMDGCNSPIRV-NEXT:    ret void
 //
 extern "C" __device__ void test_sincospi(double x, double *y, double *z) {
