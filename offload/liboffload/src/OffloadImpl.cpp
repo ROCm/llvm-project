@@ -1782,10 +1782,8 @@ __tgt_async_info *__ol_tgt_GetAsyncInfoFromQueue(ol_queue_handle_t Queue) {
   return Queue ? Queue->AsyncInfo : nullptr;
 }
 
-DeviceImageTy *__ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program) {
-  return Program->Image;
-}
-
+// Helpers for virtual address management that are only used RecordReplay until
+// it transitions to a new code.
 void *__ol_tgt_GetSuggestedVirtualAddress(ol_device_handle_t Device) {
   return Device->Device->getSuggestedVirtualAddress();
 }
