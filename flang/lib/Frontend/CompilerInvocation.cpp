@@ -1396,7 +1396,7 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
 
   constexpr unsigned newestFullySupported = 52;
   // By default OpenMP is set to 5.2 version
-  constexpr unsigned latestFinalized = 60;
+  constexpr unsigned latestFinalized = 61;
   // By default OpenMP is set to the most recent fully supported version
   res.getLangOpts().OpenMPVersion = newestFullySupported;
   res.getFrontendOpts().features.Enable(
