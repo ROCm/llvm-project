@@ -296,7 +296,7 @@ defm : ValueField<"amdgpu-memcpy-loop-unroll", "unsigned", "16",
   "Unroll factor (affecting 4x32-bit operations) to use for memory operations when lowering statically-sized memcpy, memmove, or memset as a loop">;
 defm : ValueField<"amdgpu-unroll-max-block-to-analyze", "unsigned", "32",
   "Inner loop block size threshold to analyze in unroll for AMDGPU">;
-defm : BoolField<"amdgpu-unroll-runtime-default", "true",
+defm : BoolField<"amdgpu-unroll-runtime-default", "false",
   "Set default runtime unrolling for AMDGPU">;
 defm : BoolField<"amdgpu-unroll-runtime-local", "true",
   "Allow runtime unroll for AMDGPU if local memory used in a loop">;
