@@ -208,6 +208,10 @@ void HipBinAmd::constructCompilerPath() {
     hipClangPath /= "llvm";
     hipClangPath /= "bin";
     compilerPath = hipClangPath.string();
+
+    if (!fs::exists(compilerPath))
+      compilerPath = HIPCC_DEFAULT_HIP_CLANG_PATH;
+
   } else {
     compilerPath = envVariables.hipClangPathEnv_;
   }
