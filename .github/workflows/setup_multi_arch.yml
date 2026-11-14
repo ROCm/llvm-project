@@ -141,7 +141,7 @@ jobs:
       - name: Resolve TheRock sha from RockCI config
         id: rockci_ref
         if: inputs.repository == 'ROCm/TheRock' && inputs.ref == ''
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-therock-ref@users/mliyakat/cp-test-scaffold
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-therock-ref@users/mliyakat/cp-test-branch-input
         with:
           github_token: ${{ github.token }}
       
@@ -203,7 +203,7 @@ jobs:
 
       - name: Build Test CI Config matrix
         id: convergence_config
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/ci-config-matrix@users/mliyakat/cp-test-scaffold
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/ci-config-matrix@users/mliyakat/cp-test-branch-input
         with:
           build_variant: ${{ inputs.build_variant }}
           ci_config_path: ci-config

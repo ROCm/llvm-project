@@ -1,15 +1,17 @@
 # ============================================================================
 # TEMPORARY TEST SCAFFOLD - DO NOT MERGE
 #
-# This branch exists only to dispatch Cherry-pick Testing before it merges:
+# This copy exists only to dispatch Cherry-pick Testing before it merges:
 # GitHub will not dispatch a workflow whose file path is absent from the
 # default branch, so the workflow is hosted here at the path of the legacy
 # single-arch entry point. The rock-ci-deps actions are also repointed at this
 # branch, because PR #5060 modifies submodule-pr-update and @amd-staging will
 # not carry that change until it merges.
 #
-# Nothing on this branch is intended for review. PR #5060 tracks the real
-# change and does not contain any of it.
+# Nothing in this file is intended for review, and it has to come back out
+# before PR #5060 can merge — it would otherwise overwrite the legacy
+# single-arch entry point on amd-staging. The real change is the rest of
+# the PR.
 # ============================================================================
 
 # Copyright Advanced Micro Devices, Inc.
