@@ -198,6 +198,13 @@ math_mpfr_test(
 )
 
 math_mpfr_test(
+    name = "coshbf16",
+    deps = [
+        "//libc/src/__support/FPUtil:bfloat16",
+    ],
+)
+
+math_mpfr_test(
     name = "coshf",
     deps = [
         "//libc/src/__support/CPP:array",
@@ -245,6 +252,16 @@ math_mpfr_test(
     deps = [
         "//libc/src/stdlib:rand",
         "//libc/src/stdlib:srand",
+    ],
+)
+
+math_mpfr_test(
+    name = "dmulf128",
+    hdrs = ["MulTest.h"],
+    deps = [
+        "//libc:rand",
+        "//libc:srand",
+        "//libc/src/__support/FPUtil:float128",
     ],
 )
 
