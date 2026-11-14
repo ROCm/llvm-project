@@ -20,6 +20,7 @@
 #include "asan_stack.h"
 #include "sanitizer_common/sanitizer_file.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
+#include "sanitizer_common/sanitizer_symbolizer_amdhsa.h"
 
 namespace __asan {
 
