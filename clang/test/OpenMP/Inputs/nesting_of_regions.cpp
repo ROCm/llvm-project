@@ -6063,6 +6063,34 @@ void foo() {
 #pragma omp cancel parallel // expected-error {{region cannot be closely nested inside 'parallel master taskloop' region}}
 #pragma omp cancellation point parallel // expected-error {{region cannot be closely nested inside 'parallel master taskloop' region}}
   }
+#pragma omp masked taskloop
+  for (int i = 0; i < 10; ++i) {
+#pragma omp cancel taskgroup // omp45-error {{region cannot be closely nested inside 'masked taskloop' region}}
+#pragma omp cancellation point taskgroup // omp45-error {{region cannot be closely nested inside 'masked taskloop' region}}
+  }
+#pragma omp masked taskloop
+  for (int i = 0; i < 10; ++i) {
+#pragma omp cancel parallel // expected-error {{region cannot be closely nested inside 'masked taskloop' region}}
+#pragma omp cancellation point parallel // expected-error {{region cannot be closely nested inside 'masked taskloop' region}}
+  }
+#pragma omp masked taskloop simd
+  for (int i = 0; i < 10; ++i) {
+#pragma omp cancel taskgroup // omp45-error {{OpenMP constructs may not be nested inside a simd region}} omp50-error {{OpenMP constructs may not be nested inside a simd region except for ordered simd, simd, scan, atomic, or loop directive}} omp51-error {{OpenMP constructs may not be nested inside a simd region except for ordered simd, simd, scan, atomic, or loop directive}}
+  }
+#pragma omp parallel masked taskloop
+  for (int i = 0; i < 10; ++i) {
+#pragma omp cancel taskgroup // omp45-error {{region cannot be closely nested inside 'parallel masked taskloop' region}}
+#pragma omp cancellation point taskgroup // omp45-error {{region cannot be closely nested inside 'parallel masked taskloop' region}}
+  }
+#pragma omp parallel masked taskloop
+  for (int i = 0; i < 10; ++i) {
+#pragma omp cancel parallel // expected-error {{region cannot be closely nested inside 'parallel masked taskloop' region}}
+#pragma omp cancellation point parallel // expected-error {{region cannot be closely nested inside 'parallel masked taskloop' region}}
+  }
+#pragma omp parallel masked taskloop simd
+  for (int i = 0; i < 10; ++i) {
+#pragma omp cancel taskgroup // omp45-error {{OpenMP constructs may not be nested inside a simd region}} omp50-error {{OpenMP constructs may not be nested inside a simd region except for ordered simd, simd, scan, atomic, or loop directive}} omp51-error {{OpenMP constructs may not be nested inside a simd region except for ordered simd, simd, scan, atomic, or loop directive}}
+  }
 
 // DISTRIBUTE DIRECTIVE
 #pragma omp target
@@ -9271,7 +9299,7 @@ void foo() {
   }
 #pragma omp target teams distribute parallel for
   for (int i = 0; i < 10; ++i) {
-#pragma omp scan // omp45-error {{region cannot be closely nested inside 'target teams distribute parallel for' region}} omp50-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp51-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp50-error {{'scan' directive is not supported inside target regions}} omp51-error {{'scan' directive is not supported inside target regions}}
+#pragma omp scan // expected-error {{region cannot be closely nested inside 'target teams distribute parallel for' region}}
     bar();
   }
 #pragma omp target teams distribute parallel for
@@ -18547,7 +18575,7 @@ void foo() {
   }
 #pragma omp target teams distribute parallel for
   for (int i = 0; i < 10; ++i) {
-#pragma omp scan // omp45-error {{region cannot be closely nested inside 'target teams distribute parallel for' region}} omp50-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp51-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp50-error {{'scan' directive is not supported inside target regions}} omp51-error {{'scan' directive is not supported inside target regions}}
+#pragma omp scan // expected-error {{region cannot be closely nested inside 'target teams distribute parallel for' region}}
     bar();
   }
 #pragma omp target teams distribute parallel for

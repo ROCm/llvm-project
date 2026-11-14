@@ -358,6 +358,9 @@ public:
               isOpenMPDistributeDirective(D->getDirectiveKind()));
     }
   }
+  // A metadirective has no associated statement; visit its variants and
+  // conditions.
+  void VisitOMPMetaDirective(const OMPMetaDirective *D) { VisitStmt(D); }
   void VisitCapturedStmt(const CapturedStmt *S) {
     if (!S)
       return;
@@ -636,6 +639,7 @@ static bool supportsSPMDExecutionMode(CodeGenModule &CGM,
   case OMPD_target_teams_distribute_parallel_for:
   case OMPD_target_teams_distribute_parallel_for_simd:
   case OMPD_target_simd:
+  case OMPD_target_loop:
   case OMPD_target_teams_distribute_simd:
     return true;
   case OMPD_target_teams_distribute:
@@ -963,18 +967,6 @@ static void setPropertyExecutionMode(CodeGenModule &CGM, StringRef Name,
   CGM.addCompilerUsedGlobal(GVMode);
 }
 
-// Create a global variable to indicate whether fast reduction is enabled for
-// this file. This variable is read by the runtime while determining the launch
-// bounds. The downstream fast-reduction feature it used to control has been
-// removed, so this is always emitted as disabled to keep the plugin ABI stable.
-static void setIsFastReduction(CodeGenModule &CGM) {
-  auto *GVFastReduction = new llvm::GlobalVariable(
-      CGM.getModule(), CGM.Int8Ty, /*isConstant=*/true,
-      llvm::GlobalValue::WeakAnyLinkage, llvm::ConstantInt::get(CGM.Int8Ty, 0),
-      Twine("__omp_plugin_enable_fast_reduction"));
-  CGM.addCompilerUsedGlobal(GVFastReduction);
-}
-
 static OMPTgtExecModeFlags
 computeExecutionMode(bool Mode, const Stmt *DirectiveStmt, CodeGenModule &CGM) {
   if (!Mode)
@@ -1002,20 +994,11 @@ void CGOpenMPRuntimeGPU::emitTargetOutlinedFunction(
 
   const Stmt *DirectiveStmt = CGM.getOptKernelKey(D);
   bool Mode = supportsSPMDExecutionMode(CGM, D);
-  // Used by emitParallelCall
-  CGM.setIsSPMDExecutionMode(Mode);
   if (Mode) {
-    // For AMDGPU, check if a no-loop or a Xteam reduction kernel should
-    // be generated and if so, set metadata that can be used by codegen.
-    // This check is done regardless of host or device codegen since the
-    // signature of the offloading routine has to match across host and device.
+    // For AMDGPU, check if a no-loop or big-jump-loop kernel should be
+    // generated and if so, set metadata that can be used by codegen.
     if (CGM.getTriple().isAMDGCN()) {
       assert(CGM.getLangOpts().OpenMPIsTargetDevice && "Unexpected host path");
-      // Downstream Xteam cross-team reduction codegen has been removed; kernels
-      // with reductions fall through to the normal SPMD path and use the
-      // upstream reduction implementation (emitReduction ->
-      // createReductionsGPU). Only the no-loop/big-jump-loop specialized
-      // kernels remain.
       CodeGenModule::NoLoopXteamErr NxStatus = CGM.checkAndSetNoLoopKernel(D);
       DEBUG_WITH_TYPE(NO_LOOP_XTEAM_RED,
                       CGM.emitNxResult("[No-Loop/Big-Jump-Loop]", D, NxStatus));
@@ -1040,9 +1023,6 @@ void CGOpenMPRuntimeGPU::emitTargetOutlinedFunction(
 
   if (Mode && DirectiveStmt)
     CGM.resetOptKernelMetadata(DirectiveStmt);
-
-  // Reset cached mode
-  CGM.setIsSPMDExecutionMode(false);
 }
 
 CGOpenMPRuntimeGPU::CGOpenMPRuntimeGPU(CodeGenModule &CGM)
@@ -1063,11 +1043,6 @@ CGOpenMPRuntimeGPU::CGOpenMPRuntimeGPU(CodeGenModule &CGM)
 
   if (CGM.getLangOpts().OpenMPCUDAMode)
     CurrentDataSharingMode = CGOpenMPRuntimeGPU::DS_CUDA;
-
-  // Write a global variable indicating whether fast reduction is enabled.
-  // This is done regardless of -nogpulib
-  if (!CGM.getLangOpts().OMPHostIRFile.empty())
-    setIsFastReduction(CGM);
 
   llvm::OpenMPIRBuilder &OMPBuilder = getOMPBuilder();
   if (CGM.getLangOpts().NoGPULib || CGM.getLangOpts().OMPHostIRFile.empty())
@@ -2681,9 +2656,12 @@ CGOpenMPRuntimeGPU::emitFastFPAtomicCall(CodeGenFunction &CGF, LValue X,
   llvm::MDTuple *EmptyMD = llvm::MDNode::get(CGM.getLLVMContext(), {});
   CallInst->setMetadata("amdgpu.no.fine.grained.memory", EmptyMD);
 
-  // Setting of amdgpu.ignore.denormal.mode
-  if (Kind == llvm::AtomicRMWInst::FAdd && UpdateVal->getType()->isFloatTy())
-    CallInst->setMetadata("amdgpu.ignore.denormal.mode", EmptyMD);
+  // Setting of atomic.ignore.denormal.mode, which the fp atomics hints may
+  // override for this construct.
+  if (Kind == llvm::AtomicRMWInst::FAdd && UpdateVal->getType()->isFloatTy() &&
+      CGM.getAtomicOpts().ignore_denormal_mode)
+    CallInst->setMetadata(llvm::LLVMContext::MD_atomic_ignore_denormal_mode,
+                          EmptyMD);
 
   // Note: breaks fp_atomics test so volatile cannot be used
   // CallInst->setVolatile(true);

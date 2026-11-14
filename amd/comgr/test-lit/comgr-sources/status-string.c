@@ -22,15 +22,15 @@ int main(int argc, char *argv[]) {
   if (strcmp(StatusString, "ERROR"))
     fail("incorrect status: expected 'ERROR', saw '%s'", StatusString);
 
-  amd_comgr_(status_string(AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT,
-                           &StatusString));
+  amd_comgr_(
+      status_string(AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT, &StatusString));
   if (strcmp(StatusString, "INVALID_ARGUMENT")) {
     fail("incorrect status: expected 'INVALID_ARGUMENT', saw '%s'",
          StatusString);
   }
 
-  amd_comgr_(status_string(AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES,
-                           &StatusString));
+  amd_comgr_(
+      status_string(AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES, &StatusString));
   if (strcmp(StatusString, "OUT_OF_RESOURCES")) {
     fail("incorrect status: expected 'OUT_OF_RESOURCES', saw '%s'",
          StatusString);

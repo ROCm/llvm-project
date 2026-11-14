@@ -21,33 +21,19 @@
 #undef DEBUG_PREFIX
 #define DEBUG_PREFIX "OMPT"
 
-#define FUNCPTR_TO_PTR(x) ((void *)(uint64_t)x)
-
 #define FOREACH_OMPT_TARGET_CALLBACK(macro)                                    \
   FOREACH_OMPT_DEVICE_EVENT(macro)                                             \
   FOREACH_OMPT_NOEMI_EVENT(macro)                                              \
   FOREACH_OMPT_EMI_EVENT(macro)
 
-// Common device tracing functions
-#define FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(macro)                           \
-  macro(ompt_set_trace_ompt) macro(ompt_start_trace) macro(ompt_flush_trace)   \
-      macro(ompt_stop_trace) macro(ompt_advance_buffer_cursor)                 \
-          macro(ompt_get_record_type)
-
 // Supported device tracing entry points
 #define FOREACH_OMPT_DEVICE_TRACING_FN(macro)                                  \
-  FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(macro)                                 \
-  macro(ompt_get_record_ompt) macro(ompt_get_device_time)                      \
-      macro(ompt_translate_time)
-
-// Device tracing functionalities, which are also e.g. coupled to mutexes
-#define FOREACH_OMPT_DEVICE_TRACING_FN_IMPLEMENTAIONS(macro)                   \
-  FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(macro)                                 \
-  macro(ompt_set_timestamp) macro(ompt_set_granted_teams)
+  macro(ompt_set_trace_ompt) macro(ompt_start_trace) macro(ompt_flush_trace)   \
+      macro(ompt_stop_trace) macro(ompt_advance_buffer_cursor)                 \
+          macro(ompt_get_record_type) macro(ompt_get_record_ompt)              \
+              macro(ompt_get_device_time) macro(ompt_translate_time)
 
 #define OMPT_API_ROUTINE static
-
-#define OMPT_CALLBACK_AVAILABLE(fn) (llvm::omp::target::ompt::Initialized && fn)
 
 #define OMPT_IF_BUILT(stmt) stmt
 
@@ -68,17 +54,7 @@
     }                                                                          \
   } while (0)
 
-#define OMPT_FRAME_FLAGS (ompt_frame_runtime | OMPT_FRAME_POSITION_DEFAULT)
-
-#if (__PPC64__ | __arm__)
 #define OMPT_GET_FRAME_ADDRESS(level) __builtin_frame_address(level)
-#define OMPT_FRAME_POSITION_DEFAULT ompt_frame_cfa
-#else
-#define OMPT_GET_FRAME_ADDRESS(level) __builtin_frame_address(level)
-#define OMPT_FRAME_POSITION_DEFAULT ompt_frame_framepointer
-#endif
-
-#define OMPT_PTR_UNKNOWN ((void *)0)
 
 #define performIfOmptInitialized(stmt)                                         \
   do {                                                                         \

@@ -36,6 +36,7 @@ namespace llvm {
 LLVM_ABI extern llvm::cl::opt<bool> NoKernelInfoEndLTO;
 
 class AAManager;
+class CSEConfigBase;
 using ModulePassManager = PassManager<Module>;
 
 class Function;
@@ -197,6 +198,9 @@ public:
     return nullptr;
   }
 
+  /// GlobalISel CSEConfig for the new PM. Return NULL for the standard one.
+  virtual CSEConfigBase *createCSEConfig() const { return nullptr; }
+
   /// Allocate and return a default initialized instance of the YAML
   /// representation for the MachineFunctionInfo.
   virtual yaml::MachineFunctionInfo *createDefaultFuncInfoYAML() const {
@@ -294,7 +298,7 @@ public:
 
   /// NOTE: There are targets that still do not support the debug entry values
   /// production.
-  bool shouldEmitDebugEntryValues() const;
+  bool shouldEmitDebugEntryValues(DebuggerKind Tuning) const;
 
   /// Whether the fast register allocator lowers tied operands itself instead
   /// of running TwoAddressInstructionPass. AMDGPU anchors passes on
@@ -505,10 +509,6 @@ public:
   void getNameWithPrefix(SmallVectorImpl<char> &Name, const GlobalValue *GV,
                          Mangler &Mang, bool MayAlwaysUsePrivate = false) const;
   MCSymbol *getSymbol(const GlobalValue *GV) const;
-
-  /// The integer bit size to use for SjLj based exception handling.
-  static constexpr unsigned DefaultSjLjDataSize = 32;
-  virtual unsigned getSjLjDataSize() const { return DefaultSjLjDataSize; }
 
   /// getAddressSpaceForPseudoSourceKind - Given the kind of memory
   /// (e.g. stack) the target returns the corresponding address space.

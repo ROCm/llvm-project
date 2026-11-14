@@ -36,6 +36,7 @@
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGenUtils/CallUtils.h"
+#include "clang/CodeGenUtils/TargetUtils.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
@@ -2641,6 +2642,11 @@ public:
   void EmitVTablePtrCheck(const CXXRecordDecl *RD, llvm::Value *VTable,
                           CFITypeCheckKind TCK, SourceLocation Loc);
 
+  /// Emit a CFI check failure handler or trap for a vtable type test result.
+  void EmitVTableCheck(CFITypeCheckKind TCK, CanQualType T, llvm::Metadata *MD,
+                       llvm::Value *VTable, llvm::Value *TypeTest,
+                       SourceLocation Loc, bool UseCrossDsoSlowPath);
+
   /// If whole-program virtual table optimization is enabled, emit an assumption
   /// that VTable is a member of RD's type identifier. Or, if vptr CFI is
   /// enabled, emit a check that VTable is a member of RD's type identifier.
@@ -2656,7 +2662,8 @@ public:
   llvm::Value *EmitVTableTypeCheckedLoad(const CXXRecordDecl *RD,
                                          llvm::Value *VTable,
                                          llvm::Type *VTableTy,
-                                         uint64_t VTableByteOffset);
+                                         uint64_t VTableByteOffset,
+                                         SourceLocation Loc);
 
   /// EnterDtorCleanups - Enter the cleanups necessary to complete the
   /// given phase of destruction for a destructor.  The end result
@@ -3747,12 +3754,12 @@ public:
   void EmitOptKernel(const OMPExecutableDirective &D,
                      const ForStmt *CapturedForStmt,
                      llvm::omp::OMPTgtExecModeFlags OptKernelMode,
-                     SourceLocation Loc, const FunctionArgList *Args);
+                     SourceLocation Loc);
 
   void EmitOptKernelCode(const OMPExecutableDirective &D,
                          const ForStmt *CapturedForStmt,
                          llvm::omp::OMPTgtExecModeFlags OptKernelMode,
-                         SourceLocation Loc, const FunctionArgList *Args);
+                         SourceLocation Loc);
 
   void EmitNoLoopCode(const OMPExecutableDirective &D,
                       const ForStmt *CapturedForStmt, SourceLocation Loc);
@@ -3796,8 +3803,6 @@ public:
   void EmitWhileStmt(const WhileStmt &S, ArrayRef<const Attr *> Attrs = {});
   void EmitDoStmt(const DoStmt &S, ArrayRef<const Attr *> Attrs = {});
   void EmitForStmt(const ForStmt &S, ArrayRef<const Attr *> Attrs = {});
-  void EmitForStmtWithArgs(const ForStmt &S, const FunctionArgList *Args,
-                           ArrayRef<const Attr *> Attrs = {});
   void EmitReturnStmt(const ReturnStmt &S);
   void EmitDeclStmt(const DeclStmt &S);
   void EmitBreakStmt(const BreakStmt &S);
@@ -3906,8 +3911,7 @@ public:
   GenerateOpenMPCapturedStmtFunctionAggregate(const CapturedStmt &S,
                                               const OMPExecutableDirective &D);
   void GenerateOpenMPCapturedVars(const CapturedStmt &S,
-                                  SmallVectorImpl<llvm::Value *> &CapturedVars,
-                                  const Stmt *OptKernelNestKey);
+                                  SmallVectorImpl<llvm::Value *> &CapturedVars);
   void emitOMPSimpleStore(LValue LVal, RValue RVal, QualType RValTy,
                           SourceLocation Loc);
   /// Perform element by element copying of arrays with type \a
@@ -4139,7 +4143,8 @@ public:
   void EmitOMPDistributeSimdDirective(const OMPDistributeSimdDirective &S);
   void EmitOMPTargetParallelForSimdDirective(
       const OMPTargetParallelForSimdDirective &S);
-  void EmitOMPTargetSimdDirective(const OMPTargetSimdDirective &S);
+  /// Also emits 'target loop'.
+  void EmitOMPTargetSimdDirective(const OMPLoopDirective &S);
   void EmitOMPTeamsDistributeDirective(const OMPTeamsDistributeDirective &S);
   void
   EmitOMPTeamsDistributeSimdDirective(const OMPTeamsDistributeSimdDirective &S);
@@ -4195,10 +4200,10 @@ public:
   static void EmitOMPTargetTeamsDistributeSimdDeviceFunction(
       CodeGenModule &CGM, StringRef ParentName,
       const OMPTargetTeamsDistributeSimdDirective &S);
-  /// Emit device code for the target simd directive.
+  /// Emit device code for the target simd and target loop directives.
   static void EmitOMPTargetSimdDeviceFunction(CodeGenModule &CGM,
                                               StringRef ParentName,
-                                              const OMPTargetSimdDirective &S);
+                                              const OMPLoopDirective &S);
   /// Emit device code for the target teams distribute parallel for simd
   /// directive.
   static void EmitOMPTargetTeamsDistributeParallelForSimdDeviceFunction(
@@ -5150,7 +5155,7 @@ public:
                                llvm::AtomicOrdering &AO,
                                llvm::SyncScope::ID &SSID);
 
-  enum class MSVCIntrin;
+  using MSVCIntrin = CodeGenUtils::MSVCIntrin;
   llvm::Value *EmitMSVCBuiltinExpr(MSVCIntrin BuiltinID, const CallExpr *E);
 
   llvm::Value *EmitBuiltinAvailable(const VersionTuple &Version);
@@ -5515,6 +5520,8 @@ public:
     BCK_CTZPassedZero,
     BCK_CLZPassedZero,
     BCK_AssumePassedFalse,
+    BCK_NonUniformLane,
+    BCK_InactiveLane,
   };
 
   /// Emits an argument for a call to a builtin. If the builtin sanitizer is
@@ -5815,8 +5822,7 @@ private:
                               llvm::Value *CurrVal);
   /// Emit the starting index of a BigJumpLoop.
   std::pair<const VarDecl *, Address>
-  EmitBigJumpLoopStartingIndex(const ForStmt &FStmt,
-                               const FunctionArgList *Args);
+  EmitBigJumpLoopStartingIndex(const ForStmt &FStmt);
   /// Emit the increment of a BigJumpLoop.
   void EmitBigJumpLoopInc(const ForStmt &FStmt, const VarDecl *LoopVar,
                           const Address &NoLoopIvAddr);

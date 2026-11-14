@@ -17,17 +17,16 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <mutex>
 #include <shared_mutex>
 #include <variant>
 #include <vector>
 
 #include "ExclusiveAccess.h"
-#include "OpenMP/InteropAPI.h"
+// Downstream: __tgt_async_info is defined in APITypes.h.
 #include "Shared/APITypes.h"
 #include "Shared/Debug.h"
-#include "Shared/Environment.h"
 #include "Shared/EnvironmentVar.h"
-#include "Shared/Requirements.h"
 #include "Shared/Utils.h"
 
 #include "GenericProfiler.h"
@@ -36,16 +35,8 @@
 #include "MemoryManager.h"
 #include "OffloadError.h"
 #include "RPC.h"
-#include "RecordReplay.h"
-#include "omptarget.h"
 
-#include "GenericProfiler.h"
-
-#include "llvm/ADT/DenseMapInfo.h"
-#include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StableHashing.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Frontend/OpenMP/OMPGridValues.h"
 #include "llvm/Support/Allocator.h"
@@ -138,19 +129,16 @@ struct AsyncInfoWrapperTy {
   /// provide a __tgt_async_info.
   bool isSynchronous() const { return AsyncInfoPtr == &LocalAsyncInfo; }
 
+  /// Note that a kernel trace entry referencing this wrapper's async info was
+  /// recorded. If the async info is the wrapper's local one, finalize() will
+  /// drop that reference before the local object is destroyed.
+  void setKernelTraced() { KernelTraced = true; }
+
   /// Get the queue.
   template <typename Ty> Ty getQueueAs() {
     static_assert(sizeof(Ty) == sizeof(AsyncInfoPtr->Queue),
                   "Queue is not of the same size as target type");
     return static_cast<Ty>(AsyncInfoPtr->Queue);
-  }
-
-  /// Set the queue.
-  template <typename Ty> void setQueueAs(Ty Queue) {
-    static_assert(sizeof(Ty) == sizeof(AsyncInfoPtr->Queue),
-                  "Queue is not of the same size as target type");
-    assert(!AsyncInfoPtr->Queue && "Overwriting queue");
-    AsyncInfoPtr->Queue = Queue;
   }
 
   /// Get the queue, using the provided resource manager to initialise it if it
@@ -175,17 +163,11 @@ struct AsyncInfoWrapperTy {
   /// object and only once.
   void finalize(Error &Err);
 
-  /// Register \p Ptr as an associated allocation that is freed after
-  /// finalization.
-  void freeAllocationAfterSynchronization(void *Ptr, TargetAllocTy Kind) {
-    std::lock_guard<std::mutex> AllocationGuard(AsyncInfoPtr->Mutex);
-    AsyncInfoPtr->AssociatedAllocations.push_back({Ptr, Kind});
-  }
-
 private:
   GenericDeviceTy &Device;
   __tgt_async_info LocalAsyncInfo;
   __tgt_async_info *AsyncInfoPtr;
+  bool KernelTraced = false;
 };
 
 enum class DeviceInfo {
@@ -318,9 +300,6 @@ class DeviceImageTy {
   /// The managed image data.
   std::unique_ptr<MemoryBuffer> Image;
 
-  /// An optional buffer for an IR image.
-  std::unique_ptr<MemoryBuffer> DeviceIRImage;
-
   /// Reference to the device this image is loaded on.
   GenericDeviceTy &Device;
 
@@ -347,21 +326,6 @@ public:
   MemoryBufferRef getMemoryBuffer() const {
     return MemoryBufferRef(StringRef((const char *)getStart(), getSize()),
                            "Image");
-  }
-
-  /// Get a memory buffer reference to the whole IR image.
-  MemoryBufferRef getIRImageMemoryBuffer() const {
-    if (DeviceIRImage)
-      return MemoryBufferRef(*DeviceIRImage);
-
-    return MemoryBufferRef();
-  }
-
-  bool hasIRImage() const { return DeviceIRImage != nullptr; }
-
-  /// Set the IR image.
-  void setIRImage(std::unique_ptr<MemoryBuffer> ImageBuffer) {
-    DeviceIRImage = std::move(ImageBuffer);
   }
 };
 
@@ -448,23 +412,6 @@ struct GenericKernelTy {
     return std::numeric_limits<uint32_t>::max();
   }
 
-  /// Indicate whether an execution mode is valid.
-  static bool isValidExecutionMode(OMPTgtExecModeFlags ExecutionMode) {
-    switch (ExecutionMode) {
-    case OMP_TGT_EXEC_MODE_BARE:
-    case OMP_TGT_EXEC_MODE_SPMD:
-    case OMP_TGT_EXEC_MODE_GENERIC:
-    case OMP_TGT_EXEC_MODE_GENERIC_SPMD:
-    case OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
-      return true;
-    // AMD-only execution modes
-    case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
-      ODBG(ODT_Tool) << "AMD-only execution mode";
-      return true;
-    }
-    llvm_unreachable("Unknown execution mode!");
-  }
-
   /// Compute kernel occupancy
   /// This function computes the max(upperbound) occupancy for a lanuched kernel
   /// based on the given hardware resources e.g. the number of registers, size
@@ -528,14 +475,11 @@ struct AllocationTraceInfoTy {
   /// The allocated device pointer.
   void *DevicePtr = nullptr;
 
-  /// The corresponding host pointer (can be null).
-  void *HostPtr = nullptr;
-
   /// The size of the allocation.
   uint64_t Size = 0;
 
   /// The kind of the allocation.
-  TargetAllocTy Kind = TargetAllocTy::TARGET_ALLOC_DEFAULT;
+  ol_alloc_type_t Kind = OL_ALLOC_TYPE_DEVICE;
 
   /// Information about the last allocation at this address, if any.
   AllocationTraceInfoTy *LastAllocationInfo = nullptr;
@@ -569,6 +513,15 @@ struct KernelTraceInfoRecordTy {
                __tgt_async_info *AsyncInfo) {
     KTIs[Idx] = {Kernel, std::move(StackTrace), AsyncInfo};
     Idx = (Idx + 1) % size();
+  }
+
+  /// Drop the references to \p AsyncInfo from all entries, keeping the rest of
+  /// the information (kernel, launch trace) available for error reporting.
+  void clearAsyncInfo(const __tgt_async_info *AsyncInfo) {
+    for (auto &KTI : KTIs) {
+      if (KTI.AsyncInfo == AsyncInfo)
+        KTI.AsyncInfo = nullptr;
+    }
   }
 
   /// Return the \p I'th last kernel trace info.
@@ -753,20 +706,12 @@ public:
     return utils::advancePtr(Entry->DevAccessiblePtr,
                              utils::getPtrDiff(HstPtr, Entry->HstPtr));
   }
-
-  /// Check whether a buffer belongs to a registered host pinned allocation.
-  bool isHostPinnedBuffer(const void *HstPtr) const {
-    std::shared_lock<std::shared_mutex> Lock(Mutex);
-
-    // Return whether there is an intersecting allocation.
-    return (findIntersecting(const_cast<void *>(HstPtr)) != nullptr);
-  }
 };
 
 /// Description of an allocation: owning device, kind, base address and size.
 struct PluginAllocInfoTy {
   GenericDeviceTy *Device;
-  TargetAllocTy Kind;
+  ol_alloc_type_t Kind;
   void *Base;
   size_t Size;
 };
@@ -778,9 +723,9 @@ public:
   ContextAllocatorTy(PluginContextTy &Context, GenericDeviceTy &Device)
       : Context(Context), Device(Device) {}
 
-  llvm::Expected<void *> allocate(size_t Size, void *HstPtr, TargetAllocTy Kind,
+  llvm::Expected<void *> allocate(size_t Size, ol_alloc_type_t Kind,
                                   size_t Alignment) override;
-  llvm::Error free(void *TgtPtr, TargetAllocTy Kind) override;
+  llvm::Error free(void *TgtPtr, ol_alloc_type_t Kind) override;
 
 private:
   PluginContextTy &Context;
@@ -813,19 +758,15 @@ struct PluginContextTy {
   virtual Error initAsyncInfoImpl(GenericDeviceTy &Device,
                                   AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
 
-  /// Allocate Size bytes of Kind memory accessible from Device. HostPtr is an
-  /// optional hint (e.g. for pinned-buffer registration); pass nullptr when
-  /// unused.
+  /// Allocate Size bytes of Kind memory accessible from Device.
   llvm::Expected<void *> allocate(GenericDeviceTy &Device, int64_t Size,
-                                  void *HostPtr, TargetAllocTy Kind,
-                                  size_t Alignment,
+                                  ol_alloc_type_t Kind, size_t Alignment,
                                   GenericProfilerTy *ProfilerPtr = nullptr);
 
   /// Serve an allocation requested through allocate, which decides pooling.
   virtual llvm::Expected<void *>
-  allocateImpl(GenericDeviceTy &Device, int64_t Size, void *HostPtr,
-               TargetAllocTy Kind, size_t Alignment,
-               GenericProfilerTy *ProfilerPtr = nullptr);
+  allocateImpl(GenericDeviceTy &Device, int64_t Size, ol_alloc_type_t Kind,
+               size_t Alignment, GenericProfilerTy *ProfilerPtr = nullptr);
 
   /// Free a pointer returned by allocate; resolves owner/kind via
   /// getAllocInfo. Requires a non-empty device set, so this is only valid on
@@ -834,12 +775,13 @@ struct PluginContextTy {
   llvm::Error deallocate(void *Ptr, GenericProfilerTy *ProfilerPtr = nullptr);
 
   /// Free a pointer when the caller already knows the owning device and kind.
-  llvm::Error deallocate(GenericDeviceTy &Device, void *Ptr, TargetAllocTy Kind,
+  llvm::Error deallocate(GenericDeviceTy &Device, void *Ptr,
+                         ol_alloc_type_t Kind,
                          GenericProfilerTy *ProfilerPtr = nullptr);
 
   /// Serve the deallocation requested through deallocate.
   virtual llvm::Error deallocateImpl(GenericDeviceTy &Device, void *Ptr,
-                                     TargetAllocTy Kind,
+                                     ol_alloc_type_t Kind,
                                      GenericProfilerTy *ProfilerPtr = nullptr);
 
   /// Record that \p Ptr is a live allocation of \p Size bytes of \p Kind
@@ -847,7 +789,7 @@ struct PluginContextTy {
   /// pooled or not, so that an implementation's registry tracks what the user
   /// asked for and not how it was served.
   virtual void trackAllocation(GenericDeviceTy &Device, void *Ptr, int64_t Size,
-                               TargetAllocTy Kind) {}
+                               ol_alloc_type_t Kind) {}
 
   /// Record that \p Ptr is no longer live. Called before the deallocation is
   /// served, as serving it may hand \p Ptr back out to another thread.
@@ -875,9 +817,9 @@ private:
   /// Return the pool that serves allocations of \p Kind memory on \p Device,
   /// or null when they are not pooled.
   MemoryManagerTy *getMemoryManagerFor(GenericDeviceTy &Device,
-                                       TargetAllocTy Kind);
+                                       ol_alloc_type_t Kind);
   MemoryManagerTy *getDeviceMemoryManagerFor(GenericDeviceTy &Device,
-                                             TargetAllocTy Kind);
+                                             ol_alloc_type_t Kind);
   MemoryManagerTy *getHostMemoryManager();
 
   /// A memory pool and the allocator that lets it allocate through this
@@ -1001,40 +943,27 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Error queryAsyncImpl(__tgt_async_info &AsyncInfo, bool ReleaseQueue,
                                bool *IsQueueWorkCompleted) = 0;
 
-  /// Check whether the architecture supports VA management
-  virtual bool supportVAManagement() const { return false; }
-
   /// Get the total device memory size
   virtual Error getDeviceMemorySize(uint64_t &DSize);
 
-  /// Allocates \p RSize bytes (rounded up to page size) and hints the driver to
-  /// map it to \p VAddr. The obtained address is stored in \p Addr. At return
-  /// \p RSize contains the actual size which can be equal or larger than the
-  /// requested size.
-  virtual Error memoryVAMap(void **Addr, void *VAddr, size_t *RSize);
-
-  /// De-allocates device memory and unmaps the virtual address \p VAddr
-  virtual Error memoryVAUnMap(void *VAddr, size_t Size);
-
   /// Allocate data on the device or involving the device.
-  Expected<void *> dataAlloc(int64_t Size, void *HostPtr, TargetAllocTy Kind,
+  Expected<void *> dataAlloc(int64_t Size, ol_alloc_type_t Kind,
                              size_t Alignment,
                              GenericProfilerTy *ProfilerPtr = nullptr);
 
   /// Deallocate data from the device or involving the device.
-  Error dataDelete(void *TgtPtr, TargetAllocTy Kind,
+  Error dataDelete(void *TgtPtr, ol_alloc_type_t Kind,
                    GenericProfilerTy *ProfilerPtr = nullptr);
 
-  /// Record the allocation of \p Size bytes of \p Kind memory at \p DevicePtr,
-  /// associated to \p HostPtr, with the stack it was made from. Does nothing
-  /// if allocation traces are not tracked.
-  void recordAllocation(void *DevicePtr, void *HostPtr, int64_t Size,
-                        TargetAllocTy Kind);
+  /// Record the allocation of \p Size bytes of \p Kind memory at \p DevicePtr
+  /// with the stack it was made from. Does nothing if allocation traces are not
+  /// tracked.
+  void recordAllocation(void *DevicePtr, int64_t Size, ol_alloc_type_t Kind);
 
   /// Record the deallocation of \p Kind memory at \p DevicePtr, and report it
   /// if the allocation it refers to was never made, is already deallocated, or
   /// was of another kind. Does nothing if allocation traces are not tracked.
-  void recordDeallocation(void *DevicePtr, TargetAllocTy Kind);
+  void recordDeallocation(void *DevicePtr, ol_alloc_type_t Kind);
 
   /// Pin or register host memory to optimize transfers and return the device
   /// accessible pointer that devices should use for memory transfers involving
@@ -1148,7 +1077,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   // Returns true if coarse graining of mapped variables is
   // enabled on MI200 GPUs.
-  // virtual bool IsGfx90aCoarseGrainUsmMapEnabled() { return false; }
   bool IsGfx90aCoarseGrainUsmMapEnabled();
   virtual bool IsGfx90aCoarseGrainUsmMapEnabledImpl() { return false; }
 
@@ -1284,11 +1212,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   bool useAutoZeroCopy();
   virtual bool useAutoZeroCopyImpl() { return false; }
 
-  bool isFastReductionEnabled() const { return IsFastReductionEnabled; }
-  void setIsFastReductionEnabled(bool IsFastReductionEnabled) {
-    this->IsFastReductionEnabled = IsFastReductionEnabled;
-  }
-
   /// Performs sanity checks on zero-copy options and prints diagnostic info.
   Error zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
                                     bool isAutoZeroCopy, bool isEagerMaps);
@@ -1309,27 +1232,18 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
                          "%s not supported by platform", __func__);
   }
 
+  /// Return the backend-native handle of the platform this device belongs to,
+  /// reinterpreted as a void pointer.
+  virtual Expected<void *> getNativePlatformHandle() {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "%s not supported by platform", __func__);
+  }
+
   /// Return the backend-native handle of the queue held by \p AsyncInfo,
   /// reinterpreted as a void pointer.
   virtual Expected<void *> getNativeQueueHandle(__tgt_async_info *AsyncInfo) {
     return Plugin::error(error::ErrorCode::UNSUPPORTED,
                          "%s not supported by platform", __func__);
-  }
-
-  virtual Expected<omp_interop_val_t *>
-  createInterop(int32_t InteropType, interop_spec_t &InteropSpec) {
-    return Plugin::error(error::ErrorCode::UNSUPPORTED,
-                         "%s not supported by platform", __func__);
-  }
-
-  virtual Error releaseInterop(omp_interop_val_t *Interop) {
-    return Plugin::success();
-  }
-
-  virtual interop_spec_t selectInteropPreference(int32_t InteropType,
-                                                 int32_t NumPrefers,
-                                                 interop_spec_t *Prefers) {
-    return interop_spec_t{tgt_fr_none, {false, 0}, 0};
   }
 
   /// Allocate and construct a kernel object.
@@ -1377,30 +1291,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
     }
     return ATI;
   }
-
-  Error initRecordReplay(int64_t Size, void *VAddr, bool IsRecord,
-                         bool IsNative, bool SaveOutput, bool EmitReport,
-                         const char *ReportFilename,
-                         const char *OutputDirPath) {
-    if (RecordReplay)
-      return Plugin::error(error::ErrorCode::INVALID_ARGUMENT,
-                           "RR already initialized");
-    // Other formats could be supported in the future.
-    if (!IsNative)
-      return Plugin::error(error::ErrorCode::UNSUPPORTED,
-                           "non-native RR not available");
-
-    RecordReplayTy::StatusTy Status = IsRecord
-                                          ? RecordReplayTy::StatusTy::Recording
-                                          : RecordReplayTy::StatusTy::Replaying;
-
-    RecordReplay =
-        new NativeRecordReplayTy(Status, OutputDirPath ? OutputDirPath : "",
-                                 SaveOutput, EmitReport, ReportFilename, *this);
-    return RecordReplay->init(Size, VAddr);
-  }
-
-  RecordReplayTy *getRecordReplay() { return RecordReplay; }
 
   /// Map to record kernel have been launchedl, for error reporting purposes.
   ProtectedObj<KernelTraceInfoRecordTy> KernelLaunchTraces;
@@ -1456,9 +1346,6 @@ private:
   /// Variable to track kernel launch for a device.
   std::atomic<uint32_t> LaunchId = 0;
 
-  /// Record and replay manager.
-  RecordReplayTy *RecordReplay = nullptr;
-
 protected:
   /// Environment variables defined by the LLVM OpenMP implementation
   /// regarding the initial number of streams and events.
@@ -1509,12 +1396,6 @@ protected:
 
   /// The total per-block native shared memory that a kernel may use.
   size_t MaxBlockSharedMemSize = 0;
-private:
-  /// Return the kernel environment object for kernel \p Name.
-  Expected<KernelEnvironmentTy>
-  getKernelEnvironmentForKernel(StringRef Name, DeviceImageTy &Image);
-
-  bool IsFastReductionEnabled = false;
 };
 
 /// Class implementing common functionalities of offload plugins. Each plugin
@@ -1620,7 +1501,7 @@ struct GenericPluginTy {
 
   /// Indicate whether data can be exchanged directly between two devices under
   /// this same plugin. If this function returns true, it's safe to call the
-  /// GenericDeviceTy::exchangeData() function on the source device.
+  /// GenericDeviceTy::dataExchange() function on the source device.
   virtual bool isDataExchangable(int32_t SrcDeviceId, int32_t DstDeviceId) {
     return isValidDeviceId(SrcDeviceId) && isValidDeviceId(DstDeviceId);
   }
@@ -1663,20 +1544,6 @@ struct GenericPluginTy {
   virtual Expected<bool> isImageCompatible(uint32_t DeviceID,
                                            StringRef Image) const {
     return isImageCompatible(Image);
-  }
-
-  virtual Error flushQueueImpl(omp_interop_val_t *Interop) {
-    return Plugin::success();
-  }
-
-  virtual Error syncBarrierImpl(omp_interop_val_t *Interop) {
-    return Plugin::error(error::ErrorCode::UNSUPPORTED,
-                         "sync_barrier not supported");
-  }
-
-  virtual Error asyncBarrierImpl(omp_interop_val_t *Interop) {
-    return Plugin::error(error::ErrorCode::UNSUPPORTED,
-                         "async_barrier not supported");
   }
 
   /// Return a pointer to the profiler instance
@@ -1727,16 +1594,6 @@ public:
   /// variables is enabled under unified shared memory.
   bool is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId);
 
-  /// Initializes the record and replay mechanism inside the plugin.
-  int32_t initialize_record_replay(int32_t DeviceId, int64_t MemorySize,
-                                   void *VAddr, bool IsRecord, bool IsNative,
-                                   bool SaveOutput, bool EmitReport,
-                                   const char *ReportFilename,
-                                   const char *OutputDirPath);
-
-  /// Creates an asynchronous queue for the given plugin.
-  int32_t init_async_info(int32_t DeviceId, __tgt_async_info **AsyncInfoPtr);
-
   /// Sets the region of memory that is considered coarse grained.
   int set_coarse_grain_mem_region(int32_t DeviceId, void *ptr, int64_t size);
 
@@ -1758,33 +1615,6 @@ public:
                                            bool isUnifiedSharedMemory,
                                            bool isAutoZeroCopy,
                                            bool isEagerMaps);
-
-  /// Return the interop specification that the plugin supports
-  /// It might not be one of the user specified ones.
-  interop_spec_t select_interop_preference(int32_t ID, int32_t InteropType,
-                                           int32_t NumPrefers,
-                                           interop_spec_t *Prefers) {
-    auto &Device = getDevice(ID);
-    return Device.selectInteropPreference(InteropType, NumPrefers, Prefers);
-  }
-
-  /// Create OpenMP interop with the given interop context
-  omp_interop_val_t *create_interop(int32_t ID, int32_t InteropContext,
-                                    interop_spec_t *InteropSpec);
-
-  /// Release OpenMP interop object
-  int32_t release_interop(int32_t ID, omp_interop_val_t *Interop);
-
-  /// Flush the queue associated with the interop object if necessary
-  int32_t flush_queue(omp_interop_val_t *Interop);
-
-  /// Perform a host synchronization with the queue associated with the interop
-  /// object and wait for it to complete.
-  int32_t sync_barrier(omp_interop_val_t *Interop);
-
-  /// Queue an asynchronous barrier in the queue associated with the interop
-  /// object and return immediately.
-  int32_t async_barrier(omp_interop_val_t *Interop);
 
 private:
   /// Indicates if the platform runtime has been fully initialized.

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr.h"
+#include "llvm/ADT/STLExtras.h"
 
 #include "common.h"
 #include "gtest/gtest.h"
@@ -40,7 +41,9 @@ struct SymbolFields {
   }
 };
 
-SymbolFields readSymbol(amd_comgr_data_t Data, const char *Name) {
+} // namespace
+
+static SymbolFields readSymbol(amd_comgr_data_t Data, const char *Name) {
   SymbolFields Fields = {AMD_COMGR_SYMBOL_TYPE_UNKNOWN, 0, 0, false};
 
   amd_comgr_symbol_t Symbol;
@@ -61,7 +64,8 @@ SymbolFields readSymbol(amd_comgr_data_t Data, const char *Name) {
   return Fields;
 }
 
-amd_comgr_status_t collectName(amd_comgr_symbol_t Symbol, void *UserData) {
+static amd_comgr_status_t collectName(amd_comgr_symbol_t Symbol,
+                                      void *UserData) {
   size_t Length = 0;
   EXPECT_EQ(AMD_COMGR_STATUS_SUCCESS,
             amd_comgr_symbol_get_info(Symbol, AMD_COMGR_SYMBOL_INFO_NAME_LENGTH,
@@ -75,6 +79,8 @@ amd_comgr_status_t collectName(amd_comgr_symbol_t Symbol, void *UserData) {
   static_cast<std::vector<std::string> *>(UserData)->push_back(Name);
   return AMD_COMGR_STATUS_SUCCESS;
 }
+
+namespace {
 
 // The parse and the name index the symbol APIs share. Neither is observable
 // through the public API, so this reaches into src/comgr.h.
@@ -164,8 +170,7 @@ TEST_F(SymbolIndexTest, IterationSharesTheCachedParse) {
   EXPECT_EQ(object()->SymbolIndex->size(), Names.size());
   EXPECT_EQ(std::set<std::string>(Names.begin(), Names.end()).size(),
             Names.size());
-  EXPECT_NE(Names.end(),
-            std::find(Names.begin(), Names.end(), std::string(KernelName)));
+  EXPECT_TRUE(llvm::is_contained(Names, std::string(KernelName)));
 }
 
 } // namespace

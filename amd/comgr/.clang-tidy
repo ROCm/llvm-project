@@ -1,4 +1,25 @@
-Checks: '-*,clang-diagnostic-*,llvm-*,-llvm-header-guard,misc-*,-misc-unused-parameters,-misc-non-private-member-variables-in-classes,readability-identifier-naming,readability-braces-around-statements'
+# Mirrors llvm-project/.clang-tidy with some Comgr-specific deviations:
+#
+#   1. -llvm-header-guard: We want things labelled relative to COMGR, not LLVM
+#   2. HeaderFilterRegex: Scoped to Comgr's own headers. Must stay narrow --
+#      the upstream default is '.*', which also diagnoses every llvm/clang
+#      header in the include graph.
+#   3. FunctionIgnoredRegexp: Exempts the C API naming convention
+HeaderFilterRegex: 'amd/comgr/(src|test-unit)/'
+Checks: >
+  -*,
+  clang-diagnostic-*,
+  llvm-*,
+  -llvm-header-guard,
+  misc-*,
+  -misc-const-correctness,
+  -misc-include-cleaner,
+  -misc-no-recursion,
+  -misc-non-private-member-variables-in-classes,
+  -misc-unused-parameters,
+  -misc-use-anonymous-namespace,
+  readability-identifier-naming
+
 CheckOptions:
   - key:             readability-identifier-naming.ClassCase
     value:           CamelCase
@@ -6,6 +27,9 @@ CheckOptions:
     value:           CamelCase
   - key:             readability-identifier-naming.FunctionCase
     value:           camelBack
+  # Exclude the exported C API, whose names are fixed by the public ABI.
+  - key:             readability-identifier-naming.FunctionIgnoredRegexp
+    value:           "^amd_comgr_.*"
   - key:             readability-identifier-naming.MemberCase
     value:           CamelCase
   - key:             readability-identifier-naming.ParameterCase
@@ -14,4 +38,9 @@ CheckOptions:
     value:           CamelCase
   - key:             readability-identifier-naming.VariableCase
     value:           CamelCase
-
+  - key:             readability-identifier-naming.IgnoreMainLikeFunctions
+    value:           1
+  - key:             readability-redundant-member-init.IgnoreBaseInCopyConstructors
+    value:           1
+  - key:             modernize-use-default-member-init.UseAssignment
+    value:           1

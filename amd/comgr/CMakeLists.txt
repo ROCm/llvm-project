@@ -213,7 +213,17 @@ if (ADDRESS_SANITIZER)
 endif()
 
 set(AMD_COMGR_PRIVATE_COMPILE_OPTIONS)
-set(AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS ${LLVM_DEFINITIONS})
+
+# LLVM_DEFINITIONS arrives from LLVMConfig.cmake as a space-separated string
+# ("-D_LIBCPP_HARDENING_MODE=... -D_GLIBCXX_USE_CXX11_ABI=1 -D__STDC_..."),
+# and CMake splits variable expansions on ";" only. Passing it through
+# unsplit therefore yields a single compile definition whose value is every
+# remaining flag, so the first macro gets a nonsense value and the rest are
+# never defined at all. Normalize both separators, then split.
+string(REPLACE ";" " " AMD_COMGR_LLVM_DEFINITIONS_STR "${LLVM_DEFINITIONS}")
+separate_arguments(AMD_COMGR_LLVM_DEFINITIONS NATIVE_COMMAND
+  "${AMD_COMGR_LLVM_DEFINITIONS_STR}")
+set(AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS ${AMD_COMGR_LLVM_DEFINITIONS})
 set(AMD_COMGR_PUBLIC_LINKER_OPTIONS)
 set(AMD_COMGR_PRIVATE_LINKER_OPTIONS)
 

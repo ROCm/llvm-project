@@ -103,7 +103,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
       options: -v /runner/config:/home/awsconfig/
     outputs:
       package_find_links_url: ${{ steps.upload.outputs.package_find_links_url }}
@@ -173,6 +173,4 @@ jobs:
         run: |
           python build_tools/github_actions/upload_python_packages.py \
             --input-packages-dir="${{ env.PACKAGES_DIR }}" \
-            --artifact-group="${{ inputs.artifact_group }}" \
-            --run-id="${{ github.run_id }}" \
-            ${{ inputs.multiarch_index && '--multiarch' || '' }}
+            --run-id="${{ github.run_id }}"
