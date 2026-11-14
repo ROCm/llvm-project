@@ -48,6 +48,13 @@ set_property(CACHE LLVM_tools_DISTRIBUTION_COMPONENTS APPEND PROPERTY VALUE
   amd-llvm-spirv)
 
 if(NOT CMAKE_HOST_WIN32)
+  # CIR installs MLIR aggregate objects and exports them from the Clang
+  # package. artifact-amd-llvm.toml excludes those objects, so consumers
+  # fail if the export remains. CACHE+FORCE so MLIR's default of 1 does
+  # not replace OFF under CMP0126 OLD, including on reconfigure.
+  set(MLIR_INSTALL_AGGREGATE_OBJECTS OFF CACHE BOOL
+    "Disable installation of MLIR aggregate object libraries" FORCE)
+
   set_property(CACHE LLVM_tools_DISTRIBUTION_COMPONENTS APPEND PROPERTY VALUE
     sqtt-marker)
 
