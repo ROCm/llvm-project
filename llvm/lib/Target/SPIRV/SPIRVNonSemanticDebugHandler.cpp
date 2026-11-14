@@ -183,8 +183,14 @@ findLastFunctionOpVariableDeclaration(const MachineFunction &MF,
 } // namespace
 
 SPIRVNonSemanticDebugHandler::SPIRVNonSemanticDebugHandler(AsmPrinter &AP)
-    : DebugHandlerBase(&AP),
-      CLOpts(static_cast<const SPIRVTargetMachine &>(AP.TM).getCLOpts()) {}
+    : DebugHandlerBase(&AP) {
+  const auto &TM = static_cast<const SPIRVTargetMachine &>(AP.TM);
+  const SPIRVOptions &CLOpts = TM.getCLOpts();
+  bool IsAMD = TM.getTargetTriple().getVendor() == Triple::AMD;
+  UseLexicalBlockDiscriminatorScope =
+      CLOpts.debug_lexical_block_discriminator_scope || IsAMD;
+  UseScopeForwardRefs = CLOpts.debug_scope_forward_refs || IsAMD;
+}
 
 // Map DWARF source language codes to NonSemantic.Shader.DebugInfo.100 source
 // language codes. Values are from the SourceLanguage enum in the
@@ -351,6 +357,7 @@ void SPIRVNonSemanticDebugHandler::beginModule(Module *M) {
   ScalarConstantCache.clear();
   ConstantValueRegs.clear();
   DebugOperationCache.clear();
+  DIOpOperationCache.clear();
   DebugExpressionCache.clear();
   ModuleScopeIds.clear();
   GlobalDIEmitted = false;
@@ -457,7 +464,7 @@ void SPIRVNonSemanticDebugHandler::prepareModuleOutput(
   MAI.Reqs.addExtension(SPIRV::Extension::SPV_KHR_non_semantic_info);
 
   HasRelaxedExtInst =
-      CLOpts.debug_scope_forward_refs &&
+      UseScopeForwardRefs &&
       ST.canUseExtension(
           SPIRV::Extension::SPV_KHR_relaxed_extended_instruction);
   if (HasRelaxedExtInst)
@@ -1074,7 +1081,7 @@ auto SPIRVNonSemanticDebugHandler::emitDebugTypeFunctionForSubroutineType(
 auto SPIRVNonSemanticDebugHandler::resolveScope(const DIScope *Scope,
                                                 const DICompileUnit *FallbackCU)
     -> EmitResult<MCRegister> {
-  if (!CLOpts.debug_lexical_block_discriminator_scope)
+  if (!UseLexicalBlockDiscriminatorScope)
     while (const auto *LBF = dyn_cast_or_null<DILexicalBlockFile>(Scope))
       Scope = LBF->getScope();
 
@@ -1369,6 +1376,10 @@ std::optional<MCRegister> SPIRVNonSemanticDebugHandler::emitDebugExpression(
     MCRegister ExtInstSetReg, SPIRV::ModuleAnalysisInfo &MAI) {
   assert(Expr && "Expr must not be null in emitDebugExpression");
 
+  if (Expr->holdsNewElements())
+    return emitDIOpExpression(Expr, VoidTypeReg, I32TypeReg, ExtInstSetReg,
+                              MAI);
+
   SmallVector<MCRegister> OperationRegs;
   for (const DIExpression::ExprOperand &Op : Expr->expr_ops()) {
     std::optional<MCRegister> OpReg =
@@ -1459,6 +1470,10 @@ std::optional<MCRegister> SPIRVNonSemanticDebugHandler::emitDebugGlobalVariable(
 
   if (StaticMemberRegOpt)
     Ops.push_back(*StaticMemberRegOpt);
+
+  if (Info.LLVMGV && VariableReg != CachedDebugInfoNoneReg)
+    addDIOpGlobalExpression(Ops, Info.Expr, VoidTypeReg, I32TypeReg,
+                            ExtInstSetReg, MAI);
 
   return emitExtInst(SPIRV::NonSemanticExtInst::DebugGlobalVariable,
                      VoidTypeReg, ExtInstSetReg, Ops, MAI);
@@ -1971,7 +1986,8 @@ getDebugDeclareStorageReg(const MachineInstr &MI) {
   // because LiveDebugVariables normally clears it, but this pipeline has no
   // register allocation, so LiveDebugVariables never runs.
   const MachineInstr *Def = MI.getMF()->getRegInfo().getUniqueVRegDef(LocReg);
-  if (!Def || Def->getOpcode() != SPIRV::OpVariable)
+  if (!Def || (Def->getOpcode() != SPIRV::OpVariable &&
+               Def->getOpcode() != SPIRV::OpUntypedVariableKHR))
     return std::nullopt;
 
   return LocReg;

@@ -38,7 +38,6 @@
 namespace llvm {
 
 class GlobalVariable;
-struct SPIRVOptions;
 class MachineDominatorTree;
 class SPIRVSubtarget;
 
@@ -61,7 +60,8 @@ class SPIRVSubtarget;
 ///   being printed, and the DebugDeclare and DebugValue anchored on it.
 /// - endFunctionImpl() resets per-function state.
 class SPIRVNonSemanticDebugHandler : public DebugHandlerBase {
-  const SPIRVOptions &CLOpts;
+  bool UseLexicalBlockDiscriminatorScope;
+  bool UseScopeForwardRefs;
 
   static constexpr unsigned NSSet = static_cast<unsigned>(
       SPIRV::InstructionSet::NonSemantic_Shader_DebugInfo_100);
@@ -151,8 +151,8 @@ class SPIRVNonSemanticDebugHandler : public DebugHandlerBase {
   // Types and scopes whose instruction is currently being built.
   SmallDenseMap<const DIScope *, InProgressScope, 8> ScopesInProgress;
 
-  // True when -spirv-debug-scope-forward-refs is set and prepareModuleOutput
-  // saw SPV_KHR_relaxed_extended_instruction.
+  // True when UseScopeForwardRefs is set and prepareModuleOutput saw
+  // SPV_KHR_relaxed_extended_instruction.
   bool HasRelaxedExtInst = false;
 
   // Types and scopes that are not supported.
@@ -241,6 +241,9 @@ class SPIRVNonSemanticDebugHandler : public DebugHandlerBase {
   // opcode followed by the 32-bit operation arguments. Inline size 3 is the
   // spec maximum (opcode plus at most two operands: BitPiece, Fragment).
   DenseMap<SmallVector<uint32_t, 3>, MCRegister> DebugOperationCache;
+
+  // DIOp DebugOperation ids, keyed by operand ids.
+  DenseMap<SmallVector<MCRegister, 3>, MCRegister> DIOpOperationCache;
 
   // Cache of already-emitted DebugExpression instructions, keyed by the
   // DebugOperation result ids in operand order. Useful for debug values
@@ -570,6 +573,29 @@ private:
                                                 MCRegister ExtInstSetReg,
                                                 SPIRV::ModuleAnalysisInfo &MAI);
 
+  /// \c emitDebugExpression for a heterogeneous-DWARF expression, whose
+  /// elements are DIOps (\c holdsNewElements()).
+  std::optional<MCRegister> emitDIOpExpression(const DIExpression *Expr,
+                                               MCRegister VoidTypeReg,
+                                               MCRegister I32TypeReg,
+                                               MCRegister ExtInstSetReg,
+                                               SPIRV::ModuleAnalysisInfo &MAI);
+
+  /// One \c DebugOperation for a DIOp.
+  /// Returns \c std::nullopt if an operand cannot be emitted.
+  std::optional<MCRegister> emitDIOp(const DIOp::Variant &Op,
+                                     MCRegister VoidTypeReg,
+                                     MCRegister I32TypeReg,
+                                     MCRegister ExtInstSetReg,
+                                     SPIRV::ModuleAnalysisInfo &MAI);
+
+  /// Append a global's DIOp expression to the \c DebugGlobalVariable operands
+  /// \p Ops as operand 10, as SPIRV-LLVM-Translator does.
+  void addDIOpGlobalExpression(SmallVectorImpl<MCRegister> &Ops,
+                               const DIExpression *Expr, MCRegister VoidTypeReg,
+                               MCRegister I32TypeReg, MCRegister ExtInstSetReg,
+                               SPIRV::ModuleAnalysisInfo &MAI);
+
   /// Fill \c Records from the debug records in \p MF.
   ///
   /// Where a record may legally sit is a property of the whole function, and
@@ -747,7 +773,7 @@ private:
   ///
   /// A \c DIType, \c DILexicalBlock, \c DINamespace, or \c DISubprogram scope
   /// is created through \c getOrCreateDebugScope. When
-  /// \c -spirv-debug-lexical-block-discriminator-scope is enabled, a
+  /// \c UseLexicalBlockDiscriminatorScope is set, a
   /// \c DILexicalBlockFile is also created this way, becoming a
   /// \c DebugLexicalBlockDiscriminator; otherwise it is unwrapped to its
   /// enclosing scope first. When \p Scope is null, a \c DIFile, or another
