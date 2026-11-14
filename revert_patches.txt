@@ -16,6 +16,7 @@ ASAN-DEBUG lib breaks
 ---
 [DebugInfo] Accept DW_OP_xderef_size and DW_OP_lit1..DW_OP_lit31. (#227839)
 ---
-breaks nekbone and 519 and 528
-[flang] Check the kind of subscript, bound, extent, and length expressions (#239633)
+-Wunused-private-field rocprofiler-sdk
+https://amd-hub.atlassian.net/browse/AIPROFSDK-1253
+[clang][Sema] Check -Wunused-private-field at template instantiation instead of definition (#237374)
 ---
