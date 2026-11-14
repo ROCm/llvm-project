@@ -9229,9 +9229,15 @@ void __kmp_add_threads_to_team(kmp_team_t *team, int new_nthreads) {
 // Globals and functions for hidden helper task
 kmp_info_t **__kmp_hidden_helper_threads;
 kmp_info_t *__kmp_hidden_helper_main_thread;
+#if KMP_OS_LINUX
+kmp_int32 __kmp_hidden_helper_threads_num = 8;
+std::atomic<kmp_int32> __kmp_unexecuted_hidden_helper_tasks;
+kmp_int32 __kmp_enable_hidden_helper = TRUE;
+#else
 kmp_int32 __kmp_hidden_helper_threads_num = 0;
 std::atomic<kmp_int32> __kmp_unexecuted_hidden_helper_tasks;
 kmp_int32 __kmp_enable_hidden_helper = FALSE;
+#endif
 
 namespace {
 std::atomic<kmp_int32> __kmp_hit_hidden_helper_threads_num;
