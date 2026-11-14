@@ -536,6 +536,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUInsertDelayAluLegacyPass(*PR);
   initializeAMDGPULowerVGPREncodingLegacyPass(*PR);
   initializeSIInsertHardClausesLegacyPass(*PR);
+  initializeAMDGPUFetchWindowPlacementPass(*PR);
   initializeSIInsertWaitcntsLegacyPass(*PR);
   initializeSIModeRegisterLegacyPass(*PR);
   initializeSIWholeQuadModeLegacyPass(*PR);
@@ -1888,6 +1889,9 @@ void GCNPassConfig::addPreEmitPass() {
     addPass(&AMDGPUInsertDelayAluID);
 
   addPass(&BranchRelaxationPassID);
+
+  if (getOptLevel() > CodeGenOptLevel::None)
+    addPass(&AMDGPUFetchWindowPlacementID);
 }
 
 void GCNPassConfig::addPostBBSections() {
