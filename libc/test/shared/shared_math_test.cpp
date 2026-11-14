@@ -610,6 +610,8 @@ TEST(LlvmLibcSharedMathTest, AllEmuFloat128) {
                LIBC_NAMESPACE::shared::daddf128(Float128(0.0), Float128(0.0)));
   EXPECT_FP_EQ(0.0,
                LIBC_NAMESPACE::shared::dsubf128(Float128(0.0), Float128(0.0)));
+  EXPECT_FP_EQ(0.0,
+               LIBC_NAMESPACE::shared::dmulf128(Float128(0.0), Float128(0.0)));
   EXPECT_FP_EQ(Float128(0.0), LIBC_NAMESPACE::shared::fabsf128(Float128(0.0)));
   EXPECT_FP_EQ(Float128(0.0),
                LIBC_NAMESPACE::shared::fdimf128(Float128(0.0), Float128(0.0)));
@@ -766,8 +768,6 @@ TEST(LlvmLibcSharedMathTest, AllFloat128) {
                                   float128(4.0), float128(2.0)));
   EXPECT_FP_EQ(1.0,
                LIBC_NAMESPACE::shared::ddivf128(float128(1.0), float128(1.0)));
-  EXPECT_FP_EQ(0.0,
-               LIBC_NAMESPACE::shared::dmulf128(float128(0.0), float128(0.0)));
   EXPECT_FP_EQ(float128(0.0),
                LIBC_NAMESPACE::shared::faddf128(float128(0.0), float128(0.0)));
   EXPECT_FP_EQ(1.0f,
@@ -872,6 +872,7 @@ TEST(LlvmLibcSharedMathTest, AllBFloat16) {
   EXPECT_FP_EQ(bfloat16(1.0),
                LIBC_NAMESPACE::shared::log10p1bf16(bfloat16(9.0)));
   EXPECT_FP_EQ(bfloat16(0.0), LIBC_NAMESPACE::shared::sinhbf16(bfloat16(0.0)));
+  EXPECT_FP_EQ(bfloat16(1.0), LIBC_NAMESPACE::shared::coshbf16(bfloat16(0.0)));
 
   bfloat16 neg_min_denormal = FPBits::min_subnormal(Sign::NEG).get_val();
   EXPECT_FP_EQ(neg_min_denormal,
