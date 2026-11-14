@@ -41,7 +41,6 @@ target_replay(ident_t *Loc, DeviceTy &Device, void *HostPtr, void *DeviceMemory,
               KernelReplayOutcomeTy *ReplayOutcome);
 
 extern void handleTargetOutcome(bool Success, ident_t *Loc);
-extern bool checkDevice(int64_t &DeviceID, ident_t *Loc);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Print out the names and properties of the arguments to each kernel
@@ -85,6 +84,25 @@ printKernelArguments(const ident_t *Loc, const int64_t DeviceId,
     INFO(OMP_INFOTYPE_ALL, DeviceId, "%s(%s)[%" PRId64 "] %s\n", Type,
          getNameFromMapping(VarName).c_str(), ArgSizes[I], Implicit);
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Report that the runtime is about to wait for the region's outstanding
+/// asynchronous operations (data transfers and kernels) to complete.
+static inline void printSyncInfo(const ident_t *Loc, const int64_t DeviceId,
+                                 const AsyncInfoTy &AsyncInfo) {
+  if (!(getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER))
+    return;
+  if (AsyncInfo.SyncType != AsyncInfoTy::SyncTy::BLOCKING)
+    return;
+  SourceInfo Info(Loc);
+  std::string LocStr;
+  if (Info.isAvailable())
+    LocStr = " at " + std::string(Info.getFilename()) + ":" +
+             std::to_string(Info.getLine()) + ":" +
+             std::to_string(Info.getColumn());
+  INFO(OMP_INFOTYPE_DATA_TRANSFER, DeviceId,
+       "Waiting for asynchronous operations to complete%s\n", LocStr.c_str());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -202,8 +202,10 @@ targetData(ident_t *Loc, int64_t DeviceId, int32_t ArgNum, void **ArgsBase,
     if (StateInfo && !StateInfo->AttachEntries.empty())
       Rc = processAttachEntries(*DeviceOrErr, *StateInfo, AsyncInfo);
 
-    if (Rc == OFFLOAD_SUCCESS)
+    if (Rc == OFFLOAD_SUCCESS) {
+      printSyncInfo(Loc, DeviceId, AsyncInfo);
       Rc = AsyncInfo.synchronize();
+    }
   }
 
   handleTargetOutcome(Rc == OFFLOAD_SUCCESS, Loc);
@@ -459,14 +461,16 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
 
   int Rc = OFFLOAD_SUCCESS;
   Rc = target(Loc, *DeviceOrErr, HostPtr, *KernelArgs, AsyncInfo);
-  
-  if (Rc == OFFLOAD_SUCCESS)
-    Rc = AsyncInfo.synchronize();
+  { // required to show synchronization
+    TIMESCOPE_WITH_DETAILS_AND_IDENT("Runtime: synchronize", "", Loc);
+    if (Rc == OFFLOAD_SUCCESS) {
+      printSyncInfo(Loc, DeviceId, AsyncInfo);
+      Rc = AsyncInfo.synchronize();
+    }
 
-  handleTargetOutcome(Rc == OFFLOAD_SUCCESS, Loc);
-  assert(Rc == OFFLOAD_SUCCESS && "offload failed");
-  assert(Rc == OFFLOAD_SUCCESS && "__tgt_target_kernel unexpected failure!");
-
+    handleTargetOutcome(Rc == OFFLOAD_SUCCESS, Loc);
+    assert(Rc == OFFLOAD_SUCCESS && "__tgt_target_kernel unexpected failure!");
+  }
   return OMP_TGT_SUCCESS;
 }
 
@@ -673,7 +677,7 @@ EXTERN void __tgt_target_nowait_query(void **AsyncHandle) {
 
 EXTERN void __tgt_register_rpc_callback(unsigned (*Callback)(void *,
                                                              unsigned)) {
-  if (!PM)
+  if (!PM || !PM->isLibOffloadInitialized())
     return;
 
   if (auto Err = iteratePlatforms(

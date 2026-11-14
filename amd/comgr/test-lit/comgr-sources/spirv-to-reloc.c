@@ -19,9 +19,15 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_set_t DataSetSpv, DataSetReloc;
   amd_comgr_action_info_t DataAction;
   size_t Count;
+  bool Asan = argc > 1 && strcmp(argv[1], "--asan") == 0;
+
+  if (Asan) {
+    --argc;
+    ++argv;
+  }
 
   if (argc != 3) {
-    fprintf(stderr, "Usage: spirv-to-reloc file.spv file.o\n");
+    fprintf(stderr, "Usage: spirv-to-reloc [--asan] file.spv file.o\n");
     exit(1);
   }
 
@@ -36,7 +42,13 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_HIP));
-  amd_comgr_(action_info_set_isa_name(DataAction, "amdgcn-amd-amdhsa--gfx900"));
+  const char *IsaName =
+      Asan ? "amdgcn-amd-amdhsa--gfx900:xnack+" : "amdgcn-amd-amdhsa--gfx900";
+  amd_comgr_(action_info_set_isa_name(DataAction, IsaName));
+  if (Asan) {
+    const char *Options[] = {"-fsanitize=address"};
+    amd_comgr_(action_info_set_option_list(DataAction, Options, 1));
+  }
 
   amd_comgr_(create_data_set(&DataSetReloc));
   amd_comgr_(do_action(AMD_COMGR_ACTION_COMPILE_SPIRV_TO_RELOCATABLE,

@@ -9,7 +9,7 @@
 #    *to be installed* when `cmake --install` command is run or when CPack
 #    is invoked. This is the version that is distributed with LLVM packages.
 #    The key difference between this and (1) is that all paths must be
-#    relative the the installed "MLIRConfig.cmake" file.
+#    relative to the installed "MLIRConfig.cmake" file.
 
 include(GNUInstallPackageDir)
 include(ExtendPath)
@@ -37,7 +37,9 @@ set(llvm_cmake_builddir "${llvm_cmake_builddir}/cmake/llvm")
 
 # Generate the 'MLIRTarget.cmake' file.
 get_property(MLIR_EXPORTS GLOBAL PROPERTY MLIR_EXPORTS)
-export(TARGETS ${MLIR_EXPORTS} FILE ${mlir_cmake_builddir}/MLIRTargets.cmake)
+if(NOT "mlir" IN_LIST LLVM_DEPENDENCY_ONLY_PROJECTS)
+  export(TARGETS ${MLIR_EXPORTS} FILE ${mlir_cmake_builddir}/MLIRTargets.cmake)
+endif()
 
 # Declare all the variables required by the 'MLIRConfig.cmake.in' template.
 get_property(MLIR_ALL_LIBS GLOBAL PROPERTY MLIR_ALL_LIBS)
@@ -155,7 +157,8 @@ set(MLIR_CONFIG_CMAKE_DIR)
 set(MLIR_CONFIG_LLVM_CMAKE_DIR)
 set(MLIR_CONFIG_INCLUDE_DIRS)
 
-if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY AND
+    NOT "mlir" IN_LIST LLVM_DEPENDENCY_ONLY_PROJECTS)
   # Not TOOLCHAIN ONLY, so install the MLIR parts as well
   # Include the cmake files so other tools can use mlir-tblgen, etc.
   install_distribution_exports(MLIR)

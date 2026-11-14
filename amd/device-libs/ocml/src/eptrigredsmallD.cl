@@ -30,7 +30,7 @@ MATH_PRIVATE(eptrigredsmall)(double x)
     struct epredret ret;
     ret.r.hi = rh;
     ret.r.lo = rt;
-    ret.i = BUILTIN_ISNAN_F64(dn) ? 0 : ((int)dn & 0x3);
+    ret.i = (int)dn & 0x3;
     return ret;
 }
 

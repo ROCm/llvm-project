@@ -188,8 +188,10 @@ set(LLVM_ALL_PROJECTS "bolt;clang;clang-tools-extra;cross-project-tests;lld;lldb
 set(LLVM_EXTRA_PROJECTS "flang" "libc" "compiler-rt")
 # List of all known projects in the mono repo
 set(LLVM_KNOWN_PROJECTS "${LLVM_ALL_PROJECTS};${LLVM_EXTRA_PROJECTS}")
-set(LLVM_ENABLE_PROJECTS "" CACHE STRING
+set(LLVM_REQUESTED_PROJECTS "${LLVM_ENABLE_PROJECTS}")
+set(LLVM_ENABLE_PROJECTS "${LLVM_REQUESTED_PROJECTS}" CACHE STRING
     "Semicolon-separated list of projects to build (${LLVM_KNOWN_PROJECTS}), or \"all\".")
+set(LLVM_ENABLE_PROJECTS "${LLVM_REQUESTED_PROJECTS}")
 # Make sure expansion happens first to not handle "all" in rest of the checks.
 if( LLVM_ENABLE_PROJECTS STREQUAL "all" )
   set( LLVM_ENABLE_PROJECTS ${LLVM_ALL_PROJECTS})
@@ -209,6 +211,8 @@ foreach(proj ${LLVM_ENABLE_PROJECTS})
      MESSAGE(FATAL_ERROR "${proj} isn't a known project: ${LLVM_KNOWN_PROJECTS}. Did you mean to enable it as a runtime in LLVM_ENABLE_RUNTIMES?")
   endif()
 endforeach()
+
+set(LLVM_DEPENDENCY_ONLY_PROJECTS)
 
 # Select the runtimes to build
 #
@@ -231,11 +235,18 @@ if ("flang" IN_LIST LLVM_ENABLE_PROJECTS)
   if (NOT "mlir" IN_LIST LLVM_ENABLE_PROJECTS)
     message(STATUS "Enabling MLIR as a dependency to flang")
     list(APPEND LLVM_ENABLE_PROJECTS "mlir")
+    list(APPEND LLVM_DEPENDENCY_ONLY_PROJECTS "mlir")
   endif()
 
   if (NOT "clang" IN_LIST LLVM_ENABLE_PROJECTS)
     message(STATUS "Enabling clang as a dependency to flang")
     list(APPEND LLVM_ENABLE_PROJECTS "clang")
+    # LLDB also consumes Clang libraries, and clang-tools-extra is nested under
+    # Clang. Keep their existing build and install behavior.
+    if(NOT "lldb" IN_LIST LLVM_ENABLE_PROJECTS AND
+       NOT "clang-tools-extra" IN_LIST LLVM_ENABLE_PROJECTS)
+      list(APPEND LLVM_DEPENDENCY_ONLY_PROJECTS "clang")
+    endif()
   endif()
 
   option(FLANG_ENABLE_FLANG_RT "Implicitly add LLVM_ENABLE_RUNTIMES=flang-rt when compiling Flang" ON)
@@ -252,6 +263,7 @@ if ("lldb" IN_LIST LLVM_ENABLE_PROJECTS)
   endif()
 endif ()
 
+option(CLANG_ENABLE_CIR "Build ClangIR support into the compiler" ON)
 if (CLANG_ENABLE_CIR AND "clang" IN_LIST LLVM_ENABLE_PROJECTS AND
     NOT "mlir" IN_LIST LLVM_ENABLE_PROJECTS)
   message(STATUS "Enabling MLIR as a dependency of ClangIR")
@@ -344,7 +356,16 @@ if (LLVM_ENABLE_PROJECTS_USED OR NOT LLVM_ENABLE_PROJECTS STREQUAL "")
     string(TOUPPER "${proj}" upper_proj)
     string(REGEX REPLACE "-" "_" upper_proj ${upper_proj})
     if ("${proj}" IN_LIST LLVM_ENABLE_PROJECTS)
-      message(STATUS "${proj} project is enabled")
+      if ("${proj}" IN_LIST LLVM_DEPENDENCY_ONLY_PROJECTS)
+        message(STATUS "${proj} project is enabled as a dependency")
+        # Do not cache this default: explicitly enabling the project on a later
+        # configure should restore its normal test defaults.
+        if(NOT DEFINED ${upper_proj}_INCLUDE_TESTS)
+          set(${upper_proj}_INCLUDE_TESTS OFF)
+        endif()
+      else()
+        message(STATUS "${proj} project is enabled")
+      endif()
       set(SHOULD_ENABLE_PROJECT TRUE)
       set(PROJ_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../${proj}")
       if(NOT EXISTS "${PROJ_DIR}" OR NOT IS_DIRECTORY "${PROJ_DIR}")
@@ -654,6 +675,8 @@ if (MINGW)
 endif()
 option(LLVM_WINDOWS_PREFER_FORWARD_SLASH "Prefer path names with forward slashes on Windows." ${WINDOWS_PREFER_FORWARD_SLASH_DEFAULT})
 
+option(LLVM_WINDOWS_RESTRICTED_APIS "Use only APIs available in restricted Windows environments, such as binaries whose imports are checked by ApiValidator. Currently this avoids shell32." OFF)
+
 option(LLVM_ENABLE_FFI "Use libffi to call external functions from the interpreter" OFF)
 set(FFI_LIBRARY_DIR "" CACHE PATH "Additional directory, where CMake should search for libffi.so")
 set(FFI_INCLUDE_DIR "" CACHE PATH "Additional directory, where CMake should search for ffi.h or ffi/ffi.h")
@@ -665,7 +688,7 @@ set(LLVM_ENABLE_LIBXML2 "ON" CACHE STRING "Use libxml2 if available. Can be ON, 
 
 set(LLVM_USE_STATIC_LIBXML2 "OFF" CACHE BOOL "Use static version of libxml2. Can be ON, or OFF")
 
-option(LLVM_ENABLE_LIBEDIT "Use libedit if available." ON)
+set(LLVM_ENABLE_LIBEDIT "ON" CACHE STRING "Use libedit if available. Can be ON, OFF, or FORCE_ON")
 
 option(LLVM_ENABLE_LIBPFM "Use libpfm for performance counters if available." ON)
 
@@ -685,6 +708,26 @@ set(LLVM_ENABLE_ZLIB "ON" CACHE STRING "Use zlib for compression/decompression i
 set(LLVM_ENABLE_ZSTD "ON" CACHE STRING "Use zstd for compression/decompression if available. Can be ON, OFF, or FORCE_ON")
 
 set(LLVM_USE_STATIC_ZSTD FALSE CACHE BOOL "Use static version of zstd. Can be TRUE, FALSE")
+
+# liblzma is an LLVM dependency now, so temporarily translate LLDB's older
+# LLDB_ENABLE_LZMA; its On meant required, hence FORCE_ON.
+set(LLVM_ENABLE_LZMA_DEFAULT "ON")
+if(DEFINED LLDB_ENABLE_LZMA)
+  string(TOUPPER "${LLDB_ENABLE_LZMA}" lldb_enable_lzma)
+  if(NOT lldb_enable_lzma STREQUAL "AUTO")
+    message(DEPRECATION
+      "LLDB_ENABLE_LZMA is deprecated. Set LLVM_ENABLE_LZMA (ON, OFF or "
+      "FORCE_ON) instead; liblzma is now found by LLVM, not by LLDB.")
+    if(lldb_enable_lzma)
+      set(LLVM_ENABLE_LZMA_DEFAULT "FORCE_ON")
+    else()
+      set(LLVM_ENABLE_LZMA_DEFAULT "OFF")
+    endif()
+  endif()
+  unset(lldb_enable_lzma)
+endif()
+set(LLVM_ENABLE_LZMA "${LLVM_ENABLE_LZMA_DEFAULT}" CACHE STRING "Use liblzma for xz decompression if available. Can be ON, OFF, or FORCE_ON")
+unset(LLVM_ENABLE_LZMA_DEFAULT)
 
 set(LLVM_ENABLE_CURL "OFF" CACHE STRING "Use libcurl for the HTTP client if available. Can be ON, OFF, or FORCE_ON")
 
@@ -977,7 +1020,8 @@ else()
 endif()
 
 # Used to test building the llvm shared library with explicit symbol visibility on
-# Windows and Linux. For ELF platforms default symbols visibility is set to hidden.
+# Windows, Linux and macOS. For ELF and Mach-O platforms default symbol visibility
+# is set to hidden.
 set(LLVM_BUILD_LLVM_DYLIB_VIS FALSE CACHE BOOL "")
 mark_as_advanced(LLVM_BUILD_LLVM_DYLIB_VIS)
 

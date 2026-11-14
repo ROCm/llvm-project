@@ -198,6 +198,12 @@ if(CLANG_ENABLE_LIBXML2)
   endif()
 endif()
 
+# Standalone builds don't inherit this flag from the llvm/CMakeLists, so set it
+# here.
+if(CLANG_BUILT_STANDALONE)
+  option(CLANG_ENABLE_CIR "Build ClangIR support into the compiler" OFF)
+endif()
+
 if(CLANG_ENABLE_CIR)
   if (CLANG_BUILT_STANDALONE)
     message(FATAL_ERROR
@@ -207,6 +213,10 @@ if(CLANG_ENABLE_CIR)
     message(FATAL_ERROR
       "Cannot build ClangIR without MLIR enabled")
   endif()
+  # Number of translation units the TableGen-generated CIR operation
+  # definitions are split into. Shared by the CIROps.td TableGen invocations
+  # and the MLIRCIR library sources.
+  set(CLANG_CIR_OP_SHARD_COUNT 8)
 endif()
 
 include(CheckIncludeFile)
@@ -395,7 +405,15 @@ set(CLANG_VENDOR_UTI "org.llvm.clang" CACHE STRING
 set(CLANG_PYTHON_BINDINGS_VERSIONS "" CACHE STRING
     "Python versions to install libclang python bindings for")
 
-set(CLANG_LINK_CLANG_DYLIB ${LLVM_LINK_LLVM_DYLIB} CACHE BOOL
+if(LLVM_LINK_LLVM_DYLIB AND NOT MSVC)
+  # We can't rely on default visibility with MSVC. libClang should have its own
+  # annotation (CLANG_ABI) and have its API properly annotated for exports on
+  # Windows too. See https://github.com/llvm/llvm-project/issues/238871
+  set(CLANG_LINK_CLANG_DYLIB_DEFAULT 1)
+else()
+  set(CLANG_LINK_CLANG_DYLIB_DEFAULT 0)
+endif()
+set(CLANG_LINK_CLANG_DYLIB ${CLANG_LINK_CLANG_DYLIB_DEFAULT} CACHE BOOL
     "Link tools against libclang-cpp.so")
 
 if (NOT LLVM_LINK_LLVM_DYLIB AND CLANG_LINK_CLANG_DYLIB)
@@ -931,7 +949,15 @@ if (CLANG_ENABLE_BOOTSTRAP)
   # Populate the passthrough variables
   foreach(variableName ${CLANG_BOOTSTRAP_PASSTHROUGH} ${_BOOTSTRAP_DEFAULT_PASSTHROUGH})
     if(DEFINED ${variableName})
-      if("${${variableName}}" STREQUAL "")
+      if(variableName STREQUAL "LLVM_ENABLE_PROJECTS")
+        # Forward only requested roots; the next stage re-adds dependencies.
+        set(llvm_enable_projects "${LLVM_ENABLE_PROJECTS}")
+        if(DEFINED LLVM_REQUESTED_PROJECTS)
+          set(llvm_enable_projects "${LLVM_REQUESTED_PROJECTS}")
+        endif()
+        string(REPLACE ";" "|" value "${llvm_enable_projects}")
+        unset(llvm_enable_projects)
+      elseif("${${variableName}}" STREQUAL "")
         set(value "")
       else()
         string(REPLACE ";" "|" value "${${variableName}}")

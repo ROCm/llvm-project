@@ -15,6 +15,7 @@
 #define OMPTARGET_SHARED_API_TYPES_H
 
 #include "Environment.h"
+#include "OffloadAPI.h"
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -32,8 +33,6 @@
 #include <mutex>
 #include <utility>
 
-enum TargetAllocTy : int32_t;
-
 extern "C" {
 
 /// This struct is a record of the device image information
@@ -43,12 +42,6 @@ struct __tgt_device_image {
   llvm::offloading::EntryTy
       *EntriesBegin; // Begin of table with all target entries
   llvm::offloading::EntryTy *EntriesEnd; // End of table (non inclusive)
-};
-
-struct __tgt_device_info {
-  void *Context = nullptr;
-  void *Device = nullptr;
-  void *Platform = nullptr;
 };
 
 /// This struct is a record of all the host code that may be offloaded to a
@@ -69,13 +62,11 @@ struct __tgt_target_table {
       *EntriesEnd; // End of the table with all the entries (non inclusive)
 };
 
-/// This struct contains a handle to a loaded binary in the plugin device.
-struct __tgt_device_binary {
-  uintptr_t handle;
-};
-
 // clang-format on
 
+/// Downstream: kept here instead of PluginInterface.h because libomptarget
+/// accesses ExecAsync and ProfilerData for forced synchronization and OMPT
+/// device tracing.
 /// This struct contains information exchanged between different asynchronous
 /// operations for device-dependent optimization and potential synchronization
 struct __tgt_async_info {
@@ -86,15 +77,11 @@ struct __tgt_async_info {
 
   /// A collection of allocations that are associated with this stream and that
   /// should be freed after finalization. Also store the type of the allocation.
-  llvm::SmallVector<std::pair<void *, TargetAllocTy>, 2> AssociatedAllocations;
+  llvm::SmallVector<std::pair<void *, ol_alloc_type_t>, 2>
+      AssociatedAllocations;
 
   /// Mutex to guard access to AssociatedAllocations and the Queue.
   std::mutex Mutex;
-
-  /// The kernel launch environment used to issue a kernel. Stored here to
-  /// ensure it is a valid location while the transfer to the device is
-  /// happening.
-  KernelLaunchEnvironmentTy KernelLaunchEnvironment;
 
   /// Use for sync interface. When false => synchronous execution
   bool ExecAsync = true;

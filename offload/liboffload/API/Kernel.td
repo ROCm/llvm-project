@@ -30,7 +30,15 @@ def ol_kernel_launch_prop_type_t : Enum {
   let is_typed = 1;
   let etors =
       [TaggedEtor<"none", "void *", "Used for null terminating property array">,
-       TaggedEtor<"is_cooperative ", "bool *", "Cooperative kernel launch">];
+       TaggedEtor<"is_cooperative ", "bool *", "Cooperative kernel launch">,
+       // Downstream: OpenMP launch information that the AMDGPU kernel trace
+       // (LIBOMPTARGET_KERNEL_TRACE) prints.
+       TaggedEtor<"omp_exec_mode", "uint8_t *",
+                  "Downstream: the kernel's OpenMP execution mode, an "
+                  "llvm::omp::OMPTgtExecModeFlags">,
+       TaggedEtor<"omp_tripcount", "uint64_t *",
+                  "Downstream: trip count of the kernel's teams / distribute "
+                  "loop, 0 if unknown">];
 }
 
 def ol_kernel_launch_prop_t : Struct {

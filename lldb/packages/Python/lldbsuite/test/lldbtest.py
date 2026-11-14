@@ -300,6 +300,17 @@ def dump_value_obj(val: lldb.SBValue, max_children: int = 10000) -> str:
     return str(val)
 
 
+class _LazyValueErrorMsg:
+    """Lazily error message that only formats the SBValue when needed."""
+
+    def __init__(self, prefix: str, val: lldb.SBValue):
+        self.prefix = prefix
+        self.val = val
+
+    def __str__(self):
+        return self.prefix + "\nChecking SBValue: " + dump_value_obj(self.val)
+
+
 class ValueCheck:
     def __init__(
         self,
@@ -364,8 +375,7 @@ class ValueCheck:
         not errors in the child values).
         """
 
-        this_error_msg = error_msg if error_msg else ""
-        this_error_msg += "\nChecking SBValue: " + dump_value_obj(val)
+        this_error_msg = _LazyValueErrorMsg(error_msg, val)
 
         test_base.assertSuccess(val.GetError())
 
@@ -404,8 +414,7 @@ class ValueCheck:
         :param val: The SBValue to check.
         """
 
-        this_error_msg = error_msg if error_msg else ""
-        this_error_msg += "\nChecking SBValue: " + dump_value_obj(val)
+        this_error_msg = _LazyValueErrorMsg(error_msg, val)
 
         test_base.assertEqual(len(self.children), val.GetNumChildren(), this_error_msg)
 
@@ -899,7 +908,7 @@ class Base(unittest.TestCase):
             # pass just because Clang thinks it has a fix-it.
             "settings set target.auto-apply-fixits false",
             # Testsuite runs in parallel and the host can have also other load.
-            "settings set plugin.process.gdb-remote.packet-timeout 60",
+            "settings set plugin.process.gdb-remote.packet-timeout 600",
             # LLDB-internal utility expressions can take very long when the
             # host is under heavy load.
             "settings set target.process.utility-expression-timeout 600",
@@ -1856,6 +1865,28 @@ class Base(unittest.TestCase):
         """Platform specific way to build an executable from C/C++ sources."""
         d = {"CXX_SOURCES": sources, "EXE": exe_name}
         self.build(dictionary=d)
+
+    def buildAndRunDriver(self, driver_sources, inferior_sources):
+        """Build a driver program that links with LLDB and an inferior program,
+        then run the driver with the path to the inferior as its argument.
+        """
+        # The driver links against the host liblldb, so the compiler's target
+        # triple must match liblldb's. Driver tests don't run remotely, so the
+        # OS is the same and only the architecture needs to be checked.
+        if self.getLldbArchitecture() != self.getArchitecture():
+            self.skipTest(
+                "This test is only run if the target arch is the same as the lldb binary arch"
+            )
+
+        self.buildProgram(inferior_sources, "inferior")
+        self.buildDriver(driver_sources, "driver")
+
+        env = dict(os.environ)
+        env["LLDB_TEST_SOURCE_DIR"] = self.getSourceDir()
+        check_call(
+            [self.getBuildArtifact("driver"), self.getBuildArtifact("inferior")],
+            env=env,
+        )
 
     def findBuiltClang(self):
         """Tries to find and use Clang from the build directory as the compiler (instead of the system compiler)."""

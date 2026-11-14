@@ -15,7 +15,7 @@
 #include <thread>
 #include <vector>
 
-int compileMin(int Index) {
+static int compileMin(int Index) {
 
   char *BufSource1, *BufSource2, *BufInclude;
   size_t SizeSource1, SizeSource2, SizeInclude;

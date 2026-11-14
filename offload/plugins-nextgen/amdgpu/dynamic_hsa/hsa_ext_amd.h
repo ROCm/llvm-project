@@ -63,7 +63,29 @@ typedef enum {
 
 typedef enum {
   HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS = 0,
+  HSA_AMD_AGENT_MEMORY_POOL_INFO_NUM_LINK_HOPS = 1,
+  HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO = 2,
 } hsa_amd_agent_memory_pool_info_t;
+
+typedef enum {
+  HSA_AMD_LINK_INFO_TYPE_HYPERTRANSPORT = 0,
+  HSA_AMD_LINK_INFO_TYPE_QPI = 1,
+  HSA_AMD_LINK_INFO_TYPE_PCIE = 2,
+  HSA_AMD_LINK_INFO_TYPE_INFINBAND = 3,
+  HSA_AMD_LINK_INFO_TYPE_XGMI = 4,
+} hsa_amd_link_info_type_t;
+
+typedef struct hsa_amd_memory_pool_link_info_s {
+  uint32_t min_latency;
+  uint32_t max_latency;
+  uint32_t min_bandwidth;
+  uint32_t max_bandwidth;
+  bool atomic_support_32bit;
+  bool atomic_support_64bit;
+  bool coherent_support;
+  hsa_amd_link_info_type_t link_type;
+  uint32_t numa_distance;
+} hsa_amd_memory_pool_link_info_t;
 
 typedef enum {
   HSA_AMD_MEMORY_POOL_ACCESS_NEVER_ALLOWED = 0,
@@ -83,6 +105,7 @@ typedef enum hsa_amd_agent_info_s {
   HSA_AMD_AGENT_INFO_TIMESTAMP_FREQUENCY = 0xA016,
   HSA_AMD_AGENT_INFO_NUM_SDMA_ENG = 0xA10A,
   HSA_AMD_AGENT_INFO_NUM_SDMA_XGMI_ENG = 0xA10B,
+  HSA_AMD_AGENT_INFO_NEAREST_CPU = 0xA113,
   HSA_AMD_AGENT_INFO_MEMORY_PROPERTIES = 0xA114,
 } hsa_amd_agent_info_t;
 
@@ -111,7 +134,7 @@ hsa_status_t hsa_amd_memory_async_copy(void *dst, hsa_agent_t dst_agent,
                                        const hsa_signal_t *dep_signals,
                                        hsa_signal_t completion_signal);
 
-typedef enum {
+typedef enum hsa_amd_sdma_engine_id {
   HSA_AMD_SDMA_ENGINE_0 = 0x1,
   HSA_AMD_SDMA_ENGINE_1 = 0x2,
   HSA_AMD_SDMA_ENGINE_2 = 0x4,
@@ -135,6 +158,10 @@ hsa_status_t hsa_amd_memory_async_copy_on_engine(
     size_t size, uint32_t num_dep_signals, const hsa_signal_t *dep_signals,
     hsa_signal_t completion_signal, hsa_amd_sdma_engine_id_t engine_id,
     bool force_copy_on_sdma);
+
+hsa_status_t hsa_amd_memory_copy_engine_status(hsa_agent_t dst_agent,
+                                               hsa_agent_t src_agent,
+                                               uint32_t *engine_ids_mask);
 
 hsa_status_t hsa_amd_agent_memory_pool_get_info(
     hsa_agent_t agent, hsa_amd_memory_pool_t memory_pool,

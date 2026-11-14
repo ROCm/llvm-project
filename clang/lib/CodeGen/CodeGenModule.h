@@ -354,15 +354,11 @@ public:
   enum NoLoopXteamErr {
     NxSuccess,
     NxNonSPMD,
-    NxOptionDisabled,
     NxOptionDisabledOrHasCall,
     NxUnsupportedDirective,
-    NxUnsupportedSplitDirective,
     NxNoStmt,
     NxUnsupportedTargetClause,
     NxNotLoopDirective,
-    NxNotCapturedStmt,
-    NxNotExecutableStmt,
     NxUnsupportedNestedSplitDirective,
     NxSplitConstructImproperlyNested,
     NxNestedOmpParallelDirective,
@@ -374,34 +370,11 @@ public:
     NxGuidedOrRuntimeSched,
     NxNonUnitStaticChunk,
     NxNonConcurrentOrder,
-    NxUnsupportedRedType,
-    NxUnsupportedRedIntSize,
-    NxNotScalarRed,
-    NxNotBinOpRed,
-    NxUnsupportedRedOp,
-    NxNoRedVar,
-    NxMultRedVar,
-    NxUnsupportedRedExpr,
-    NxUnsupportedXteamRedThreadLimit,
     NxUnsupportedPseudoObject,
-    NxNotRedVarInBinOpRHS,
-    NxNotAddOpInBinOpRHs,
-    NxRhsOfAssignNotBinOpOrCall,
-    NxBinOpNotAddAssignOrAssign,
-    NxNotBinOpOrCallButAccessesRedVar,
-    NxNotArgScalarEval,
-    NxReductionOpNotBinAssign,
-    NxReductionOpRhsNotBinOrCond,
-    NxReductionOpRhsNotMinMaxSum,
     NxNotBuiltinByNameInHostCompile,
     NxNotBuiltinByNameInDeviceCompile,
     NxPOExprCountNotOne,
-    NxPOSemanticExprNotCall,
-    NxChildOfCallIsNull,
-    NxMultiDeviceMinMaxNotSupported,
-    NxFastReductionMinMaxNotSupported,
-    NxScanMinMaxNotSupported,
-    NxAmbiguousRedKind
+    NxPOSemanticExprNotCall
   };
 
   using Stmt2StmtMap = llvm::DenseMap<const Stmt *, const Stmt *>;
@@ -431,6 +404,10 @@ private:
   llvm::Module &TheModule;
   DiagnosticsEngine &Diags;
   const TargetInfo &Target;
+  /// Lazily cached target features for functions without a target attribute.
+  /// An invalid attribute means that the defaults were computed but no
+  /// target-features attribute needs to be emitted.
+  std::optional<llvm::Attribute> DefaultTargetFeatures;
   std::unique_ptr<CGCXXABI> ABI;
   llvm::LLVMContext &VMContext;
   std::string ModuleNameHash;
@@ -733,9 +710,6 @@ private:
   void createHLSLRuntime();
 
   bool shouldEmitFunction(GlobalDecl GD);
-  // Whether a global variable should be emitted by CUDA/HIP host/device
-  // related attributes.
-  bool shouldEmitCUDAGlobalVar(const VarDecl *VD) const;
   bool shouldOpportunisticallyEmitVTables();
   /// Map used to be sure we don't emit the same CompoundLiteral twice.
   llvm::DenseMap<const CompoundLiteralExpr *, llvm::GlobalVariable *>
@@ -820,7 +794,6 @@ public:
   ~CodeGenModule();
 
   void clear();
-  const OMPExecutableDirective *OMPPresentScanDirective = nullptr;
 
   /// Finalize LLVM code generation.
   void Release();
@@ -1254,8 +1227,6 @@ public:
   getVTablePointerAuthentication(const CXXRecordDecl *thisClass,
                                  bool IsVTTEntry = false);
 
-  CGPointerAuthInfo EmitPointerAuthInfo(const RecordDecl *RD);
-
   // Return whether RTTI information should be emitted for this target.
   bool shouldEmitRTTI(bool ForEH = false) {
     return (ForEH || getLangOpts().RTTI) &&
@@ -1577,10 +1548,6 @@ public:
   /// definition.
   void SetLLVMFunctionAttributesForDefinition(const Decl *D, llvm::Function *F);
 
-  /// Set the LLVM function attributes that represent floating point
-  /// environment.
-  void setLLVMFunctionFEnvAttributes(const FunctionDecl *D, llvm::Function *F);
-
   /// Return true iff the given type uses 'sret' when used as a return type.
   bool ReturnTypeUsesSRet(const CGFunctionInfo &FI);
 
@@ -1624,6 +1591,8 @@ public:
   void addDefaultFunctionDefinitionAttributes(llvm::AttrBuilder &attrs);
 
   StringRef getMangledName(GlobalDecl GD);
+  std::string getMangledNameIgnoringAsmLabel(GlobalDecl GD,
+                                             const NamedDecl *ND);
   StringRef getBlockMangledName(GlobalDecl GD, const BlockDecl *BD);
   const GlobalDecl getMangledNameDecl(StringRef);
 

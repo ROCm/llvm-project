@@ -22,15 +22,14 @@
 
 using namespace COMGR;
 
-namespace {
 // llvm symbolizer with default options
-LLVMSymbolizer::Options getDefaultOptions() {
+static LLVMSymbolizer::Options getDefaultOptions() {
   LLVMSymbolizer::Options Opt;
   Opt.SkipLineZero = true;
   return Opt;
 }
 
-llvm::symbolize::PrinterConfig getDefaultPrinterConfig() {
+static llvm::symbolize::PrinterConfig getDefaultPrinterConfig() {
   llvm::symbolize::PrinterConfig Config;
   Config.Pretty = true;
   Config.Verbose = false;
@@ -40,7 +39,7 @@ llvm::symbolize::PrinterConfig getDefaultPrinterConfig() {
   return Config;
 }
 
-llvm::symbolize::ErrorHandler
+static llvm::symbolize::ErrorHandler
 symbolizeErrorHandler(llvm::raw_string_ostream &OS) {
   return
       [&](const llvm::ErrorInfoBase &ErrorInfo, llvm::StringRef ErrorBanner) {
@@ -49,7 +48,6 @@ symbolizeErrorHandler(llvm::raw_string_ostream &OS) {
         OS << '\n';
       };
 }
-} // namespace
 
 Symbolizer::Symbolizer(std::unique_ptr<ObjectFile> &&CodeObject,
                        PrintSymbolCallback PrintSymbol)

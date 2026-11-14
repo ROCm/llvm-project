@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/DebugInfoMetadata.h"
+#include "IROptions.h"
 #include "LLVMContextImpl.h"
 #include "MetadataImpl.h"
 #include "llvm/ADT/DenseSet.h"
@@ -23,7 +24,6 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Compiler.h"
 
 #include <numeric>
 #include <optional>
@@ -36,12 +36,6 @@ namespace llvm {
 cl::opt<bool> EnableFSDiscriminator(
     "enable-fs-discriminator", cl::Hidden,
     cl::desc("Enable adding flow sensitive discriminators"));
-
-// When true, preserves line and column number by picking one of the merged
-// location info in a deterministic manner to assist sample based PGO.
-LLVM_ABI cl::opt<bool> PickMergedSourceLocations(
-    "pick-merged-source-locations", cl::init(false), cl::Hidden,
-    cl::desc("Preserve line and column number when merging locations."));
 } // namespace llvm
 
 uint32_t DIType::getAlignInBits() const {
@@ -317,9 +311,10 @@ DILocation *DILocation::getMergedLocation(DILocation *LocA, DILocation *LocB) {
   // rather than computing a merged location using line 0, which is typically
   // not useful for PGO. If one of them is null, then try to return one which is
   // valid.
-  if (PickMergedSourceLocations) {
+  DILocation *Loc = LocA ? LocA : LocB;
+  if (getIROptions(Loc->getContext()).pick_merged_source_locations) {
     if (!LocA || !LocB)
-      return LocA ? LocA : LocB;
+      return Loc;
 
     auto A = std::make_tuple(LocA->getLine(), LocA->getColumn(),
                              LocA->getDiscriminator(), LocA->getFilename(),
@@ -1885,6 +1880,7 @@ unsigned DIExpression::ExprOperand::getSize() const {
   case dwarf::DW_OP_LLVM_entry_value:
   case dwarf::DW_OP_LLVM_arg:
   case dwarf::DW_OP_regx:
+  case dwarf::DW_OP_LLVM_user:
     return 2;
   default:
     return 1;
@@ -2154,6 +2150,10 @@ bool DIExpression::isValid(
         return false;
       break;
     }
+    case dwarf::DW_OP_LLVM_user:
+      if (I->getArg(0) != dwarf::DW_OP_LLVM_offset)
+        return false;
+      break;
     case dwarf::DW_OP_swap: {
       // Must be more than one implicit element on the stack.
 

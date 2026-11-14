@@ -21,8 +21,7 @@
 namespace COMGR {
 using namespace llvm;
 using namespace clang;
-namespace {
-bool hasDebugOrProfileInfo(ArrayRef<const char *> Args) {
+static bool hasDebugOrProfileInfo(ArrayRef<const char *> Args) {
   // These are too difficult to handle since they generate debug info that
   // refers to the temporary paths used by comgr.
   const StringRef Flags[] = {"-fdebug-info-kind", "-fprofile", "-coverage",
@@ -37,7 +36,7 @@ bool hasDebugOrProfileInfo(ArrayRef<const char *> Args) {
   return false;
 }
 
-Error addFile(CachedCommandAdaptor::HashAlgorithm &H, StringRef Path) {
+static Error addFile(CachedCommandAdaptor::HashAlgorithm &H, StringRef Path) {
   auto BufOrError = MemoryBuffer::getFile(Path);
   if (std::error_code EC = BufOrError.getError()) {
     return errorCodeToError(EC);
@@ -50,7 +49,7 @@ Error addFile(CachedCommandAdaptor::HashAlgorithm &H, StringRef Path) {
 }
 
 template <typename IteratorTy>
-bool skipProblematicFlag(IteratorTy &It, const IteratorTy &End) {
+static bool skipProblematicFlag(IteratorTy &It, const IteratorTy &End) {
   // Skip include paths, these should have been handled by preprocessing the
   // source first. Sadly, these are passed also to the middle-end commands. Skip
   // debug related flags (they should be ignored) like -dumpdir (used for
@@ -80,7 +79,7 @@ bool skipProblematicFlag(IteratorTy &It, const IteratorTy &End) {
   return false;
 }
 
-SmallVector<StringRef, 1> getInputFiles(driver::Command &Command) {
+static SmallVector<StringRef, 1> getInputFiles(driver::Command &Command) {
   const auto &CommandInputs = Command.getInputInfos();
 
   SmallVector<StringRef, 1> Paths;
@@ -95,7 +94,6 @@ SmallVector<StringRef, 1> getInputFiles(driver::Command &Command) {
   return Paths;
 }
 
-} // namespace
 ClangCommand::ClangCommand(driver::Command &Command,
                            DiagnosticOptions &DiagOpts,
                            IntrusiveRefCntPtr<vfs::FileSystem> VFS,

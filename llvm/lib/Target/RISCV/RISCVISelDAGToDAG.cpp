@@ -666,6 +666,8 @@ bool RISCVDAGToDAGISel::tryShrinkShlLogicImm(SDNode *Node) {
     return false;
 
   uint64_t ShAmt = ShlCst->getZExtValue();
+  assert(ShAmt > 0 && ShAmt < Subtarget->getXLen() &&
+         "Unexpected shift amount!");
 
   // Make sure that we don't change the operation by removing bits.
   // This only matters for OR and XOR, AND is unaffected.
@@ -738,7 +740,10 @@ bool RISCVDAGToDAGISel::trySignedBitfieldExtract(SDNode *Node) {
 
   SDLoc DL(Node);
   MVT VT = Node->getSimpleValueType(0);
+  assert(VT == Subtarget->getXLenVT() && "Unexpected VT!");
   const unsigned RightShAmt = N1C->getZExtValue();
+  assert(RightShAmt > 0 && RightShAmt < VT.getSizeInBits() &&
+         "Unexpected shift amount!");
 
   // Transform (sra (shl X, C1) C2) with C1 < C2
   //        -> (SignedBitfieldExtract X, msb, lsb)
@@ -748,6 +753,8 @@ bool RISCVDAGToDAGISel::trySignedBitfieldExtract(SDNode *Node) {
       return false;
 
     const unsigned LeftShAmt = N01C->getZExtValue();
+    assert(LeftShAmt > 0 && LeftShAmt < VT.getSizeInBits() &&
+           "Unexpected shift amount!");
     // Make sure that this is a bitfield extraction (i.e., the shift-right
     // amount can not be less than the left-shift).
     if (LeftShAmt > RightShAmt)
@@ -811,7 +818,10 @@ bool RISCVDAGToDAGISel::trySignedBitfieldInsertInSign(SDNode *Node) {
 
   SDLoc DL(Node);
   MVT VT = Node->getSimpleValueType(0);
+  assert(VT == Subtarget->getXLenVT() && "Unexpected VT!");
   const unsigned RightShAmt = N1C->getZExtValue();
+  assert(RightShAmt > 0 && RightShAmt < VT.getSizeInBits() &&
+         "Unexpected shift amount!");
 
   // Transform (sra (shl X, C1) C2) with C1 > C2
   //        -> (NDS.BFOS X, lsb, msb)
@@ -821,6 +831,8 @@ bool RISCVDAGToDAGISel::trySignedBitfieldInsertInSign(SDNode *Node) {
       return false;
 
     const unsigned LeftShAmt = N01C->getZExtValue();
+    assert(LeftShAmt > 0 && LeftShAmt < VT.getSizeInBits() &&
+           "Unexpected shift amount!");
     // Make sure that this is a bitfield insertion (i.e., the shift-right
     // amount should be less than the left-shift).
     if (LeftShAmt <= RightShAmt)
@@ -958,7 +970,7 @@ bool RISCVDAGToDAGISel::tryIndexedLoad(SDNode *Node) {
 static SDValue buildGPRPair(SelectionDAG *CurDAG, const SDLoc &DL, MVT VT,
                             SDValue Lo, SDValue Hi) {
   SDValue Ops[] = {
-      CurDAG->getTargetConstant(RISCV::GPRPairRegClassID, DL, MVT::i32), Lo,
+      CurDAG->getTargetConstant(RISCV::GPRPairNoX0RegClassID, DL, MVT::i32), Lo,
       CurDAG->getTargetConstant(RISCV::sub_gpr_even, DL, MVT::i32), Hi,
       CurDAG->getTargetConstant(RISCV::sub_gpr_odd, DL, MVT::i32)};
 
@@ -1182,7 +1194,7 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
 
   switch (Opcode) {
   case ISD::Constant: {
-    assert(VT == Subtarget->getXLenVT() && "Unexpected VT");
+    assert(VT == Subtarget->getXLenVT() && "Unexpected VT!");
     auto *ConstNode = cast<ConstantSDNode>(Node);
     if (ConstNode->isZero()) {
       SDValue New =
@@ -1370,7 +1382,10 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
     if (N0.getOpcode() != ISD::AND || !N0.hasOneUse() ||
         !isa<ConstantSDNode>(N0.getOperand(1)))
       break;
+    assert(VT == Subtarget->getXLenVT() && "Unexpected VT!");
     unsigned ShAmt = N1C->getZExtValue();
+    assert(ShAmt > 0 && ShAmt < Subtarget->getXLen() &&
+           "Unexpected shift amount!");
     uint64_t Mask = N0.getConstantOperandVal(1);
 
     if (isShiftedMask_64(Mask)) {
@@ -1418,7 +1433,10 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
     SDValue N0 = Node->getOperand(0);
     if (N0.getOpcode() != ISD::AND || !isa<ConstantSDNode>(N0.getOperand(1)))
       break;
+    assert(VT == Subtarget->getXLenVT() && "Unexpected VT!");
     unsigned ShAmt = N1C->getZExtValue();
+    assert(ShAmt > 0 && ShAmt < Subtarget->getXLen() &&
+           "Unexpected shift amount!");
     uint64_t Mask = N0.getConstantOperandVal(1);
 
     // Optimize (srl (and X, C2), C) -> (slli (srliw X, C3), C3-C) where C2 has
@@ -1510,7 +1528,10 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
     SDValue N0 = Node->getOperand(0);
     if (N0.getOpcode() != ISD::SIGN_EXTEND_INREG || !N0.hasOneUse())
       break;
+    assert(VT == Subtarget->getXLenVT() && "Unexpected VT!");
     unsigned ShAmt = N1C->getZExtValue();
+    assert(ShAmt > 0 && ShAmt < Subtarget->getXLen() &&
+           "Unexpected shift amount!");
     unsigned ExtSize =
         cast<VTSDNode>(N0.getOperand(1))->getVT().getSizeInBits();
     // ExtSize of 32 should use sraiw via tablegen pattern.
@@ -1573,6 +1594,7 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
     auto *N1C = dyn_cast<ConstantSDNode>(Node->getOperand(1));
     if (!N1C)
       break;
+    assert(VT == Subtarget->getXLenVT() && "Unexpected VT!");
 
     SDValue N0 = Node->getOperand(0);
 
@@ -3141,8 +3163,8 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
   case ISD::SCALAR_TO_VECTOR:
     if (Subtarget->hasStdExtP()) {
       MVT SrcVT = Node->getOperand(0).getSimpleValueType();
-      if ((VT == MVT::v2i32 && SrcVT == MVT::i64) ||
-          (VT == MVT::v4i8 && SrcVT == MVT::i32)) {
+      if (SrcVT == Subtarget->getXLenVT() &&
+          VT.getSizeInBits() == SrcVT.getSizeInBits()) {
         ReplaceUses(SDValue(Node, 0), Node->getOperand(0));
         CurDAG->RemoveDeadNode(Node);
         return;
@@ -4073,35 +4095,10 @@ bool RISCVDAGToDAGISel::SelectAddrRegReg(SDValue Addr, SDValue &Base,
 
 bool RISCVDAGToDAGISel::selectShiftMask(SDValue N, unsigned ShiftWidth,
                                         SDValue &ShAmt) {
-  ShAmt = N;
-
-  // Peek through zext.
-  if (ShAmt->getOpcode() == ISD::ZERO_EXTEND)
-    ShAmt = ShAmt.getOperand(0);
-
   // Shift instructions on RISC-V only read the lower 5 or 6 bits of the shift
-  // amount. If there is an AND on the shift amount, we can bypass it if it
-  // doesn't affect any of those bits.
-  if (ShAmt.getOpcode() == ISD::AND &&
-      isa<ConstantSDNode>(ShAmt.getOperand(1))) {
-    const APInt &AndMask = ShAmt.getConstantOperandAPInt(1);
-
-    // Since the max shift amount is a power of 2 we can subtract 1 to make a
-    // mask that covers the bits needed to represent all shift amounts.
-    assert(isPowerOf2_32(ShiftWidth) && "Unexpected max shift amount!");
-    APInt ShMask(AndMask.getBitWidth(), ShiftWidth - 1);
-
-    if (ShMask.isSubsetOf(AndMask)) {
-      ShAmt = ShAmt.getOperand(0);
-    } else {
-      // SimplifyDemandedBits may have optimized the mask so try restoring any
-      // bits that are known zero.
-      KnownBits Known = CurDAG->computeKnownBits(ShAmt.getOperand(0));
-      if (!ShMask.isSubsetOf(AndMask | Known.Zero))
-        return true;
-      ShAmt = ShAmt.getOperand(0);
-    }
-  }
+  // amount. Look through an AND that doesn't affect those bits.
+  if (!selectShiftAmountMask(N, ShiftWidth, ShAmt))
+    ShAmt = N;
 
   if (ShAmt.getOpcode() == ISD::ADD &&
       isa<ConstantSDNode>(ShAmt.getOperand(1))) {
@@ -4161,7 +4158,7 @@ bool RISCVDAGToDAGISel::selectSETCC(SDValue N, ISD::CondCode ExpectedCCVal,
     return false;
 
   // Must be an equality comparison.
-  ISD::CondCode CCVal = cast<CondCodeSDNode>(N->getOperand(2))->get();
+  ISD::CondCode CCVal = N->getOperandCondCode(2);
   if (CCVal != ExpectedCCVal)
     return false;
 
@@ -4289,6 +4286,8 @@ bool RISCVDAGToDAGISel::selectZExtBits(SDValue N, unsigned Bits, SDValue &Val) {
 bool RISCVDAGToDAGISel::selectSHXADDOp(SDValue N, unsigned ShAmt,
                                        SDValue &Val) {
   if (N.getOpcode() == ISD::AND && isa<ConstantSDNode>(N.getOperand(1))) {
+    MVT VT = N.getSimpleValueType();
+    assert(VT == Subtarget->getXLenVT());
     SDValue N0 = N.getOperand(0);
 
     if (bool LeftShift = N0.getOpcode() == ISD::SHL;
@@ -4296,6 +4295,7 @@ bool RISCVDAGToDAGISel::selectSHXADDOp(SDValue N, unsigned ShAmt,
         isa<ConstantSDNode>(N0.getOperand(1))) {
       uint64_t Mask = N.getConstantOperandVal(1);
       unsigned C2 = N0.getConstantOperandVal(1);
+      assert(C2 > 0 && C2 < Subtarget->getXLen() && "Unexpected shift amount!");
 
       unsigned XLen = Subtarget->getXLen();
       if (LeftShift)
@@ -4334,7 +4334,6 @@ bool RISCVDAGToDAGISel::selectSHXADDOp(SDValue N, unsigned ShAmt,
           return false;
 
         SDLoc DL(N);
-        EVT VT = N.getValueType();
         ShAmt = LeftShift ? Trailing - C2 : Trailing + C2;
         Val = SDValue(
             CurDAG->getMachineNode(Opcode, DL, VT, N0.getOperand(0),
@@ -4373,12 +4372,16 @@ bool RISCVDAGToDAGISel::selectSHXADDOp(SDValue N, unsigned ShAmt,
   } else if (bool LeftShift = N.getOpcode() == ISD::SHL;
              (LeftShift || N.getOpcode() == ISD::SRL) &&
              isa<ConstantSDNode>(N.getOperand(1))) {
+    MVT VT = N.getSimpleValueType();
+    assert(VT == Subtarget->getXLenVT() && "Unexpected VT!");
     SDValue N0 = N.getOperand(0);
     if (N0.getOpcode() == ISD::AND && N0.hasOneUse() &&
         isa<ConstantSDNode>(N0.getOperand(1))) {
       uint64_t Mask = N0.getConstantOperandVal(1);
       if (isShiftedMask_64(Mask)) {
         unsigned C1 = N.getConstantOperandVal(1);
+        assert(C1 > 0 && C1 < Subtarget->getXLen() &&
+               "Unexpected shift amount!");
         unsigned XLen = Subtarget->getXLen();
         unsigned Leading = XLen - llvm::bit_width(Mask);
         unsigned Trailing = llvm::countr_zero(Mask);
@@ -4399,7 +4402,6 @@ bool RISCVDAGToDAGISel::selectSHXADDOp(SDValue N, unsigned ShAmt,
         if (!LeftShift && Leading == 32 && Trailing > C1 &&
             (Trailing - C1) == ShAmt) {
           SDLoc DL(N);
-          EVT VT = N.getValueType();
           Val = SDValue(CurDAG->getMachineNode(
                             RISCV::SRLIW, DL, VT, N0.getOperand(0),
                             CurDAG->getTargetConstant(Trailing, DL, VT)),
@@ -4420,11 +4422,14 @@ bool RISCVDAGToDAGISel::selectSHXADD_UWOp(SDValue N, unsigned ShAmt,
                                           SDValue &Val) {
   if (N.getOpcode() == ISD::AND && isa<ConstantSDNode>(N.getOperand(1)) &&
       N.hasOneUse()) {
+    assert(N.getSimpleValueType() == Subtarget->getXLenVT() &&
+           "Unexpected VT!");
     SDValue N0 = N.getOperand(0);
     if (N0.getOpcode() == ISD::SHL && isa<ConstantSDNode>(N0.getOperand(1)) &&
         N0.hasOneUse()) {
       uint64_t Mask = N.getConstantOperandVal(1);
       unsigned C2 = N0.getConstantOperandVal(1);
+      assert(C2 > 0 && C2 < Subtarget->getXLen() && "Unexpected shift amount!");
 
       Mask &= maskTrailingZeros<uint64_t>(C2);
 
@@ -4710,6 +4715,7 @@ bool RISCVDAGToDAGISel::hasAllNBitUsers(SDNode *Node, unsigned Bits,
     case RISCV::SH1ADD:
     case RISCV::SH2ADD:
     case RISCV::SH3ADD:
+    case RISCV::PseudoMERGE:
     RecCheck:
       if (hasAllNBitUsers(User, Bits, Depth + 1))
         break;

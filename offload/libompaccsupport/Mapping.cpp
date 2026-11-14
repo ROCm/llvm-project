@@ -10,6 +10,7 @@
 
 #include "OpenMP/Mapping.h"
 
+#include "OpenMP/AMDGPUSupport.h"
 #include "PluginManager.h"
 #include "Shared/Debug.h"
 #include "Shared/Requirements.h"
@@ -80,8 +81,7 @@ int MappingInfoTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin,
                /*HstPtrEnd=*/(uintptr_t)HstPtrBegin + Size,
                /*TgtAllocBegin=*/(uintptr_t)TgtPtrBegin,
                /*TgtPtrBegin=*/(uintptr_t)TgtPtrBegin,
-               /*UseHoldRefCount=*/false,
-               /*Name=*/nullptr,
+               /*UseHoldRefCount=*/false, /*Name=*/nullptr,
                /*IsRefCountINF=*/true))
            .first->HDTT;
   ODBG(ODT_Mapping) << "Creating new map entry: HstBase="
@@ -211,7 +211,7 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
     bool HasFlagAlways, bool IsImplicit, bool UpdateRefCount,
     bool HasCloseModifier, bool HasPresentModifier, bool HasHoldModifier,
     AsyncInfoTy &AsyncInfo, HostDataToTargetTy *OwnedTPR, bool ReleaseHDTTMap,
-    StateInfoTy *StateInfo) {
+    StateInfoTy *StateInfo, const ident_t *Loc) {
 
   LookupResult LR = lookupMapping(HDTTMap, HstPtrBegin, Size, OwnedTPR);
   LR.TPR.Flags.IsPresent = true;
@@ -276,10 +276,11 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
       // can optimize memory access latency by registering allocated
       // memory as coarse-grained. The usage of coarse-grained memory can be
       // overriden by setting the env-var OMPX_DISABLE_USM_MAPS=1.
-      if (Device.RTL->is_gfx90a(Device.DeviceID) && HstPtrBegin &&
-          Device.RTL->is_gfx90a_coarse_grain_usm_map_enabled(Device.DeviceID)) {
-        Device.RTL->set_coarse_grain_mem_region(Device.DeviceID, HstPtrBegin,
-                                                Size);
+      if (HstPtrBegin && Device.getConfig().SupportsCoarseGrainMemory &&
+          llvm::offload::tmp::__ol_tgt_IsGfx90aCoarseGrainUsmMapEnabled(
+              Device.DeviceHandle)) {
+        llvm::offload::tmp::__ol_tgt_SetCoarseGrainMemRegion(
+            Device.DeviceHandle, HstPtrBegin, Size);
         INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
              "Memory pages for HstPtrBegin " DPxMOD " Size=%" PRId64
              " switched to coarse grain\n",
@@ -290,7 +291,8 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
       // Enable GPU page table prefaulting if selected by the user. This feature
       // is only enabled for APUs.
       if (Device.PM->getRequirements() & OMPX_REQ_EAGER_ZERO_COPY_MAPS) {
-        Device.RTL->prepopulate_page_table(Device.DeviceID, HstPtrBegin, Size);
+        llvm::offload::tmp::__ol_tgt_PrepopulatePageTable(Device.DeviceHandle,
+                                                          HstPtrBegin, Size);
         INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
              "Prefaulted " DPxMOD " Size=%" PRId64 " on GPU page table\n",
              DPxPTR((uintptr_t)HstPtrBegin), Size);
@@ -408,7 +410,8 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
                       << ") -> (tgt:" << LR.TPR.TargetPointer << ")";
 
     int Ret = Device.submitData(LR.TPR.TargetPointer, HstPtrBegin, Size,
-                                AsyncInfo, LR.TPR.getEntry());
+                                AsyncInfo, LR.TPR.getEntry(),
+                                /*HDTTMapPtr=*/nullptr, Loc);
     if (Ret != OFFLOAD_SUCCESS) {
       REPORT() << "Copying data to device failed.";
       // We will also return nullptr if the data movement fails because that
@@ -581,21 +584,31 @@ int MappingInfoTy::deallocTgtPtrAndEntry(HostDataToTargetTy *Entry,
 
 static void printCopyInfoImpl(int DeviceId, bool H2D, void *SrcPtrBegin,
                               void *DstPtrBegin, int64_t Size,
-                              HostDataToTargetTy *HT) {
+                              HostDataToTargetTy *HT, const ident_t *Loc,
+                              const char *Name) {
+  SourceInfo Info(Loc);
+  std::string LocStr;
+  if (Info.isAvailable())
+    LocStr = ", at " + std::string(Info.getFilename()) + ":" +
+             std::to_string(Info.getLine()) + ":" +
+             std::to_string(Info.getColumn());
 
   INFO(OMP_INFOTYPE_DATA_TRANSFER, DeviceId,
        "Copying data from %s to %s, %sPtr=" DPxMOD ", %sPtr=" DPxMOD
-       ", Size=%" PRId64 ", Name=%s\n",
+       ", Size=%" PRId64 ", Name=%s%s\n",
        H2D ? "host" : "device", H2D ? "device" : "host", H2D ? "Hst" : "Tgt",
        DPxPTR(H2D ? SrcPtrBegin : DstPtrBegin), H2D ? "Tgt" : "Hst",
        DPxPTR(H2D ? DstPtrBegin : SrcPtrBegin), Size,
        (HT && HT->HstPtrName) ? getNameFromMapping(HT->HstPtrName).c_str()
-                              : "unknown");
+                              : (Name ? Name : "unknown"),
+       LocStr.c_str());
 }
 
-void MappingInfoTy::printCopyInfo(
-    void *TgtPtrBegin, void *HstPtrBegin, int64_t Size, bool H2D,
-    HostDataToTargetTy *Entry, MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr) {
+void MappingInfoTy::printCopyInfo(void *TgtPtrBegin, void *HstPtrBegin,
+                                  int64_t Size, bool H2D,
+                                  HostDataToTargetTy *Entry,
+                                  MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
+                                  const ident_t *Loc, const char *Name) {
   auto HDTTMap =
       HostDataToTargetMap.getExclusiveAccessor(!!Entry || !!HDTTMapPtr);
   LookupResult LR;
@@ -603,6 +616,6 @@ void MappingInfoTy::printCopyInfo(
     LR = lookupMapping(HDTTMapPtr ? *HDTTMapPtr : HDTTMap, HstPtrBegin, Size);
     Entry = LR.TPR.getEntry();
   }
-  printCopyInfoImpl(Device.DeviceID, H2D, HstPtrBegin, TgtPtrBegin, Size,
-                    Entry);
+  printCopyInfoImpl(Device.DeviceID, H2D, HstPtrBegin, TgtPtrBegin, Size, Entry,
+                    Loc, Name);
 }

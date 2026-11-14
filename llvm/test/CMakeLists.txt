@@ -9,6 +9,7 @@ llvm_canonicalize_cmake_booleans(
   LLVM_ENABLE_HTTPLIB
   LLVM_ENABLE_ZLIB
   LLVM_ENABLE_ZSTD
+  LLVM_ENABLE_LZMA
   LLVM_ENABLE_LIBXML2
   LLVM_LINK_LLVM_DYLIB
   LLVM_TOOL_LTO_BUILD
@@ -192,8 +193,8 @@ if (TARGET llvm-calc-occupancy)
   list(APPEND LLVM_TEST_DEPENDS llvm-calc-occupancy)
 endif ()
 
-if (TARGET CGTestPlugin)
-  list(APPEND LLVM_TEST_DEPENDS CGTestPlugin)
+if (TARGET Ciao)
+  list(APPEND LLVM_TEST_DEPENDS Ciao)
 endif()
 
 if (LLVM_ENABLE_ONDISK_CAS AND LLVM_ENABLE_PIC)
