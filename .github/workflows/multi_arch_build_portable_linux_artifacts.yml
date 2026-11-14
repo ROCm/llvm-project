@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: ${{ inputs.repository || github.repository }}
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.head_ref || github.ref}}
 
       - name: Checkout external repository
         if: ${{ inputs.external_repo_config != '' }}
@@ -152,7 +152,9 @@ jobs:
              echo "$commit_log" | awk -F"'" '/Submodule path/ {
                n = split($2, a, "/")
                print a[n], $4
-             }' > submodule-commit-${STAGE_NAME}.txt          
+             }' > submodule-commit-${STAGE_NAME}.txt
+
+             git submodule status compiler/amd-llvm
 
       - name: build prep (patches & hotfixes for CK, tests)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd-staging # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
@@ -180,13 +182,14 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_HIPTENSOR=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
+          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_HIPTENSOR=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON -DLLVM_SMREV_REPO='ROCm' -DLLVM_SMREV_REVISION='ci-static'"
           BUILD_DIR: build           
         run: |
          cmake -B "${BUILD_DIR}" -S . -GNinja \
            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+           -DCMAKE_HIP_COMPILER_LAUNCHER=ccache \
            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
            ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \
            ${{ steps.stage_config.outputs.cmake_args }} \
@@ -210,27 +213,83 @@ jobs:
            ${{ steps.stage_config.outputs.cmake_args }} \
            ${{ env.extra_cmake_options }}
 
-      - name: Reset ccache stats for clean measurement
-        run: |
-          ccache --zero-stats
-          echo "ccache remote_only: $(ccache --get-config remote_only)"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::317668459450:role/therock-aig-sharks-compiler-ci-s3-oidc
+          role-duration-seconds: 3600
 
+      - name: Unarch ccache
+        env:
+          S3_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
+          ARCHIVE_NAME: ccache_llvm_project_latest.tar
+        run: |
+          LOCAL_CACHE="$(ccache --get-config cache_dir)"
+          
+          echo "CP arch from S3"
+          time aws s3 cp s3://${S3_BUCKET}/amd-staging/ccache/${ARCHIVE_NAME} /tmp/ccache.tar \
+            --quiet
+
+          echo "Extracting cache..."
+          time tar -xf /tmp/ccache.tar \
+            -C "$(dirname $LOCAL_CACHE)"
+          
+          echo "$(du -sh ${LOCAL_CACHE})"
+          # Cleanup
+          rm -f /tmp/ccache.tar
+
+          # FORCE disable remote storage & optimize local cache hits
+          ccache --set-config cache_dir="$CACHE_DIR/ccache"
+          ccache --set-config log_file="$(dirname "$CCACHE_CONFIGPATH")/ccache.log"
+          ccache --set-config remote_storage=""
+          ccache --set-config max_size=20G
+          ccache --set-config compression=false
+          ccache --set-config file_clone=true
+          ccache --set-config base_dir="${GITHUB_WORKSPACE}"
+          ccache --set-config hash_dir=false
+          ccache --set-config direct_mode=true
+          ccache --set-config sloppiness="include_file_ctime,time_macros"
+          ccache --set-config compiler_check=content
+          ccache --set-config ignore_options="-DCLANG_REPOSITORY_STRING=* -DLLVM_LIT_ARGS=*"
+          #ccache --set-config sloppiness="pch_defines,time_macros,include_file_mtime,include_file_ctime,locale"
+          #ccache --set-config compiler_check="%compiler% -dumpversion"
+          ccache --zero-stats
+          ccache --show-config
+          echo "CCACHE_REMOTE_STORAGE=" >> $GITHUB_ENV
+          
       - name: Build stage
         run: |
+          ccache --zero-stats
+          # check all sha
+          echo "TheRock: $(git rev-parse HEAD)"
+          for p in base/half base/rocm-cmake compiler/amd-llvm compiler/hipify compiler/spirv-llvm-translator rocm-systems; do
+            printf '%-32s %s\n' "$p" "$(git -C "$p" rev-parse HEAD 2>/dev/null || echo MISSING)"
+          done
+          git -C compiler/amd-llvm status --short | head -20   # shows patched or modified files
+
           cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
 
       - name: Show ccache stats for build
-        if: always()
         run: |
           echo "========================================="
-          echo "CCache Stats (Build Step Only)"
+          echo "ccache Stats (Build Step Only)"
           echo "========================================="
-          ccache --show-stats
-          
-          echo ""
-          echo "Key metrics:"
-          ccache --show-stats | grep -E "Cacheable calls|cache hits|Cache misses|hit rate"
-
+          ccache --show-stats -v
+      
+      - name: restore cred
+        if: always()
+        run: |
+          # Restore the runner's default credentials
+          if [ "$DEFAULT_AWS_ACCESS_KEY_ID" != "EMPTY" ]; then
+            echo "AWS_ACCESS_KEY_ID=$DEFAULT_AWS_ACCESS_KEY_ID" >> $GITHUB_ENV
+            echo "AWS_SECRET_ACCESS_KEY=$DEFAULT_AWS_SECRET_ACCESS_KEY" >> $GITHUB_ENV
+            echo "AWS_SESSION_TOKEN=$DEFAULT_AWS_SESSION_TOKEN" >> $GITHUB_ENV
+            echo "AWS_REGION=$DEFAULT_AWS_REGION" >> $GITHUB_ENV
+            echo "✅ Restored default AWS credentials"
+          else
+            echo "⚠️  No default credentials to restore"
+          fi
+                  
       - name: Generate failed log summaries
         if: ${{ !cancelled() }}
         run: |
