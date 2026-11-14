@@ -500,6 +500,11 @@ public:
 
   bool enableMachineScheduler() const override { return true; }
 
+  bool enableRALocalReassignment(CodeGenOptLevel OptLevel) const override {
+    return getCPU() != "gfx1250" &&
+           TargetSubtargetInfo::enableRALocalReassignment(OptLevel);
+  }
+
   bool enableSSAMachineScheduler() const override { return true; }
 
   bool useAA() const override;
