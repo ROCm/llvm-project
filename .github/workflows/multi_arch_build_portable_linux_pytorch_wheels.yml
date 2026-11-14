@@ -163,6 +163,15 @@ jobs:
       SCCACHE_S3_SERVER_SIDE_ENCRYPTION: "true"
       SCCACHE_IDLE_TIMEOUT: "0" # never idle-out; keeps stats accurate on long builds
       SCCACHE_LOG: warn
+      # Inputs are passed as env vars, not expanded into run: scripts. GitHub
+      # expands ${{ }} into script text before bash parses it.
+      PYTHON_VERSION: ${{ inputs.python_version }}
+      PYTORCH_GIT_REF: ${{ inputs.pytorch_git_ref }}
+      ROCM_VERSION: ${{ inputs.rocm_version }}
+      AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
+      CACHE_TYPE: ${{ inputs.cache_type }}
+      BUILD_RELEASE_TYPE: ${{ inputs.release_type }}
+      ROCM_FIND_LINKS: ${{ inputs.rocm_package_find_links_url }}
     outputs:
       torch_version: ${{ steps.pytorch-versions.outputs.torch_version }}
       torchaudio_version: ${{ steps.pytorch-versions.outputs.torchaudio_version }}
@@ -174,6 +183,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          persist-credentials: false
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
 
@@ -185,11 +195,11 @@ jobs:
       - name: Select Python version
         run: |
           python build_tools/github_actions/python_to_cp_version.py \
-            --python-version ${{ inputs.python_version }}
+            --python-version "${PYTHON_VERSION}"
 
       - name: Add selected Python version to PATH
         run: |
-          python_dir="/opt/python/${{ env.cp_version }}"
+          python_dir="/opt/python/${cp_version}"
           if ! [ -x "${python_dir}/bin/python" ]; then
             echo "ERROR: Could not find python: ${python_dir}"
             exit 1
@@ -223,7 +233,7 @@ jobs:
         run: |
           ./external-builds/pytorch/pytorch_torch_repo.py checkout \
             --gitrepo-origin https://github.com/ROCm/pytorch.git \
-            --repo-hashtag ${{ inputs.pytorch_git_ref }} \
+            --repo-hashtag "${PYTORCH_GIT_REF}" \
             --no-commit-hipify
           ./external-builds/pytorch/pytorch_audio_repo.py checkout \
             --require-related-commit \
@@ -242,7 +252,7 @@ jobs:
       - name: Determine optional arguments passed to `build_prod_wheels.py`
         run: |
           python build_tools/github_actions/determine_version.py \
-            --rocm-version ${{ inputs.rocm_version }}
+            --rocm-version "${ROCM_VERSION}"
 
       - name: Configure AWS Credentials for sccache
         if: ${{ inputs.cache_type == 'sccache' && github.repository_owner == 'ROCm' }}
@@ -265,37 +275,41 @@ jobs:
         id: expand
         run: |
           targets=$(python build_tools/github_actions/expand_amdgpu_families.py \
-            --amdgpu-families "${{ inputs.amdgpu_families }}")
-          echo "Expanded families '${{ inputs.amdgpu_families }}' -> '${targets}'"
+            --amdgpu-families "${AMDGPU_FAMILIES}")
+          echo "Expanded families '${AMDGPU_FAMILIES}' -> '${targets}'"
           echo "targets=${targets}" >> "$GITHUB_OUTPUT"
 
       - name: Build PyTorch wheels
+        env:
+          # Comma-separated gfx list from the expand step. One argument,
+          # same value the script received from the step output before.
+          AMDGPU_TARGETS: ${{ steps.expand.outputs.targets }}
         run: |
           cache_flag=""
-          if [ "${{ inputs.cache_type }}" = "sccache" ]; then
+          if [ "${CACHE_TYPE}" = "sccache" ]; then
             cache_flag="--use-sccache"
-          elif [ "${{ inputs.cache_type }}" = "ccache" ]; then
+          elif [ "${CACHE_TYPE}" = "ccache" ]; then
             cache_flag="--use-ccache"
           fi
 
           ./external-builds/pytorch/build_prod_wheels.py \
             build \
             --install-rocm \
-            --find-links "${{ inputs.rocm_package_find_links_url }}" \
+            --find-links "${ROCM_FIND_LINKS}" \
             --clean \
-            --output-dir ${{ env.PACKAGE_DIST_DIR }} \
+            --output-dir "${PACKAGE_DIST_DIR}" \
             ${cache_flag} \
-            --pytorch-rocm-arch ${{ steps.expand.outputs.targets }} \
+            --pytorch-rocm-arch "${AMDGPU_TARGETS}" \
             ${{ env.optional_build_prod_arguments }}
 
       - name: Report cache stats
         if: ${{ !cancelled() && inputs.cache_type != 'none' }}
         run: |
-          if [ "${{ inputs.cache_type }}" = "sccache" ]; then
+          if [ "${CACHE_TYPE}" = "sccache" ]; then
             echo "sccache stats:"
             echo "--------------"
             sccache --show-stats || true
-          elif [ "${{ inputs.cache_type }}" = "ccache" ]; then
+          elif [ "${CACHE_TYPE}" = "ccache" ]; then
             echo "ccache stats:"
             echo "-------------"
             ccache -s -v || true
@@ -304,7 +318,7 @@ jobs:
       - name: Sanity check wheel
         run: |
           python external-builds/pytorch/sanity_check_wheel.py \
-            ${{ env.PACKAGE_DIST_DIR }}/
+            "${PACKAGE_DIST_DIR}"/
 
       # The kpack wheel splitter takes the fat torch wheel and produces a
       # smaller host wheel plus one device wheel per gfx target. Source-install
@@ -335,10 +349,10 @@ jobs:
 
           ROCM_SDK_VERSION="$(python -m rocm_sdk version)"
 
-          mv ${{ env.PACKAGE_DIST_DIR }}/torch-*.whl "${FAT_STAGE}/"
+          mv "${PACKAGE_DIST_DIR}"/torch-*.whl "${FAT_STAGE}/"
           python -m rocm_kpack.tools.split_python_wheels \
             --input "${FAT_STAGE}"/torch-*.whl \
-            --output-dir "${{ env.PACKAGE_DIST_DIR }}" \
+            --output-dir "${PACKAGE_DIST_DIR}" \
             --device-package-prefix amd-torch-device \
             --overlay-root torch/ \
             --wheel-type torch-fat \
@@ -347,10 +361,10 @@ jobs:
             -j "$(nproc)"
           rm -f "${FAT_STAGE}"/torch-*.whl
 
-          mv ${{ env.PACKAGE_DIST_DIR }}/torchvision-*.whl "${FAT_STAGE}/"
+          mv "${PACKAGE_DIST_DIR}"/torchvision-*.whl "${FAT_STAGE}/"
           python -m rocm_kpack.tools.split_python_wheels \
             --input "${FAT_STAGE}"/torchvision-*.whl \
-            --output-dir "${{ env.PACKAGE_DIST_DIR }}" \
+            --output-dir "${PACKAGE_DIST_DIR}" \
             --device-package-prefix amd-torchvision-device \
             --overlay-root torchvision/ \
             --device-requires-dist "rocm-sdk-device-@GFXARCH@ == ${ROCM_SDK_VERSION}" \
@@ -358,8 +372,8 @@ jobs:
             -j "$(nproc)"
 
           rm -rf "${FAT_STAGE}"
-          echo "Post-split contents of ${{ env.PACKAGE_DIST_DIR }}:"
-          ls -lh "${{ env.PACKAGE_DIST_DIR }}/"
+          echo "Post-split contents of ${PACKAGE_DIST_DIR}:"
+          ls -lh "${PACKAGE_DIST_DIR}/"
 
       # TODO(#5110): Once manifest-driven builds land, write these outputs from
       # the manifest and keep wheel scanning as a validation step that the build
@@ -368,7 +382,7 @@ jobs:
         id: pytorch-versions
         run: |
           python build_tools/github_actions/write_torch_versions.py \
-            --dist-dir ${{ env.PACKAGE_DIST_DIR }}
+            --dist-dir "${PACKAGE_DIST_DIR}"
 
       - name: Configure AWS Credentials
         if: ${{ github.repository == 'ROCm/TheRock' }}
@@ -380,8 +394,8 @@ jobs:
         id: publish-pytorch-wheels
         run: |
           python build_tools/github_actions/publish_pytorch_to_release_bucket.py \
-            --source-dir="${{ env.PACKAGE_DIST_DIR }}" \
-            --release-type="${{ inputs.release_type }}"
+            --source-dir="${PACKAGE_DIST_DIR}" \
+            --release-type="${BUILD_RELEASE_TYPE}"
 
   configure_pytorch_tests:
     name: Configure PyTorch Tests
@@ -391,16 +405,22 @@ jobs:
     outputs:
       enabled: ${{ steps.configure.outputs.enabled }}
       matrix: ${{ steps.configure.outputs.matrix }}
+    env:
+      # Same input-to-env handoff as the build job.
+      AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
+      TEST_AMDGPU_FAMILIES: ${{ inputs.test_amdgpu_families }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          persist-credentials: false
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
 
       - name: Checkout CI config
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           repository: ROCm/therock-ci-config
           ref: main
           path: ci-config
@@ -412,8 +432,8 @@ jobs:
           CI_CONFIG_PATH: ci-config
         run: |
           python build_tools/github_actions/configure_pytorch_test_matrix.py \
-            --build-amdgpu-families "${{ inputs.amdgpu_families }}" \
-            --test-amdgpu-families "${{ inputs.test_amdgpu_families }}" \
+            --build-amdgpu-families "${AMDGPU_FAMILIES}" \
+            --test-amdgpu-families "${TEST_AMDGPU_FAMILIES}" \
             --platform linux
 
   test_pytorch_wheels:
