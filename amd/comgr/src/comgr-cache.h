@@ -41,10 +41,19 @@ public:
   ~CommandCache();
   void prune();
 
-  /// Checks if the Command C is cached.
-  /// If it is the case, it replaces its output and logs its error-stream.
-  /// Otherwise it executes C through the callback Execute
-  amd_comgr_status_t execute(CachedCommandAdaptor &C, llvm::raw_ostream &LogS);
+  /// A cache hit's output kept in memory instead of written via
+  /// C.writeExecuteOutput(). Output is a view into Entry; keep Entry alive
+  /// for as long as Output (or any slice of it) is used.
+  struct CachedOutput {
+    std::shared_ptr<llvm::MemoryBuffer> Entry;
+    llvm::StringRef Output;
+  };
+
+  /// Checks if Command C is cached; if so, replaces its output and logs its
+  /// error stream. If Hit is set, a cache hit is returned there instead of
+  /// via C.writeExecuteOutput(). Otherwise executes C directly.
+  amd_comgr_status_t execute(CachedCommandAdaptor &C, llvm::raw_ostream &LogS,
+                             CachedOutput *Hit = nullptr);
 };
 } // namespace COMGR
 
