@@ -759,8 +759,8 @@ def __builtin_amdgcn_cvt_sr_fp8_f32 : AMDGPUBuiltin<"int(float, int, int, _Const
 //===----------------------------------------------------------------------===//
 // GFX950 only builtins.
 //===----------------------------------------------------------------------===//
-def __builtin_amdgcn_mfma_scale_f32_16x16x128_f8f6f4 : AMDGPUBuiltin<"_Vector<4, float>(_Vector<8, int32_t>, _Vector<8, int32_t>, _Vector<4, float>, _Constant int, _Constant int, _Constant int, int, _Constant int, int)", [Const], "gfx950-insts">;
-def __builtin_amdgcn_mfma_scale_f32_32x32x64_f8f6f4 : AMDGPUBuiltin<"_Vector<16, float>(_Vector<8, int32_t>, _Vector<8, int32_t>, _Vector<16, float>, _Constant int, _Constant int, _Constant int, int, _Constant int, int)", [Const], "gfx950-insts">;
+def __builtin_amdgcn_mfma_scale_f32_16x16x128_f8f6f4 : AMDGPUBuiltin<"_Vector<4, float>(_Vector<8, int32_t>, _Vector<8, int32_t>, _Vector<4, float>, _Constant int, _Constant int, _Constant int, int, _Constant int, int)", [Const, ArgRange<3, 0, 5>, ArgRange<4, 0, 5>], "gfx950-insts">;
+def __builtin_amdgcn_mfma_scale_f32_32x32x64_f8f6f4 : AMDGPUBuiltin<"_Vector<16, float>(_Vector<8, int32_t>, _Vector<8, int32_t>, _Vector<16, float>, _Constant int, _Constant int, _Constant int, int, _Constant int, int)", [Const, ArgRange<3, 0, 5>, ArgRange<4, 0, 5>], "gfx950-insts">;
 
 def __builtin_amdgcn_mfma_f32_16x16x32_f16 : AMDGPUBuiltin<"_Vector<4, float>(_Vector<8, _Float16>, _Vector<8, _Float16>, _Vector<4, float>, _Constant int, _Constant int, _Constant int)", [Const], "gfx950-insts">;
 def __builtin_amdgcn_mfma_f32_16x16x32_bf16 : AMDGPUBuiltin<"_Vector<4, float>(_Vector<8, __bf16>, _Vector<8, __bf16>, _Vector<4, float>, _Constant int, _Constant int, _Constant int)", [Const], "gfx950-insts">;
@@ -1008,10 +1008,10 @@ def __builtin_amdgcn_cvt_scalef32_pk32_fp6_f16 : AMDGPUBuiltin<"_Vector<6, unsig
 def __builtin_amdgcn_cvt_scalef32_pk32_bf6_f16 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, _Float16>, float)", [Const], "f16bf16-to-fp6bf6-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk32_fp6_bf16 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, __bf16>, float)", [Const], "f16bf16-to-fp6bf6-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk32_bf6_bf16 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, __bf16>, float)", [Const], "f16bf16-to-fp6bf6-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_f16_fp8 : AMDGPUBuiltin<"_Vector<2, _Float16>(_Vector<2, _Float16>, int, float, _Constant int, _Constant bool)", [Const], "fp8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_f16_bf8 : AMDGPUBuiltin<"_Vector<2, _Float16>(_Vector<2, _Float16>, int, float, _Constant int, _Constant bool)", [Const], "bf8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_f32_fp8 : AMDGPUBuiltin<"float(int, float, _Constant int)", [Const], "fp8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_f32_bf8 : AMDGPUBuiltin<"float(int, float, _Constant int)", [Const], "bf8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_f16_fp8 : AMDGPUBuiltin<"_Vector<2, _Float16>(_Vector<2, _Float16>, int, float, _Constant int, _Constant bool)", [Const, ArgRange<3, 0, 4>], "fp8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_f16_bf8 : AMDGPUBuiltin<"_Vector<2, _Float16>(_Vector<2, _Float16>, int, float, _Constant int, _Constant bool)", [Const, ArgRange<3, 0, 4>], "bf8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_f32_fp8 : AMDGPUBuiltin<"float(int, float, _Constant int)", [Const, ArgRange<2, 0, 4>], "fp8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_f32_bf8 : AMDGPUBuiltin<"float(int, float, _Constant int)", [Const, ArgRange<2, 0, 4>], "bf8-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk_fp8_f32 : AMDGPUBuiltin<"_Vector<2, short>(_Vector<2, short>, float, float, float, _Constant bool)", [Const], "fp8-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk_bf8_f32 : AMDGPUBuiltin<"_Vector<2, short>(_Vector<2, short>, float, float, float, _Constant bool)", [Const], "bf8-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk_f32_fp8 : AMDGPUBuiltin<"_Vector<2, float>(unsigned int, float, _Constant bool)", [Const], "fp8-cvt-scale-insts">;
@@ -1020,10 +1020,10 @@ def __builtin_amdgcn_cvt_scalef32_pk_fp8_f16 : AMDGPUBuiltin<"_Vector<2, short>(
 def __builtin_amdgcn_cvt_scalef32_pk_fp8_bf16 : AMDGPUBuiltin<"_Vector<2, short>(_Vector<2, short>, _Vector<2, __bf16>, float, _Constant bool)", [Const], "fp8-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk_bf8_f16 : AMDGPUBuiltin<"_Vector<2, short>(_Vector<2, short>, _Vector<2, _Float16>, float, _Constant bool)", [Const], "bf8-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk_bf8_bf16 : AMDGPUBuiltin<"_Vector<2, short>(_Vector<2, short>, _Vector<2, __bf16>, float, _Constant bool)", [Const], "bf8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_pk_f32_fp4 : AMDGPUBuiltin<"_Vector<2, float>(unsigned int, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_pk_fp4_f32 : AMDGPUBuiltin<"unsigned int(unsigned int, float, float, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_pk_f16_fp4 : AMDGPUBuiltin<"_Vector<2, _Float16>(unsigned int, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_pk_bf16_fp4 : AMDGPUBuiltin<"_Vector<2, __bf16>(unsigned int, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_pk_f32_fp4 : AMDGPUBuiltin<"_Vector<2, float>(unsigned int, float, _Constant int)", [Const, ArgRange<2, 0, 4>], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_pk_fp4_f32 : AMDGPUBuiltin<"unsigned int(unsigned int, float, float, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_pk_f16_fp4 : AMDGPUBuiltin<"_Vector<2, _Float16>(unsigned int, float, _Constant int)", [Const, ArgRange<2, 0, 4>], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_pk_bf16_fp4 : AMDGPUBuiltin<"_Vector<2, __bf16>(unsigned int, float, _Constant int)", [Const, ArgRange<2, 0, 4>], "fp4-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk32_f32_fp6 : AMDGPUBuiltin<"_Vector<32, float>(_Vector<6, unsigned int>, float)", [Const], "fp6bf6-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk32_f32_bf6 : AMDGPUBuiltin<"_Vector<32, float>(_Vector<6, unsigned int>, float)", [Const], "fp6bf6-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk32_f16_fp6 : AMDGPUBuiltin<"_Vector<32, _Float16>(_Vector<6, unsigned int>, float)", [Const], "fp6bf6-cvt-scale-insts">;
@@ -1034,17 +1034,17 @@ def __builtin_amdgcn_cvt_scalef32_pk_f16_fp8 : AMDGPUBuiltin<"_Vector<2, _Float1
 def __builtin_amdgcn_cvt_scalef32_pk_bf16_fp8 : AMDGPUBuiltin<"_Vector<2, __bf16>(unsigned int, float, _Constant bool)", [Const], "fp8-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk_f16_bf8 : AMDGPUBuiltin<"_Vector<2, _Float16>(unsigned int, float, _Constant bool)", [Const], "bf8-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk_bf16_bf8 : AMDGPUBuiltin<"_Vector<2, __bf16>(unsigned int, float, _Constant bool)", [Const], "bf8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_pk_fp4_f16 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, _Float16>, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_pk_fp4_bf16 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, __bf16>, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_pk_fp4_f16 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, _Float16>, unsigned int, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_pk_fp4_bf16 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, __bf16>, unsigned int, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_pk_fp4_f32 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, float>, unsigned int, float, _Constant int)", [Const], "fp4-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_bf8_bf16 : AMDGPUBuiltin<"int(int, __bf16, unsigned int, float, _Constant int)", [Const], "bf8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_bf8_f16 : AMDGPUBuiltin<"int(int, _Float16, unsigned int, float, _Constant int)", [Const], "bf8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_bf8_f32 : AMDGPUBuiltin<"int(int, float, unsigned int, float, _Constant int)", [Const], "bf8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_fp8_bf16 : AMDGPUBuiltin<"int(int, __bf16, unsigned int, float, _Constant int)", [Const], "fp8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_fp8_f16 : AMDGPUBuiltin<"int(int, _Float16, unsigned int, float, _Constant int)", [Const], "fp8-cvt-scale-insts">;
-def __builtin_amdgcn_cvt_scalef32_sr_fp8_f32 : AMDGPUBuiltin<"int(int, float, unsigned int, float, _Constant int)", [Const], "fp8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_pk_fp4_f16 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, _Float16>, float, _Constant int)", [Const, ArgRange<3, 0, 4>], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_pk_fp4_bf16 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, __bf16>, float, _Constant int)", [Const, ArgRange<3, 0, 4>], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_pk_fp4_f16 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, _Float16>, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_pk_fp4_bf16 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, __bf16>, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_pk_fp4_f32 : AMDGPUBuiltin<"unsigned int(unsigned int, _Vector<2, float>, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "fp4-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_bf8_bf16 : AMDGPUBuiltin<"int(int, __bf16, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "bf8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_bf8_f16 : AMDGPUBuiltin<"int(int, _Float16, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "bf8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_bf8_f32 : AMDGPUBuiltin<"int(int, float, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "bf8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_fp8_bf16 : AMDGPUBuiltin<"int(int, __bf16, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "fp8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_fp8_f16 : AMDGPUBuiltin<"int(int, _Float16, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "fp8-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scalef32_sr_fp8_f32 : AMDGPUBuiltin<"int(int, float, unsigned int, float, _Constant int)", [Const, ArgRange<4, 0, 4>], "fp8-cvt-scale-insts">;
 
 def __builtin_amdgcn_cvt_scalef32_sr_pk32_bf6_bf16 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, __bf16>, unsigned int, float)", [Const], "f16bf16-to-fp6bf6-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_sr_pk32_bf6_f16 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, _Float16>, unsigned int, float)", [Const], "f16bf16-to-fp6bf6-cvt-scale-insts">;
@@ -1139,8 +1139,8 @@ def __builtin_amdgcn_cvt_pk_f16_fp8 : AMDGPUBuiltin<"_Vector<2, _Float16>(short)
 def __builtin_amdgcn_cvt_pk_f16_bf8 : AMDGPUBuiltin<"_Vector<2, _Float16>(short)", [Const], "gfx1250-insts">;
 def __builtin_amdgcn_cvt_pk_fp8_f16 : AMDGPUBuiltin<"short(_Vector<2, _Float16>)", [Const], "gfx1250-insts">;
 def __builtin_amdgcn_cvt_pk_bf8_f16 : AMDGPUBuiltin<"short(_Vector<2, _Float16>)", [Const], "gfx1250-insts">;
-def __builtin_amdgcn_cvt_sr_fp8_f16 : AMDGPUBuiltin<"int(_Float16, int, unsigned int, _Constant int)", [Const], "gfx1250-insts">;
-def __builtin_amdgcn_cvt_sr_bf8_f16 : AMDGPUBuiltin<"int(_Float16, int, unsigned int, _Constant int)", [Const], "gfx1250-insts">;
+def __builtin_amdgcn_cvt_sr_fp8_f16 : AMDGPUBuiltin<"int(_Float16, int, unsigned int, _Constant int)", [Const, ArgRange<3, 0, 4>], "gfx1250-insts">;
+def __builtin_amdgcn_cvt_sr_bf8_f16 : AMDGPUBuiltin<"int(_Float16, int, unsigned int, _Constant int)", [Const, ArgRange<3, 0, 4>], "gfx1250-insts">;
 def __builtin_amdgcn_cvt_scale_pk8_f16_fp8 : AMDGPUBuiltin<"_Vector<8, _Float16>(_Vector<2, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "gfx1250-insts">;
 def __builtin_amdgcn_cvt_scale_pk8_bf16_fp8 : AMDGPUBuiltin<"_Vector<8, __bf16>(_Vector<2, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "gfx1250-insts">;
 def __builtin_amdgcn_cvt_scale_pk8_f16_bf8 : AMDGPUBuiltin<"_Vector<8, _Float16>(_Vector<2, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "gfx1250-insts">;
@@ -1303,7 +1303,7 @@ def __builtin_amdgcn_wmma_f16_16x16x128_bf8_bf8 : AMDGPUBuiltin<"_Vector<8, _Flo
   let Documentation = [DocWMMA_fp8_16x16x128_GFX1250];
   let ArgNames = ["a", "b", "c_mod", "c", "matrix_a_reuse", "matrix_b_reuse"];
 }
-def __builtin_amdgcn_wmma_f32_16x16x128_f8f6f4 : AMDGPUBuiltin<"_Vector<8, float>(_Constant int, _Vector<16, int>, _Constant int, _Vector<16, int>, _Constant short, _Vector<8, float>)", [Const], "wmma-n16-insts,wavefrontsize32"> {
+def __builtin_amdgcn_wmma_f32_16x16x128_f8f6f4 : AMDGPUBuiltin<"_Vector<8, float>(_Constant int, _Vector<16, int>, _Constant int, _Vector<16, int>, _Constant short, _Vector<8, float>)", [Const, ArgRange<0, 0, 5>, ArgRange<2, 0, 5>], "wmma-n16-insts,wavefrontsize32"> {
   let Documentation = [DocWMMA_f8f6f4_GFX1250];
   let ArgNames = ["matrix_a_fmt", "a", "matrix_b_fmt", "b", "c_mod", "c"];
 }
@@ -1323,11 +1323,11 @@ def __builtin_amdgcn_wmma_f32_16x16x128_bf8_bf8 : AMDGPUBuiltin<"_Vector<8, floa
   let Documentation = [DocWMMA_fp8_16x16x128_GFX1250];
   let ArgNames = ["a", "b", "c_mod", "c", "matrix_a_reuse", "matrix_b_reuse"];
 }
-def __builtin_amdgcn_wmma_scale_f32_16x16x128_f8f6f4 : AMDGPUBuiltin<"_Vector<8, float>(_Constant int, _Vector<16, int>, _Constant int, _Vector<16, int>, _Constant short, _Vector<8, float>, _Constant int, _Constant int, int, _Constant int, _Constant int, int, _Constant bool, _Constant bool)", [Const], "wmma-n16-insts,wavefrontsize32"> {
+def __builtin_amdgcn_wmma_scale_f32_16x16x128_f8f6f4 : AMDGPUBuiltin<"_Vector<8, float>(_Constant int, _Vector<16, int>, _Constant int, _Vector<16, int>, _Constant short, _Vector<8, float>, _Constant int, _Constant int, int, _Constant int, _Constant int, int, _Constant bool, _Constant bool)", [Const, ArgRange<0, 0, 5>, ArgRange<2, 0, 5>], "wmma-n16-insts,wavefrontsize32"> {
   let Documentation = [DocWMMA_scale_GFX1250];
   let ArgNames = ["matrix_a_fmt", "a", "matrix_b_fmt", "b", "c_mod", "c", "matrix_a_scale", "matrix_a_scale_fmt", "matrix_a_scale_exp", "matrix_b_scale", "matrix_b_scale_fmt", "matrix_b_scale_exp", "matrix_a_reuse", "matrix_b_reuse"];
 }
-def __builtin_amdgcn_wmma_scale16_f32_16x16x128_f8f6f4 : AMDGPUBuiltin<"_Vector<8, float>(_Constant int, _Vector<16, int>, _Constant int, _Vector<16, int>, _Constant short, _Vector<8, float>, _Constant int, _Constant int, int64_t, _Constant int, _Constant int, int64_t, _Constant bool, _Constant bool)", [Const], "wmma-n16-insts,wavefrontsize32"> {
+def __builtin_amdgcn_wmma_scale16_f32_16x16x128_f8f6f4 : AMDGPUBuiltin<"_Vector<8, float>(_Constant int, _Vector<16, int>, _Constant int, _Vector<16, int>, _Constant short, _Vector<8, float>, _Constant int, _Constant int, int64_t, _Constant int, _Constant int, int64_t, _Constant bool, _Constant bool)", [Const, ArgRange<0, 0, 5>, ArgRange<2, 0, 5>], "wmma-n16-insts,wavefrontsize32"> {
   let Documentation = [DocWMMA_scale16_GFX1250];
   let ArgNames = ["matrix_a_fmt", "a", "matrix_b_fmt", "b", "c_mod", "c", "matrix_a_scale", "matrix_a_scale_fmt", "matrix_a_scale_exp", "matrix_b_scale", "matrix_b_scale_fmt", "matrix_b_scale_exp", "matrix_a_reuse", "matrix_b_reuse"];
 }

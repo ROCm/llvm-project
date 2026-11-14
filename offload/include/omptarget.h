@@ -335,8 +335,6 @@ int omp_target_disassociate_ptr(const void *HostPtr, int DeviceNum);
 
 /// Explicit target memory allocators
 /// Using the llvm_ prefix until they become part of the OpenMP standard.
-void *llvm_omp_target_lock_mem(void *ptr, size_t size, int device_num);
-void llvm_omp_target_unlock_mem(void *ptr, int device_num);
 void *llvm_omp_target_alloc_device(size_t Size, int DeviceNum);
 void *llvm_omp_target_alloc_host(size_t Size, int DeviceNum);
 void *llvm_omp_target_alloc_shared(size_t Size, int DeviceNum);
