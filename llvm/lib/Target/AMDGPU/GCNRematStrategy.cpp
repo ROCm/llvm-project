@@ -14,6 +14,7 @@
 #include "GCNRematStrategy.h"
 #include "GCNRegPressure.h"
 #include "SIMachineFunctionInfo.h"
+#include "SIRegisterInfo.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
@@ -32,11 +33,13 @@ GCNRematStrategy::RematRegions::RematRegions(
     ArrayRef<RegionBoundaries> Regions,
     MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns,
     MutableArrayRef<GCNRPTracker::LiveRegSet> LiveOuts, LiveIntervals &LIS,
-    const MachineBlockFrequencyInfo &MBFI, const MachineRegisterInfo &MRI)
-    : Bounds(Regions), LiveIns(LiveIns), LiveOuts(LiveOuts),
+    const MachineBlockFrequencyInfo &MBFI, const MachineRegisterInfo &MRI,
+    ArrayRef<RegionPeaks> Peaks)
+    : Bounds(Regions), LiveIns(LiveIns), LiveOuts(LiveOuts), Peaks(Peaks),
       Frequencies(Regions.size(), 0), LIS(LIS), MRI(MRI) {
   assert(LiveIns.size() == Regions.size());
   assert(LiveOuts.size() == Regions.size());
+  assert(Peaks.empty() || Peaks.size() == Regions.size());
 
   // Derive frequency of each region. Frequencies are scaled down if they are
   // high to avoid overflow/underflow when combining them.
@@ -144,12 +147,47 @@ bool GCNRematStrategy::RematTargets::updateAndVerifyRPTargets(
 
 void GCNRematStrategy::RematCandidate::init(const RematRegions &RF,
                                             const Rematerializer &Remater,
-                                            const MachineRegisterInfo &MRI) {
+                                            const MachineRegisterInfo &MRI,
+                                            const LiveIntervals &LIS) {
   const Rematerializer::Reg &Reg = Remater.getReg(RegIdx);
   Register DefReg = Reg.getDefReg();
 
   Live |= LiveIn;
   Live |= LiveOut;
+
+  // In a region whose RP peak is known, the rematerialization can only save
+  // the register at the peak if the register is no longer live there. In the
+  // defining region, the original register stays when it has users there. In
+  // a using region, the rematerialized register lives from the first to the
+  // last use in the region. The peaks are those of the initial schedule and
+  // are not updated after rematerializations.
+  const bool IsSGPR = SIRegisterInfo::isSGPRClass(MRI.getRegClass(DefReg));
+  for (unsigned I : Live.set_bits()) {
+    const SlotIndex Peak = RF.getPeak(I, IsSGPR);
+    if (!Peak.isValid())
+      continue;
+    bool LiveAtPeak = false;
+    auto RegionUsers = Reg.Uses.find(I);
+    if (I == Reg.DefRegion) {
+      LiveAtPeak = !(LIS.getInstructionIndex(*Reg.getLastDef()) < Peak);
+      if (RegionUsers != Reg.Uses.end()) {
+        LiveAtPeak |= any_of(RegionUsers->second, [&](MachineInstr *MI) {
+          return !(LIS.getInstructionIndex(*MI) < Peak);
+        });
+      }
+    } else if (RegionUsers != Reg.Uses.end()) {
+      bool UseAtOrBefore = false, UseAtOrAfter = false;
+      for (MachineInstr *MI : RegionUsers->second) {
+        SlotIndex UseIdx = LIS.getInstructionIndex(*MI);
+        UseAtOrBefore |= !(Peak < UseIdx);
+        UseAtOrAfter |= !(UseIdx < Peak);
+      }
+      LiveAtPeak = UseAtOrBefore && (UseAtOrAfter || !LiveOut[I]);
+    }
+    if (LiveAtPeak)
+      NoPeakSave.set(I);
+  }
+  Live.reset(NoPeakSave);
 
   for (unsigned I : Live.set_bits()) {
     // If the register is both unused and live-through in the region, the
@@ -368,7 +406,9 @@ void GCNRematStrategy::rematerializeFor(
       // where the register is live.
       Targets.updateRPTargets(Cand.Live, Cand.RPSave);
       RecomputeRP |= Cand.UnpredictableRPSave;
+      RecomputeRP |= Cand.NoPeakSave;
       AffectedRegions |= Cand.Live;
+      AffectedRegions |= Cand.NoPeakSave;
       if (Targets.allAchieved()) {
         LLVM_DEBUG(dbgs() << "All targets cleared, verifying...\n");
         break;
@@ -481,7 +521,7 @@ void GCNRematStrategy::createCandidates() {
   }
 
   for (RematCandidate &Cand : Candidates)
-    Cand.init(Regions, Remater, MRI);
+    Cand.init(Regions, Remater, MRI, LIS);
 }
 
 bool GCNRematStrategy::candidateHasValidUsers(
