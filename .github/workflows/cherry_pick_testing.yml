@@ -116,9 +116,9 @@ on:
         type: string
         default: ""
       performance_execution_label:
-        description: "Execution label the install and the measurements are recorded under. Must be one the target workflows accept."
+        description: "Execution label the install and the measurements are recorded under."
         type: string
-        default: "workflow-test"
+        default: "stg-compiler-full"
       performance_install_method:
         description: "How ROCm is laid down on the perf machine."
         type: string
@@ -431,7 +431,15 @@ jobs:
       dist_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
       platform: linux
       package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      release_type: ci
+      # A measurement installs from the dev channel, and only what was
+      # uploaded as a dev build can be published onto it. Everything else
+      # keeps going to the CI bucket exactly as before, so an ordinary
+      # cherry-pick is untouched by any of this.
+      release_type: ${{ inputs.run_performance_tests && 'dev' || 'ci' }}
+      # The perf suites run the test binaries, which live in the -tests-
+      # sibling rather than the base tarball. Building it costs a second pass
+      # over the artifacts, so it is asked for only when it will be used.
+      include_test_tarballs: ${{ inputs.run_performance_tests }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
     permissions:
@@ -450,6 +458,10 @@ jobs:
       windows_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).windows_amdgpu_families }}
       multiarch_index: true
       package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      # Publication is not tarballs-only: publish_rocm_to_release_buckets.py
+      # raises when it finds no python packages beside them, so these have to
+      # reach the same bucket the tarballs do.
+      release_type: ${{ inputs.run_performance_tests && 'dev' || '' }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
     permissions:
@@ -586,6 +598,85 @@ jobs:
       contents: read
       id-token: write
 
+  # A measurement installs by name from the dev channel, and nothing reaches
+  # that channel on its own. The build uploads to the dev artifacts bucket;
+  # this job is what copies it onto the channel the install reads. It sits
+  # between the two for that reason — skip it and the install has nothing to
+  # resolve.
+  #
+  # Its own job, not a step in the perf jobs, because publication needs
+  # `id-token: write` to assume a role that can write a shared channel, and
+  # that is not a permission to leave sitting on the job that dispatches into
+  # another repository. The perf jobs stay on `contents: read`.
+  #
+  # Gated on the performance toggle, so an ordinary cherry-pick publishes
+  # nothing. The dev channel is consumed by other teams; writing to it is a
+  # deliberate act, not a side effect of running CI.
+  publish_linux_artifacts:
+    name: Publish Linux Artifacts
+    needs: [setup, build_linux_tarballs, build_linux_python_packages]
+    if: >-
+      ${{
+        !cancelled() && inputs.run_performance_tests && !inputs.dry_run &&
+        needs.build_linux_tarballs.result == 'success' &&
+        needs.build_linux_python_packages.result == 'success'
+      }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # Assume the repo.amd.com publication role.
+    steps:
+      # The publication script and its credentials action live in TheRock, not
+      # here, which is also how the tarball job reaches its tools.
+      - name: Checkout TheRock
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          repository: "ROCm/TheRock"
+          ref: ${{ needs.setup.outputs.ref }}
+
+      - name: Setting up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Python requirements
+        run: pip install -r requirements.txt
+
+      - name: Configure AWS Credentials
+        uses: ./.github/actions/configure_aws_product_publication_credentials
+        with:
+          release_type: dev
+          product: core
+
+      - name: Publish to the dev channel
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # Native packages are skipped: this run does not build deb and rpm
+          # into the dev bucket, and a measurement installs from the tarball.
+          # Python packages have no such switch, which is why the job above
+          # has to put them where this can find them.
+          python build_tools/github_actions/publish_rocm_to_release_buckets.py \
+            --run-id="${RUN_ID}" \
+            --platform=linux \
+            --release-type=dev \
+            --structured \
+            --build-variant=release \
+            --skip-native-packages
+
+      - name: Record what was published
+        env:
+          PACKAGE_VERSION: ${{ needs.setup.outputs.rocm_package_version }}
+        run: |
+          {
+            echo "### Published to the dev channel"
+            echo
+            echo "\`therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz\`"
+            echo
+            echo "at https://dev.repo.amd.com/rocm/core/tarball/"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   # Performance qualification lives in qa-forge: the suites are ROCmTest suites,
   # the machines are its baremetal perf servers, and the result store is its
   # own. Nothing here reimplements any of that. These two jobs drive qa-forge's
@@ -604,16 +695,20 @@ jobs:
   # machine, not for the identity of their run.
   performance_install:
     name: Performance Install
-    needs: [setup, build_linux]
-    # A successful build is what gives this run a version to name its own
-    # tarball from. Naming someone else's tarball outright is the one way to
-    # run without a build in front.
+    needs: [setup, build_linux, publish_linux_artifacts]
+    # Naming this run's own tarball requires that it was built and published.
+    # Naming someone else's, already on the channel, is the one way to run
+    # without either in front — which is also how the trigger is exercised
+    # while publication is still being wired up.
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
         (
           inputs.performance_tar_name != '' ||
-          needs.build_linux.result == 'success'
+          (
+            needs.build_linux.result == 'success' &&
+            needs.publish_linux_artifacts.result == 'success'
+          )
         )
       }}
     runs-on: ubuntu-24.04
@@ -661,9 +756,8 @@ jobs:
           # family skips the perf run with a warning rather than failing it:
           # most families legitimately have no perf hardware behind them.
           declare -A PERF_SERVERS=(
-            # Bring-up value: the single MI300 box attached so far, named
-            # rather than pooled. Replace with the common label once there is
-            # more than one machine behind the family.
+            # Named rather than pooled, because it is one machine. Replace
+            # with a common label once more than one sits behind the family.
             [gfx94X-dcgpu]=SMC-SC-DI13-13
             # Provisional: no machine is attached for gfx950 yet, so this name
             # is a placeholder and a run targeting it will queue indefinitely.
@@ -1235,6 +1329,7 @@ jobs:
       - build_linux_deb_packages
       - build_linux_rpm_packages
       - build_linux_pytorch_wheels
+      - publish_linux_artifacts
       - performance_install
       - performance_tests
       - build_windows
