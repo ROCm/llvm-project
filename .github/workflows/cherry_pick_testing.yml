@@ -705,17 +705,24 @@ jobs:
             skip_with "no perf machine is mapped to any of: ${FAMILIES[*]:-none}. Pass performance_target_server to force one."
           fi
 
-          # A cherry-pick is a dev build and publishes to the dev channel under
-          # its own full version string, commit sha and all, so the run can name
-          # its own tarball and pin exactly the build it just produced. Nobody
-          # has to type it. The override exists only for pointing a run at some
-          # other already-published build.
+          # The tarball is named after the build's own full version string,
+          # commit sha and all, so naming it identifies exactly one build and
+          # nobody has to type it. The override points a run at some other
+          # already-published build instead.
           #
           # The name is the one TheRock's build_tarballs.py writes:
           #   therock-dist-{platform}-{family|multiarch}[-tests]-{version}.tar.gz
           # Perf takes the multiarch tests variant, because the suites need the
           # test binaries that the plain tarball leaves out. Published with a
           # literal '+' in the name; the %2B seen in a browser is URL encoding.
+          #
+          # Naming it is not the same as it existing. Reaching the dev channel
+          # takes a publication step that this pipeline does not currently
+          # perform: the tarball job here uploads with release_type 'ci', which
+          # goes to the CI artifacts bucket, and nothing afterwards copies it
+          # onto the channel the install reads. Until that is resolved, a
+          # derived name will not resolve and the override is the only way
+          # through. See docs/perf-publication-path.md.
           TAR_NAME="${TAR_NAME_OVERRIDE}"
           if [[ -z "${TAR_NAME}" ]]; then
             if [[ -z "${PACKAGE_VERSION}" ]]; then
@@ -725,18 +732,30 @@ jobs:
             TAR_NAME="therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz"
           fi
 
-          # Advisory only. A tarball the build has not finished publishing is
-          # the likeliest reason an install fails, and it fails deep inside
-          # qa-forge where the cause is not obvious. Saying so here costs one
-          # request. It does not fail the job: this host may not be reachable
-          # from every runner, and the install resolves its own URL anyway.
+          # Checked before dispatching rather than after. The install takes a
+          # perf machine exclusively and holds it for as long as the install
+          # runs, so letting it start on a tarball that demonstrably is not
+          # there spends the scarce thing in this pipeline to reach a 404.
+          # Unreachable is not the same as absent: this host may be closed to
+          # some runners, and the install resolves its own URL regardless, so
+          # only a definitive answer is treated as one.
           TARBALL_INDEX="https://dev.repo.amd.com/rocm/core/tarball"
           TARBALL_CODE="$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 \
             "${TARBALL_INDEX}/$(jq -rn --arg n "${TAR_NAME}" '$n|@uri')" || echo "000")"
           case "${TARBALL_CODE}" in
-            200) echo "Found ${TAR_NAME} on the dev channel." ;;
-            000) echo "::warning::Could not reach ${TARBALL_INDEX} to check that ${TAR_NAME} is published. Continuing." ;;
-            *)   echo "::warning::${TARBALL_INDEX} answered ${TARBALL_CODE} for ${TAR_NAME}. If the install cannot find it, the build may not have finished publishing, or the name may not match what this build produced." ;;
+            200)
+              echo "Found ${TAR_NAME} on the dev channel."
+              ;;
+            000)
+              echo "::warning::Could not reach ${TARBALL_INDEX} to check that ${TAR_NAME} is published. Continuing without the check."
+              ;;
+            404)
+              echo "::error::${TAR_NAME} is not published at ${TARBALL_INDEX}. Nothing in this pipeline publishes a cherry-pick build to that channel yet, so a derived name will not resolve; see docs/perf-publication-path.md. Pass performance_tar_name to point at a build that is already published."
+              exit 1
+              ;;
+            *)
+              echo "::warning::${TARBALL_INDEX} answered ${TARBALL_CODE} for ${TAR_NAME}, which is neither a hit nor a clear miss. Continuing."
+              ;;
           esac
 
           # qa-forge installs by ROCm version, which it expects as X.Y.Z, so
