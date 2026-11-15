@@ -107,6 +107,14 @@ on:
         description: "Override the qa-forge perf machine. Empty picks the machine mapped to the family being built."
         type: string
         default: ""
+      performance_artifact_run_id:
+        description: "Measure an earlier completed run's artifacts instead of this run's. Lets the performance path run on its own, without a build in front of it. Requires performance_amdgpu_family."
+        type: string
+        default: ""
+      performance_amdgpu_family:
+        description: "GPU family the measured artifacts were built for, e.g. gfx94X-dcgpu. Empty takes the family from this run's build."
+        type: string
+        default: ""
       qa_forge_ref:
         description: "Branch of ROCm/qa-forge supplying the performance workflow."
         type: string
@@ -570,13 +578,20 @@ jobs:
   # it buys nothing while results are informational. The dispatched run's URL
   # goes in the summary. When perf becomes a gate, this is where the wait and
   # the pass/fail check would go.
+  # performance_artifact_run_id detaches this job from the build in front of it,
+  # so the perf path can be exercised on its own against a run that already
+  # finished. Nothing upstream is read in that mode, so the job is allowed to
+  # proceed past a skipped or failed build rather than being gated on one.
   performance_tests:
     name: Performance Tests
     needs: [setup, build_linux]
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
-        needs.build_linux.result == 'success'
+        (
+          inputs.performance_artifact_run_id != '' ||
+          needs.build_linux.result == 'success'
+        )
       }}
     runs-on: ubuntu-24.04
     # No actions: write. The dispatch crosses into ROCm/qa-forge on a separate
@@ -590,11 +605,13 @@ jobs:
     outputs:
       perf_run_url: ${{ steps.dispatch.outputs.runUrlHtml }}
     steps:
-      - name: Resolve the perf machine for the family being built
+      - name: Resolve the artifacts and the perf machine
         id: target
         env:
           BUILD_CONFIG: ${{ needs.setup.outputs.linux_build_config }}
           SERVER_OVERRIDE: ${{ inputs.performance_target_server }}
+          FAMILY_OVERRIDE: ${{ inputs.performance_amdgpu_family }}
+          ARTIFACT_RUN_ID: ${{ inputs.performance_artifact_run_id }}
         run: |
           set -euo pipefail
 
@@ -607,11 +624,33 @@ jobs:
           # family skips the perf run with a warning rather than failing it:
           # most families legitimately have no perf hardware behind them.
           declare -A PERF_SERVERS=(
-            [gfx94X-dcgpu]=linux-gfx942-8gpu-perf-rocm
+            # Bring-up value: the single MI300 box attached so far, named
+            # rather than pooled. Replace with the common label once there is
+            # more than one machine behind the family.
+            [gfx94X-dcgpu]=SMC-SC-DI13-13
+            # Provisional: no machine is attached for gfx950 yet, so this name
+            # is a placeholder and a run targeting it will queue indefinitely.
             [gfx950-dcgpu]=linux-gfx950-8gpu-perf-rocm
           )
 
-          mapfile -t FAMILIES < <(jq -r '.per_family_info[].amdgpu_family' <<<"${BUILD_CONFIG}")
+          # Which run's artifacts get measured. Defaults to this run's build.
+          RUN_ID="${ARTIFACT_RUN_ID:-}"
+          [[ -n "${RUN_ID}" ]] || RUN_ID="${GITHUB_RUN_ID}"
+
+          # Candidate families, most specific first.
+          if [[ -n "${FAMILY_OVERRIDE}" ]]; then
+            FAMILIES=("${FAMILY_OVERRIDE}")
+          elif [[ -n "${ARTIFACT_RUN_ID}" ]]; then
+            # The artifacts belong to a different run, so this run's build
+            # config does not describe them. Reading it anyway would install
+            # one family's artifacts and measure them on another's machine.
+            echo "::error::performance_artifact_run_id is set, so performance_amdgpu_family must name the family those artifacts were built for, e.g. gfx94X-dcgpu."
+            exit 1
+          elif [[ -n "${BUILD_CONFIG}" ]]; then
+            mapfile -t FAMILIES < <(jq -r '.per_family_info[].amdgpu_family' <<<"${BUILD_CONFIG}")
+          else
+            FAMILIES=()
+          fi
 
           FAMILY=""
           SERVER=""
@@ -643,10 +682,11 @@ jobs:
             exit 0
           fi
 
-          echo "Measuring ${FAMILY} on ${SERVER}"
+          echo "Measuring ${FAMILY} artifacts from run ${RUN_ID} on ${SERVER}"
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "family=${FAMILY}" >> "$GITHUB_OUTPUT"
           echo "server=${SERVER}" >> "$GITHUB_OUTPUT"
+          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Report a missing dispatch token
         if: ${{ steps.target.outputs.skip == 'false' && env.PERF_TOKEN_PRESENT == 'false' }}
@@ -676,7 +716,7 @@ jobs:
           inputs: |
             {
               "artifact_repo": "${{ github.repository }}",
-              "artifact_run_id": "${{ github.run_id }}",
+              "artifact_run_id": "${{ steps.target.outputs.run_id }}",
               "amdgpu_family": "${{ steps.target.outputs.family }}",
               "target_server": "${{ steps.target.outputs.server }}",
               "triggered_by": "${{ github.triggering_actor }} (CP ${{ inputs.LLVM_BRANCH }})"
@@ -688,7 +728,13 @@ jobs:
           PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
           PERF_FAMILY: ${{ steps.target.outputs.family }}
           PERF_SERVER: ${{ steps.target.outputs.server }}
+          PERF_ARTIFACT_RUN_ID: ${{ steps.target.outputs.run_id }}
         run: |
+          if [[ "${PERF_ARTIFACT_RUN_ID}" == "${GITHUB_RUN_ID}" ]]; then
+            ARTIFACTS="this run (\`${GITHUB_RUN_ID}\`)"
+          else
+            ARTIFACTS="[run \`${PERF_ARTIFACT_RUN_ID}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${PERF_ARTIFACT_RUN_ID}), not this one"
+          fi
           {
             echo "### Performance tests"
             echo
@@ -697,7 +743,7 @@ jobs:
             echo "| Run | ${PERF_RUN_URL} |"
             echo "| Family | \`${PERF_FAMILY}\` |"
             echo "| Machine | \`${PERF_SERVER}\` |"
-            echo "| Artifacts | this run (\`${GITHUB_RUN_ID}\`) |"
+            echo "| Artifacts | ${ARTIFACTS} |"
             echo
             echo "> Dispatched, not waited on. Results are informational and do not"
             echo "> affect this run's conclusion."
