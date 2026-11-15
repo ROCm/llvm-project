@@ -108,7 +108,7 @@ on:
         type: string
         default: ""
       performance_tar_name:
-        description: "TheRock tarball to install, e.g. therock-dist-linux-gfx94X-dcgpu-7.11.0a20261115.tar.gz. EMPTY INSTALLS THE LATEST PUBLISHED BUILD, NOT THIS ONE."
+        description: "Override the tarball installed on the perf machine. Empty names the one this run published, pinning the build under test."
         type: string
         default: ""
       performance_rocm_version:
@@ -116,13 +116,13 @@ on:
         type: string
         default: ""
       performance_execution_label:
-        description: "Execution label the install and the measurements are recorded under."
+        description: "Execution label the install and the measurements are recorded under. Must be one the target workflows accept."
         type: string
-        default: "stg-compiler-full"
+        default: "workflow-test"
       performance_install_method:
         description: "How ROCm is laid down on the perf machine."
         type: string
-        default: "therock_tarball_multiarch_singledevice"
+        default: "therock_tarball_multiarch_alldevice"
       performance_suites:
         description: "Comma-separated performance suite ids to run."
         type: string
@@ -605,11 +605,14 @@ jobs:
   performance_install:
     name: Performance Install
     needs: [setup, build_linux]
+    # A successful build is what gives this run a version to name its own
+    # tarball from. Naming someone else's tarball outright is the one way to
+    # run without a build in front.
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
         (
-          inputs.performance_rocm_version != '' ||
+          inputs.performance_tar_name != '' ||
           needs.build_linux.result == 'success'
         )
       }}
@@ -639,7 +642,7 @@ jobs:
           BUILD_CONFIG: ${{ needs.setup.outputs.linux_build_config }}
           PACKAGE_VERSION: ${{ needs.setup.outputs.rocm_package_version }}
           SERVER_OVERRIDE: ${{ inputs.performance_target_server }}
-          TAR_NAME: ${{ inputs.performance_tar_name }}
+          TAR_NAME_OVERRIDE: ${{ inputs.performance_tar_name }}
           ROCM_VERSION_OVERRIDE: ${{ inputs.performance_rocm_version }}
           EXECUTION_LABEL: ${{ inputs.performance_execution_label }}
           INSTALL_METHOD: ${{ inputs.performance_install_method }}
@@ -702,24 +705,49 @@ jobs:
             skip_with "no perf machine is mapped to any of: ${FAMILIES[*]:-none}. Pass performance_target_server to force one."
           fi
 
-          # qa-forge installs by ROCm version, which it expects as X.Y.Z. The
-          # build's own package version carries a suffix identifying the commit
-          # (for example 7.11.0.dev0+<sha>), so trim it back to the base.
-          ROCM_VERSION="${ROCM_VERSION_OVERRIDE}"
-          if [[ -z "${ROCM_VERSION}" ]]; then
-            ROCM_VERSION="$(grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' <<<"${PACKAGE_VERSION}" || true)"
-          fi
-          if [[ -z "${ROCM_VERSION}" ]]; then
-            echo "::error::Could not determine the ROCm version to install. The build reported package version '${PACKAGE_VERSION}'. Pass performance_rocm_version as X.Y.Z."
-            exit 1
+          # A cherry-pick is a dev build and publishes to the dev channel under
+          # its own full version string, commit sha and all, so the run can name
+          # its own tarball and pin exactly the build it just produced. Nobody
+          # has to type it. The override exists only for pointing a run at some
+          # other already-published build.
+          #
+          # The name is the one TheRock's build_tarballs.py writes:
+          #   therock-dist-{platform}-{family|multiarch}[-tests]-{version}.tar.gz
+          # Perf takes the multiarch tests variant, because the suites need the
+          # test binaries that the plain tarball leaves out. Published with a
+          # literal '+' in the name; the %2B seen in a browser is URL encoding.
+          TAR_NAME="${TAR_NAME_OVERRIDE}"
+          if [[ -z "${TAR_NAME}" ]]; then
+            if [[ -z "${PACKAGE_VERSION}" ]]; then
+              echo "::error::No build ran in front of this job, so there is no version to name a tarball from. Pass performance_tar_name to point at an already-published build."
+              exit 1
+            fi
+            TAR_NAME="therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz"
           fi
 
-          # The install resolves an empty tarball name to the latest build
-          # published to the ROCm package CDN, which is not this cherry-pick.
-          # The run still produces a number, just not one attributable to the
-          # patch, so this warns loudly rather than failing.
-          if [[ -z "${TAR_NAME}" ]]; then
-            echo "::warning::performance_tar_name is empty, so the latest published ROCm build will be installed, NOT this cherry-pick. The measurement will not be attributable to the patch under test."
+          # Advisory only. A tarball the build has not finished publishing is
+          # the likeliest reason an install fails, and it fails deep inside
+          # qa-forge where the cause is not obvious. Saying so here costs one
+          # request. It does not fail the job: this host may not be reachable
+          # from every runner, and the install resolves its own URL anyway.
+          TARBALL_INDEX="https://dev.repo.amd.com/rocm/core/tarball"
+          TARBALL_CODE="$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 \
+            "${TARBALL_INDEX}/$(jq -rn --arg n "${TAR_NAME}" '$n|@uri')" || echo "000")"
+          case "${TARBALL_CODE}" in
+            200) echo "Found ${TAR_NAME} on the dev channel." ;;
+            000) echo "::warning::Could not reach ${TARBALL_INDEX} to check that ${TAR_NAME} is published. Continuing." ;;
+            *)   echo "::warning::${TARBALL_INDEX} answered ${TARBALL_CODE} for ${TAR_NAME}. If the install cannot find it, the build may not have finished publishing, or the name may not match what this build produced." ;;
+          esac
+
+          # qa-forge installs by ROCm version, which it expects as X.Y.Z, so
+          # trim the commit suffix off the version carried in the tarball name.
+          ROCM_VERSION="${ROCM_VERSION_OVERRIDE}"
+          if [[ -z "${ROCM_VERSION}" ]]; then
+            ROCM_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' <<<"${TAR_NAME}" | head -1 || true)"
+          fi
+          if [[ -z "${ROCM_VERSION}" ]]; then
+            echo "::error::Could not read a ROCm version out of the tarball name '${TAR_NAME}'. Pass performance_rocm_version as X.Y.Z."
+            exit 1
           fi
 
           if ! [[ "${INSTALL_WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( INSTALL_WAIT_MINUTES < 1 )); then
@@ -735,30 +763,32 @@ jobs:
           fi
 
           # ════════════════════════════════════════════════════════════════
-          # ASSUMED DISPATCH KEYS — the only place either payload is built.
+          # DISPATCH KEYS — the only place either payload is built.
           #
-          # The input *keys* below are inferred, not verified: the target
-          # workflows live in a repository this one cannot read, and what was
-          # described to us were form labels rather than key names. The values
-          # are correct; the names on the left may not be. Every assumed key
-          # for both workflows is in this block, so correcting them is one
-          # edit here and nothing else in the file changes.
+          # The key names come from the two target workflows as they stand in
+          # the public mirror of qa-forge, which is archived and so may trail
+          # the internal repository these are dispatched to. Both payloads are
+          # built here and handed to the dispatch steps whole, so correcting a
+          # name is one edit in this block and nothing else in the file moves.
           #
           #   rocm-func-core-therock-install-dev.yml
+          #     target_type      'servers' to address a machine by name
           #     target_server    the perf machine
           #     install_method   how ROCm is laid down
           #     execution_label  what the install is recorded under
-          #     package_name     tarball to install; empty means latest
+          #     package_name     the tarball naming this exact build
           #     rocm_version     X.Y.Z
-          #     triggered_by     attribution, likely optional
+          #     build_type       'dev', selecting the dev channel the
+          #                      cherry-pick published to
+          #     triggered_by     attribution, optional
           #
           #   performance-test-run.yml
           #     workflow_id      comma-separated suite ids
           #     target_server    the same machine
           #     execution_label  the same label
-          #     triggered_by     attribution, likely optional
+          #     triggered_by     attribution, optional
           # ════════════════════════════════════════════════════════════════
-          export SERVER ROCM_VERSION
+          export SERVER ROCM_VERSION TAR_NAME
           python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
           import json
           import os
@@ -767,11 +797,13 @@ jobs:
               return f"{key}={json.dumps(payload, separators=(',', ':'))}"
 
           install = {
+              "target_type": "servers",
               "target_server": os.environ["SERVER"],
               "install_method": os.environ["INSTALL_METHOD"],
               "execution_label": os.environ["EXECUTION_LABEL"],
               "package_name": os.environ["TAR_NAME"],
               "rocm_version": os.environ["ROCM_VERSION"],
+              "build_type": "dev",
               "triggered_by": os.environ["TRIGGERED_BY"],
           }
           perf = {
@@ -784,7 +816,7 @@ jobs:
           print(line("perf_dispatch_inputs", perf))
           PAYLOADS
 
-          echo "Installing ROCm ${ROCM_VERSION} on ${SERVER} (tarball: ${TAR_NAME:-latest published})"
+          echo "Installing ROCm ${ROCM_VERSION} on ${SERVER} from ${TAR_NAME}"
           {
             echo "skip=false"
             echo "server=${SERVER}"
@@ -828,11 +860,7 @@ jobs:
             echo "| Run | ${INSTALL_RUN_URL} |"
             echo "| Machine | \`${PERF_SERVER}\` |"
             echo "| ROCm version | \`${ROCM_VERSION}\` |"
-            if [[ -n "${TAR_NAME}" ]]; then
-              echo "| Tarball | \`${TAR_NAME}\` |"
-            else
-              echo "| Tarball | latest published, **not this cherry-pick** |"
-            fi
+            echo "| Tarball | \`${TAR_NAME}\` |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Check the install succeeded
