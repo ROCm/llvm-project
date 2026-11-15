@@ -100,9 +100,17 @@ on:
         type: string
         default: ""
       run_performance_tests:
-        description: "Run performance tests after the build. Not yet wired up."
+        description: "Run performance tests after the build, on the qa-forge perf machines. Results are informational and do not gate the run."
         type: boolean
         default: false
+      performance_target_server:
+        description: "Override the qa-forge perf machine. Empty picks the machine mapped to the family being built."
+        type: string
+        default: ""
+      qa_forge_ref:
+        description: "Branch of ROCm/qa-forge supplying the performance workflow."
+        type: string
+        default: "main"
       changed_projects:
         description: "Comma-separated list of changed projects to filter tests (empty = run all tests)."
         type: string
@@ -546,29 +554,153 @@ jobs:
       contents: read
       id-token: write
 
+  # Performance qualification lives in qa-forge, not here. The suites are
+  # ROCmTest suites, the machines are qa-forge's long-lived baremetal perf
+  # servers, and the results go to qa-forge's result store; none of that has an
+  # equivalent in TheRock's test workflows. So this job's whole job is to hand
+  # qa-forge the one thing only this run knows — the id of the run whose
+  # artifacts are to be measured — and get out of the way.
+  #
+  # qa-forge pulls those artifacts straight out of TheRock's public CI bucket
+  # by repository and run id, so nothing has to be published or packaged first;
+  # build_linux finishing is enough.
+  #
+  # Fire-and-forget, like compiler_bump.yml's trigger-linux-tests: the perf run
+  # takes far longer than the build and holding a hosted runner open to watch
+  # it buys nothing while results are informational. The dispatched run's URL
+  # goes in the summary. When perf becomes a gate, this is where the wait and
+  # the pass/fail check would go.
   performance_tests:
     name: Performance Tests
-    needs: build_linux
+    needs: [setup, build_linux]
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
         needs.build_linux.result == 'success'
       }}
     runs-on: ubuntu-24.04
+    # No actions: write. The dispatch crosses into ROCm/qa-forge on a separate
+    # token, so GITHUB_TOKEN needs nothing beyond the default read.
+    permissions:
+      contents: read
+    env:
+      # The secrets context is not available in a step `if:`, and the token
+      # itself must never be compared in one. Mirror only whether it is set.
+      PERF_TOKEN_PRESENT: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN != '' && 'true' || 'false' }}
+    outputs:
+      perf_run_url: ${{ steps.dispatch.outputs.runUrlHtml }}
     steps:
-      - name: Report that performance testing is not wired up
+      - name: Resolve the perf machine for the family being built
+        id: target
+        env:
+          BUILD_CONFIG: ${{ needs.setup.outputs.linux_build_config }}
+          SERVER_OVERRIDE: ${{ inputs.performance_target_server }}
+        run: |
+          set -euo pipefail
+
+          # Perf machines are qa-forge's, not TheRock's, so they are absent
+          # from runner-config-v2.json and the family's `benchmark-runs-on`
+          # does not point at them. The mapping has to live somewhere, and a
+          # table here is more legible than another workflow input.
+          #
+          # Only families with a perf machine appear. A build for any other
+          # family skips the perf run with a warning rather than failing it:
+          # most families legitimately have no perf hardware behind them.
+          declare -A PERF_SERVERS=(
+            [gfx94X-dcgpu]=linux-gfx942-8gpu-perf-rocm
+            [gfx950-dcgpu]=linux-gfx950-8gpu-perf-rocm
+          )
+
+          mapfile -t FAMILIES < <(jq -r '.per_family_info[].amdgpu_family' <<<"${BUILD_CONFIG}")
+
+          FAMILY=""
+          SERVER=""
+          for candidate in "${FAMILIES[@]}"; do
+            if [[ -n "${PERF_SERVERS[${candidate}]:-}" ]]; then
+              FAMILY="${candidate}"
+              SERVER="${PERF_SERVERS[${candidate}]}"
+              break
+            fi
+          done
+
+          # An override replaces the machine, never the family: the family
+          # selects which artifacts get installed and so has to match what was
+          # actually built.
+          if [[ -n "${SERVER_OVERRIDE}" ]]; then
+            SERVER="${SERVER_OVERRIDE}"
+            [[ -n "${FAMILY}" ]] || FAMILY="${FAMILIES[0]:-}"
+          fi
+
+          if [[ -z "${FAMILY}" || -z "${SERVER}" ]]; then
+            echo "::warning::No perf machine is mapped to any of: ${FAMILIES[*]:-none}. Skipping the performance run. Pass performance_target_server to force one."
+            {
+              echo "### Performance tests"
+              echo
+              echo "> [!NOTE]"
+              echo "> Skipped: no perf machine is mapped to \`${FAMILIES[*]:-none}\`."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Measuring ${FAMILY} on ${SERVER}"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "family=${FAMILY}" >> "$GITHUB_OUTPUT"
+          echo "server=${SERVER}" >> "$GITHUB_OUTPUT"
+
+      - name: Report a missing dispatch token
+        if: ${{ steps.target.outputs.skip == 'false' && env.PERF_TOKEN_PRESENT == 'false' }}
+        run: |
+          echo "::warning::QA_FORGE_PERF_DISPATCH_TOKEN is not configured, so no performance run was dispatched."
+          {
+            echo "### Performance tests"
+            echo
+            echo "> [!WARNING]"
+            echo "> Not dispatched: the \`QA_FORGE_PERF_DISPATCH_TOKEN\` secret is not"
+            echo "> configured on this repository. It needs \`actions: write\` on"
+            echo "> \`ROCm/qa-forge\`."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Dispatch the qa-forge performance run
+        id: dispatch
+        if: ${{ steps.target.outputs.skip == 'false' && env.PERF_TOKEN_PRESENT == 'true' }}
+        uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
+        with:
+          repo: ROCm/qa-forge
+          ref: ${{ inputs.qa_forge_ref }}
+          workflow: performance-test-ci-artifacts.yml
+          token: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
+          # Which suites run, at what depth, and where the numbers are recorded
+          # are qa-forge's decisions; it holds the perf matrix. Sending only the
+          # build's identity keeps that from being restated, and wrongly, here.
+          inputs: |
+            {
+              "artifact_repo": "${{ github.repository }}",
+              "artifact_run_id": "${{ github.run_id }}",
+              "amdgpu_family": "${{ steps.target.outputs.family }}",
+              "target_server": "${{ steps.target.outputs.server }}",
+              "triggered_by": "${{ github.triggering_actor }} (CP ${{ inputs.LLVM_BRANCH }})"
+            }
+
+      - name: Link the performance run
+        if: ${{ steps.dispatch.outputs.runUrlHtml != '' }}
+        env:
+          PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
+          PERF_FAMILY: ${{ steps.target.outputs.family }}
+          PERF_SERVER: ${{ steps.target.outputs.server }}
         run: |
           {
             echo "### Performance tests"
             echo
-            echo "Placeholder: requested but not yet wired up, so nothing ran."
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Run | ${PERF_RUN_URL} |"
+            echo "| Family | \`${PERF_FAMILY}\` |"
+            echo "| Machine | \`${PERF_SERVER}\` |"
+            echo "| Artifacts | this run (\`${GITHUB_RUN_ID}\`) |"
             echo
-            echo "Wiring this up means replacing this job with a call to"
-            echo "\`./.github/workflows/test_benchmarks.yml\`, which takes"
-            echo "\`artifact_group\`, \`artifact_run_id\`, \`amdgpu_families\` and"
-            echo "\`test_runs_on\`, and optionally the BENCHMARK_DB_URL secrets to"
-            echo "publish results. The per-family benchmark runner label is"
-            echo "already carried in the build config as \`benchmark-runs-on\`."
+            echo "> Dispatched, not waited on. Results are informational and do not"
+            echo "> affect this run's conclusion."
           } >> "${GITHUB_STEP_SUMMARY}"
 
   # ==========================================================================
