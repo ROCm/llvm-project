@@ -104,19 +104,43 @@ on:
         type: boolean
         default: false
       performance_target_server:
-        description: "Override the qa-forge perf machine. Empty picks the machine mapped to the family being built."
+        description: "Override the perf machine. Empty picks the machine mapped to the family being built."
         type: string
         default: ""
-      performance_artifact_run_id:
-        description: "Measure an earlier completed run's artifacts instead of this run's. Lets the performance path run on its own, without a build in front of it. Requires performance_amdgpu_family."
+      performance_tar_name:
+        description: "TheRock tarball to install, e.g. therock-dist-linux-gfx94X-dcgpu-7.11.0a20261115.tar.gz. EMPTY INSTALLS THE LATEST PUBLISHED BUILD, NOT THIS ONE."
         type: string
         default: ""
-      performance_amdgpu_family:
-        description: "GPU family the measured artifacts were built for, e.g. gfx94X-dcgpu. Empty takes the family from this run's build."
+      performance_rocm_version:
+        description: "ROCm version to install, as X.Y.Z, e.g. 7.11.0. Empty derives it from this run's package version."
         type: string
         default: ""
+      performance_execution_label:
+        description: "Execution label the install and the measurements are recorded under."
+        type: string
+        default: "stg-compiler-full"
+      performance_install_method:
+        description: "How ROCm is laid down on the perf machine."
+        type: string
+        default: "therock_tarball_multiarch_singledevice"
+      performance_suites:
+        description: "Comma-separated performance suite ids to run."
+        type: string
+        default: "hip-hipperf,rocmlibs-rocrand-perf,rocmlibs-rocfft-perf,rocmlibs-rccl-perf"
+      performance_install_wait_minutes:
+        description: "How long to wait for the install before giving up. Expiry fails the run, because measuring an unknown stack is worse than not measuring."
+        type: number
+        default: 120
+      performance_wait_minutes:
+        description: "How long to wait for the measurement before giving up. Expiry is not a failure; the measurement keeps running and its URL is reported."
+        type: number
+        default: 300
+      qa_forge_repo:
+        description: "Repository holding the install and performance workflows."
+        type: string
+        default: "AMD-ROCm-Internal/qa-forge"
       qa_forge_ref:
-        description: "Branch of ROCm/qa-forge supplying the performance workflow."
+        description: "Branch of qa_forge_repo supplying the install and performance workflows."
         type: string
         default: "main"
       changed_projects:
@@ -562,40 +586,40 @@ jobs:
       contents: read
       id-token: write
 
-  # Performance qualification lives in qa-forge, not here. The suites are
-  # ROCmTest suites, the machines are qa-forge's long-lived baremetal perf
-  # servers, and the results go to qa-forge's result store; none of that has an
-  # equivalent in TheRock's test workflows. So this job's whole job is to hand
-  # qa-forge the one thing only this run knows — the id of the run whose
-  # artifacts are to be measured — and get out of the way.
+  # Performance qualification lives in qa-forge: the suites are ROCmTest suites,
+  # the machines are its baremetal perf servers, and the result store is its
+  # own. Nothing here reimplements any of that. These two jobs drive qa-forge's
+  # two existing workflows in order — install the ROCm under test on the perf
+  # machine, then measure it — because the ordering is the one part neither
+  # workflow owns.
   #
-  # qa-forge pulls those artifacts straight out of TheRock's public CI bucket
-  # by repository and run id, so nothing has to be published or packaged first;
-  # build_linux finishing is enough.
+  # Split in two so each wait gets its own six-hour job budget. Both halves
+  # queue for a machine held exclusively, so one job waiting on install time
+  # plus perf time plus two queues is the shape most likely to hit the cap.
   #
-  # Fire-and-forget, like compiler_bump.yml's trigger-linux-tests: the perf run
-  # takes far longer than the build and holding a hosted runner open to watch
-  # it buys nothing while results are informational. The dispatched run's URL
-  # goes in the summary. When perf becomes a gate, this is where the wait and
-  # the pass/fail check would go.
-  # performance_artifact_run_id detaches this job from the build in front of it,
-  # so the perf path can be exercised on its own against a run that already
-  # finished. Nothing upstream is read in that mode, so the job is allowed to
-  # proceed past a skipped or failed build rather than being gated on one.
-  performance_tests:
-    name: Performance Tests
+  # Finding the dispatched run is not a search. The dispatch API is called with
+  # return_run_details, so the created run's id comes back from the call that
+  # created it. Two cherry-picks dispatching at the same moment each get their
+  # own id from their own call and cannot be confused; they contend for the
+  # machine, not for the identity of their run.
+  performance_install:
+    name: Performance Install
     needs: [setup, build_linux]
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
         (
-          inputs.performance_artifact_run_id != '' ||
+          inputs.performance_rocm_version != '' ||
           needs.build_linux.result == 'success'
         )
       }}
     runs-on: ubuntu-24.04
-    # No actions: write. The dispatch crosses into ROCm/qa-forge on a separate
-    # token, so GITHUB_TOKEN needs nothing beyond the default read.
+    # The hard ceiling. The wait itself is bounded below this by
+    # performance_install_wait_minutes, so the action reports a timeout and the
+    # check step runs, rather than the job being killed mid-wait.
+    timeout-minutes: 360
+    # No actions: write. The dispatch crosses into another repository on a
+    # separate token, so GITHUB_TOKEN needs nothing beyond the default read.
     permissions:
       contents: read
     env:
@@ -603,15 +627,25 @@ jobs:
       # itself must never be compared in one. Mirror only whether it is set.
       PERF_TOKEN_PRESENT: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN != '' && 'true' || 'false' }}
     outputs:
-      perf_run_url: ${{ steps.dispatch.outputs.runUrlHtml }}
+      skip: ${{ steps.plan.outputs.skip }}
+      server: ${{ steps.plan.outputs.server }}
+      rocm_version: ${{ steps.plan.outputs.rocm_version }}
+      perf_dispatch_inputs: ${{ steps.plan.outputs.perf_dispatch_inputs }}
+      install_run_url: ${{ steps.dispatch.outputs.runUrlHtml }}
     steps:
-      - name: Resolve the artifacts and the perf machine
-        id: target
+      - name: Plan the performance run
+        id: plan
         env:
           BUILD_CONFIG: ${{ needs.setup.outputs.linux_build_config }}
+          PACKAGE_VERSION: ${{ needs.setup.outputs.rocm_package_version }}
           SERVER_OVERRIDE: ${{ inputs.performance_target_server }}
-          FAMILY_OVERRIDE: ${{ inputs.performance_amdgpu_family }}
-          ARTIFACT_RUN_ID: ${{ inputs.performance_artifact_run_id }}
+          TAR_NAME: ${{ inputs.performance_tar_name }}
+          ROCM_VERSION_OVERRIDE: ${{ inputs.performance_rocm_version }}
+          EXECUTION_LABEL: ${{ inputs.performance_execution_label }}
+          INSTALL_METHOD: ${{ inputs.performance_install_method }}
+          SUITES: ${{ inputs.performance_suites }}
+          INSTALL_WAIT_MINUTES: ${{ inputs.performance_install_wait_minutes }}
+          TRIGGERED_BY: ${{ github.triggering_actor }} (CP ${{ inputs.LLVM_BRANCH }})
         run: |
           set -euo pipefail
 
@@ -633,121 +667,350 @@ jobs:
             [gfx950-dcgpu]=linux-gfx950-8gpu-perf-rocm
           )
 
-          # Which run's artifacts get measured. Defaults to this run's build.
-          RUN_ID="${ARTIFACT_RUN_ID:-}"
-          [[ -n "${RUN_ID}" ]] || RUN_ID="${GITHUB_RUN_ID}"
+          skip_with() {
+            echo "::warning::$1"
+            {
+              echo "### Performance tests"
+              echo
+              echo "> [!NOTE]"
+              echo "> Skipped: $1"
+            } >> "${GITHUB_STEP_SUMMARY}"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
 
-          # Candidate families, most specific first.
-          if [[ -n "${FAMILY_OVERRIDE}" ]]; then
-            FAMILIES=("${FAMILY_OVERRIDE}")
-          elif [[ -n "${ARTIFACT_RUN_ID}" ]]; then
-            # The artifacts belong to a different run, so this run's build
-            # config does not describe them. Reading it anyway would install
-            # one family's artifacts and measure them on another's machine.
-            echo "::error::performance_artifact_run_id is set, so performance_amdgpu_family must name the family those artifacts were built for, e.g. gfx94X-dcgpu."
-            exit 1
-          elif [[ -n "${BUILD_CONFIG}" ]]; then
+          if [[ "${PERF_TOKEN_PRESENT}" != "true" ]]; then
+            skip_with "the QA_FORGE_PERF_DISPATCH_TOKEN secret is not configured."
+          fi
+
+          if [[ -n "${BUILD_CONFIG}" ]]; then
             mapfile -t FAMILIES < <(jq -r '.per_family_info[].amdgpu_family' <<<"${BUILD_CONFIG}")
           else
             FAMILIES=()
           fi
 
-          FAMILY=""
           SERVER=""
           for candidate in "${FAMILIES[@]}"; do
             if [[ -n "${PERF_SERVERS[${candidate}]:-}" ]]; then
-              FAMILY="${candidate}"
               SERVER="${PERF_SERVERS[${candidate}]}"
               break
             fi
           done
+          [[ -z "${SERVER_OVERRIDE}" ]] || SERVER="${SERVER_OVERRIDE}"
 
-          # An override replaces the machine, never the family: the family
-          # selects which artifacts get installed and so has to match what was
-          # actually built.
-          if [[ -n "${SERVER_OVERRIDE}" ]]; then
-            SERVER="${SERVER_OVERRIDE}"
-            [[ -n "${FAMILY}" ]] || FAMILY="${FAMILIES[0]:-}"
+          if [[ -z "${SERVER}" ]]; then
+            skip_with "no perf machine is mapped to any of: ${FAMILIES[*]:-none}. Pass performance_target_server to force one."
           fi
 
-          if [[ -z "${FAMILY}" || -z "${SERVER}" ]]; then
-            echo "::warning::No perf machine is mapped to any of: ${FAMILIES[*]:-none}. Skipping the performance run. Pass performance_target_server to force one."
-            {
-              echo "### Performance tests"
-              echo
-              echo "> [!NOTE]"
-              echo "> Skipped: no perf machine is mapped to \`${FAMILIES[*]:-none}\`."
-            } >> "${GITHUB_STEP_SUMMARY}"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          # qa-forge installs by ROCm version, which it expects as X.Y.Z. The
+          # build's own package version carries a suffix identifying the commit
+          # (for example 7.11.0.dev0+<sha>), so trim it back to the base.
+          ROCM_VERSION="${ROCM_VERSION_OVERRIDE}"
+          if [[ -z "${ROCM_VERSION}" ]]; then
+            ROCM_VERSION="$(grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' <<<"${PACKAGE_VERSION}" || true)"
+          fi
+          if [[ -z "${ROCM_VERSION}" ]]; then
+            echo "::error::Could not determine the ROCm version to install. The build reported package version '${PACKAGE_VERSION}'. Pass performance_rocm_version as X.Y.Z."
+            exit 1
           fi
 
-          echo "Measuring ${FAMILY} artifacts from run ${RUN_ID} on ${SERVER}"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
-          echo "family=${FAMILY}" >> "$GITHUB_OUTPUT"
-          echo "server=${SERVER}" >> "$GITHUB_OUTPUT"
-          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+          # The install resolves an empty tarball name to the latest build
+          # published to the ROCm package CDN, which is not this cherry-pick.
+          # The run still produces a number, just not one attributable to the
+          # patch, so this warns loudly rather than failing.
+          if [[ -z "${TAR_NAME}" ]]; then
+            echo "::warning::performance_tar_name is empty, so the latest published ROCm build will be installed, NOT this cherry-pick. The measurement will not be attributable to the patch under test."
+          fi
 
-      - name: Report a missing dispatch token
-        if: ${{ steps.target.outputs.skip == 'false' && env.PERF_TOKEN_PRESENT == 'false' }}
-        run: |
-          echo "::warning::QA_FORGE_PERF_DISPATCH_TOKEN is not configured, so no performance run was dispatched."
+          if ! [[ "${INSTALL_WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( INSTALL_WAIT_MINUTES < 1 )); then
+            echo "::error::performance_install_wait_minutes must be a positive whole number of minutes, got '${INSTALL_WAIT_MINUTES}'."
+            exit 1
+          fi
+          # Stay under the job's own ceiling so the wait ends inside the job and
+          # the outcome is reported, instead of the job being killed mid-wait.
+          WAIT_MINUTES="${INSTALL_WAIT_MINUTES}"
+          if (( WAIT_MINUTES > 345 )); then
+            echo "::warning::performance_install_wait_minutes of ${WAIT_MINUTES} exceeds the job ceiling; clamping to 345."
+            WAIT_MINUTES=345
+          fi
+
+          # ════════════════════════════════════════════════════════════════
+          # ASSUMED DISPATCH KEYS — the only place either payload is built.
+          #
+          # The input *keys* below are inferred, not verified: the target
+          # workflows live in a repository this one cannot read, and what was
+          # described to us were form labels rather than key names. The values
+          # are correct; the names on the left may not be. Every assumed key
+          # for both workflows is in this block, so correcting them is one
+          # edit here and nothing else in the file changes.
+          #
+          #   rocm-func-core-therock-install-dev.yml
+          #     target_server    the perf machine
+          #     install_method   how ROCm is laid down
+          #     execution_label  what the install is recorded under
+          #     package_name     tarball to install; empty means latest
+          #     rocm_version     X.Y.Z
+          #     triggered_by     attribution, likely optional
+          #
+          #   performance-test-run.yml
+          #     workflow_id      comma-separated suite ids
+          #     target_server    the same machine
+          #     execution_label  the same label
+          #     triggered_by     attribution, likely optional
+          # ════════════════════════════════════════════════════════════════
+          export SERVER ROCM_VERSION
+          python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+
+          def line(key, payload):
+              return f"{key}={json.dumps(payload, separators=(',', ':'))}"
+
+          install = {
+              "target_server": os.environ["SERVER"],
+              "install_method": os.environ["INSTALL_METHOD"],
+              "execution_label": os.environ["EXECUTION_LABEL"],
+              "package_name": os.environ["TAR_NAME"],
+              "rocm_version": os.environ["ROCM_VERSION"],
+              "triggered_by": os.environ["TRIGGERED_BY"],
+          }
+          perf = {
+              "workflow_id": os.environ["SUITES"],
+              "target_server": os.environ["SERVER"],
+              "execution_label": os.environ["EXECUTION_LABEL"],
+              "triggered_by": os.environ["TRIGGERED_BY"],
+          }
+          print(line("install_dispatch_inputs", install))
+          print(line("perf_dispatch_inputs", perf))
+          PAYLOADS
+
+          echo "Installing ROCm ${ROCM_VERSION} on ${SERVER} (tarball: ${TAR_NAME:-latest published})"
           {
-            echo "### Performance tests"
-            echo
-            echo "> [!WARNING]"
-            echo "> Not dispatched: the \`QA_FORGE_PERF_DISPATCH_TOKEN\` secret is not"
-            echo "> configured on this repository. It needs \`actions: write\` on"
-            echo "> \`ROCm/qa-forge\`."
-          } >> "${GITHUB_STEP_SUMMARY}"
+            echo "skip=false"
+            echo "server=${SERVER}"
+            echo "rocm_version=${ROCM_VERSION}"
+            echo "tar_name=${TAR_NAME}"
+            echo "wait_seconds=$(( WAIT_MINUTES * 60 ))"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch the qa-forge performance run
+      - name: Dispatch the ROCm install onto the perf machine
         id: dispatch
-        if: ${{ steps.target.outputs.skip == 'false' && env.PERF_TOKEN_PRESENT == 'true' }}
+        if: ${{ steps.plan.outputs.skip == 'false' }}
         uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
         with:
-          repo: ROCm/qa-forge
+          repo: ${{ inputs.qa_forge_repo }}
           ref: ${{ inputs.qa_forge_ref }}
-          workflow: performance-test-ci-artifacts.yml
+          workflow: rocm-func-core-therock-install-dev.yml
           token: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
-          # Which suites run, at what depth, and where the numbers are recorded
-          # are qa-forge's decisions; it holds the perf matrix. Sending only the
-          # build's identity keeps that from being restated, and wrongly, here.
-          inputs: |
+          wait-for-completion: true
+          wait-timeout-seconds: ${{ steps.plan.outputs.wait_seconds }}
+          wait-interval-seconds: 30
+          # sync-status is deliberately off. It would fail this step on a failed
+          # install, before the link step below has put the run URL in the
+          # summary. The check step at the end of the job fails the job instead,
+          # and covers the timeout case that sync-status misses.
+          sync-status: false
+          inputs: ${{ steps.plan.outputs.install_dispatch_inputs }}
+
+      - name: Link the install run
+        if: ${{ always() && steps.dispatch.outputs.runUrlHtml != '' }}
+        env:
+          INSTALL_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
+          PERF_SERVER: ${{ steps.plan.outputs.server }}
+          ROCM_VERSION: ${{ steps.plan.outputs.rocm_version }}
+          TAR_NAME: ${{ steps.plan.outputs.tar_name }}
+        run: |
+          {
+            echo "### Performance install"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Run | ${INSTALL_RUN_URL} |"
+            echo "| Machine | \`${PERF_SERVER}\` |"
+            echo "| ROCm version | \`${ROCM_VERSION}\` |"
+            if [[ -n "${TAR_NAME}" ]]; then
+              echo "| Tarball | \`${TAR_NAME}\` |"
+            else
+              echo "| Tarball | latest published, **not this cherry-pick** |"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Check the install succeeded
+        if: ${{ always() && steps.dispatch.outputs.runId != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
+          QA_FORGE_REPO: ${{ inputs.qa_forge_repo }}
+          RUN_ID: ${{ steps.dispatch.outputs.runId }}
+          INSTALL_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
+        run: |
+          set -euo pipefail
+
+          # The dispatch action only warns when its wait expires, and its
+          # status sync reads a conclusion that is still null at that point, so
+          # a timeout would otherwise pass silently. Read the run directly.
+          read -r STATUS CONCLUSION < <(
+            gh api "repos/${QA_FORGE_REPO}/actions/runs/${RUN_ID}" \
+              --jq '[.status, (.conclusion // "none")] | @tsv'
+          )
+          echo "Install run ${RUN_ID}: status=${STATUS} conclusion=${CONCLUSION}"
+
+          if [[ "${STATUS}" != "completed" ]]; then
+            echo "::error::The install run is still ${STATUS} after the wait expired. Measuring now would measure an unknown stack, so no performance run is dispatched. Raise performance_install_wait_minutes or check ${INSTALL_RUN_URL}."
             {
-              "artifact_repo": "${{ github.repository }}",
-              "artifact_run_id": "${{ steps.target.outputs.run_id }}",
-              "amdgpu_family": "${{ steps.target.outputs.family }}",
-              "target_server": "${{ steps.target.outputs.server }}",
-              "triggered_by": "${{ github.triggering_actor }} (CP ${{ inputs.LLVM_BRANCH }})"
-            }
+              echo "> [!CAUTION]"
+              echo "> The install did not finish within the wait. No measurement was taken."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
+
+          if [[ "${CONCLUSION}" != "success" ]]; then
+            echo "::error::The install run concluded '${CONCLUSION}'. No performance run is dispatched, because the stack on the machine is not the one under test. See ${INSTALL_RUN_URL}."
+            {
+              echo "> [!CAUTION]"
+              echo "> The install ${CONCLUSION}. No measurement was taken."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
+
+  performance_tests:
+    name: Performance Tests
+    needs: [performance_install]
+    # A skipped or failed install takes this with it: GitHub skips a job whose
+    # dependency did not succeed, and the explicit result check says so out
+    # loud. Measuring a stack that did not install is worse than not measuring.
+    if: >-
+      ${{
+        needs.performance_install.result == 'success' &&
+        needs.performance_install.outputs.skip == 'false'
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    steps:
+      - name: Bound the wait
+        id: budget
+        env:
+          WAIT_MINUTES: ${{ inputs.performance_wait_minutes }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( WAIT_MINUTES < 1 )); then
+            echo "::error::performance_wait_minutes must be a positive whole number of minutes, got '${WAIT_MINUTES}'."
+            exit 1
+          fi
+          MINUTES="${WAIT_MINUTES}"
+          if (( MINUTES > 345 )); then
+            echo "::warning::performance_wait_minutes of ${MINUTES} exceeds the job ceiling; clamping to 345."
+            MINUTES=345
+          fi
+          echo "wait_seconds=$(( MINUTES * 60 ))" >> "$GITHUB_OUTPUT"
+          echo "wait_minutes=${MINUTES}" >> "$GITHUB_OUTPUT"
+
+      # The payload comes from the single assumed-keys block in the install
+      # job, so there is nothing to correct here.
+      - name: Dispatch the performance run
+        id: dispatch
+        uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
+        with:
+          repo: ${{ inputs.qa_forge_repo }}
+          ref: ${{ inputs.qa_forge_ref }}
+          workflow: performance-test-run.yml
+          token: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
+          wait-for-completion: true
+          wait-timeout-seconds: ${{ steps.budget.outputs.wait_seconds }}
+          wait-interval-seconds: 60
+          sync-status: false
+          inputs: ${{ needs.performance_install.outputs.perf_dispatch_inputs }}
 
       - name: Link the performance run
-        if: ${{ steps.dispatch.outputs.runUrlHtml != '' }}
+        if: ${{ always() && steps.dispatch.outputs.runUrlHtml != '' }}
         env:
           PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
-          PERF_FAMILY: ${{ steps.target.outputs.family }}
-          PERF_SERVER: ${{ steps.target.outputs.server }}
-          PERF_ARTIFACT_RUN_ID: ${{ steps.target.outputs.run_id }}
+          PERF_SERVER: ${{ needs.performance_install.outputs.server }}
+          INSTALL_RUN_URL: ${{ needs.performance_install.outputs.install_run_url }}
+          ROCM_VERSION: ${{ needs.performance_install.outputs.rocm_version }}
+          SUITES: ${{ inputs.performance_suites }}
         run: |
-          if [[ "${PERF_ARTIFACT_RUN_ID}" == "${GITHUB_RUN_ID}" ]]; then
-            ARTIFACTS="this run (\`${GITHUB_RUN_ID}\`)"
-          else
-            ARTIFACTS="[run \`${PERF_ARTIFACT_RUN_ID}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${PERF_ARTIFACT_RUN_ID}), not this one"
-          fi
           {
             echo "### Performance tests"
             echo
             echo "| | |"
             echo "|---|---|"
-            echo "| Run | ${PERF_RUN_URL} |"
-            echo "| Family | \`${PERF_FAMILY}\` |"
+            echo "| Measurement run | ${PERF_RUN_URL} |"
+            echo "| Install run | ${INSTALL_RUN_URL} |"
             echo "| Machine | \`${PERF_SERVER}\` |"
-            echo "| Artifacts | ${ARTIFACTS} |"
-            echo
-            echo "> Dispatched, not waited on. Results are informational and do not"
-            echo "> affect this run's conclusion."
+            echo "| ROCm version | \`${ROCM_VERSION}\` |"
+            echo "| Suites | \`${SUITES}\` |"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      # ──────────────────────────────────────────────────────────────────
+      # STUB. Results are published as logs to Artifactory, and the path
+      # that identifies one measurement is not yet known; it will be read
+      # off a trial run. Until then this reports where the results are
+      # rather than fetching them, so the trigger can be exercised without
+      # waiting on the layout.
+      #
+      # Filling it in means fetching from that path, attaching the logs to
+      # this run with actions/upload-artifact, and lifting only the
+      # headline pass/fail counts into the step summary.
+      # ──────────────────────────────────────────────────────────────────
+      - name: Collect the results
+        if: ${{ always() && steps.dispatch.outputs.runId != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
+          QA_FORGE_REPO: ${{ inputs.qa_forge_repo }}
+          RUN_ID: ${{ steps.dispatch.outputs.runId }}
+          PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
+          WAIT_MINUTES: ${{ steps.budget.outputs.wait_minutes }}
+        run: |
+          set -euo pipefail
+          STATUS=$(gh api "repos/${QA_FORGE_REPO}/actions/runs/${RUN_ID}" --jq '.status')
+          {
+            echo
+            if [[ "${STATUS}" != "completed" ]]; then
+              echo "> [!NOTE]"
+              echo "> Still ${STATUS} after waiting ${WAIT_MINUTES} minutes. The measurement"
+              echo "> continues on the machine; this run stopped waiting for it."
+              echo "> Results will be at ${PERF_RUN_URL} when it finishes."
+            else
+              echo "> [!NOTE]"
+              echo "> Measured values are published as logs to Artifactory by the"
+              echo "> measurement run. Collecting them into this run is not wired up"
+              echo "> yet, so read them from ${PERF_RUN_URL} for now."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Conclude
+        if: ${{ always() && steps.dispatch.outputs.runId != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
+          QA_FORGE_REPO: ${{ inputs.qa_forge_repo }}
+          RUN_ID: ${{ steps.dispatch.outputs.runId }}
+          PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
+        run: |
+          set -euo pipefail
+          read -r STATUS CONCLUSION < <(
+            gh api "repos/${QA_FORGE_REPO}/actions/runs/${RUN_ID}" \
+              --jq '[.status, (.conclusion // "none")] | @tsv'
+          )
+          echo "Measurement run ${RUN_ID}: status=${STATUS} conclusion=${CONCLUSION}"
+
+          # A wait that expires is not a verdict. The measurement is still
+          # running and has said nothing about the patch, so failing here would
+          # report a regression that was never observed. Neutral, with the run
+          # URL already in the summary.
+          if [[ "${STATUS}" != "completed" ]]; then
+            echo "::warning::The measurement run is still ${STATUS}; this job stopped waiting. Follow ${PERF_RUN_URL} for the result."
+            exit 0
+          fi
+
+          # Nothing here compares against a baseline, so the measurement cannot
+          # fail for being slow. It can only fail for not having run, which is a
+          # broken run and worth a red mark.
+          if [[ "${CONCLUSION}" != "success" ]]; then
+            echo "::error::The measurement run concluded '${CONCLUSION}'. See ${PERF_RUN_URL}."
+            exit 1
+          fi
 
   # ==========================================================================
   # Windows
@@ -925,6 +1188,7 @@ jobs:
       - build_linux_deb_packages
       - build_linux_rpm_packages
       - build_linux_pytorch_wheels
+      - performance_install
       - performance_tests
       - build_windows
       - validate_windows_artifacts
