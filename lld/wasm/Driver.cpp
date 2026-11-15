@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
+// REQUIRES: cmake_changes
 #include "lld/Common/Driver.h"
 #include "Config.h"
 #include "InputChunks.h"
