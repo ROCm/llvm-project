@@ -3377,6 +3377,8 @@ TEST(TargetParserTest, testAMDGPUgetMaxHWAddressableLocalMemorySize) {
             163840u);
   EXPECT_EQ(AMDGPU::getMaxHWAddressableLocalMemorySize(AMDGPU::GK_GFX1250),
             327680u);
+  EXPECT_EQ(AMDGPU::getMaxHWAddressableLocalMemorySize(AMDGPU::GK_GFX1310),
+            196608u);
 }
 
 TEST(TargetParserTest, testAMDGPUgetBufferResourceNumRecordsWidth) {
@@ -3574,6 +3576,98 @@ TEST(TargetParserTest, testAMDGPUgetMaxWavesPerEU) {
   EXPECT_EQ(AMDGPU::getMaxWavesPerEU(AMDGPU::GK_GFX908), 10u);
   EXPECT_EQ(AMDGPU::getMaxWavesPerEU(AMDGPU::GK_GFX90A), 8u);
   EXPECT_EQ(AMDGPU::getMaxWavesPerEU(AMDGPU::GK_GFX1030), 16u);
+}
+
+TEST(TargetParserTest, testAMDGPUObjectLinkingWaveSize) {
+  const Triple AMDHSA("amdgcn-amd-amdhsa");
+  const AMDGPU::TargetID GFX900(AMDHSA, "gfx900");
+  const AMDGPU::TargetID GFX1030(AMDHSA, "gfx1030");
+  const AMDGPU::TargetID GFX1250(AMDHSA, "gfx1250");
+  const AMDGPU::TargetID GFX1310(AMDHSA, "gfx1310");
+
+  EXPECT_FALSE(AMDGPU::isWaveSizeSupported(GFX900, 32));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX900, 64));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1030, 32));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1030, 64));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1250, 32));
+  EXPECT_FALSE(AMDGPU::isWaveSizeSupported(GFX1250, 64));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1310, 32));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1310, 64));
+}
+
+TEST(TargetParserTest, testAMDGPUObjectLinkingRegisterEncoding) {
+  const Triple AMDHSA("amdgcn-amd-amdhsa");
+  const AMDGPU::TargetID GFX600(AMDHSA, "gfx600");
+  const AMDGPU::TargetID GFX900XnackOn(AMDHSA, "gfx900:xnack+");
+  const AMDGPU::TargetID GFX942XnackOff(AMDHSA, "gfx942:xnack-");
+  const AMDGPU::TargetID GFX1030(AMDHSA, "gfx1030");
+  const AMDGPU::TargetID GFX1250(AMDHSA, "gfx1250");
+
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX600, false, false), 0u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX600, true, false), 2u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX600, false, true), 4u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX900XnackOn, false, false), 4u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX900XnackOn, false, true), 6u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX942XnackOff, false, false), 6u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX1030, true, true), 2u);
+
+  EXPECT_EQ(AMDGPU::getEncodedNumVGPRBlocks(GFX600, 32, 64), 7u);
+  EXPECT_EQ(AMDGPU::getEncodedNumVGPRBlocks(GFX1030, 32, 32), 3u);
+  EXPECT_EQ(AMDGPU::getEncodedNumVGPRBlocks(GFX1250, 32, 32), 1u);
+
+  EXPECT_EQ(AMDGPU::getNumSGPRBlocks(0), 0u);
+  EXPECT_EQ(AMDGPU::getNumSGPRBlocks(8), 0u);
+  EXPECT_EQ(AMDGPU::getNumSGPRBlocks(9), 1u);
+}
+
+TEST(TargetParserTest, testAMDGPUObjectLinkingMaxWaveScratchSize) {
+  const Triple AMDHSA("amdgcn-amd-amdhsa");
+  const unsigned PreGFX11 = (256 * 4) * ((1 << 13) - 1);
+  const unsigned GFX11 = (64 * 4) * ((1 << 15) - 1);
+  const unsigned GFX12 = (64 * 4) * ((1 << 18) - 1);
+
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx900")),
+            PreGFX11);
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx1030")),
+            PreGFX11);
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx1100")),
+            GFX11);
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx1200")),
+            GFX12);
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx1250")),
+            GFX12);
+}
+
+TEST(TargetParserTest, testAMDGPUObjectLinkingLDSOccupancy) {
+  const Triple AMDHSA("amdgcn-amd-amdhsa");
+  const AMDGPU::TargetID GFX900(AMDHSA, "gfx900");
+  const AMDGPU::TargetID GFX1250(AMDHSA, "gfx1250");
+  const AMDGPU::TargetID GFX1310(AMDHSA, "gfx1310");
+
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX900, 64, true, 21504, 10));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX900, 64, true, 21505, 10));
+  // gfx9 has no half-SIMD mode, so a request for it changes nothing.
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX900, 64, false, 21504, 10));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX900, 64, false, 21505, 10));
+
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1250, 32, true, 327680, 1));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1250, 32, true, 327681, 1));
+
+  // gfx13 has 192 KiB in full-SIMD mode and 96 KiB in half-SIMD mode.
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1310, 64, true, 65000, 9));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1310, 64, true, 65537, 9));
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1310, 64, false, 49000, 9));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1310, 64, false, 49153, 9));
 }
 
 TEST(TargetParserTest, testAMDGPUParseTargetIDString) {
