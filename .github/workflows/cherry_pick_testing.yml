@@ -744,6 +744,8 @@ jobs:
           SUITES: ${{ inputs.performance_suites }}
           INSTALL_WAIT_MINUTES: ${{ inputs.performance_install_wait_minutes }}
           TRIGGERED_BY: ${{ github.triggering_actor }} (CP ${{ inputs.LLVM_BRANCH }})
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -802,21 +804,12 @@ jobs:
           # The tarball is named after the build's own full version string,
           # commit sha and all, so naming it identifies exactly one build and
           # nobody has to type it. The override points a run at some other
-          # already-published build instead.
+          # already-built tarball instead.
           #
           # The name is the one TheRock's build_tarballs.py writes:
           #   therock-dist-{platform}-{family|multiarch}[-tests]-{version}.tar.gz
           # Perf takes the multiarch tests variant, because the suites need the
-          # test binaries that the plain tarball leaves out. Published with a
-          # literal '+' in the name; the %2B seen in a browser is URL encoding.
-          #
-          # Naming it is not the same as it existing. Reaching the dev channel
-          # takes a publication step that this pipeline does not currently
-          # perform: the tarball job here uploads with release_type 'ci', which
-          # goes to the CI artifacts bucket, and nothing afterwards copies it
-          # onto the channel the install reads. Until that is resolved, a
-          # derived name will not resolve and the override is the only way
-          # through. See docs/perf-publication-path.md.
+          # test binaries that the plain tarball leaves out.
           TAR_NAME="${TAR_NAME_OVERRIDE}"
           if [[ -z "${TAR_NAME}" ]]; then
             if [[ -z "${PACKAGE_VERSION}" ]]; then
@@ -826,25 +819,34 @@ jobs:
             TAR_NAME="therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz"
           fi
 
+          # The build already publishes here, under this run's own id, with
+          # the credentials it already has and public read. That makes it the
+          # place to look: no channel to publish to first, and the prefix is
+          # derived rather than configured, so it cannot drift from the run it
+          # describes.
+          #
+          # The '+' in the version must be sent as %2B. A literal '+' is a 404
+          # on this bucket and on the ROCm channels alike, so the encoding is
+          # a property of the name rather than of the host.
+          TARBALL_INDEX="https://therock-ci-artifacts-external.s3.amazonaws.com/${GITHUB_REPOSITORY//\//-}/${GITHUB_RUN_ID}-linux/tarballs"
+          TARBALL_URL="${TARBALL_INDEX}/${TAR_NAME//+/%2B}"
+
           # Checked before dispatching rather than after. The install takes a
           # perf machine exclusively and holds it for as long as the install
           # runs, so letting it start on a tarball that demonstrably is not
           # there spends the scarce thing in this pipeline to reach a 404.
           # Unreachable is not the same as absent: this host may be closed to
-          # some runners, and the install resolves its own URL regardless, so
-          # only a definitive answer is treated as one.
-          TARBALL_INDEX="https://dev.repo.amd.com/rocm/core/tarball"
-          TARBALL_CODE="$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 \
-            "${TARBALL_INDEX}/$(jq -rn --arg n "${TAR_NAME}" '$n|@uri')" || echo "000")"
+          # some runners, so only a definitive answer is treated as one.
+          TARBALL_CODE="$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 "${TARBALL_URL}" || echo "000")"
           case "${TARBALL_CODE}" in
             200)
-              echo "Found ${TAR_NAME} on the dev channel."
+              echo "Found ${TAR_NAME}."
               ;;
             000)
-              echo "::warning::Could not reach ${TARBALL_INDEX} to check that ${TAR_NAME} is published. Continuing without the check."
+              echo "::warning::Could not reach ${TARBALL_INDEX} to check that ${TAR_NAME} is present. Continuing without the check."
               ;;
             404)
-              echo "::error::${TAR_NAME} is not published at ${TARBALL_INDEX}. Nothing in this pipeline publishes a cherry-pick build to that channel yet, so a derived name will not resolve; see docs/perf-publication-path.md. Pass performance_tar_name to point at a build that is already published."
+              echo "::error::${TAR_NAME} is not at ${TARBALL_INDEX}. A -tests- tarball is only built when the performance toggle is on, so a run that built without it will not have one. Pass performance_tar_name to name a tarball that does exist."
               exit 1
               ;;
             *)
@@ -935,6 +937,7 @@ jobs:
             echo "server=${SERVER}"
             echo "rocm_version=${ROCM_VERSION}"
             echo "tar_name=${TAR_NAME}"
+            echo "packages_url=${TARBALL_INDEX}/"
             echo "wait_seconds=$(( WAIT_MINUTES * 60 ))"
           } >> "$GITHUB_OUTPUT"
 
