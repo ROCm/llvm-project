@@ -126,6 +126,9 @@ on:
             publish_dev=   any value: also publish this build to the dev
                            channel. Needs IAM grants this repository does not
                            have yet, and nothing else here depends on it.
+            plan_only=     any value: build the tarballs and work out both
+                           dispatch payloads, print them, and stop without
+                           touching a perf machine.
           If multi-arch resolution rejects the package, method=therock_tarball
           installs the same tarball by the single-arch path, which does no run
           lookup. Example: server=SMC-SC-DI13-13 wait=200
@@ -770,6 +773,7 @@ jobs:
           QA_FORGE_REPO="AMD-ROCm-Internal/qa-forge"
           QA_FORGE_REF="main"
           PACKAGES_URL_OVERRIDE=""
+          PLAN_ONLY=""
           # The install workflow's input for a directory to fetch from is
           # being added on the qa-forge side, and whoever lands it there names
           # it. Keeping the key settable means a different name is a dispatch
@@ -802,8 +806,9 @@ jobs:
               url_key)      URL_KEY="${value}" ;;
               # Read at job level, not here; accepted so it is not a typo.
               publish_dev)  : ;;
+              plan_only)    PLAN_ONLY="${value}" ;;
               *)
-                echo "::error::Unknown performance_options key '${key}'. Valid keys: server, tar_name, rocm_version, label, method, suites, install_wait, wait, repo, ref, packages_url, url_key, publish_dev."
+                echo "::error::Unknown performance_options key '${key}'. Valid keys: server, tar_name, rocm_version, label, method, suites, install_wait, wait, repo, ref, packages_url, url_key, publish_dev, plan_only."
                 exit 1
                 ;;
             esac
@@ -1000,7 +1005,7 @@ jobs:
           # The perf keys are still read from the archived public mirror and
           # have not been checked against the internal workflow.
           # ════════════════════════════════════════════════════════════════
-          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL URL_KEY INSTALL_METHOD EXECUTION_LABEL SUITES
+          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL URL_KEY INSTALL_METHOD EXECUTION_LABEL SUITES PLAN_ONLY
           python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
           import json
           import os
@@ -1033,11 +1038,33 @@ jobs:
 
           print(line("install_dispatch_inputs", install))
           print(line("perf_dispatch_inputs", perf))
+
+          # An install holds a perf machine exclusively for as long as it
+          # runs, so the payloads can be read before either is sent rather
+          # than inferred afterwards from what the machine did.
+          if os.environ["PLAN_ONLY"]:
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+                  summary.write("### Performance dispatch, planned only\n\n")
+                  summary.write("Nothing was sent and no machine was taken.\n\n")
+                  for name, workflow, payload in (
+                      ("Install", "rocm-func-core-therock-install-dev.yml", install),
+                      ("Measurement", "performance-test-run.yml", perf),
+                  ):
+                      summary.write(f"**{name}** &rarr; `{workflow}`\n\n")
+                      summary.write("```json\n")
+                      summary.write(json.dumps(payload, indent=2) + "\n")
+                      summary.write("```\n\n")
           PAYLOADS
 
-          echo "Installing ROCm ${ROCM_VERSION} on ${SERVER} from ${TAR_NAME}"
+          if [[ -n "${PLAN_ONLY}" ]]; then
+            echo "Planned the install of ROCm ${ROCM_VERSION} on ${SERVER} from ${TAR_NAME}, and stopped before sending it."
+            PERF_SKIP=true
+          else
+            echo "Installing ROCm ${ROCM_VERSION} on ${SERVER} from ${TAR_NAME}"
+            PERF_SKIP=false
+          fi
           {
-            echo "skip=false"
+            echo "skip=${PERF_SKIP}"
             echo "server=${SERVER}"
             echo "rocm_version=${ROCM_VERSION}"
             echo "tar_name=${TAR_NAME}"
