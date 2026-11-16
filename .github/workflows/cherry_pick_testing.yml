@@ -830,6 +830,7 @@ jobs:
           # a property of the name rather than of the host.
           TARBALL_INDEX="https://therock-ci-artifacts-external.s3.amazonaws.com/${GITHUB_REPOSITORY//\//-}/${GITHUB_RUN_ID}-linux/tarballs"
           TARBALL_URL="${TARBALL_INDEX}/${TAR_NAME//+/%2B}"
+          PACKAGES_URL="${TARBALL_INDEX}/"
 
           # Checked before dispatching rather than after. The install takes a
           # perf machine exclusively and holds it for as long as the install
@@ -880,30 +881,41 @@ jobs:
           # ════════════════════════════════════════════════════════════════
           # DISPATCH KEYS — the only place either payload is built.
           #
-          # The key names come from the two target workflows as they stand in
-          # the public mirror of qa-forge, which is archived and so may trail
-          # the internal repository these are dispatched to. Both payloads are
-          # built here and handed to the dispatch steps whole, so correcting a
-          # name is one edit in this block and nothing else in the file moves.
+          # The install keys are the real input list of
+          # rocm-func-core-therock-install-dev.yml. Inputs left out here take
+          # the defaults that workflow declares: is_release false, and
+          # amdgpu_build, driver_url, rocm_path and therock_branch empty, all
+          # of which are what this wants. Both payloads are built here and
+          # handed to the dispatch steps whole, so correcting a name is one
+          # edit in this block and nothing else in the file moves.
           #
           #   rocm-func-core-therock-install-dev.yml
-          #     target_type      'servers' to address a machine by name
-          #     target_server    the perf machine
-          #     install_method   how ROCm is laid down
-          #     execution_label  what the install is recorded under
-          #     package_name     the tarball naming this exact build
-          #     rocm_version     X.Y.Z
-          #     build_type       'dev', selecting the dev channel the
-          #                      cherry-pick published to
-          #     triggered_by     attribution, optional
+          #     target_type           'servers' to address a machine by name
+          #     target_server         the perf machine
+          #     install_method        the bare multiarch alldevice method; the
+          #                           ' amdgpu' suffixed form would make
+          #                           amdgpu_build mandatory
+          #     execution_label       what the install is recorded under
+          #     package_name          the tarball naming this exact build,
+          #                           with a literal '+'; ROCmTest encodes it
+          #     therock_packages_url  the directory to fetch from, bypassing
+          #                           the channel routing and the commit-hash
+          #                           domain lookup that a CI artifacts prefix
+          #                           has no business going through
+          #     rocm_version          X.Y.Z
+          #     build_type            'dev'
+          #     triggered_by          attribution, optional
           #
           #   performance-test-run.yml
           #     workflow_id      comma-separated suite ids
           #     target_server    the same machine
           #     execution_label  the same label
           #     triggered_by     attribution, optional
+          #
+          # The perf keys are still read from the archived public mirror and
+          # have not been checked against the internal workflow.
           # ════════════════════════════════════════════════════════════════
-          export SERVER ROCM_VERSION TAR_NAME
+          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL
           python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
           import json
           import os
@@ -917,6 +929,7 @@ jobs:
               "install_method": os.environ["INSTALL_METHOD"],
               "execution_label": os.environ["EXECUTION_LABEL"],
               "package_name": os.environ["TAR_NAME"],
+              "therock_packages_url": os.environ["PACKAGES_URL"],
               "rocm_version": os.environ["ROCM_VERSION"],
               "build_type": "dev",
               "triggered_by": os.environ["TRIGGERED_BY"],
@@ -937,7 +950,7 @@ jobs:
             echo "server=${SERVER}"
             echo "rocm_version=${ROCM_VERSION}"
             echo "tar_name=${TAR_NAME}"
-            echo "packages_url=${TARBALL_INDEX}/"
+            echo "packages_url=${PACKAGES_URL}"
             echo "wait_seconds=$(( WAIT_MINUTES * 60 ))"
           } >> "$GITHUB_OUTPUT"
 
