@@ -1,8 +1,6 @@
 #include <DeviceTypes.h>
 
 extern "C" {
-__attribute__((leaf)) char *global_allocate(uint32_t bufsz);
-__attribute__((leaf)) int global_free(void *ptr);
 
 /// This is a skeleton only. It does not support custom allocator creation, and
 /// all predefined allocators map to global memory allocation. No aligned or calloc
@@ -24,12 +22,6 @@ void omp_set_default_allocator(omp_allocator_handle_t a) {
 omp_allocator_handle_t omp_get_default_allocator(void) {
   return omp_default_mem_alloc;
 }
-#if 0
-void *omp_alloc(uint64_t size,
-                omp_allocator_handle_t allocator) {
-  return (void *)global_allocate(size);
-}
-#endif
 void *omp_aligned_alloc(uint64_t align, uint64_t size,
                         omp_allocator_handle_t allocator) {
   // TODO

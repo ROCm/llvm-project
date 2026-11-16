@@ -221,8 +221,8 @@ int main(int Argc, char *Argv[]) {
     checkError(Status, "amd_comgr_release_data");
 
     if (BytesSize) {
-     printf("Object host element size: %ld (expected empty)\n", BytesSize);
-     exit(1);
+      printf("Object host element size: %ld (expected empty)\n", BytesSize);
+      exit(1);
     }
 
     // object hip-gfx900 element (non-empty)

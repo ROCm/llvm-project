@@ -151,9 +151,9 @@ define void @divergent_i1_phi_used_outside_loop_larger_loop_body(float %val, ptr
 ; GFX1100-W32-NEXT:    ; in Loop: Header=BB1_2 Depth=1
 ; GFX1100-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX1100-W32-NEXT:    v_add_co_u32 v1, vcc_lo, v1, 4
-; GFX1100-W32-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1100-W32-NEXT:    v_add_co_ci_u32_e64 v2, null, 0, v2, vcc_lo
 ; GFX1100-W32-NEXT:    s_add_i32 s0, s0, 1
+; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1100-W32-NEXT:    s_cmp_gt_i32 s0, 9
 ; GFX1100-W32-NEXT:    s_cbranch_scc0 .LBB1_4
 ; GFX1100-W32-NEXT:  .LBB1_2: ; %loop.start
@@ -321,7 +321,6 @@ define void @divergent_i1_xor_used_outside_loop_larger_loop_body(i32 %num.elts, 
 ; GFX1100-W64-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1100-W64-NEXT:    s_lshl_b64 s[8:9], s[4:5], 2
 ; GFX1100-W64-NEXT:    v_add_co_u32 v7, vcc, v1, s8
-; GFX1100-W64-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1100-W64-NEXT:    v_add_co_ci_u32_e64 v8, null, s9, v2, vcc
 ; GFX1100-W64-NEXT:    global_load_b32 v7, v[7:8], off
 ; GFX1100-W64-NEXT:    s_waitcnt vmcnt(0)
@@ -391,7 +390,6 @@ define void @divergent_i1_xor_used_outside_loop_larger_loop_body(i32 %num.elts, 
 ; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1100-W32-NEXT:    s_lshl_b64 s[6:7], s[0:1], 2
 ; GFX1100-W32-NEXT:    v_add_co_u32 v7, vcc_lo, v1, s6
-; GFX1100-W32-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1100-W32-NEXT:    v_add_co_ci_u32_e64 v8, null, s7, v2, vcc_lo
 ; GFX1100-W32-NEXT:    global_load_b32 v7, v[7:8], off
 ; GFX1100-W32-NEXT:    s_waitcnt vmcnt(0)
@@ -493,7 +491,7 @@ define void @divergent_i1_icmp_used_outside_loop(i32 %v0, i32 %v1, ptr addrspace
 ; GFX1100-W64-NEXT:    s_ashr_i32 s5, s4, 31
 ; GFX1100-W64-NEXT:    v_mov_b32_e32 v8, s4
 ; GFX1100-W64-NEXT:    s_lshl_b64 s[8:9], s[4:5], 2
-; GFX1100-W64-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1100-W64-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1100-W64-NEXT:    v_add_co_u32 v4, s[0:1], v2, s8
 ; GFX1100-W64-NEXT:    v_add_co_ci_u32_e64 v5, null, s9, v3, s[0:1]
 ; GFX1100-W64-NEXT:    global_store_b32 v[4:5], v8, off
@@ -550,7 +548,7 @@ define void @divergent_i1_icmp_used_outside_loop(i32 %v0, i32 %v1, ptr addrspace
 ; GFX1100-W32-NEXT:    s_ashr_i32 s3, s2, 31
 ; GFX1100-W32-NEXT:    v_mov_b32_e32 v8, s2
 ; GFX1100-W32-NEXT:    s_lshl_b64 s[6:7], s[2:3], 2
-; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1100-W32-NEXT:    v_add_co_u32 v4, s0, v2, s6
 ; GFX1100-W32-NEXT:    v_add_co_ci_u32_e64 v5, null, s7, v3, s0
 ; GFX1100-W32-NEXT:    global_store_b32 v[4:5], v8, off
@@ -670,7 +668,7 @@ define amdgpu_ps void @divergent_i1_freeze_used_outside_loop(i32 %n, ptr addrspa
 ; GFX1100-W64-NEXT:  .LBB5_3: ; %is.eq.zero
 ; GFX1100-W64-NEXT:    ; in Loop: Header=BB5_2 Depth=1
 ; GFX1100-W64-NEXT:    s_lshl_b64 s[6:7], s[2:3], 2
-; GFX1100-W64-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1100-W64-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1100-W64-NEXT:    v_add_co_u32 v5, vcc, v1, s6
 ; GFX1100-W64-NEXT:    v_add_co_ci_u32_e64 v6, null, s7, v2, vcc
 ; GFX1100-W64-NEXT:    global_load_b32 v5, v[5:6], off
@@ -717,7 +715,7 @@ define amdgpu_ps void @divergent_i1_freeze_used_outside_loop(i32 %n, ptr addrspa
 ; GFX1100-W32-NEXT:  .LBB5_3: ; %is.eq.zero
 ; GFX1100-W32-NEXT:    ; in Loop: Header=BB5_2 Depth=1
 ; GFX1100-W32-NEXT:    s_lshl_b64 s[4:5], s[0:1], 2
-; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1100-W32-NEXT:    v_add_co_u32 v5, vcc_lo, v1, s4
 ; GFX1100-W32-NEXT:    v_add_co_ci_u32_e64 v6, null, s5, v2, vcc_lo
 ; GFX1100-W32-NEXT:    global_load_b32 v5, v[5:6], off
@@ -838,15 +836,14 @@ define amdgpu_cs void @loop_with_1break(ptr addrspace(1) %x, ptr addrspace(1) %a
 ; GFX1100-W32-NEXT:    ; in Loop: Header=BB6_1 Depth=1
 ; GFX1100-W32-NEXT:    global_load_b32 v8, v[0:1], off
 ; GFX1100-W32-NEXT:    v_add_co_u32 v2, vcc_lo, v2, 4
-; GFX1100-W32-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1100-W32-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v3, vcc_lo
 ; GFX1100-W32-NEXT:    s_add_i32 s1, s1, 1
+; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1100-W32-NEXT:    s_cmpk_lt_u32 s1, 0x64
 ; GFX1100-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX1100-W32-NEXT:    v_add_nc_u32_e32 v8, 1, v8
 ; GFX1100-W32-NEXT:    global_store_b32 v[0:1], v8, off
 ; GFX1100-W32-NEXT:    v_add_co_u32 v0, vcc_lo, v0, 4
-; GFX1100-W32-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1100-W32-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, vcc_lo
 ; GFX1100-W32-NEXT:    s_cbranch_scc0 .LBB6_1
 ; GFX1100-W32-NEXT:  ; %bb.3:

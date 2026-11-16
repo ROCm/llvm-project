@@ -187,7 +187,7 @@ jobs:
           python-version: ${{ inputs.python_version }}
 
       - name: Select Python version
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.python_version is a workflow_call/workflow_dispatch input; python_to_cp_version.py accepts only a dotted version such as 3.12
           python build_tools/github_actions/python_to_cp_version.py \
             --python-version ${{ inputs.python_version }}
 
@@ -242,7 +242,7 @@ jobs:
 
       - name: Checkout PyTorch source repos (stable)
         if: ${{ inputs.pytorch_git_ref != 'nightly' }}
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.pytorch_git_ref is a workflow input (nightly or release/X.Y); pytorch_torch_repo.py uses it only as the git ref to checkout
           git config --global core.longpaths true
           python ./external-builds/pytorch/pytorch_torch_repo.py checkout \
             --checkout-dir ${{ env.CHECKOUT_ROOT }}/pytorch \
@@ -263,7 +263,7 @@ jobs:
       # determine_version.py sets optional_build_prod_arguments in
       # GITHUB_ENV (--rocm-sdk-version, --version-suffix).
       - name: Determine optional arguments passed to `build_prod_wheels.py`
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.rocm_version is a workflow input; determine_version.py parses it with packaging.version before deriving build arguments
           python build_tools/github_actions/determine_version.py \
             --rocm-version ${{ inputs.rocm_version }}
 
@@ -287,7 +287,7 @@ jobs:
 
       - name: Expand amdgpu families to gfx targets
         id: expand
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.amdgpu_families is a workflow input; expand_amdgpu_families.py splits the semicolon-separated list and rejects families absent from therock_amdgpu_targets.cmake
           targets=$(python build_tools/github_actions/expand_amdgpu_families.py \
             --amdgpu-families "${{ inputs.amdgpu_families }}")
           echo "Expanded families '${{ inputs.amdgpu_families }}' -> '${targets}'"
@@ -296,8 +296,16 @@ jobs:
       # Using 'cmd' here is load bearing! There are configuration issues when
       # run under 'bash': https://github.com/ROCm/TheRock/issues/827#issuecomment-3025858800
       - name: Build PyTorch wheels
-        shell: cmd
-        run: |
+        # Default to the nightly repo.amd.com aggregate ROCm index when neither source is
+        # provided so a bare manual dispatch works; setting either input
+        # overrides it. The default is applied here rather than on the input
+        # because GitHub reverts an emptied input back to its declared default,
+        # which would make the two inputs impossible to use exclusively.
+        shell: cmd # zizmor: ignore[misfeature]
+        # determine_version.py emits multiple arguments from a parsed ROCm version.
+        # Trust that repository script to produce this intentional shell fragment.
+        # Delayed expansion keeps metacharacters in input values from becoming CMD operators.
+        run: | # zizmor: ignore[template-injection] workflow inputs cache_type (none, sccache, or ccache), amdgpu_families, and the ROCm package URLs; cache_type is only compared, and determine_version.py produces optional_build_prod_arguments from the parsed ROCm version
           set "CACHE_FLAG="
           if "${{ inputs.cache_type }}"=="sccache" set "CACHE_FLAG=--use-sccache"
           if "${{ inputs.cache_type }}"=="ccache" set "CACHE_FLAG=--use-ccache"
@@ -318,7 +326,7 @@ jobs:
 
       - name: Report cache stats
         if: ${{ !cancelled() && inputs.cache_type != 'none' }}
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.cache_type is a workflow input limited to none, sccache, or ccache and is only compared, never executed
           if [ "${{ inputs.cache_type }}" = "sccache" ]; then
             echo "sccache stats:"
             echo "--------------"
@@ -330,7 +338,8 @@ jobs:
           fi
 
       - name: Sanity check wheel
-        shell: cmd
+        # Keep CMD for compatibility with the Windows wheel build and validation.
+        shell: cmd # zizmor: ignore[misfeature]
         run: |
           python external-builds/pytorch/sanity_check_wheel.py ${{ env.PACKAGE_DIST_DIR }}
 
@@ -416,7 +425,8 @@ jobs:
       # produced the requested package versions.
       - name: Write PyTorch package version outputs
         id: pytorch-versions
-        shell: cmd
+        # Keep CMD for compatibility with the Windows wheel build and validation.
+        shell: cmd # zizmor: ignore[misfeature]
         run: |
           python build_tools/github_actions/write_torch_versions.py --dist-dir ${{ env.PACKAGE_DIST_DIR }}
 
@@ -428,7 +438,7 @@ jobs:
 
       - name: Upload PyTorch wheels to release bucket
         id: publish-pytorch-wheels
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.release_type is a workflow input; publish_pytorch_to_release_bucket.py accepts only dev, dev-bkc, nightly, nightly-bkc, or prerelease. This block also expands env.PACKAGE_DIST_DIR, which the job sets itself
           python build_tools/github_actions/publish_pytorch_to_release_bucket.py \
             --source-dir="${{ env.PACKAGE_DIST_DIR }}" \
             --release-type="${{ inputs.release_type }}"
@@ -460,7 +470,7 @@ jobs:
         id: configure
         env:
           CI_CONFIG_PATH: ci-config
-        run: |
+        run: | # zizmor: ignore[template-injection] workflow inputs; configure_pytorch_test_matrix.py splits semicolon-separated families, treats auto/none/skip as controls, and rejects unknown families
           python build_tools/github_actions/configure_pytorch_test_matrix.py \
             --build-amdgpu-families "${{ inputs.amdgpu_families }}" \
             --test-amdgpu-families "${{ inputs.test_amdgpu_families }}" \

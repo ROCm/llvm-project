@@ -49,12 +49,22 @@
     }                                                                          \
   } while (false)
 
-static void fail(const char *format, ...) {
+// fail() ends in exit(), but without this the compiler cannot see that and
+// reports locals as possibly-uninitialized on paths that end in a fail() call.
+// These build as C99 (C_STANDARD 99 in test-lit/CMakeLists.txt), where
+// _Noreturn is a C11 extension, so spell it per compiler instead.
+#if defined(_MSC_VER)
+#define COMGR_TEST_NORETURN __declspec(noreturn)
+#else
+#define COMGR_TEST_NORETURN __attribute__((noreturn))
+#endif
+
+COMGR_TEST_NORETURN static void fail(const char *Format, ...) {
   va_list ap;
-  va_start(ap, format);
+  va_start(ap, Format);
 
   printf("FAILED: ");
-  vprintf(format, ap);
+  vprintf(Format, ap);
   printf("\n");
 
   va_end(ap);

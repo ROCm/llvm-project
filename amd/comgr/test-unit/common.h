@@ -11,10 +11,10 @@
 
 #include "amd_comgr.h"
 
-#define ASSERT_COMGR(call)                                                \
-  do {                                                                    \
-    amd_comgr_status_t status = amd_comgr_##call;                         \
-    ASSERT_EQ(AMD_COMGR_STATUS_SUCCESS, status);                          \
+#define ASSERT_COMGR(call)                                                     \
+  do {                                                                         \
+    amd_comgr_status_t status = amd_comgr_##call;                              \
+    ASSERT_EQ(AMD_COMGR_STATUS_SUCCESS, status);                               \
   } while (false)
 
 // For helpers that return a value, where ASSERT_COMGR's `return;` will not

@@ -102,7 +102,6 @@ define amdgpu_kernel void @atomic_add_i64_offset(ptr %out, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v0, vcc_lo, v0, s2
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -233,7 +232,6 @@ define amdgpu_kernel void @atomic_add_i64_ret_offset(ptr %out, ptr %out2, i64 %i
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s5, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB1_3
@@ -367,7 +365,6 @@ define amdgpu_kernel void @atomic_add_i64_addr64_offset(ptr %out, i64 %in, i64 %
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v0, vcc_lo, v0, s2
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -504,7 +501,6 @@ define amdgpu_kernel void @atomic_add_i64_ret_addr64_offset(ptr %out, ptr %out2,
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s5, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB3_3
@@ -619,7 +615,6 @@ define amdgpu_kernel void @atomic_add_i64(ptr %out, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v0, vcc_lo, v0, s2
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -743,7 +738,6 @@ define amdgpu_kernel void @atomic_add_i64_ret(ptr %out, ptr %out2, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s5, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB5_3
@@ -869,7 +863,6 @@ define amdgpu_kernel void @atomic_add_i64_addr64(ptr %out, i64 %in, i64 %index) 
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v0, vcc_lo, v0, s2
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -999,7 +992,6 @@ define amdgpu_kernel void @atomic_add_i64_ret_addr64(ptr %out, ptr %out2, i64 %i
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s5, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB7_3
@@ -2112,7 +2104,6 @@ define amdgpu_kernel void @atomic_sub_i64_offset(ptr %out, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_sub_co_u32 v0, vcc_lo, v0, s2
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -2243,7 +2234,6 @@ define amdgpu_kernel void @atomic_sub_i64_ret_offset(ptr %out, ptr %out2, i64 %i
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_sub_co_u32 v2, vcc_lo, v0, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v3, null, s5, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB17_3
@@ -2377,7 +2367,6 @@ define amdgpu_kernel void @atomic_sub_i64_addr64_offset(ptr %out, i64 %in, i64 %
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_sub_co_u32 v0, vcc_lo, v0, s2
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -2514,7 +2503,6 @@ define amdgpu_kernel void @atomic_sub_i64_ret_addr64_offset(ptr %out, ptr %out2,
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_sub_co_u32 v2, vcc_lo, v0, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v3, null, s5, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB19_3
@@ -2629,7 +2617,6 @@ define amdgpu_kernel void @atomic_sub_i64(ptr %out, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_sub_co_u32 v0, vcc_lo, v0, s2
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -2753,7 +2740,6 @@ define amdgpu_kernel void @atomic_sub_i64_ret(ptr %out, ptr %out2, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_sub_co_u32 v2, vcc_lo, v0, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v3, null, s5, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB21_3
@@ -2879,7 +2865,6 @@ define amdgpu_kernel void @atomic_sub_i64_addr64(ptr %out, i64 %in, i64 %index) 
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_sub_co_u32 v0, vcc_lo, v0, s2
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -3009,7 +2994,6 @@ define amdgpu_kernel void @atomic_sub_i64_ret_addr64(ptr %out, ptr %out2, i64 %i
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_sub_co_u32 v2, vcc_lo, v0, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v3, null, s5, v1, vcc_lo
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB23_3
@@ -12387,10 +12371,10 @@ define amdgpu_kernel void @atomic_inc_i64_offset(ptr %out, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_u64_e32 vcc_lo, s[2:3], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v1, 0, v3 :: v_dual_cndmask_b32 v0, 0, v2
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -12525,10 +12509,10 @@ define amdgpu_kernel void @atomic_inc_i64_ret_offset(ptr %out, ptr %out2, i64 %i
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_u64_e32 vcc_lo, s[4:5], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v3, 0, v3 :: v_dual_cndmask_b32 v2, 0, v2
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB108_3
@@ -12666,10 +12650,10 @@ define amdgpu_kernel void @atomic_inc_i64_incr64_offset(ptr %out, i64 %in, i64 %
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_u64_e32 vcc_lo, s[2:3], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v1, 0, v3 :: v_dual_cndmask_b32 v0, 0, v2
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -12810,10 +12794,10 @@ define amdgpu_kernel void @atomic_inc_i64_ret_incr64_offset(ptr %out, ptr %out2,
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_u64_e32 vcc_lo, s[4:5], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v3, 0, v3 :: v_dual_cndmask_b32 v2, 0, v2
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB110_3
@@ -12932,10 +12916,10 @@ define amdgpu_kernel void @atomic_inc_i64(ptr %out, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_u64_e32 vcc_lo, s[2:3], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v1, 0, v3 :: v_dual_cndmask_b32 v0, 0, v2
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -13063,10 +13047,10 @@ define amdgpu_kernel void @atomic_inc_i64_ret(ptr %out, ptr %out2, i64 %in) {
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_u64_e32 vcc_lo, s[4:5], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v3, 0, v3 :: v_dual_cndmask_b32 v2, 0, v2
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB112_3
@@ -13196,10 +13180,10 @@ define amdgpu_kernel void @atomic_inc_i64_incr64(ptr %out, i64 %in, i64 %index) 
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_u64_e32 vcc_lo, s[2:3], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v1, 0, v3 :: v_dual_cndmask_b32 v0, 0, v2
 ; GFX12-NEXT:    scratch_store_b64 off, v[0:1], s0
 ; GFX12-NEXT:    s_endpgm
@@ -13333,10 +13317,10 @@ define amdgpu_kernel void @atomic_inc_i64_ret_incr64(ptr %out, ptr %out2, i64 %i
 ; GFX12-NEXT:    scratch_load_b64 v[0:1], off, s0
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_add_co_u32 v2, vcc_lo, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_u64_e32 vcc_lo, s[4:5], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v3, 0, v3 :: v_dual_cndmask_b32 v2, 0, v2
 ; GFX12-NEXT:    scratch_store_b64 off, v[2:3], s0
 ; GFX12-NEXT:    s_branch .LBB114_3
@@ -13465,7 +13449,6 @@ define amdgpu_kernel void @atomic_dec_i64_offset(ptr %out, i64 %in) {
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_cmp_lt_u64_e32 vcc_lo, s[2:3], v[0:1]
 ; GFX12-NEXT:    v_sub_co_u32 v0, s0, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v1, s0, 0, v1, s0
 ; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
@@ -13611,7 +13594,6 @@ define amdgpu_kernel void @atomic_dec_i64_ret_offset(ptr %out, ptr %out2, i64 %i
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_cmp_lt_u64_e32 vcc_lo, s[4:5], v[0:1]
 ; GFX12-NEXT:    v_sub_co_u32 v2, s0, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v3, s0, 0, v1, s0
 ; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
@@ -13758,7 +13740,6 @@ define amdgpu_kernel void @atomic_dec_i64_decr64_offset(ptr %out, i64 %in, i64 %
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_cmp_lt_u64_e32 vcc_lo, s[2:3], v[0:1]
 ; GFX12-NEXT:    v_sub_co_u32 v0, s0, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v1, s0, 0, v1, s0
 ; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
@@ -13910,7 +13891,6 @@ define amdgpu_kernel void @atomic_dec_i64_ret_decr64_offset(ptr %out, ptr %out2,
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_cmp_lt_u64_e32 vcc_lo, s[4:5], v[0:1]
 ; GFX12-NEXT:    v_sub_co_u32 v2, s0, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v3, s0, 0, v1, s0
 ; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
@@ -14038,7 +14018,6 @@ define amdgpu_kernel void @atomic_dec_i64(ptr %out, i64 %in) {
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_cmp_lt_u64_e32 vcc_lo, s[2:3], v[0:1]
 ; GFX12-NEXT:    v_sub_co_u32 v0, s0, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v1, s0, 0, v1, s0
 ; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
@@ -14177,7 +14156,6 @@ define amdgpu_kernel void @atomic_dec_i64_ret(ptr %out, ptr %out2, i64 %in) {
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_cmp_lt_u64_e32 vcc_lo, s[4:5], v[0:1]
 ; GFX12-NEXT:    v_sub_co_u32 v2, s0, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v3, s0, 0, v1, s0
 ; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
@@ -14316,7 +14294,6 @@ define amdgpu_kernel void @atomic_dec_i64_decr64(ptr %out, i64 %in, i64 %index) 
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_cmp_lt_u64_e32 vcc_lo, s[2:3], v[0:1]
 ; GFX12-NEXT:    v_sub_co_u32 v0, s0, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v1, s0, 0, v1, s0
 ; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
@@ -14461,7 +14438,6 @@ define amdgpu_kernel void @atomic_dec_i64_ret_decr64(ptr %out, ptr %out2, i64 %i
 ; GFX12-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-NEXT:    v_cmp_lt_u64_e32 vcc_lo, s[4:5], v[0:1]
 ; GFX12-NEXT:    v_sub_co_u32 v2, s0, v0, 1
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v3, s0, 0, v1, s0
 ; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)

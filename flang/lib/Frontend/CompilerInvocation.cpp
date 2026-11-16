@@ -597,6 +597,11 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
       args.hasFlag(clang::options::OPT_fdefer_desc_map,
                    clang::options::OPT_fno_defer_desc_map, true);
 
+  opts.ImplicitDefaultMapperAllocatableMembers = args.hasFlag(
+      clang::options::OPT_fimplicit_default_mapper_allocatable_members,
+      clang::options::OPT_fno_implicit_default_mapper_allocatable_members,
+      /*Default=*/true);
+
   if (const llvm::opt::Arg *arg =
           args.getLastArg(clang::options::OPT_complex_range_EQ)) {
     llvm::StringRef argValue = llvm::StringRef(arg->getValue());
@@ -1391,7 +1396,7 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
 
   constexpr unsigned newestFullySupported = 52;
   // By default OpenMP is set to 5.2 version
-  constexpr unsigned latestFinalized = 60;
+  constexpr unsigned latestFinalized = 61;
   // By default OpenMP is set to the most recent fully supported version
   res.getLangOpts().OpenMPVersion = newestFullySupported;
   res.getFrontendOpts().features.Enable(

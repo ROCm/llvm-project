@@ -12,6 +12,7 @@
 
 #include "PluginManager.h"
 #include "OmpAccError.h"
+#include "OpenMP/AMDGPUSupport.h"
 #include "OpenMP/OMPT/Callback.h"
 #include "OpenMP/OMPT/Interface.h"
 #include "OpenMP/OMPT/OmptCommonDefs.h"
@@ -29,6 +30,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 
 #ifdef OMPT_SUPPORT
@@ -40,12 +42,6 @@ using namespace llvm::sys;
 using namespace llvm::omp::target::error;
 using namespace llvm::omp::target::debug;
 using namespace llvm::omp::target::helpers;
-
-namespace llvm::offload::tmp {
-GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
-llvm::omp::target::plugin::DeviceImageTy *
-__ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program);
-} // namespace llvm::offload::tmp
 
 void PluginManager::init() {
   TIMESCOPE();
@@ -60,15 +56,12 @@ void PluginManager::init() {
   if (auto Err = iteratePlatforms(
           [](ol_platform_handle_t Platform, void *Data) {
             auto *PM = static_cast<PluginManager *>(Data);
-            auto *Plugin =
-                llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
             PlatformTy &P =
                 PM->Platforms
                     .try_emplace(Platform, PlatformTy::create(Platform))
                     .first->second;
-            ODBG(ODT_Init) << "Adding plugin " << P.getName()
+            ODBG(ODT_Init) << "Added plugin " << P.getName()
                            << " from liboffload";
-            PM->Plugins.push_back(Plugin);
           },
           this))
     REPORT() << "Failed to iterate platforms: " << toString(std::move(Err));
@@ -105,7 +98,6 @@ void PluginManager::deinit() {
   TraceRecordManager = nullptr;
 #endif
 
-  Plugins.clear();
   Platforms.clear();
   if (LibOffloadInitialized) {
     if (auto Err = olShutDown())
@@ -347,8 +339,14 @@ void PluginManager::registerLib(__tgt_bin_desc *Desc) {
   if (!FoundCompatibleImage) {
     for (DeviceImageTy &DI : deviceImages()) {
       __tgt_device_image *Img = &DI.getExecutableImage();
-      for (auto &R : plugins())
-        R.check_invalid_image(Img);
+      for (auto &[Platform, P] : Platforms) {
+        ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;
+        if (!olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND,
+                               sizeof(Backend), &Backend) &&
+            llvm::omp::target::BackendConfig::get(Backend)
+                .ExplainsIncompatibleImages)
+          llvm::offload::tmp::__ol_tgt_CheckInvalidImage(Platform, Img);
+      }
     }
   }
 
@@ -363,7 +361,8 @@ void PluginManager::registerLib(__tgt_bin_desc *Desc) {
   if (ExclusiveDevicesAccessor->size() > 0) {
     auto &Device = *(*ExclusiveDevicesAccessor)[0];
     UseAutoZeroCopy = Device.useAutoZeroCopy();
-    IsAPU = Device.checkIfAPU();
+    IsAPU = Device.getConfig().SupportsEagerZeroCopyMaps &&
+            llvm::offload::tmp::__ol_tgt_IsAPU(Device.DeviceHandle);
   }
 
   if (UseAutoZeroCopy)
@@ -388,13 +387,36 @@ void PluginManager::registerLib(__tgt_bin_desc *Desc) {
     // the first device in the system to run a sanity check.
     auto &Device = *(*ExclusiveDevicesAccessor)[0];
     // just skip checks if no devices are found in the system
-    Device.zeroCopySanityChecksAndDiag(
-        (getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY),
-        (getRequirements() & OMPX_REQ_AUTO_ZERO_COPY),
-        (getRequirements() & OMPX_REQ_EAGER_ZERO_COPY_MAPS));
+    if (Device.getConfig().ChecksZeroCopyConfig)
+      llvm::offload::tmp::__ol_tgt_ZeroCopySanityChecksAndDiag(
+          Device.DeviceHandle,
+          (getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY),
+          (getRequirements() & OMPX_REQ_AUTO_ZERO_COPY),
+          (getRequirements() & OMPX_REQ_EAGER_ZERO_COPY_MAPS));
   }
 
   ODBG(ODT_Init) << "Done registering entries!";
+}
+
+void PluginManager::unloadPrograms(const void *Key, TranslationTable &TT) {
+  // To avoid calling destructors with the lock held, make a list first and
+  // then traverse the list to destroy programs.
+  llvm::SmallVector<DeviceTy *> DevicesToVisit;
+  {
+    auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
+    for (size_t DeviceId = 0;
+         DeviceId <
+         std::min(TT.TargetsEntries.size(), ExclusiveDevicesAccessor->size());
+         ++DeviceId)
+      DevicesToVisit.push_back((*ExclusiveDevicesAccessor)[DeviceId].get());
+  }
+
+  // Destroy in reverse device order, mirroring the load order.
+  for (size_t DeviceId = DevicesToVisit.size(); DeviceId-- > 0;)
+    DevicesToVisit[DeviceId]->unloadProgram(
+        Key, TT.TargetsEntries[DeviceId],
+        llvm::ArrayRef<llvm::offloading::EntryTy>(TT.HostTable.EntriesBegin,
+                                                  TT.HostTable.EntriesEnd));
 }
 
 void PluginManager::unregisterLib(__tgt_bin_desc *Desc) {
@@ -408,26 +430,36 @@ void PluginManager::unregisterLib(__tgt_bin_desc *Desc) {
   Desc = upgradeLegacyEntries(Desc);
 
   // Remove entries from HostPtrToTableMap
-  TblMapMtx.lock();
-  for (llvm::offloading::EntryTy *Cur = Desc->HostEntriesBegin;
-       Cur < Desc->HostEntriesEnd; ++Cur) {
-    if (Cur->Kind == object::OffloadKind::OFK_OpenMP)
-      HostPtrToTableMap.erase(Cur->Address);
+  {
+    std::lock_guard<std::mutex> TblMapLock(TblMapMtx);
+    for (llvm::offloading::EntryTy *Cur = Desc->HostEntriesBegin;
+         Cur < Desc->HostEntriesEnd; ++Cur) {
+      if (Cur->Kind == object::OffloadKind::OFK_OpenMP)
+        HostPtrToTableMap.erase(Cur->Address);
+    }
   }
 
-  // Remove translation table for this descriptor.
-  auto TransTable = HostEntriesBeginToTransTable.find(Desc->HostEntriesBegin);
-  if (TransTable != HostEntriesBeginToTransTable.end()) {
+  // Remove the translation table for this descriptor.
+  std::optional<TranslationTable> TT;
+  {
+    std::lock_guard<std::mutex> TrlTblLock(TrlTblMtx);
+    auto TransTable = HostEntriesBeginToTransTable.find(Desc->HostEntriesBegin);
+    if (TransTable != HostEntriesBeginToTransTable.end()) {
+      TT = std::move(TransTable->second);
+      HostEntriesBeginToTransTable.erase(TransTable);
+      llvm::erase(HostEntriesBeginRegistrationOrder, Desc->HostEntriesBegin);
+    }
+  }
+
+  if (TT) {
     ODBG(ODT_Deinit) << "Removing translation table for descriptor "
                      << Desc->HostEntriesBegin;
-    HostEntriesBeginToTransTable.erase(TransTable);
+    unloadPrograms(Desc->HostEntriesBegin, *TT);
   } else {
     ODBG(ODT_Deinit) << "Translation table for descriptor "
                      << Desc->HostEntriesBegin << " cannot be found, probably "
                      << "it has been already removed.";
   }
-
-  TblMapMtx.unlock();
 
   ODBG(ODT_Deinit) << "Done unregistering library!";
 }
@@ -475,6 +507,10 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
         break;
       }
 
+      // The device keeps the program until the library is unregistered.
+      ProgramTy &Program =
+          Device.addProgram(HostEntriesBegin, std::move(*LoadedOrErr));
+
       // 3) Create the translation table.
       llvm::SmallVector<llvm::offloading::EntryTy> &DeviceEntries =
           TransTable->TargetsEntries[DeviceId];
@@ -482,8 +518,6 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
            llvm::make_range(Img->EntriesBegin, Img->EntriesEnd)) {
         if (Entry.Kind != object::OffloadKind::OFK_OpenMP)
           continue;
-
-        ProgramTy &Program = *LoadedOrErr;
 
         llvm::offloading::EntryTy DeviceEntry = Entry;
         if (Entry.Size) {
@@ -564,9 +598,6 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
               REPORT() << "Failed to query max threads of " << Entry.SymbolName
                        << ": " << Res->Details;
 
-            auto &Image =
-                *llvm::offload::tmp::__ol_tgt_GetDeviceImageFromProgram(
-                    Program.getHandle());
             const auto &Cfg = KernelEnv.Configuration;
 
             // Downstream, "<name>_exec_mode" is authoritative: the AMD-only
@@ -576,16 +607,9 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
                 static_cast<llvm::omp::OMPTgtExecModeFlags>(Cfg.ExecMode);
             uint8_t ExecModeVal = 0;
             if (ReadImageGlobal("_exec_mode", &ExecModeVal,
-                                sizeof(ExecModeVal))) {
+                                sizeof(ExecModeVal)))
               ExecMode =
                   static_cast<llvm::omp::OMPTgtExecModeFlags>(ExecModeVal);
-              if (!llvm::omp::target::plugin::GenericKernelTy::
-                      isValidExecutionMode(ExecMode)) {
-                REPORT() << "Invalid execution mode " << int(ExecModeVal)
-                         << " for '" << Entry.SymbolName << "'";
-                return OFFLOAD_FAIL;
-              }
-            }
             ODBG(ODT_Mapping)
                 << "Kernel '" << Entry.SymbolName << "' uses "
                 << KernelLaunchInfoTy::getExecutionModeName(ExecMode)
@@ -593,8 +617,7 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
 
             KernelLaunchInfoTy LaunchInfo;
             LaunchInfo.Name = Entry.SymbolName;
-            LaunchInfo.Image = Image.getMemoryBuffer();
-            LaunchInfo.IRImage = Image.getIRImageMemoryBuffer();
+            LaunchInfo.Program = &Program;
             LaunchInfo.Mode = ExecMode;
             LaunchInfo.ReductionDataSize = Cfg.ReductionDataSize;
             LaunchInfo.StaticBlockMemSize = StaticBlockMemSize;

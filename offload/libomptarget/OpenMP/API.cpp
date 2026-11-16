@@ -17,6 +17,7 @@
 #include "omptarget.h"
 #include "rtl.h"
 
+#include "OpenMP/AMDGPUSupport.h"
 #include "OpenMP/InternalTypes.h"
 #include "OpenMP/InteropAPI.h"
 #include "OpenMP/Mapping.h"
@@ -37,7 +38,8 @@ EXTERN int ompx_get_team_procs(int DeviceNum) {
   if (!DeviceOrErr)
     FATAL_MESSAGE(DeviceNum, "%s", toString(DeviceOrErr.takeError()).c_str());
   int TeamProcs = DeviceOrErr->getTeamProcs();
-  ODBG(ODT_Interface) << "Call to ompx_get_team_procs returning " << TeamProcs;
+  ODBG(llvm::omp::target::debug::ODT_Interface)
+      << "Call to ompx_get_team_procs returning " << TeamProcs;
   return TeamProcs;
 }
 
@@ -159,7 +161,8 @@ EXTERN size_t omp_get_gprivate_limit(int DeviceNum, omp_access_t AccessGroup) {
   if (!DeviceOrErr)
     FATAL_MESSAGE(DeviceNum, "%s", toString(DeviceOrErr.takeError()).c_str());
 
-  return DeviceOrErr->getInfo<uint64_t>(DeviceInfo::WORK_GROUP_LOCAL_MEM_SIZE);
+  return DeviceOrErr->getInfo<uint64_t>(
+      OL_DEVICE_INFO_WORK_GROUP_LOCAL_MEM_SIZE);
 }
 
 EXTERN void *omp_target_alloc(size_t Size, int DeviceNum) {
@@ -751,8 +754,10 @@ EXTERN int omp_is_coarse_grain_mem_region(void *ptr, size_t size) {
     FATAL_MESSAGE(omp_get_default_device(), "%s",
                   toString(DeviceOrErr.takeError()).c_str());
 
-  return DeviceOrErr->RTL->query_coarse_grain_mem_region(
-      omp_get_default_device(), ptr, size);
+  if (!DeviceOrErr->getConfig().SupportsCoarseGrainMemory)
+    return 0;
+  return llvm::offload::tmp::__ol_tgt_QueryCoarseGrainMemRegion(
+      DeviceOrErr->DeviceHandle, ptr, size);
 }
 
 // This user-callable function allows host overlays of HIP mem alloc functions
@@ -767,14 +772,14 @@ EXTERN void omp_register_coarse_grain_mem(void *ptr, size_t size, int setattr) {
     FATAL_MESSAGE(omp_get_default_device(), "%s",
                   toString(DeviceOrErr.takeError()).c_str());
 
-  if (!(DeviceOrErr->RTL->is_gfx90a(omp_get_default_device()) &&
-        DeviceOrErr->RTL->is_gfx90a_coarse_grain_usm_map_enabled(
-            omp_get_default_device())))
+  if (!DeviceOrErr->getConfig().SupportsCoarseGrainMemory ||
+      !llvm::offload::tmp::__ol_tgt_IsGfx90aCoarseGrainUsmMapEnabled(
+          DeviceOrErr->DeviceHandle))
     return;
 
   bool set_attr = (setattr == 1) ? true : false;
-  DeviceOrErr->RTL->set_coarse_grain_mem(omp_get_default_device(), ptr, size,
-                                         set_attr);
+  llvm::offload::tmp::__ol_tgt_SetCoarseGrainMem(DeviceOrErr->DeviceHandle, ptr,
+                                                 size, set_attr);
   return;
 }
 

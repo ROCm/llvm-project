@@ -9,6 +9,9 @@
 #ifndef AMD_COMGR_PERF_TIMER_H
 #define AMD_COMGR_PERF_TIMER_H
 
+#include <cstdint>
+#include <memory>
+
 namespace COMGR {
 namespace TimeStatistics {
 
@@ -22,17 +25,17 @@ protected:
 public:
   PerfTimerImpl() : CounterStart(0), PCFreq(0.0) {};
   virtual ~PerfTimerImpl() = default;
-  virtual bool Init() = 0;
+  virtual bool init() = 0;
   virtual double getCurrentTime() = 0;
 };
 
 // Timer client interface class
 class PerfTimer {
-  std::unique_ptr<PerfTimerImpl> pImpl;
+  std::unique_ptr<PerfTimerImpl> Impl;
 
 public:
-  bool Init();
-  double getCurrentTime() { return pImpl->getCurrentTime(); }
+  bool init();
+  double getCurrentTime() { return Impl->getCurrentTime(); }
 };
 } // namespace TimeStatistics
 } // namespace COMGR

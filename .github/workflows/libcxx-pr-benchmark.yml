@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] benchmarks run only after the llvm-committers membership check
     types:
       - created
       - edited

@@ -1487,6 +1487,9 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
     case 60:
       Builder.defineMacro("_OPENMP", "202411");
       break;
+    case 61:
+      Builder.defineMacro("_OPENMP", "202611");
+      break;
     default: // case 51:
       // Default version is OpenMP 5.1
       Builder.defineMacro("_OPENMP", "202011");
@@ -1538,6 +1541,8 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   if (LangOpts.Sanitize.hasOneOf(SanitizerKind::HWAddress |
                                  SanitizerKind::KernelHWAddress))
     Builder.defineMacro("__SANITIZE_HWADDRESS__");
+  if (LangOpts.Sanitize.has(SanitizerKind::DeviceAddress))
+    Builder.defineMacro("__SANITIZE_DEVICE_ADDRESS__");
   if (LangOpts.Sanitize.has(SanitizerKind::Thread))
     Builder.defineMacro("__SANITIZE_THREAD__");
   if (LangOpts.Sanitize.has(SanitizerKind::Concurrency))

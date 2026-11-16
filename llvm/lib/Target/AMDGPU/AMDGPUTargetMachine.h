@@ -28,11 +28,12 @@ namespace llvm {
 //===----------------------------------------------------------------------===//
 
 namespace AMDGPU {
-StringRef getSchedStrategy(const Function &F);
+StringRef getSchedStrategy(const AMDGPUOptions &CLOpts, const Function &F);
 }
 
 class AMDGPUTargetMachine : public CodeGenTargetMachineImpl {
 protected:
+  const AMDGPUOptions &CLOpts;
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
 
   StringRef getGPUName(const Function &F) const;
@@ -49,6 +50,8 @@ public:
                       std::optional<Reloc::Model> RM,
                       std::optional<CodeModel::Model> CM, CodeGenOptLevel OL);
   ~AMDGPUTargetMachine() override;
+
+  const AMDGPUOptions &getCLOpts() const { return CLOpts; }
 
   const TargetSubtargetInfo *
   getSubtargetImpl(const Function &) const override = 0;
@@ -111,10 +114,11 @@ public:
 
   void registerMachineRegisterInfoCallback(MachineFunction &MF) const override;
 
-  /// Get xnack/sramecc setting from module flag or cl::opt (for testing).
+  /// Get xnack/sramecc setting from module flag or command line option (for
+  /// testing).
   /// Returns Any if not specified.
-  static AMDGPU::TargetIDSetting
-  getTargetIDSettingFromModuleFlag(const Module &M, StringRef FlagName);
+  AMDGPU::TargetIDSetting
+  getTargetIDSettingFromModuleFlag(const Module &M, StringRef FlagName) const;
 
   MachineFunctionInfo *
   createMachineFunctionInfo(BumpPtrAllocator &Allocator, const Function &F,
@@ -138,6 +142,9 @@ public:
 //===----------------------------------------------------------------------===//
 
 class AMDGPUPassConfig : public TargetPassConfig {
+protected:
+  const AMDGPUOptions &CLOpts;
+
 public:
   AMDGPUPassConfig(TargetMachine &TM, PassManagerBase &PM);
 
@@ -155,16 +162,11 @@ public:
   std::unique_ptr<CSEConfigBase> getCSEConfig() const override;
 
   /// Check if a pass is enabled given \p Opt option. The option always
-  /// overrides defaults if explicitly used. Otherwise its default will
-  /// be used given that a pass shall work at an optimization \p Level
-  /// minimum.
-  bool isPassEnabled(const cl::opt<bool> &Opt,
+  /// overrides defaults if explicitly used. Otherwise the pass is enabled at an
+  /// optimization \p Level minimum.
+  bool isPassEnabled(BoolOrDefault Opt,
                      CodeGenOptLevel Level = CodeGenOptLevel::Default) const {
-    if (Opt.getNumOccurrences())
-      return Opt;
-    if (TM->getOptLevel() < Level)
-      return false;
-    return Opt;
+    return valueOr(Opt, TM->getOptLevel() >= Level);
   }
 };
 

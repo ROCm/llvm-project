@@ -115,11 +115,11 @@ int main(int argc, char *argv[]) {
   amd_comgr_(get_isa_count(&IsaCount));
   if (IsaCount != ExpectedIsaCount)
     fail("Expected %zu ISAs, got %zu", (size_t)ExpectedIsaCount, IsaCount);
-  for (size_t i = 0; i < IsaCount; i++) {
+  for (size_t I = 0; I < IsaCount; I++) {
     const char *Name;
-    bool sramecc, xnack;
+    bool Sramecc, Xnack;
     amd_comgr_metadata_node_t Root, Features;
-    amd_comgr_(get_isa_name(i, &Name));
+    amd_comgr_(get_isa_name(I, &Name));
 
     // Compare sets rather than relying on TargetParser's enumeration order.
     size_t Index;
@@ -135,20 +135,20 @@ int main(int argc, char *argv[]) {
     amd_comgr_(get_isa_metadata(Name, &Root));
     amd_comgr_(metadata_lookup(Root, "Features", &Features));
 
-    sramecc = queryFeature(Name, Features, "sramecc");
-    xnack = queryFeature(Name, Features, "xnack");
+    Sramecc = queryFeature(Name, Features, "sramecc");
+    Xnack = queryFeature(Name, Features, "xnack");
 
     printf("%s\n", Name);
 
-    if (sramecc) {
+    if (Sramecc) {
       printf("%s:sramecc+\n", Name);
       printf("%s:sramecc-\n", Name);
     }
-    if (xnack) {
+    if (Xnack) {
       printf("%s:xnack+\n", Name);
       printf("%s:xnack-\n", Name);
     }
-    if (sramecc && xnack) {
+    if (Sramecc && Xnack) {
       printf("%s:sramecc+:xnack+\n", Name);
       printf("%s:sramecc+:xnack-\n", Name);
       printf("%s:sramecc-:xnack+\n", Name);

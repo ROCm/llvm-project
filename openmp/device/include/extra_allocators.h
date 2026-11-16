@@ -72,8 +72,6 @@ uint32_t __kmpc_get_hardware_num_blocks();
 /// Synchronization
 ///
 ///{
-void __kmpc_impl_syncthreads();
-
 void __kmpc_flush_acquire(IdentTy *Loc);
 
 void __kmpc_flush_release(IdentTy *Loc);
