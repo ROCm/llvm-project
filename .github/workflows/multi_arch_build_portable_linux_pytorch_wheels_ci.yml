@@ -324,7 +324,7 @@ jobs:
 
       - name: Configure AWS Credentials
         if: ${{ github.repository == 'ROCm/TheRock' }}
-        uses: $/.github/actions/configure_aws_artifacts_credentials
+        uses: ./.github/actions/configure_aws_artifacts_credentials # zizmor: ignore[self-repository] action lives in TheRock, not this repo
         with:
           release_type: ci
 
