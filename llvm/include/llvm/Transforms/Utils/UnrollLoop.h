@@ -158,13 +158,9 @@ public:
 
   /// \param PrepareForLTO If true, consider calls as inline candidates and
   /// defer unrolling so that LTO post-link inlining can consider them first.
-  /// \param TripCountIsUniform If true, all threads in a convergent execution
-  /// agree on the trip count, so runtime unrolling with a remainder is safe
-  /// even for loops with uncontrolled convergent operations.
   LLVM_ABI UnrollCostEstimator(const Loop *L, const TargetTransformInfo &TTI,
                                const SmallPtrSetImpl<const Value *> &EphValues,
-                               unsigned BEInsns, bool PrepareForLTO = false,
-                               bool TripCountIsUniform = false);
+                               unsigned BEInsns, bool PrepareForLTO = false);
 
   /// Whether it is legal to unroll this loop. If \p ORE and \p L are provided,
   /// emit an optimization remark on failure.
