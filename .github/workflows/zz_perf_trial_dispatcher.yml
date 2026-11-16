@@ -1,0 +1,70 @@
+name: Perf Trial Dispatcher
+
+# Scratch branch only. Nothing here is meant to merge.
+#
+# cherry_pick_testing.yml is not on the default branch, so the Actions tab
+# offers no Run workflow button for it. The REST API does not share that
+# restriction: a job inside the repository holding actions: write can create
+# the dispatch and name any ref, and the workflow then runs from that ref.
+# This exists so the trial can be started against the copy on
+# users/mliyakat/cp-test-branch-input without adding a commit to PR #5060.
+#
+# Scoped to its own path so that only a push which edits this file starts a
+# trial. Every other push to this branch leaves it alone, and deleting it
+# cannot start one either, because the workflow no longer exists at the
+# commit that removes it.
+
+on:
+  push:
+    branches:
+      - cursor/push-inputs-probe-b7d6
+    paths:
+      - ".github/workflows/zz_perf_trial_dispatcher.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    name: Start the trial on cp-test-branch-input
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Dispatch Cherry-pick Testing
+        id: fire
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REF: users/mliyakat/cp-test-branch-input
+        run: |
+          set -euo pipefail
+
+          # build_native_packages and run_tests are sent false on purpose:
+          # neither is on the path to a tarball or a measurement, and both
+          # cost build and runner time a first trial does not need.
+          gh api -X POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/419188209/dispatches" \
+            -f ref="${TARGET_REF}" \
+            -f 'inputs[LLVM_BRANCH]=amd/dev/mliyakat/triage_WW45_pytorch1' \
+            -f 'inputs[THEROCK_REF]=amd-compiler-2026-10-29-COT' \
+            -f 'inputs[linux_amdgpu_families]=gfx94X-dcgpu' \
+            -f 'inputs[windows_amdgpu_families]=none' \
+            -f 'inputs[dry_run]=false' \
+            -f 'inputs[build_pytorch]=false' \
+            -f 'inputs[build_jax]=false' \
+            -f 'inputs[build_native_packages]=false' \
+            -f 'inputs[run_tests]=false' \
+            -f 'inputs[test_type]=quick' \
+            -f 'inputs[run_performance_tests]=true' \
+            -f 'inputs[performance_options]=plan_only=yes'
+
+          echo "Dispatched against ${TARGET_REF}."
+
+      - name: Name the run it created
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sleep 15
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/419188209/runs?event=workflow_dispatch&per_page=5" \
+            --jq '.workflow_runs[] | "\(.id)\t\(.created_at)\t\(.head_branch)\t\(.html_url)"'
