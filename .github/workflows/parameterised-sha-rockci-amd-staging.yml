@@ -895,27 +895,52 @@ jobs:
           python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
           import json
           import os
+          import sys
 
           def line(key, payload):
               return f"{key}={json.dumps(payload, separators=(',', ':'))}"
 
+          # Every value here reaches qa-forge, which interpolates it into a
+          # shell variable and then into a Python argv. A trailing space on the
+          # directory URL survives both and silently changes what is fetched --
+          # observed on 2026-11-16, where a hand-entered URL arrived as
+          # ".../tarballs/ " and became ".../tarballs/ /" one step later.
+          #
+          # None of these values legitimately contains whitespace, so rejecting
+          # all of it is safe and catches the whole class rather than the one
+          # case. Warnings go to stderr because stdout is GITHUB_OUTPUT.
+          def value(name):
+              raw = os.environ[name]
+              trimmed = raw.strip()
+              if trimmed != raw:
+                  print(
+                      f"::warning::{name} arrived with surrounding whitespace; trimmed before dispatch.",
+                      file=sys.stderr,
+                  )
+              if not trimmed or any(c.isspace() for c in trimmed):
+                  raise SystemExit(
+                      f"::error::{name} is empty or contains whitespace after trimming ({trimmed!r}). "
+                      "qa-forge would carry it into the fetch URL, so the dispatch is stopped here."
+                  )
+              return trimmed
+
           install = {
               "target_type": "servers",
-              "target_server": os.environ["SERVER"],
-              "install_method": os.environ["INSTALL_METHOD"],
-              "execution_label": os.environ["EXECUTION_LABEL"],
-              "package_name": os.environ["TAR_NAME"],
-              "therock_packages_url": os.environ["PACKAGES_URL"],
-              "rocm_version": os.environ["ROCM_VERSION"],
+              "target_server": value("SERVER"),
+              "install_method": value("INSTALL_METHOD"),
+              "execution_label": value("EXECUTION_LABEL"),
+              "package_name": value("TAR_NAME"),
+              "therock_packages_url": value("PACKAGES_URL"),
+              "rocm_version": value("ROCM_VERSION"),
               "build_type": "dev",
-              "triggered_by": os.environ["TRIGGERED_BY"],
+              "triggered_by": value("TRIGGERED_BY"),
           }
           perf = {
-              "workflow_id": os.environ["SUITES"],
-              "target_server": os.environ["SERVER"],
-              "execution_label": os.environ["EXECUTION_LABEL"],
-              "test_flag": os.environ["TEST_FLAG"],
-              "triggered_by": os.environ["TRIGGERED_BY"],
+              "workflow_id": value("SUITES"),
+              "target_server": value("SERVER"),
+              "execution_label": value("EXECUTION_LABEL"),
+              "test_flag": value("TEST_FLAG"),
+              "triggered_by": value("TRIGGERED_BY"),
           }
 
           print(line("install_dispatch_inputs", install))
