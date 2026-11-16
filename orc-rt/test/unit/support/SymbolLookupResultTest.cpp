@@ -1,4 +1,4 @@
-//===- SymbolLookupSetTest.cpp --------------------------------------------===//
+//===- SymbolLookupResultTest.cpp -----------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,46 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Test SymbolLookupSet and SymbolLookupResult APIs.
+// Test SymbolLookupResult APIs.
 //
 //===----------------------------------------------------------------------===//
 
-#include "orc-rt/support/SymbolLookupSet.h"
+#include "orc-rt/support/SymbolLookupResult.h"
 
 #include "gtest/gtest.h"
 
 using namespace orc_rt;
-
-TEST(SymbolLookupSetTest, DefaultConstructedIsEmpty) {
-  SymbolLookupSet S;
-  EXPECT_TRUE(S.empty());
-  EXPECT_EQ(S.size(), 0U);
-  EXPECT_EQ(S.begin(), S.end());
-}
-
-TEST(SymbolLookupSetTest, InitializerList) {
-  SymbolLookupSet S({{"foo", SymbolLookupFlags::RequiredSymbol},
-                     {"bar", SymbolLookupFlags::WeaklyReferencedSymbol}});
-  ASSERT_EQ(S.size(), 2U);
-  EXPECT_FALSE(S.empty());
-  EXPECT_EQ(S[0].first, "foo");
-  EXPECT_EQ(S[0].second, SymbolLookupFlags::RequiredSymbol);
-  EXPECT_EQ(S[1].first, "bar");
-  EXPECT_EQ(S[1].second, SymbolLookupFlags::WeaklyReferencedSymbol);
-}
-
-TEST(SymbolLookupSetTest, PushBackAndIterate) {
-  SymbolLookupSet S;
-  S.reserve(2);
-  S.push_back({"foo", SymbolLookupFlags::RequiredSymbol});
-  S.push_back({"bar", SymbolLookupFlags::WeaklyReferencedSymbol});
-  ASSERT_EQ(S.size(), 2U);
-
-  std::vector<std::string> Names;
-  for (auto &Sym : S)
-    Names.push_back(Sym.first);
-  EXPECT_EQ(Names, (std::vector<std::string>{"foo", "bar"}));
-}
 
 TEST(SymbolLookupResultTest, DefaultConstructedIsEmpty) {
   SymbolLookupResult R;

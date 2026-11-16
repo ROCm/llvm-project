@@ -1,4 +1,4 @@
-//===-- SPSSymbolLookupSetTest.cpp ----------------------------------------===//
+//===-- SPSRemoteSymbolLookupSetTest.cpp ----------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Test SPS serialization for SymbolLookupFlags and SymbolLookupSet APIs.
+// Test SPS serialization for SymbolLookupFlags and RemoteSymbolLookupSet APIs.
 //
 //===----------------------------------------------------------------------===//
 
-#include "orc-rt/support/sps/SPSSymbolLookupSet.h"
+#include "orc-rt/support/sps/SPSRemoteSymbolLookupSet.h"
 
 #include "SimplePackedSerializationTestUtils.h"
 #include "gtest/gtest.h"
@@ -26,14 +26,14 @@ static bool seqEqual(const SeqT &LHS, const SeqT &RHS) {
          std::equal(LHS.begin(), LHS.end(), RHS.begin());
 }
 
-TEST(SPSSymbolLookupSetTest, SymbolLookupFlagsSerialization) {
+TEST(SPSRemoteSymbolLookupSetTest, SymbolLookupFlagsSerialization) {
   blobSerializationRoundTrip<bool, SymbolLookupFlags>(
       SymbolLookupFlags::RequiredSymbol);
   blobSerializationRoundTrip<bool, SymbolLookupFlags>(
       SymbolLookupFlags::WeaklyReferencedSymbol);
 }
 
-TEST(SPSSymbolLookupSetTest, SymbolLookupFlagsWireFormat) {
+TEST(SPSRemoteSymbolLookupSetTest, SymbolLookupFlagsWireFormat) {
   // RequiredSymbol must serialize as true and WeaklyReferencedSymbol as false
   // to match the controller's RemoteSymbolLookupSetElement::Required field.
   for (auto [F, Required] :
@@ -50,23 +50,12 @@ TEST(SPSSymbolLookupSetTest, SymbolLookupFlagsWireFormat) {
   }
 }
 
-TEST(SPSSymbolLookupSetTest, SymbolLookupSetSerialization) {
-  blobSerializationRoundTrip<SPSSymbolLookupSet, SymbolLookupSet>(
-      SymbolLookupSet(), seqEqual<SymbolLookupSet>);
-  blobSerializationRoundTrip<SPSSymbolLookupSet, SymbolLookupSet>(
-      SymbolLookupSet({{"foo", SymbolLookupFlags::RequiredSymbol},
-                       {"bar", SymbolLookupFlags::WeaklyReferencedSymbol}}),
-      seqEqual<SymbolLookupSet>);
-}
-
-TEST(SPSSymbolLookupSetTest, SymbolLookupResultSerialization) {
-  int X = 0;
-  SymbolLookupResult R;
-  R.push_back(&X);
-  R.push_back(nullptr);
-  R.push_back(std::nullopt);
-  blobSerializationRoundTrip<SPSSymbolLookupResult, SymbolLookupResult>(
-      SymbolLookupResult(), seqEqual<SymbolLookupResult>);
-  blobSerializationRoundTrip<SPSSymbolLookupResult, SymbolLookupResult>(
-      R, seqEqual<SymbolLookupResult>);
+TEST(SPSRemoteSymbolLookupSetTest, RemoteSymbolLookupSetSerialization) {
+  blobSerializationRoundTrip<SPSSymbolLookupSet, RemoteSymbolLookupSet>(
+      RemoteSymbolLookupSet(), seqEqual<RemoteSymbolLookupSet>);
+  blobSerializationRoundTrip<SPSSymbolLookupSet, RemoteSymbolLookupSet>(
+      RemoteSymbolLookupSet(
+          {{"foo", SymbolLookupFlags::RequiredSymbol},
+           {"bar", SymbolLookupFlags::WeaklyReferencedSymbol}}),
+      seqEqual<RemoteSymbolLookupSet>);
 }
