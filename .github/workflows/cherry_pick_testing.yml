@@ -496,6 +496,116 @@ jobs:
       contents: read
       id-token: write
 
+  # Deliberately depends on nothing, so it starts beside validate_cp_base
+  # rather than behind the build. The perf jobs themselves only come up after a
+  # full Linux build, so without this a token that cannot reach qa-forge is
+  # discovered about two hours in -- and a newly issued fine-grained token is
+  # the case most likely to be wrong, because three of its four usual failures
+  # are settings on the qa-forge organisation rather than on the token.
+  #
+  # Both workflows are checked here, together, before either is dispatched.
+  # Checking each beside its own dispatch would let a run install onto the perf
+  # machine, hold it, and only then be refused the measurement.
+  performance_preflight:
+    name: Performance Preflight
+    if: ${{ inputs.run_performance_tests }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      QA_FORGE_REPO: AMD-ROCm-Internal/qa-forge
+      QA_FORGE_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
+      INSTALL_WORKFLOW: rocm-func-core-therock-install-dev.yml
+      PERF_WORKFLOW: performance-test-run.yml
+    steps:
+      - name: Check the dispatch token reaches both qa-forge workflows
+        run: |
+          set -uo pipefail
+
+          REQUIRED="Actions: Read and write"
+
+          if [[ -z "${QA_FORGE_TOKEN}" ]]; then
+            echo "::error::The QA_FORGE_PERF_DISPATCH_TOKEN secret is not set on this repository, so neither qa-forge dispatch can be made. Add it as a repository secret holding a token with '${REQUIRED}' on ${QA_FORGE_REPO}, or turn run_performance_tests off."
+            exit 1
+          fi
+
+          probe() {
+            curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
+              -H "Authorization: Bearer ${QA_FORGE_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/$1" 2>/dev/null || echo "000"
+          }
+
+          # GitHub answers 404 rather than 403 for a token without access, so
+          # that a token cannot be used to discover which private repositories
+          # exist. It therefore reads as "no such workflow" while meaning "no
+          # such permission", which is the part that is never guessed.
+          WHY_404="A 404 is what GitHub returns for a token that lacks access, not for a missing repository, so the cause is usually one of three things: the token's resource owner is not AMD-ROCm-Internal (a fine-grained token has exactly one resource owner, and it cannot be ROCm or a personal account); the organisation does not permit fine-grained tokens, or an owner has not yet approved this one; or the organisation enforces SAML SSO and the token has not been authorised for it."
+
+          case "$(probe "repos/${QA_FORGE_REPO}")" in
+            200)
+              echo "Reached ${QA_FORGE_REPO}."
+              ;;
+            401)
+              echo "::error::QA_FORGE_PERF_DISPATCH_TOKEN was rejected by GitHub (401). The token is malformed, revoked, or past its expiry date -- fine-grained tokens always carry one and stop working on it. It needs '${REQUIRED}' on ${QA_FORGE_REPO}."
+              exit 1
+              ;;
+            403)
+              echo "::error::QA_FORGE_PERF_DISPATCH_TOKEN was refused access to ${QA_FORGE_REPO} (403), which is an organisation policy blocking the token or a rate limit rather than a missing permission. The permission it needs is '${REQUIRED}' on ${QA_FORGE_REPO}."
+              exit 1
+              ;;
+            404)
+              echo "::error::QA_FORGE_PERF_DISPATCH_TOKEN cannot see ${QA_FORGE_REPO} (404). ${WHY_404} The permission it needs, once it can see the repository, is '${REQUIRED}' on ${QA_FORGE_REPO}."
+              exit 1
+              ;;
+            000)
+              echo "::warning::Could not reach api.github.com to check the token. Continuing; the dispatch itself will be the test."
+              exit 0
+              ;;
+            *)
+              echo "::error::Checking ${QA_FORGE_REPO} returned an unexpected status, neither success nor a recognised refusal. The token needs '${REQUIRED}' on ${QA_FORGE_REPO}."
+              exit 1
+              ;;
+          esac
+
+          INSTALL_STATUS="$(probe "repos/${QA_FORGE_REPO}/actions/workflows/${INSTALL_WORKFLOW}")"
+          PERF_STATUS="$(probe "repos/${QA_FORGE_REPO}/actions/workflows/${PERF_WORKFLOW}")"
+          echo "${INSTALL_WORKFLOW}: ${INSTALL_STATUS}"
+          echo "${PERF_WORKFLOW}: ${PERF_STATUS}"
+
+          # The case this job exists to catch early. Reaching the measurement
+          # dispatch to discover it means the install has already taken the
+          # machine and is holding it.
+          if [[ "${INSTALL_STATUS}" == "200" && "${PERF_STATUS}" != "200" ]]; then
+            echo "::error::The token can read ${INSTALL_WORKFLOW} but not ${PERF_WORKFLOW} (${PERF_STATUS}). Dispatching anyway would install onto the perf machine, hold it, and then be refused the measurement, so the run stops here instead. ${WHY_404} Grant '${REQUIRED}' on ${QA_FORGE_REPO}; because that permission covers every workflow in the repository, one readable and one not more often means the token is scoped to a subset of repositories, or that ${PERF_WORKFLOW} has been renamed."
+            exit 1
+          fi
+
+          if [[ "${INSTALL_STATUS}" != "200" && "${PERF_STATUS}" != "200" ]]; then
+            echo "::error::The token reaches ${QA_FORGE_REPO} but can read neither ${INSTALL_WORKFLOW} (${INSTALL_STATUS}) nor ${PERF_WORKFLOW} (${PERF_STATUS}). Access to the repository is therefore not what is missing; the Actions permission is. Grant '${REQUIRED}' on ${QA_FORGE_REPO}."
+            exit 1
+          fi
+
+          if [[ "${INSTALL_STATUS}" != "200" ]]; then
+            echo "::error::The token can read ${PERF_WORKFLOW} but not ${INSTALL_WORKFLOW} (${INSTALL_STATUS}). ${WHY_404} Grant '${REQUIRED}' on ${QA_FORGE_REPO}; since that permission is repository-wide, one readable and one not more often means ${INSTALL_WORKFLOW} has been renamed on the qa-forge side."
+            exit 1
+          fi
+
+          echo "Both workflows are readable."
+          {
+            echo "### Performance preflight"
+            echo
+            echo "\`QA_FORGE_PERF_DISPATCH_TOKEN\` reaches \`${QA_FORGE_REPO}\` and can read both workflows."
+            echo
+            echo "> [!NOTE]"
+            echo "> This is the read half only. Creating a dispatch needs"
+            echo "> \`${REQUIRED}\`, and the write half cannot be proven without"
+            echo "> dispatching, so a token granted read alone would still be"
+            echo "> refused at the install."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   # Performance qualification lives in qa-forge: the suites are ROCmTest suites,
   # the machines are its baremetal perf servers, and the result store is its
   # own. Nothing here reimplements any of that. These two jobs drive qa-forge's
@@ -514,13 +624,14 @@ jobs:
   # machine, not for the identity of their run.
   performance_install:
     name: Performance Install
-    needs: [setup, build_linux, build_linux_tarballs]
+    needs: [setup, build_linux, build_linux_tarballs, performance_preflight]
     # The tarball job is the one that matters: it is what puts the tarball in
     # the bucket the install is pointed at. Nothing is published to a release
     # channel on the way, and nothing here waits on anything that would be.
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
+        needs.performance_preflight.result == 'success' &&
         needs.build_linux.result == 'success' &&
         needs.build_linux_tarballs.result == 'success'
       }}
@@ -1141,6 +1252,7 @@ jobs:
       - build_linux_deb_packages
       - build_linux_rpm_packages
       - build_linux_pytorch_wheels
+      - performance_preflight
       - performance_install
       - performance_tests
       - build_windows
