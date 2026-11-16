@@ -117,7 +117,15 @@ on:
             wait=          minutes to wait for the measurement
             repo=          qa-forge repository to dispatch into
             ref=           branch of it to dispatch
-          Example: server=SMC-SC-DI13-13 wait=200
+            packages_url=  directory to install from; defaults to this run's
+                           own artifacts prefix, or to nothing (letting
+                           qa-forge resolve the channel) when tar_name names
+                           someone else's build
+            url_key=       the install workflow's input name for that
+                           directory, if it is not therock_packages_url
+          If multi-arch resolution rejects the package, method=therock_tarball
+          installs the same tarball by the single-arch path, which does no run
+          lookup. Example: server=SMC-SC-DI13-13 wait=200
         required: false
         type: string
         default: ""
@@ -746,6 +754,12 @@ jobs:
           WAIT_MINUTES="300"
           QA_FORGE_REPO="AMD-ROCm-Internal/qa-forge"
           QA_FORGE_REF="main"
+          PACKAGES_URL_OVERRIDE=""
+          # The install workflow's input for a directory to fetch from is
+          # being added on the qa-forge side, and whoever lands it there names
+          # it. Keeping the key settable means a different name is a dispatch
+          # field rather than an edit here and another run to find out.
+          URL_KEY="therock_packages_url"
 
           # Whitespace separates the pairs, so a value may contain commas --
           # which suites does. A misspelled key is an error rather than a
@@ -769,8 +783,10 @@ jobs:
               wait)         WAIT_MINUTES="${value}" ;;
               repo)         QA_FORGE_REPO="${value}" ;;
               ref)          QA_FORGE_REF="${value}" ;;
+              packages_url) PACKAGES_URL_OVERRIDE="${value}" ;;
+              url_key)      URL_KEY="${value}" ;;
               *)
-                echo "::error::Unknown performance_options key '${key}'. Valid keys: server, tar_name, rocm_version, label, method, suites, install_wait, wait, repo, ref."
+                echo "::error::Unknown performance_options key '${key}'. Valid keys: server, tar_name, rocm_version, label, method, suites, install_wait, wait, repo, ref, packages_url, url_key."
                 exit 1
                 ;;
             esac
@@ -851,18 +867,34 @@ jobs:
             TAR_NAME="therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz"
           fi
 
-          # The build already publishes here, under this run's own id, with
-          # the credentials it already has and public read. That makes it the
-          # place to look: no channel to publish to first, and the prefix is
-          # derived rather than configured, so it cannot drift from the run it
-          # describes.
+          # Where to fetch it from. This run's own build goes to the CI
+          # artifacts bucket under this run's id, publicly readable, with the
+          # credentials the build already has -- so naming that prefix needs
+          # nothing published anywhere first, and it is derived rather than
+          # configured, so it cannot drift from the run it describes.
           #
+          # A tarball someone else built is a different matter: it is wherever
+          # it was put, usually the dev channel, and this run's prefix
+          # certainly does not hold it. So a named tarball gets no URL unless
+          # one is given, and qa-forge falls back to resolving the channel
+          # from build_type, which is what it does for every other caller.
+          if [[ -n "${PACKAGES_URL_OVERRIDE}" ]]; then
+            PACKAGES_URL="${PACKAGES_URL_OVERRIDE%/}/"
+          elif [[ -n "${TAR_NAME_OVERRIDE}" ]]; then
+            PACKAGES_URL=""
+          else
+            PACKAGES_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/${GITHUB_REPOSITORY//\//-}/${GITHUB_RUN_ID}-linux/tarballs/"
+          fi
+
           # The '+' in the version must be sent as %2B. A literal '+' is a 404
-          # on this bucket and on the ROCm channels alike, so the encoding is
-          # a property of the name rather than of the host.
-          TARBALL_INDEX="https://therock-ci-artifacts-external.s3.amazonaws.com/${GITHUB_REPOSITORY//\//-}/${GITHUB_RUN_ID}-linux/tarballs"
+          # on the bucket and on the ROCm channels alike, so the encoding is a
+          # property of the name rather than of the host.
+          if [[ -n "${PACKAGES_URL}" ]]; then
+            TARBALL_INDEX="${PACKAGES_URL%/}"
+          else
+            TARBALL_INDEX="https://dev.repo.amd.com/rocm/core/tarball"
+          fi
           TARBALL_URL="${TARBALL_INDEX}/${TAR_NAME//+/%2B}"
-          PACKAGES_URL="${TARBALL_INDEX}/"
 
           # Checked before dispatching rather than after. The install takes a
           # perf machine exclusively and holds it for as long as the install
@@ -879,7 +911,7 @@ jobs:
               echo "::warning::Could not reach ${TARBALL_INDEX} to check that ${TAR_NAME} is present. Continuing without the check."
               ;;
             404)
-              echo "::error::${TAR_NAME} is not at ${TARBALL_INDEX}. A -tests- tarball is only built when the performance toggle is on, so a run that built without it will not have one. Set performance_options tar_name=<tarball> to name one that does exist."
+              echo "::error::${TAR_NAME} is not at ${TARBALL_INDEX}. A -tests- tarball is only built when the performance toggle is on, so a run that built without it will not have one. Set performance_options tar_name=<tarball> to name one that does exist, and packages_url=<dir> if it is not where this looked."
               exit 1
               ;;
             *)
@@ -951,7 +983,7 @@ jobs:
           # The perf keys are still read from the archived public mirror and
           # have not been checked against the internal workflow.
           # ════════════════════════════════════════════════════════════════
-          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL INSTALL_METHOD EXECUTION_LABEL SUITES
+          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL URL_KEY INSTALL_METHOD EXECUTION_LABEL SUITES
           python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
           import json
           import os
@@ -965,7 +997,6 @@ jobs:
               "install_method": os.environ["INSTALL_METHOD"],
               "execution_label": os.environ["EXECUTION_LABEL"],
               "package_name": os.environ["TAR_NAME"],
-              "therock_packages_url": os.environ["PACKAGES_URL"],
               "rocm_version": os.environ["ROCM_VERSION"],
               "build_type": "dev",
               "triggered_by": os.environ["TRIGGERED_BY"],
@@ -976,6 +1007,13 @@ jobs:
               "execution_label": os.environ["EXECUTION_LABEL"],
               "triggered_by": os.environ["TRIGGERED_BY"],
           }
+          # Sent only when there is one. An empty string would be a value
+          # qa-forge has to interpret, and an input it may not declare yet is
+          # a rejected dispatch rather than a resolved channel.
+          packages_url = os.environ["PACKAGES_URL"]
+          if packages_url:
+              install[os.environ["URL_KEY"]] = packages_url
+
           print(line("install_dispatch_inputs", install))
           print(line("perf_dispatch_inputs", perf))
           PAYLOADS
