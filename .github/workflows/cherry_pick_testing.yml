@@ -103,46 +103,24 @@ on:
         description: "Run performance tests after the build, on the qa-forge perf machines. Results are informational and do not gate the run."
         type: boolean
         default: false
-      performance_target_server:
-        description: "Override the perf machine. Empty picks the machine mapped to the family being built."
+      performance_options:
+        description: |
+          Performance run settings, as whitespace-separated key=value pairs.
+          Everything here has a working default; set a key only to override it.
+            server=        perf machine, instead of the one mapped to the family
+            tar_name=      an already-built tarball, instead of this run's own
+            rocm_version=  X.Y.Z, instead of the one read off the tarball name
+            label=         execution label the install is recorded under
+            method=        install method
+            suites=        comma-separated suite ids
+            install_wait=  minutes to wait for the install
+            wait=          minutes to wait for the measurement
+            repo=          qa-forge repository to dispatch into
+            ref=           branch of it to dispatch
+          Example: server=SMC-SC-DI13-13 wait=200
+        required: false
         type: string
         default: ""
-      performance_tar_name:
-        description: "Override the tarball installed on the perf machine. Empty names the one this run published, pinning the build under test."
-        type: string
-        default: ""
-      performance_rocm_version:
-        description: "ROCm version to install, as X.Y.Z, e.g. 7.11.0. Empty derives it from this run's package version."
-        type: string
-        default: ""
-      performance_execution_label:
-        description: "Execution label the install and the measurements are recorded under."
-        type: string
-        default: "stg-compiler-full"
-      performance_install_method:
-        description: "How ROCm is laid down on the perf machine."
-        type: string
-        default: "therock_tarball_multiarch_alldevice"
-      performance_suites:
-        description: "Comma-separated performance suite ids to run."
-        type: string
-        default: "hip-hipperf,rocmlibs-rocrand-perf,rocmlibs-rocfft-perf,rocmlibs-rccl-perf"
-      performance_install_wait_minutes:
-        description: "How long to wait for the install before giving up. Expiry fails the run, because measuring an unknown stack is worse than not measuring."
-        type: number
-        default: 120
-      performance_wait_minutes:
-        description: "How long to wait for the measurement before giving up. Expiry is not a failure; the measurement keeps running and its URL is reported."
-        type: number
-        default: 300
-      qa_forge_repo:
-        description: "Repository holding the install and performance workflows."
-        type: string
-        default: "AMD-ROCm-Internal/qa-forge"
-      qa_forge_ref:
-        description: "Branch of qa_forge_repo supplying the install and performance workflows."
-        type: string
-        default: "main"
       changed_projects:
         description: "Comma-separated list of changed projects to filter tests (empty = run all tests)."
         type: string
@@ -704,7 +682,7 @@ jobs:
       ${{
         !cancelled() && inputs.run_performance_tests &&
         (
-          inputs.performance_tar_name != '' ||
+          contains(inputs.performance_options, 'tar_name=') ||
           (
             needs.build_linux.result == 'success' &&
             needs.publish_linux_artifacts.result == 'success'
@@ -729,6 +707,10 @@ jobs:
       server: ${{ steps.plan.outputs.server }}
       rocm_version: ${{ steps.plan.outputs.rocm_version }}
       perf_dispatch_inputs: ${{ steps.plan.outputs.perf_dispatch_inputs }}
+      suites: ${{ steps.plan.outputs.suites }}
+      qa_forge_repo: ${{ steps.plan.outputs.qa_forge_repo }}
+      qa_forge_ref: ${{ steps.plan.outputs.qa_forge_ref }}
+      perf_wait_minutes: ${{ steps.plan.outputs.perf_wait_minutes }}
       install_run_url: ${{ steps.dispatch.outputs.runUrlHtml }}
     steps:
       - name: Plan the performance run
@@ -736,18 +718,63 @@ jobs:
         env:
           BUILD_CONFIG: ${{ needs.setup.outputs.linux_build_config }}
           PACKAGE_VERSION: ${{ needs.setup.outputs.rocm_package_version }}
-          SERVER_OVERRIDE: ${{ inputs.performance_target_server }}
-          TAR_NAME_OVERRIDE: ${{ inputs.performance_tar_name }}
-          ROCM_VERSION_OVERRIDE: ${{ inputs.performance_rocm_version }}
-          EXECUTION_LABEL: ${{ inputs.performance_execution_label }}
-          INSTALL_METHOD: ${{ inputs.performance_install_method }}
-          SUITES: ${{ inputs.performance_suites }}
-          INSTALL_WAIT_MINUTES: ${{ inputs.performance_install_wait_minutes }}
+          OPTIONS: ${{ inputs.performance_options }}
           TRIGGERED_BY: ${{ github.triggering_actor }} (CP ${{ inputs.LLVM_BRANCH }})
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          # ════════════════════════════════════════════════════════════════
+          # OPTIONS — every performance setting, parsed out of one input.
+          #
+          # They are one input because `on.workflow_dispatch.inputs` may hold
+          # at most 25 top-level properties. Past that GitHub rejects the file
+          # outright, and because the rejection happens before it can work out
+          # which events the file wants, every push records a failed run for a
+          # workflow that has no push trigger. Ten separate knobs do not fit
+          # under that ceiling alongside the build's own inputs; one string
+          # does, and it leaves room for the next one.
+          # ════════════════════════════════════════════════════════════════
+          SERVER_OVERRIDE=""
+          TAR_NAME_OVERRIDE=""
+          ROCM_VERSION_OVERRIDE=""
+          EXECUTION_LABEL="stg-compiler-full"
+          INSTALL_METHOD="therock_tarball_multiarch_alldevice"
+          SUITES="hip-hipperf,rocmlibs-rocrand-perf,rocmlibs-rocfft-perf,rocmlibs-rccl-perf"
+          INSTALL_WAIT_MINUTES="120"
+          WAIT_MINUTES="300"
+          QA_FORGE_REPO="AMD-ROCm-Internal/qa-forge"
+          QA_FORGE_REF="main"
+
+          # Whitespace separates the pairs, so a value may contain commas --
+          # which suites does. A misspelled key is an error rather than a
+          # silent default, because the whole point of typed inputs was that
+          # a typo could not reach the machine unnoticed.
+          for pair in ${OPTIONS}; do
+            key="${pair%%=*}"
+            value="${pair#*=}"
+            if [[ "${pair}" != *=* || -z "${key}" ]]; then
+              echo "::error::performance_options takes key=value pairs separated by spaces; got '${pair}'."
+              exit 1
+            fi
+            case "${key}" in
+              server)       SERVER_OVERRIDE="${value}" ;;
+              tar_name)     TAR_NAME_OVERRIDE="${value}" ;;
+              rocm_version) ROCM_VERSION_OVERRIDE="${value}" ;;
+              label)        EXECUTION_LABEL="${value}" ;;
+              method)       INSTALL_METHOD="${value}" ;;
+              suites)       SUITES="${value}" ;;
+              install_wait) INSTALL_WAIT_MINUTES="${value}" ;;
+              wait)         WAIT_MINUTES="${value}" ;;
+              repo)         QA_FORGE_REPO="${value}" ;;
+              ref)          QA_FORGE_REF="${value}" ;;
+              *)
+                echo "::error::Unknown performance_options key '${key}'. Valid keys: server, tar_name, rocm_version, label, method, suites, install_wait, wait, repo, ref."
+                exit 1
+                ;;
+            esac
+          done
 
           # Perf machines are qa-forge's, not TheRock's, so they are absent
           # from runner-config-v2.json and the family's `benchmark-runs-on`
@@ -761,9 +788,6 @@ jobs:
             # Named rather than pooled, because it is one machine. Replace
             # with a common label once more than one sits behind the family.
             [gfx94X-dcgpu]=SMC-SC-DI13-13
-            # Provisional: no machine is attached for gfx950 yet, so this name
-            # is a placeholder and a run targeting it will queue indefinitely.
-            [gfx950-dcgpu]=linux-gfx950-8gpu-perf-rocm
           )
 
           skip_with() {
@@ -797,8 +821,16 @@ jobs:
           done
           [[ -z "${SERVER_OVERRIDE}" ]] || SERVER="${SERVER_OVERRIDE}"
 
+          # An unmapped family fails rather than skips. Only a run that asked
+          # for a measurement reaches here, and the two quiet outcomes are both
+          # worse than this one: skipping reports success for a measurement
+          # nobody took, and naming a machine that does not exist queues the
+          # install until the job's six-hour ceiling kills it. Every family
+          # except gfx94X-dcgpu is unmapped today, including the default, so
+          # this is the path most runs take until more hardware is attached.
           if [[ -z "${SERVER}" ]]; then
-            skip_with "no perf machine is mapped to any of: ${FAMILIES[*]:-none}. Pass performance_target_server to force one."
+            echo "::error::No perf machine is mapped to any of: ${FAMILIES[*]:-none}. Mapped families: ${!PERF_SERVERS[*]}. Set performance_options server=<machine> to name one, or turn run_performance_tests off."
+            exit 1
           fi
 
           # The tarball is named after the build's own full version string,
@@ -813,7 +845,7 @@ jobs:
           TAR_NAME="${TAR_NAME_OVERRIDE}"
           if [[ -z "${TAR_NAME}" ]]; then
             if [[ -z "${PACKAGE_VERSION}" ]]; then
-              echo "::error::No build ran in front of this job, so there is no version to name a tarball from. Pass performance_tar_name to point at an already-published build."
+              echo "::error::No build ran in front of this job, so there is no version to name a tarball from. Set performance_options tar_name=<tarball> to point at a build that already exists."
               exit 1
             fi
             TAR_NAME="therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz"
@@ -847,7 +879,7 @@ jobs:
               echo "::warning::Could not reach ${TARBALL_INDEX} to check that ${TAR_NAME} is present. Continuing without the check."
               ;;
             404)
-              echo "::error::${TAR_NAME} is not at ${TARBALL_INDEX}. A -tests- tarball is only built when the performance toggle is on, so a run that built without it will not have one. Pass performance_tar_name to name a tarball that does exist."
+              echo "::error::${TAR_NAME} is not at ${TARBALL_INDEX}. A -tests- tarball is only built when the performance toggle is on, so a run that built without it will not have one. Set performance_options tar_name=<tarball> to name one that does exist."
               exit 1
               ;;
             *)
@@ -867,15 +899,19 @@ jobs:
           fi
 
           if ! [[ "${INSTALL_WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( INSTALL_WAIT_MINUTES < 1 )); then
-            echo "::error::performance_install_wait_minutes must be a positive whole number of minutes, got '${INSTALL_WAIT_MINUTES}'."
+            echo "::error::The performance_options 'install_wait' must be a positive whole number of minutes, got '${INSTALL_WAIT_MINUTES}'."
+            exit 1
+          fi
+          if ! [[ "${WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( WAIT_MINUTES < 1 )); then
+            echo "::error::The performance_options 'wait' must be a positive whole number of minutes, got '${WAIT_MINUTES}'."
             exit 1
           fi
           # Stay under the job's own ceiling so the wait ends inside the job and
           # the outcome is reported, instead of the job being killed mid-wait.
-          WAIT_MINUTES="${INSTALL_WAIT_MINUTES}"
-          if (( WAIT_MINUTES > 345 )); then
-            echo "::warning::performance_install_wait_minutes of ${WAIT_MINUTES} exceeds the job ceiling; clamping to 345."
-            WAIT_MINUTES=345
+          INSTALL_WAIT_CAPPED="${INSTALL_WAIT_MINUTES}"
+          if (( INSTALL_WAIT_CAPPED > 345 )); then
+            echo "::warning::An 'install_wait' of ${INSTALL_WAIT_CAPPED} minutes exceeds the job ceiling; clamping to 345."
+            INSTALL_WAIT_CAPPED=345
           fi
 
           # ════════════════════════════════════════════════════════════════
@@ -915,7 +951,7 @@ jobs:
           # The perf keys are still read from the archived public mirror and
           # have not been checked against the internal workflow.
           # ════════════════════════════════════════════════════════════════
-          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL
+          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL INSTALL_METHOD EXECUTION_LABEL SUITES
           python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
           import json
           import os
@@ -951,7 +987,11 @@ jobs:
             echo "rocm_version=${ROCM_VERSION}"
             echo "tar_name=${TAR_NAME}"
             echo "packages_url=${PACKAGES_URL}"
-            echo "wait_seconds=$(( WAIT_MINUTES * 60 ))"
+            echo "suites=${SUITES}"
+            echo "qa_forge_repo=${QA_FORGE_REPO}"
+            echo "qa_forge_ref=${QA_FORGE_REF}"
+            echo "perf_wait_minutes=${WAIT_MINUTES}"
+            echo "install_wait_seconds=$(( INSTALL_WAIT_CAPPED * 60 ))"
           } >> "$GITHUB_OUTPUT"
 
       - name: Dispatch the ROCm install onto the perf machine
@@ -959,12 +999,12 @@ jobs:
         if: ${{ steps.plan.outputs.skip == 'false' }}
         uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
         with:
-          repo: ${{ inputs.qa_forge_repo }}
-          ref: ${{ inputs.qa_forge_ref }}
+          repo: ${{ steps.plan.outputs.qa_forge_repo }}
+          ref: ${{ steps.plan.outputs.qa_forge_ref }}
           workflow: rocm-func-core-therock-install-dev.yml
           token: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
           wait-for-completion: true
-          wait-timeout-seconds: ${{ steps.plan.outputs.wait_seconds }}
+          wait-timeout-seconds: ${{ steps.plan.outputs.install_wait_seconds }}
           wait-interval-seconds: 30
           # sync-status is deliberately off. It would fail this step on a failed
           # install, before the link step below has put the run URL in the
@@ -996,7 +1036,7 @@ jobs:
         if: ${{ always() && steps.dispatch.outputs.runId != '' }}
         env:
           GH_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
-          QA_FORGE_REPO: ${{ inputs.qa_forge_repo }}
+          QA_FORGE_REPO: ${{ steps.plan.outputs.qa_forge_repo }}
           RUN_ID: ${{ steps.dispatch.outputs.runId }}
           INSTALL_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
         run: |
@@ -1048,16 +1088,16 @@ jobs:
       - name: Bound the wait
         id: budget
         env:
-          WAIT_MINUTES: ${{ inputs.performance_wait_minutes }}
+          WAIT_MINUTES: ${{ needs.performance_install.outputs.perf_wait_minutes }}
         run: |
           set -euo pipefail
           if ! [[ "${WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( WAIT_MINUTES < 1 )); then
-            echo "::error::performance_wait_minutes must be a positive whole number of minutes, got '${WAIT_MINUTES}'."
+            echo "::error::The performance_options 'wait' must be a positive whole number of minutes, got '${WAIT_MINUTES}'."
             exit 1
           fi
           MINUTES="${WAIT_MINUTES}"
           if (( MINUTES > 345 )); then
-            echo "::warning::performance_wait_minutes of ${MINUTES} exceeds the job ceiling; clamping to 345."
+            echo "::warning::A 'wait' of ${MINUTES} minutes exceeds the job ceiling; clamping to 345."
             MINUTES=345
           fi
           echo "wait_seconds=$(( MINUTES * 60 ))" >> "$GITHUB_OUTPUT"
@@ -1069,8 +1109,8 @@ jobs:
         id: dispatch
         uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
         with:
-          repo: ${{ inputs.qa_forge_repo }}
-          ref: ${{ inputs.qa_forge_ref }}
+          repo: ${{ needs.performance_install.outputs.qa_forge_repo }}
+          ref: ${{ needs.performance_install.outputs.qa_forge_ref }}
           workflow: performance-test-run.yml
           token: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
           wait-for-completion: true
@@ -1086,7 +1126,7 @@ jobs:
           PERF_SERVER: ${{ needs.performance_install.outputs.server }}
           INSTALL_RUN_URL: ${{ needs.performance_install.outputs.install_run_url }}
           ROCM_VERSION: ${{ needs.performance_install.outputs.rocm_version }}
-          SUITES: ${{ inputs.performance_suites }}
+          SUITES: ${{ needs.performance_install.outputs.suites }}
         run: |
           {
             echo "### Performance tests"
@@ -1115,7 +1155,7 @@ jobs:
         if: ${{ always() && steps.dispatch.outputs.runId != '' }}
         env:
           GH_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
-          QA_FORGE_REPO: ${{ inputs.qa_forge_repo }}
+          QA_FORGE_REPO: ${{ needs.performance_install.outputs.qa_forge_repo }}
           RUN_ID: ${{ steps.dispatch.outputs.runId }}
           PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
           WAIT_MINUTES: ${{ steps.budget.outputs.wait_minutes }}
@@ -1141,7 +1181,7 @@ jobs:
         if: ${{ always() && steps.dispatch.outputs.runId != '' }}
         env:
           GH_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
-          QA_FORGE_REPO: ${{ inputs.qa_forge_repo }}
+          QA_FORGE_REPO: ${{ needs.performance_install.outputs.qa_forge_repo }}
           RUN_ID: ${{ steps.dispatch.outputs.runId }}
           PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
         run: |
