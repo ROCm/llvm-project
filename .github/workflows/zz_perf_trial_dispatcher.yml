@@ -48,7 +48,7 @@ jobs:
             -f 'inputs[THEROCK_REF]=amd-compiler-2026-10-29-COT' \
             -f 'inputs[linux_amdgpu_families]=gfx94x' \
             -f 'inputs[windows_amdgpu_families]=none' \
-            -f 'inputs[dry_run]=true' \
+            -f 'inputs[dry_run]=false' \
             -f 'inputs[build_pytorch]=false' \
             -f 'inputs[build_jax]=false' \
             -f 'inputs[build_native_packages]=false' \
