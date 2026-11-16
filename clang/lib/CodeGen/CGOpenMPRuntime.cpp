@@ -11024,8 +11024,7 @@ emitTargetCallFallback(CGOpenMPRuntime *OMPRuntime, llvm::Function *OutlinedFn,
   } else {
     if (RequiresOuterTask) {
       CapturedVars.clear();
-      CGF.GenerateOpenMPCapturedVars(CS, CapturedVars,
-                                     CGF.CGM.getOptKernelKey(D));
+      CGF.GenerateOpenMPCapturedVars(CS, CapturedVars);
     }
     llvm::SmallVector<llvm::Value *, 16> Args(CapturedVars.begin(),
                                               CapturedVars.end());
@@ -11096,17 +11095,14 @@ static void genMapInfoForCaptures(
     const CapturedStmt &CS, llvm::SmallVectorImpl<llvm::Value *> &CapturedVars,
     llvm::OpenMPIRBuilder &OMPBuilder,
     llvm::DenseSet<CanonicalDeclPtr<const Decl>> &MappedVarSet,
-    uint32_t &CapturedCount,
     MappableExprsHandler::MapCombinedInfoTy &CombinedInfo) {
-  llvm::DenseMap<llvm::Value *, llvm::Value *> LambdaPointers;
 
+  llvm::DenseMap<llvm::Value *, llvm::Value *> LambdaPointers;
   auto RI = CS.getCapturedRecordDecl()->field_begin();
   auto *CV = CapturedVars.begin();
-  CapturedCount = 0;
   for (CapturedStmt::const_capture_iterator CI = CS.capture_begin(),
                                             CE = CS.capture_end();
        CI != CE; ++CI, ++RI, ++CV) {
-    ++CapturedCount;
     MappableExprsHandler::MapCombinedInfoTy CurInfo;
 
     // VLA sizes are passed to the outlined region by copy and do not have map
@@ -11208,7 +11204,6 @@ genMapInfo(MappableExprsHandler &MEHandler, CodeGenFunction &CGF,
                llvm::DenseSet<CanonicalDeclPtr<const Decl>>()) {
 
   CodeGenModule &CGM = CGF.CGM;
-
   // Map any list items in a map clause that were not captures because they
   // weren't referenced within the construct.
   MEHandler.generateAllInfo(CombinedInfo, OMPBuilder, SkippedVarSet);
@@ -11228,14 +11223,13 @@ static void genMapInfo(const OMPExecutableDirective &D, CodeGenFunction &CGF,
                        const CapturedStmt &CS,
                        llvm::SmallVectorImpl<llvm::Value *> &CapturedVars,
                        llvm::OpenMPIRBuilder &OMPBuilder,
-                       uint32_t &CapturedCount,
                        MappableExprsHandler::MapCombinedInfoTy &CombinedInfo) {
   // Get mappable expression information.
   MappableExprsHandler MEHandler(D, CGF);
   llvm::DenseSet<CanonicalDeclPtr<const Decl>> MappedVarSet;
 
-  genMapInfoForCaptures(MEHandler, CGF, CS, CapturedVars,
-                        OMPBuilder, MappedVarSet, CapturedCount, CombinedInfo);
+  genMapInfoForCaptures(MEHandler, CGF, CS, CapturedVars, OMPBuilder,
+                        MappedVarSet, CombinedInfo);
   genMapInfo(MEHandler, CGF, CombinedInfo, OMPBuilder, MappedVarSet);
 }
 
@@ -11258,8 +11252,8 @@ emitClauseForBareTargetDirective(CodeGenFunction &CGF,
 static void emitTargetCallKernelLaunch(
     CGOpenMPRuntime *OMPRuntime, llvm::Function *OutlinedFn,
     const OMPExecutableDirective &D,
-    llvm::SmallVectorImpl<llvm::Value *> &CapturedVars,
-    bool RequiresOuterTask, const CapturedStmt &CS, bool OffloadingMandatory,
+    llvm::SmallVectorImpl<llvm::Value *> &CapturedVars, bool RequiresOuterTask,
+    const CapturedStmt &CS, bool OffloadingMandatory,
     llvm::PointerIntPair<const Expr *, 2, OpenMPDeviceClauseModifier> Device,
     llvm::Value *OutlinedFnID, CodeGenFunction::OMPTargetDataInfo &InputInfo,
     llvm::Value *&MapTypesArray, llvm::Value *&MapNamesArray,
@@ -11271,9 +11265,8 @@ static void emitTargetCallKernelLaunch(
 
   // Fill up the arrays with all the captured variables.
   MappableExprsHandler::MapCombinedInfoTy CombinedInfo;
-  uint32_t CapturedCount;
-  genMapInfo(D, CGF, CS, CapturedVars, OMPBuilder,
-             CapturedCount, CombinedInfo);
+  CGOpenMPRuntime::TargetDataInfo Info;
+  genMapInfo(D, CGF, CS, CapturedVars, OMPBuilder, CombinedInfo);
 
   // Append a null entry for the implicit dyn_ptr argument.
   using OpenMPOffloadMappingFlags = llvm::omp::OpenMPOffloadMappingFlags;
@@ -11292,7 +11285,6 @@ static void emitTargetCallKernelLaunch(
   CombinedInfo.Mappers.push_back(nullptr);
   CombinedInfo.DevicePtrDecls.push_back(nullptr);
 
-  CGOpenMPRuntime::TargetDataInfo Info;
   emitOffloadingArraysAndArgs(CGF, CombinedInfo, Info, OMPBuilder,
                               /*IsNonContiguous=*/true, /*ForEndCall=*/false);
 
@@ -11433,10 +11425,9 @@ void CGOpenMPRuntime::emitTargetCall(
        D.hasClausesOfKind<OMPThreadLimitClause>());
   llvm::SmallVector<llvm::Value *, 16> CapturedVars;
   const CapturedStmt &CS = *D.getCapturedStmt(OMPD_target);
-  auto &&ArgsCodegen = [&CS, &D, &CapturedVars](
-                           CodeGenFunction &CGF, PrePostActionTy &) {
-    CGF.GenerateOpenMPCapturedVars(CS, CapturedVars,
-                                         CGF.CGM.getOptKernelKey(D));
+  auto &&ArgsCodegen = [&CS, &CapturedVars](CodeGenFunction &CGF,
+                                            PrePostActionTy &) {
+    CGF.GenerateOpenMPCapturedVars(CS, CapturedVars);
   };
   emitInlinedDirective(CGF, OMPD_unknown, ArgsCodegen);
 
@@ -11449,10 +11440,10 @@ void CGOpenMPRuntime::emitTargetCall(
                           OutlinedFnID, &InputInfo, &MapTypesArray,
                           &MapNamesArray, SizeEmitter](CodeGenFunction &CGF,
                                                        PrePostActionTy &) {
-    emitTargetCallKernelLaunch(
-        this, OutlinedFn, D, CapturedVars, RequiresOuterTask,
-        CS, OffloadingMandatory, Device, OutlinedFnID, InputInfo, MapTypesArray,
-        MapNamesArray, SizeEmitter, CGF, CGM);
+    emitTargetCallKernelLaunch(this, OutlinedFn, D, CapturedVars,
+                               RequiresOuterTask, CS, OffloadingMandatory,
+                               Device, OutlinedFnID, InputInfo, MapTypesArray,
+                               MapNamesArray, SizeEmitter, CGF, CGM);
   };
 
   auto &&TargetElseGen =

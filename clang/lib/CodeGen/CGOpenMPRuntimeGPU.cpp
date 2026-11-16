@@ -994,20 +994,11 @@ void CGOpenMPRuntimeGPU::emitTargetOutlinedFunction(
 
   const Stmt *DirectiveStmt = CGM.getOptKernelKey(D);
   bool Mode = supportsSPMDExecutionMode(CGM, D);
-  // Used by emitParallelCall
-  CGM.setIsSPMDExecutionMode(Mode);
   if (Mode) {
-    // For AMDGPU, check if a no-loop or a Xteam reduction kernel should
-    // be generated and if so, set metadata that can be used by codegen.
-    // This check is done regardless of host or device codegen since the
-    // signature of the offloading routine has to match across host and device.
+    // For AMDGPU, check if a no-loop or big-jump-loop kernel should be
+    // generated and if so, set metadata that can be used by codegen.
     if (CGM.getTriple().isAMDGCN()) {
       assert(CGM.getLangOpts().OpenMPIsTargetDevice && "Unexpected host path");
-      // Downstream Xteam cross-team reduction codegen has been removed; kernels
-      // with reductions fall through to the normal SPMD path and use the
-      // upstream reduction implementation (emitReduction ->
-      // createReductionsGPU). Only the no-loop/big-jump-loop specialized
-      // kernels remain.
       CodeGenModule::NoLoopXteamErr NxStatus = CGM.checkAndSetNoLoopKernel(D);
       DEBUG_WITH_TYPE(NO_LOOP_XTEAM_RED,
                       CGM.emitNxResult("[No-Loop/Big-Jump-Loop]", D, NxStatus));
@@ -1032,9 +1023,6 @@ void CGOpenMPRuntimeGPU::emitTargetOutlinedFunction(
 
   if (Mode && DirectiveStmt)
     CGM.resetOptKernelMetadata(DirectiveStmt);
-
-  // Reset cached mode
-  CGM.setIsSPMDExecutionMode(false);
 }
 
 CGOpenMPRuntimeGPU::CGOpenMPRuntimeGPU(CodeGenModule &CGM)

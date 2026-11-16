@@ -1,5 +1,4 @@
 !===----------------------------------------------------------------------===!
-! XFAIL: *
 ! This directory can be used to add Integration tests involving multiple
 ! stages of the compiler (for eg. from Fortran to LLVM IR). It should not
 ! contain executable tests. We should only add tests here sparingly and only
@@ -121,7 +120,7 @@ end program
 
 ! ATTACH entries do not have present applied.
 
-! CHECK: %[[ATTACH_TYPE:.*]] = phi i64 [ 16384,
+! CHECK: %[[ATTACH_TYPE:.*]] = phi i64 [ 32768,
 ! CHECK: %[[ATTACH_MODS:.*]] = and i64 %{{.*}}, 1036
 ! CHECK: %[[ATTACH_WITH:.*]] = or i64 %[[ATTACH_TYPE]], %[[ATTACH_MODS]]
 ! CHECK: call void {{(@__tgt_push_mapper_component|@\.omp_mapper[^ ]*)}}({{.*}}i64 %[[ATTACH_TYPE]],
@@ -229,22 +228,22 @@ end subroutine nested_allocatable_case
 ! CHECK: call void @__tgt_push_mapper_component({{.*}}i64 %[[BOT_SCALAR_A_WITH]],
 
 ! ATTACH entries are excluded from present map type propagation.
-! CHECK: %[[ATTACH_MID_TYPE:.*]] = phi i64 [ 16384,
+! CHECK: %[[ATTACH_MID_TYPE:.*]] = phi i64 [ 32768,
 ! CHECK: %[[ATTACH_MID_MODS:.*]] = and i64 %{{.*}}, 1036
 ! CHECK: %[[ATTACH_MID_WITH:.*]] = or i64 %[[ATTACH_MID_TYPE]], %[[ATTACH_MID_MODS]]
 ! CHECK: call void @__tgt_push_mapper_component({{.*}}i64 %[[ATTACH_MID_TYPE]],
 
-! CHECK: %[[ATTACH_MID_A_TYPE:.*]] = phi i64 [ 16384,
+! CHECK: %[[ATTACH_MID_A_TYPE:.*]] = phi i64 [ 32768,
 ! CHECK: %[[ATTACH_MID_A_MODS:.*]] = and i64 %{{.*}}, 1036
 ! CHECK: %[[ATTACH_MID_A_WITH:.*]] = or i64 %[[ATTACH_MID_A_TYPE]], %[[ATTACH_MID_A_MODS]]
 ! CHECK: call void @__tgt_push_mapper_component({{.*}}i64 %[[ATTACH_MID_A_TYPE]],
 
-! CHECK: %[[ATTACH_BOTTOM_TYPE:.*]] = phi i64 [ 16384,
+! CHECK: %[[ATTACH_BOTTOM_TYPE:.*]] = phi i64 [ 32768,
 ! CHECK: %[[ATTACH_BOTTOM_MODS:.*]] = and i64 %{{.*}}, 1036
 ! CHECK: %[[ATTACH_BOTTOM_WITH:.*]] = or i64 %[[ATTACH_BOTTOM_TYPE]], %[[ATTACH_BOTTOM_MODS]]
 ! CHECK: call void @__tgt_push_mapper_component({{.*}}i64 %[[ATTACH_BOTTOM_TYPE]],
 
-! CHECK: %[[ATTACH_BOT_A_TYPE:.*]] = phi i64 [ 16384,
+! CHECK: %[[ATTACH_BOT_A_TYPE:.*]] = phi i64 [ 32768,
 ! CHECK: %[[ATTACH_BOT_A_MODS:.*]] = and i64 %{{.*}}, 1036
 ! CHECK: %[[ATTACH_BOT_A_WITH:.*]] = or i64 %[[ATTACH_BOT_A_TYPE]], %[[ATTACH_BOT_A_MODS]]
 ! CHECK: call void @__tgt_push_mapper_component({{.*}}i64 %[[ATTACH_BOT_A_TYPE]],

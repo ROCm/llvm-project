@@ -3754,12 +3754,12 @@ public:
   void EmitOptKernel(const OMPExecutableDirective &D,
                      const ForStmt *CapturedForStmt,
                      llvm::omp::OMPTgtExecModeFlags OptKernelMode,
-                     SourceLocation Loc, const FunctionArgList *Args);
+                     SourceLocation Loc);
 
   void EmitOptKernelCode(const OMPExecutableDirective &D,
                          const ForStmt *CapturedForStmt,
                          llvm::omp::OMPTgtExecModeFlags OptKernelMode,
-                         SourceLocation Loc, const FunctionArgList *Args);
+                         SourceLocation Loc);
 
   void EmitNoLoopCode(const OMPExecutableDirective &D,
                       const ForStmt *CapturedForStmt, SourceLocation Loc);
@@ -3803,8 +3803,6 @@ public:
   void EmitWhileStmt(const WhileStmt &S, ArrayRef<const Attr *> Attrs = {});
   void EmitDoStmt(const DoStmt &S, ArrayRef<const Attr *> Attrs = {});
   void EmitForStmt(const ForStmt &S, ArrayRef<const Attr *> Attrs = {});
-  void EmitForStmtWithArgs(const ForStmt &S, const FunctionArgList *Args,
-                           ArrayRef<const Attr *> Attrs = {});
   void EmitReturnStmt(const ReturnStmt &S);
   void EmitDeclStmt(const DeclStmt &S);
   void EmitBreakStmt(const BreakStmt &S);
@@ -3913,8 +3911,7 @@ public:
   GenerateOpenMPCapturedStmtFunctionAggregate(const CapturedStmt &S,
                                               const OMPExecutableDirective &D);
   void GenerateOpenMPCapturedVars(const CapturedStmt &S,
-                                  SmallVectorImpl<llvm::Value *> &CapturedVars,
-                                  const Stmt *OptKernelNestKey);
+                                  SmallVectorImpl<llvm::Value *> &CapturedVars);
   void emitOMPSimpleStore(LValue LVal, RValue RVal, QualType RValTy,
                           SourceLocation Loc);
   /// Perform element by element copying of arrays with type \a
@@ -5825,8 +5822,7 @@ private:
                               llvm::Value *CurrVal);
   /// Emit the starting index of a BigJumpLoop.
   std::pair<const VarDecl *, Address>
-  EmitBigJumpLoopStartingIndex(const ForStmt &FStmt,
-                               const FunctionArgList *Args);
+  EmitBigJumpLoopStartingIndex(const ForStmt &FStmt);
   /// Emit the increment of a BigJumpLoop.
   void EmitBigJumpLoopInc(const ForStmt &FStmt, const VarDecl *LoopVar,
                           const Address &NoLoopIvAddr);

@@ -2974,7 +2974,7 @@ public:
     /// Arguments passed to the runtime library
     TargetDataRTArgs RTArgs;
     /// The number of iterations
-    Value *TripCount = nullptr;
+    Value *NumIterations = nullptr;
     /// The number of teams.
     ArrayRef<Value *> NumTeams;
     /// The number of threads.
@@ -2994,14 +2994,15 @@ public:
     // Constructors for TargetKernelArgs.
     TargetKernelArgs() = default;
     TargetKernelArgs(unsigned NumTargetItems, TargetDataRTArgs RTArgs,
-                     Value *TripCount, ArrayRef<Value *> NumTeams,
+                     Value *NumIterations, ArrayRef<Value *> NumTeams,
                      ArrayRef<Value *> NumThreads, Value *DynCGroupMem,
                      bool HasNoWait, bool StrictBlocks, bool StrictThreads,
                      omp::OMPDynGroupprivateFallbackType DynCGroupMemFallback)
-        : NumTargetItems(NumTargetItems), RTArgs(RTArgs), TripCount(TripCount),
-          NumTeams(NumTeams), NumThreads(NumThreads),
-          DynCGroupMem(DynCGroupMem), HasNoWait(HasNoWait),
-          StrictBlocks(StrictBlocks), StrictThreads(StrictThreads),
+        : NumTargetItems(NumTargetItems), RTArgs(RTArgs),
+          NumIterations(NumIterations), NumTeams(NumTeams),
+          NumThreads(NumThreads), DynCGroupMem(DynCGroupMem),
+          HasNoWait(HasNoWait), StrictBlocks(StrictBlocks),
+          StrictThreads(StrictThreads),
           DynCGroupMemFallback(DynCGroupMemFallback) {}
   };
 
