@@ -103,51 +103,13 @@ on:
         description: "Run performance tests after the build, on the qa-forge perf machines. Results are informational and do not gate the run."
         type: boolean
         default: false
-      performance_options:
-        description: |
-          Performance run settings, as whitespace-separated key=value pairs.
-          Everything here has a working default; set a key only to override it.
-            server=        perf machine, instead of the one mapped to the family
-            tar_name=      an already-built tarball, instead of this run's own
-            rocm_version=  X.Y.Z, instead of the one read off the tarball name
-            label=         execution label the install is recorded under
-            method=        install method
-            suites=        comma-separated suite ids
-            install_wait=  minutes to wait for the install
-            wait=          minutes to wait for the measurement
-            repo=          qa-forge repository to dispatch into
-            ref=           branch of it to dispatch
-            packages_url=  directory to install from; defaults to this run's
-                           own artifacts prefix, or to nothing (letting
-                           qa-forge resolve the channel) when tar_name names
-                           someone else's build
-            url_key=       the install workflow's input name for that
-                           directory, if it is not therock_packages_url
-            publish_dev=   any value: also publish this build to the dev
-                           channel. Needs IAM grants this repository does not
-                           have yet, and nothing else here depends on it.
-            plan_only=     any value: build the tarballs and work out both
-                           dispatch payloads, print them, and stop without
-                           touching a perf machine.
-          If multi-arch resolution rejects the package, method=therock_tarball
-          installs the same tarball by the single-arch path, which does no run
-          lookup. Example: server=SMC-SC-DI13-13 wait=200
-        required: false
-        type: string
-        default: ""
-      changed_projects:
-        description: "Comma-separated list of changed projects to filter tests (empty = run all tests)."
-        type: string
-        default: ""
-      # Reuse artifacts from an earlier run instead of rebuilding.
-      prebuilt_stages:
-        description: "Comma-separated build stages to skip (or 'all' for all stages); artifacts are copied from baseline_run_id instead."
-        type: string
-        default: ""
-      baseline_run_id:
-        description: "Workflow run ID to copy prebuilt stage artifacts from; required when prebuilt_stages is set."
-        type: string
-        default: ""
+      performance_family:
+        description: "Perf machine family. Each one maps to a fixed qa-forge machine."
+        type: choice
+        options:
+          - gfx94X-dcgpu
+          - gfx950-dcgpu
+        default: gfx94X-dcgpu
 
 permissions:
   contents: read
@@ -273,8 +235,6 @@ jobs:
       windows_amdgpu_families: ${{ inputs.windows_amdgpu_families }}
       linux_test_labels: ${{ inputs.linux_test_labels }}
       windows_test_labels: ${{ inputs.windows_test_labels }}
-      prebuilt_stages: ${{ inputs.prebuilt_stages }}
-      baseline_run_id: ${{ inputs.baseline_run_id }}
       build_pytorch: ${{ inputs.build_pytorch }}
       build_jax: ${{ inputs.build_jax }}
       python_version: ${{ inputs.python_version }}
@@ -284,60 +244,11 @@ jobs:
   # ==========================================================================
   # Linux
   # ==========================================================================
-  copy_prebuilt_stages_linux:
-    name: Copy Prebuilt Stages (Linux)
-    needs: setup
-    if: >-
-      ${{
-        !inputs.dry_run &&
-        inputs.linux_amdgpu_families != '' &&
-        inputs.linux_amdgpu_families != 'none' &&
-        needs.setup.outputs.linux_build_config != '' &&
-        fromJSON(needs.setup.outputs.linux_build_config).prebuilt_stages != '' &&
-        fromJSON(needs.setup.outputs.linux_build_config).baseline_run_id != ''
-      }}
-    runs-on: aws-linux-scale-rocm-large
-    permissions:
-      contents: read
-      id-token: write
-    # Run in container to access AWS credentials mounted from the host runner.
-    container:
-      image: python:3.12-slim
-      options: -v /runner/config:/home/awsconfig/
-    env:
-      AWS_SHARED_CREDENTIALS_FILE: /home/awsconfig/credentials.ini
-    steps:
-      - name: Checking out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: "ROCm/TheRock"
-          ref: ${{ needs.setup.outputs.ref }}
-
-      - name: Install artifact manager dependencies
-        run: pip install boto3
-
-      - name: Configure AWS credentials for artifact uploads
-        uses: ./.github/actions/configure_aws_artifacts_credentials
-        with:
-          release_type: ci
-
-      - name: Copy prebuilt stage artifacts
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_TYPE: ci
-        run: |
-          python build_tools/artifact_manager.py copy \
-            --source-run-id=${{ fromJSON(needs.setup.outputs.linux_build_config).baseline_run_id }} \
-            --stage="${{ fromJSON(needs.setup.outputs.linux_build_config).prebuilt_stages }}" \
-            --amdgpu-families="${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}" \
-            --expand-family-to-targets
-
   build_linux:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
     needs:
       - setup
       - cp_params
-      - copy_prebuilt_stages_linux
     # The platform guard reads the inputs rather than the resolved config,
     # because setup_multi_arch always emits a config for both platforms and so
     # cannot express "this platform was not requested". compiler_bump.yml gates
@@ -347,7 +258,6 @@ jobs:
         !cancelled() && !inputs.dry_run &&
         needs.setup.result == 'success' &&
         needs.cp_params.result == 'success' &&
-        needs.copy_prebuilt_stages_linux.result != 'failure' &&
         inputs.linux_amdgpu_families != '' &&
         inputs.linux_amdgpu_families != 'none' &&
         needs.setup.outputs.linux_build_config != '' &&
@@ -361,7 +271,6 @@ jobs:
       build_variant_label: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_variant_label }}
       build_variant_cmake_preset: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_variant_cmake_preset }}
       build_variant_suffix: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_variant_suffix }}
-      prebuilt_stages: ${{ fromJSON(needs.setup.outputs.linux_build_config).prebuilt_stages }}
       build_runs_on: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_runs_on }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       # test_type picks the configure branch as well as the test depth: any
@@ -409,7 +318,6 @@ jobs:
       test_type: ${{ inputs.test_type }}
       test_labels: ${{ needs.setup.outputs.linux_test_labels }}
       sanity_check_only_for_family: ${{ matrix.family_info.sanity_check_only_for_family }}
-      changed_projects: ${{ inputs.changed_projects }}
       build_variant: ${{ fromJSON(needs.setup.outputs.linux_build_config).build_variant_label }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
@@ -451,9 +359,6 @@ jobs:
       windows_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).windows_amdgpu_families }}
       multiarch_index: true
       package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      # Publication is not tarballs-only: publish_rocm_to_release_buckets.py
-      # raises when it finds no python packages beside them, so these have to
-      # reach the same bucket the tarballs do.
       release_type: ""
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
@@ -591,92 +496,6 @@ jobs:
       contents: read
       id-token: write
 
-  # A measurement installs by name from the dev channel, and nothing reaches
-  # that channel on its own. The build uploads to the dev artifacts bucket;
-  # this job is what copies it onto the channel the install reads. It sits
-  # between the two for that reason — skip it and the install has nothing to
-  # resolve.
-  #
-  # Its own job, not a step in the perf jobs, because publication needs
-  # `id-token: write` to assume a role that can write a shared channel, and
-  # that is not a permission to leave sitting on the job that dispatches into
-  # another repository. The perf jobs stay on `contents: read`.
-  #
-  # Gated on the performance toggle, so an ordinary cherry-pick publishes
-  # nothing. The dev channel is consumed by other teams; writing to it is a
-  # deliberate act, not a side effect of running CI.
-  publish_linux_artifacts:
-    name: Publish Linux Artifacts
-    needs: [setup, build_linux_tarballs, build_linux_python_packages]
-    # Asked for explicitly, not implied by wanting a measurement. The
-    # measurement installs from the CI artifacts bucket the build already
-    # writes, so it needs nothing from here; and this cannot succeed until
-    # ROCm/llvm-project is federated for the two publication roles, so making
-    # it implicit would fail every performance run for a reason unrelated to
-    # the measurement. Set performance_options publish_dev=yes to ask.
-    if: >-
-      ${{
-        !cancelled() && !inputs.dry_run &&
-        contains(inputs.performance_options, 'publish_dev=') &&
-        needs.build_linux_tarballs.result == 'success' &&
-        needs.build_linux_python_packages.result == 'success'
-      }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write # Assume the repo.amd.com publication role.
-    steps:
-      # The publication script and its credentials action live in TheRock, not
-      # here, which is also how the tarball job reaches its tools.
-      - name: Checkout TheRock
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          repository: "ROCm/TheRock"
-          ref: ${{ needs.setup.outputs.ref }}
-
-      - name: Setting up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.12"
-
-      - name: Install Python requirements
-        run: pip install -r requirements.txt
-
-      - name: Configure AWS Credentials
-        uses: ./.github/actions/configure_aws_product_publication_credentials
-        with:
-          release_type: dev
-          product: core
-
-      - name: Publish to the dev channel
-        env:
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          # Native packages are skipped: this run does not build deb and rpm
-          # into the dev bucket, and a measurement installs from the tarball.
-          # Python packages have no such switch, which is why the job above
-          # has to put them where this can find them.
-          python build_tools/github_actions/publish_rocm_to_release_buckets.py \
-            --run-id="${RUN_ID}" \
-            --platform=linux \
-            --release-type=dev \
-            --structured \
-            --build-variant=release \
-            --skip-native-packages
-
-      - name: Record what was published
-        env:
-          PACKAGE_VERSION: ${{ needs.setup.outputs.rocm_package_version }}
-        run: |
-          {
-            echo "### Published to the dev channel"
-            echo
-            echo "\`therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz\`"
-            echo
-            echo "at https://dev.repo.amd.com/rocm/core/tarball/"
-          } >> "${GITHUB_STEP_SUMMARY}"
-
   # Performance qualification lives in qa-forge: the suites are ROCmTest suites,
   # the machines are its baremetal perf servers, and the result store is its
   # own. Nothing here reimplements any of that. These two jobs drive qa-forge's
@@ -696,28 +515,18 @@ jobs:
   performance_install:
     name: Performance Install
     needs: [setup, build_linux, build_linux_tarballs]
-    # The tarball job is what this waits on, because it is what puts the
-    # tarball in the bucket the install reads. Publication to the dev channel
-    # is a separate errand and deliberately not in front of this: it needs
-    # credentials this repository does not have, and a measurement that can
-    # proceed without it should not be held up by it failing.
-    #
-    # Naming someone else's tarball is the one way to run with no build in
-    # front at all.
+    # The tarball job is the one that matters: it is what puts the tarball in
+    # the bucket the install is pointed at. Nothing is published to a release
+    # channel on the way, and nothing here waits on anything that would be.
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
-        (
-          contains(inputs.performance_options, 'tar_name=') ||
-          (
-            needs.build_linux.result == 'success' &&
-            needs.build_linux_tarballs.result == 'success'
-          )
-        )
+        needs.build_linux.result == 'success' &&
+        needs.build_linux_tarballs.result == 'success'
       }}
     runs-on: ubuntu-24.04
     # The hard ceiling. The wait itself is bounded below this by
-    # performance_install_wait_minutes, so the action reports a timeout and the
+    # PERFORMANCE_INSTALL_WAIT_MINUTES, so the action reports a timeout and the
     # check step runs, rather than the job being killed mid-wait.
     timeout-minutes: 360
     # No actions: write. The dispatch crosses into another repository on a
@@ -729,14 +538,10 @@ jobs:
       # itself must never be compared in one. Mirror only whether it is set.
       PERF_TOKEN_PRESENT: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN != '' && 'true' || 'false' }}
     outputs:
-      skip: ${{ steps.plan.outputs.skip }}
       server: ${{ steps.plan.outputs.server }}
       rocm_version: ${{ steps.plan.outputs.rocm_version }}
       perf_dispatch_inputs: ${{ steps.plan.outputs.perf_dispatch_inputs }}
       suites: ${{ steps.plan.outputs.suites }}
-      qa_forge_repo: ${{ steps.plan.outputs.qa_forge_repo }}
-      qa_forge_ref: ${{ steps.plan.outputs.qa_forge_ref }}
-      perf_wait_minutes: ${{ steps.plan.outputs.perf_wait_minutes }}
       install_run_url: ${{ steps.dispatch.outputs.runUrlHtml }}
     steps:
       - name: Plan the performance run
@@ -744,7 +549,7 @@ jobs:
         env:
           BUILD_CONFIG: ${{ needs.setup.outputs.linux_build_config }}
           PACKAGE_VERSION: ${{ needs.setup.outputs.rocm_package_version }}
-          OPTIONS: ${{ inputs.performance_options }}
+          PERFORMANCE_FAMILY: ${{ inputs.performance_family }}
           TRIGGERED_BY: ${{ github.triggering_actor }} (CP ${{ inputs.LLVM_BRANCH }})
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -752,171 +557,90 @@ jobs:
           set -euo pipefail
 
           # ════════════════════════════════════════════════════════════════
-          # OPTIONS — every performance setting, parsed out of one input.
-          #
-          # They are one input because `on.workflow_dispatch.inputs` may hold
-          # at most 25 top-level properties. Past that GitHub rejects the file
-          # outright, and because the rejection happens before it can work out
-          # which events the file wants, every push records a failed run for a
-          # workflow that has no push trigger. Ten separate knobs do not fit
-          # under that ceiling alongside the build's own inputs; one string
-          # does, and it leaves room for the next one.
+          # SETTINGS — fixed, because every one of them is a property of the
+          # qa-forge side rather than of a given cherry-pick. Changing one is
+          # an edit here, which is a reviewable act; it is deliberately not a
+          # dispatch field, so a measurement cannot be quietly recorded under
+          # the wrong label or sent to the wrong machine.
           # ════════════════════════════════════════════════════════════════
-          SERVER_OVERRIDE=""
-          TAR_NAME_OVERRIDE=""
-          ROCM_VERSION_OVERRIDE=""
           EXECUTION_LABEL="stg-compiler-full"
           INSTALL_METHOD="therock_tarball_multiarch_alldevice"
           SUITES="hip-hipperf,rocmlibs-rocrand-perf,rocmlibs-rocfft-perf,rocmlibs-rccl-perf"
-          INSTALL_WAIT_MINUTES="120"
-          WAIT_MINUTES="300"
           QA_FORGE_REPO="AMD-ROCm-Internal/qa-forge"
-          QA_FORGE_REF="main"
-          PACKAGES_URL_OVERRIDE=""
-          PLAN_ONLY=""
-          # The install workflow's input for a directory to fetch from is
-          # being added on the qa-forge side, and whoever lands it there names
-          # it. Keeping the key settable means a different name is a dispatch
-          # field rather than an edit here and another run to find out.
-          URL_KEY="therock_packages_url"
-
-          # Whitespace separates the pairs, so a value may contain commas --
-          # which suites does. A misspelled key is an error rather than a
-          # silent default, because the whole point of typed inputs was that
-          # a typo could not reach the machine unnoticed.
-          for pair in ${OPTIONS}; do
-            key="${pair%%=*}"
-            value="${pair#*=}"
-            if [[ "${pair}" != *=* || -z "${key}" ]]; then
-              echo "::error::performance_options takes key=value pairs separated by spaces; got '${pair}'."
-              exit 1
-            fi
-            case "${key}" in
-              server)       SERVER_OVERRIDE="${value}" ;;
-              tar_name)     TAR_NAME_OVERRIDE="${value}" ;;
-              rocm_version) ROCM_VERSION_OVERRIDE="${value}" ;;
-              label)        EXECUTION_LABEL="${value}" ;;
-              method)       INSTALL_METHOD="${value}" ;;
-              suites)       SUITES="${value}" ;;
-              install_wait) INSTALL_WAIT_MINUTES="${value}" ;;
-              wait)         WAIT_MINUTES="${value}" ;;
-              repo)         QA_FORGE_REPO="${value}" ;;
-              ref)          QA_FORGE_REF="${value}" ;;
-              packages_url) PACKAGES_URL_OVERRIDE="${value}" ;;
-              url_key)      URL_KEY="${value}" ;;
-              # Read at job level, not here; accepted so it is not a typo.
-              publish_dev)  : ;;
-              plan_only)    PLAN_ONLY="${value}" ;;
-              *)
-                echo "::error::Unknown performance_options key '${key}'. Valid keys: server, tar_name, rocm_version, label, method, suites, install_wait, wait, repo, ref, packages_url, url_key, publish_dev, plan_only."
-                exit 1
-                ;;
-            esac
-          done
+          INSTALL_WAIT_MINUTES="120"
 
           # Perf machines are qa-forge's, not TheRock's, so they are absent
           # from runner-config-v2.json and the family's `benchmark-runs-on`
           # does not point at them. The mapping has to live somewhere, and a
           # table here is more legible than another workflow input.
           #
-          # Only families with a perf machine appear. A build for any other
-          # family skips the perf run with a warning rather than failing it:
-          # most families legitimately have no perf hardware behind them.
+          # Keyed on the resolved family name, which is what the build config
+          # carries and what the tarballs are named after. The dispatch input
+          # that produces it is the CI family key -- `gfx94x` resolves to
+          # `gfx94X-dcgpu`. The two spellings are not interchangeable.
           declare -A PERF_SERVERS=(
-            # Named rather than pooled, because it is one machine. Replace
-            # with a common label once more than one sits behind the family.
+            # Named rather than pooled, because it is one machine. qa-forge
+            # carries the same string as a fixed label.
             [gfx94X-dcgpu]=SMC-SC-DI13-13
           )
 
-          skip_with() {
-            echo "::warning::$1"
-            {
-              echo "### Performance tests"
-              echo
-              echo "> [!NOTE]"
-              echo "> Skipped: $1"
-            } >> "${GITHUB_STEP_SUMMARY}"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          }
-
           if [[ "${PERF_TOKEN_PRESENT}" != "true" ]]; then
-            skip_with "the QA_FORGE_PERF_DISPATCH_TOKEN secret is not configured."
+            echo "::error::The QA_FORGE_PERF_DISPATCH_TOKEN secret is not configured, so no dispatch can be made. Turn run_performance_tests off, or have the secret added."
+            exit 1
           fi
 
-          if [[ -n "${BUILD_CONFIG}" ]]; then
-            mapfile -t FAMILIES < <(jq -r '.per_family_info[].amdgpu_family' <<<"${BUILD_CONFIG}")
-          else
-            FAMILIES=()
-          fi
-
-          SERVER=""
-          for candidate in "${FAMILIES[@]}"; do
-            if [[ -n "${PERF_SERVERS[${candidate}]:-}" ]]; then
-              SERVER="${PERF_SERVERS[${candidate}]}"
-              break
-            fi
-          done
-          [[ -z "${SERVER_OVERRIDE}" ]] || SERVER="${SERVER_OVERRIDE}"
-
-          # An unmapped family fails rather than skips. Only a run that asked
-          # for a measurement reaches here, and the two quiet outcomes are both
-          # worse than this one: skipping reports success for a measurement
-          # nobody took, and naming a machine that does not exist queues the
-          # install until the job's six-hour ceiling kills it. Every family
-          # except gfx94X-dcgpu is unmapped today, including the default, so
-          # this is the path most runs take until more hardware is attached.
+          # An unmapped family fails here rather than later. The two quiet
+          # outcomes are both worse: skipping reports success for a
+          # measurement nobody took, and falling back to some other machine
+          # records numbers against hardware the run did not ask for.
+          SERVER="${PERF_SERVERS[${PERFORMANCE_FAMILY}]:-}"
           if [[ -z "${SERVER}" ]]; then
-            echo "::error::No perf machine is mapped to any of: ${FAMILIES[*]:-none}. Mapped families: ${!PERF_SERVERS[*]}. Set performance_options server=<machine> to name one, or turn run_performance_tests off."
+            echo "::error::No perf machine is mapped to '${PERFORMANCE_FAMILY}'. Mapped families: ${!PERF_SERVERS[*]}. Add it to the PERF_SERVERS table in this workflow once qa-forge has a machine for it, or pick a family that has one."
+            exit 1
+          fi
+
+          # The family being measured has to be a family this run actually
+          # built, or the install would fetch a tarball that does not contain
+          # the targets the suites then run on.
+          if [[ -n "${BUILD_CONFIG}" ]]; then
+            mapfile -t BUILT < <(jq -r '.per_family_info[].amdgpu_family' <<<"${BUILD_CONFIG}")
+          else
+            BUILT=()
+          fi
+          FOUND="no"
+          for candidate in "${BUILT[@]}"; do
+            [[ "${candidate}" == "${PERFORMANCE_FAMILY}" ]] && FOUND="yes"
+          done
+          if [[ "${FOUND}" != "yes" ]]; then
+            echo "::error::This run built [${BUILT[*]:-none}], which does not include '${PERFORMANCE_FAMILY}'. Set linux_amdgpu_families to the CI family key that resolves to it, or pick a performance_family this run builds."
             exit 1
           fi
 
           # The tarball is named after the build's own full version string,
           # commit sha and all, so naming it identifies exactly one build and
-          # nobody has to type it. The override points a run at some other
-          # already-built tarball instead.
+          # nobody has to type it.
           #
           # The name is the one TheRock's build_tarballs.py writes:
           #   therock-dist-{platform}-{family|multiarch}[-tests]-{version}.tar.gz
           # Perf takes the multiarch tests variant, because the suites need the
           # test binaries that the plain tarball leaves out.
-          TAR_NAME="${TAR_NAME_OVERRIDE}"
-          if [[ -z "${TAR_NAME}" ]]; then
-            if [[ -z "${PACKAGE_VERSION}" ]]; then
-              echo "::error::No build ran in front of this job, so there is no version to name a tarball from. Set performance_options tar_name=<tarball> to point at a build that already exists."
-              exit 1
-            fi
-            TAR_NAME="therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz"
+          if [[ -z "${PACKAGE_VERSION}" ]]; then
+            echo "::error::setup resolved no package version, so there is no tarball name to derive."
+            exit 1
           fi
+          TAR_NAME="therock-dist-linux-multiarch-tests-${PACKAGE_VERSION}.tar.gz"
 
           # Where to fetch it from. This run's own build goes to the CI
           # artifacts bucket under this run's id, publicly readable, with the
           # credentials the build already has -- so naming that prefix needs
           # nothing published anywhere first, and it is derived rather than
           # configured, so it cannot drift from the run it describes.
-          #
-          # A tarball someone else built is a different matter: it is wherever
-          # it was put, usually the dev channel, and this run's prefix
-          # certainly does not hold it. So a named tarball gets no URL unless
-          # one is given, and qa-forge falls back to resolving the channel
-          # from build_type, which is what it does for every other caller.
-          if [[ -n "${PACKAGES_URL_OVERRIDE}" ]]; then
-            PACKAGES_URL="${PACKAGES_URL_OVERRIDE%/}/"
-          elif [[ -n "${TAR_NAME_OVERRIDE}" ]]; then
-            PACKAGES_URL=""
-          else
-            PACKAGES_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/${GITHUB_REPOSITORY//\//-}/${GITHUB_RUN_ID}-linux/tarballs/"
-          fi
+          PACKAGES_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/${GITHUB_REPOSITORY//\//-}/${GITHUB_RUN_ID}-linux/tarballs/"
 
           # The '+' in the version must be sent as %2B. A literal '+' is a 404
           # on the bucket and on the ROCm channels alike, so the encoding is a
           # property of the name rather than of the host.
-          if [[ -n "${PACKAGES_URL}" ]]; then
-            TARBALL_INDEX="${PACKAGES_URL%/}"
-          else
-            TARBALL_INDEX="https://dev.repo.amd.com/rocm/core/tarball"
-          fi
-          TARBALL_URL="${TARBALL_INDEX}/${TAR_NAME//+/%2B}"
+          TARBALL_URL="${PACKAGES_URL%/}/${TAR_NAME//+/%2B}"
 
           # Checked before dispatching rather than after. The install takes a
           # perf machine exclusively and holds it for as long as the install
@@ -930,54 +654,35 @@ jobs:
               echo "Found ${TAR_NAME}."
               ;;
             000)
-              echo "::warning::Could not reach ${TARBALL_INDEX} to check that ${TAR_NAME} is present. Continuing without the check."
+              echo "::warning::Could not reach the artifacts bucket to check that ${TAR_NAME} is present. Continuing without the check."
               ;;
             404)
-              echo "::error::${TAR_NAME} is not at ${TARBALL_INDEX}. A -tests- tarball is only built when the performance toggle is on, so a run that built without it will not have one. Set performance_options tar_name=<tarball> to name one that does exist, and packages_url=<dir> if it is not where this looked."
+              echo "::error::${TAR_NAME} is not at ${PACKAGES_URL}. The -tests- tarball is only built when run_performance_tests is on, so a build that ran without it will not have one."
               exit 1
               ;;
             *)
-              echo "::warning::${TARBALL_INDEX} answered ${TARBALL_CODE} for ${TAR_NAME}, which is neither a hit nor a clear miss. Continuing."
+              echo "::warning::The artifacts bucket answered ${TARBALL_CODE} for ${TAR_NAME}, which is neither a hit nor a clear miss. Continuing."
               ;;
           esac
 
           # qa-forge installs by ROCm version, which it expects as X.Y.Z, so
           # trim the commit suffix off the version carried in the tarball name.
-          ROCM_VERSION="${ROCM_VERSION_OVERRIDE}"
+          ROCM_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' <<<"${TAR_NAME}" | head -1 || true)"
           if [[ -z "${ROCM_VERSION}" ]]; then
-            ROCM_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' <<<"${TAR_NAME}" | head -1 || true)"
-          fi
-          if [[ -z "${ROCM_VERSION}" ]]; then
-            echo "::error::Could not read a ROCm version out of the tarball name '${TAR_NAME}'. Pass performance_rocm_version as X.Y.Z."
+            echo "::error::Could not read a ROCm version out of the tarball name '${TAR_NAME}'."
             exit 1
-          fi
-
-          if ! [[ "${INSTALL_WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( INSTALL_WAIT_MINUTES < 1 )); then
-            echo "::error::The performance_options 'install_wait' must be a positive whole number of minutes, got '${INSTALL_WAIT_MINUTES}'."
-            exit 1
-          fi
-          if ! [[ "${WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( WAIT_MINUTES < 1 )); then
-            echo "::error::The performance_options 'wait' must be a positive whole number of minutes, got '${WAIT_MINUTES}'."
-            exit 1
-          fi
-          # Stay under the job's own ceiling so the wait ends inside the job and
-          # the outcome is reported, instead of the job being killed mid-wait.
-          INSTALL_WAIT_CAPPED="${INSTALL_WAIT_MINUTES}"
-          if (( INSTALL_WAIT_CAPPED > 345 )); then
-            echo "::warning::An 'install_wait' of ${INSTALL_WAIT_CAPPED} minutes exceeds the job ceiling; clamping to 345."
-            INSTALL_WAIT_CAPPED=345
           fi
 
           # ════════════════════════════════════════════════════════════════
           # DISPATCH KEYS — the only place either payload is built.
           #
-          # The install keys are the real input list of
-          # rocm-func-core-therock-install-dev.yml. Inputs left out here take
-          # the defaults that workflow declares: is_release false, and
-          # amdgpu_build, driver_url, rocm_path and therock_branch empty, all
-          # of which are what this wants. Both payloads are built here and
-          # handed to the dispatch steps whole, so correcting a name is one
-          # edit in this block and nothing else in the file moves.
+          # The install keys are the input list of
+          # rocm-func-core-therock-install-dev.yml as it stands on
+          # mliyakat_amdeng/custom, which is the branch that declares
+          # therock_packages_url. Inputs left out here take the defaults that
+          # workflow declares: is_release false, and amdgpu_build, driver_url,
+          # rocm_path and therock_branch empty, all of which are what this
+          # wants.
           #
           #   rocm-func-core-therock-install-dev.yml
           #     target_type           'servers' to address a machine by name
@@ -996,16 +701,13 @@ jobs:
           #     build_type            'dev'
           #     triggered_by          attribution, optional
           #
-          #   performance-test-run.yml
-          #     workflow_id      comma-separated suite ids
-          #     target_server    the same machine
-          #     execution_label  the same label
-          #     triggered_by     attribution, optional
-          #
-          # The perf keys are still read from the archived public mirror and
-          # have not been checked against the internal workflow.
+          # The performance-test-run.yml keys below are STILL UNVERIFIED. They
+          # were read off the archived public mirror, not off the internal
+          # workflow, and none of workflow_id, target_server, execution_label
+          # or triggered_by has been confirmed against the file qa-forge
+          # actually runs. The first dispatch is what will say.
           # ════════════════════════════════════════════════════════════════
-          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL URL_KEY INSTALL_METHOD EXECUTION_LABEL SUITES PLAN_ONLY
+          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL INSTALL_METHOD EXECUTION_LABEL SUITES
           python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
           import json
           import os
@@ -1019,6 +721,7 @@ jobs:
               "install_method": os.environ["INSTALL_METHOD"],
               "execution_label": os.environ["EXECUTION_LABEL"],
               "package_name": os.environ["TAR_NAME"],
+              "therock_packages_url": os.environ["PACKAGES_URL"],
               "rocm_version": os.environ["ROCM_VERSION"],
               "build_type": "dev",
               "triggered_by": os.environ["TRIGGERED_BY"],
@@ -1029,60 +732,32 @@ jobs:
               "execution_label": os.environ["EXECUTION_LABEL"],
               "triggered_by": os.environ["TRIGGERED_BY"],
           }
-          # Sent only when there is one. An empty string would be a value
-          # qa-forge has to interpret, and an input it may not declare yet is
-          # a rejected dispatch rather than a resolved channel.
-          packages_url = os.environ["PACKAGES_URL"]
-          if packages_url:
-              install[os.environ["URL_KEY"]] = packages_url
 
           print(line("install_dispatch_inputs", install))
           print(line("perf_dispatch_inputs", perf))
-
-          # An install holds a perf machine exclusively for as long as it
-          # runs, so the payloads can be read before either is sent rather
-          # than inferred afterwards from what the machine did.
-          if os.environ["PLAN_ONLY"]:
-              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-                  summary.write("### Performance dispatch, planned only\n\n")
-                  summary.write("Nothing was sent and no machine was taken.\n\n")
-                  for name, workflow, payload in (
-                      ("Install", "rocm-func-core-therock-install-dev.yml", install),
-                      ("Measurement", "performance-test-run.yml", perf),
-                  ):
-                      summary.write(f"**{name}** &rarr; `{workflow}`\n\n")
-                      summary.write("```json\n")
-                      summary.write(json.dumps(payload, indent=2) + "\n")
-                      summary.write("```\n\n")
           PAYLOADS
 
-          if [[ -n "${PLAN_ONLY}" ]]; then
-            echo "Planned the install of ROCm ${ROCM_VERSION} on ${SERVER} from ${TAR_NAME}, and stopped before sending it."
-            PERF_SKIP=true
-          else
-            echo "Installing ROCm ${ROCM_VERSION} on ${SERVER} from ${TAR_NAME}"
-            PERF_SKIP=false
-          fi
+          echo "Installing ROCm ${ROCM_VERSION} on ${SERVER} from ${TAR_NAME}"
           {
-            echo "skip=${PERF_SKIP}"
             echo "server=${SERVER}"
             echo "rocm_version=${ROCM_VERSION}"
             echo "tar_name=${TAR_NAME}"
             echo "packages_url=${PACKAGES_URL}"
             echo "suites=${SUITES}"
             echo "qa_forge_repo=${QA_FORGE_REPO}"
-            echo "qa_forge_ref=${QA_FORGE_REF}"
-            echo "perf_wait_minutes=${WAIT_MINUTES}"
-            echo "install_wait_seconds=$(( INSTALL_WAIT_CAPPED * 60 ))"
+            echo "install_wait_seconds=$(( INSTALL_WAIT_MINUTES * 60 ))"
           } >> "$GITHUB_OUTPUT"
 
+      # Dispatched against mliyakat_amdeng/custom rather than main, because
+      # therock_packages_url is declared there and not yet on main. A
+      # workflow_dispatch carrying an input the target does not declare is
+      # rejected outright, so this ref is load-bearing.
       - name: Dispatch the ROCm install onto the perf machine
         id: dispatch
-        if: ${{ steps.plan.outputs.skip == 'false' }}
         uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
         with:
           repo: ${{ steps.plan.outputs.qa_forge_repo }}
-          ref: ${{ steps.plan.outputs.qa_forge_ref }}
+          ref: mliyakat_amdeng/custom
           workflow: rocm-func-core-therock-install-dev.yml
           token: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
           wait-for-completion: true
@@ -1102,6 +777,7 @@ jobs:
           PERF_SERVER: ${{ steps.plan.outputs.server }}
           ROCM_VERSION: ${{ steps.plan.outputs.rocm_version }}
           TAR_NAME: ${{ steps.plan.outputs.tar_name }}
+          PACKAGES_URL: ${{ steps.plan.outputs.packages_url }}
         run: |
           {
             echo "### Performance install"
@@ -1112,6 +788,7 @@ jobs:
             echo "| Machine | \`${PERF_SERVER}\` |"
             echo "| ROCm version | \`${ROCM_VERSION}\` |"
             echo "| Tarball | \`${TAR_NAME}\` |"
+            echo "| Fetched from | ${PACKAGES_URL} |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Check the install succeeded
@@ -1134,7 +811,7 @@ jobs:
           echo "Install run ${RUN_ID}: status=${STATUS} conclusion=${CONCLUSION}"
 
           if [[ "${STATUS}" != "completed" ]]; then
-            echo "::error::The install run is still ${STATUS} after the wait expired. Measuring now would measure an unknown stack, so no performance run is dispatched. Raise performance_install_wait_minutes or check ${INSTALL_RUN_URL}."
+            echo "::error::The install run is still ${STATUS} after the wait expired. Measuring now would measure an unknown stack, so no performance run is dispatched. See ${INSTALL_RUN_URL}."
             {
               echo "> [!CAUTION]"
               echo "> The install did not finish within the wait. No measurement was taken."
@@ -1154,45 +831,42 @@ jobs:
   performance_tests:
     name: Performance Tests
     needs: [performance_install]
-    # A skipped or failed install takes this with it: GitHub skips a job whose
-    # dependency did not succeed, and the explicit result check says so out
-    # loud. Measuring a stack that did not install is worse than not measuring.
-    if: >-
-      ${{
-        needs.performance_install.result == 'success' &&
-        needs.performance_install.outputs.skip == 'false'
-      }}
+    # A failed install takes this with it: GitHub skips a job whose dependency
+    # did not succeed. Measuring a stack that did not install is worse than
+    # not measuring.
+    if: ${{ needs.performance_install.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
       contents: read
+    env:
+      PERFORMANCE_WAIT_MINUTES: "300"
     steps:
       - name: Bound the wait
         id: budget
-        env:
-          WAIT_MINUTES: ${{ needs.performance_install.outputs.perf_wait_minutes }}
         run: |
           set -euo pipefail
-          if ! [[ "${WAIT_MINUTES}" =~ ^[0-9]+$ ]] || (( WAIT_MINUTES < 1 )); then
-            echo "::error::The performance_options 'wait' must be a positive whole number of minutes, got '${WAIT_MINUTES}'."
-            exit 1
-          fi
-          MINUTES="${WAIT_MINUTES}"
+          # Stay under the job's own ceiling so the wait ends inside the job
+          # and the outcome is reported, instead of the job being killed
+          # mid-wait.
+          MINUTES="${PERFORMANCE_WAIT_MINUTES}"
           if (( MINUTES > 345 )); then
-            echo "::warning::A 'wait' of ${MINUTES} minutes exceeds the job ceiling; clamping to 345."
             MINUTES=345
           fi
           echo "wait_seconds=$(( MINUTES * 60 ))" >> "$GITHUB_OUTPUT"
           echo "wait_minutes=${MINUTES}" >> "$GITHUB_OUTPUT"
 
-      # The payload comes from the single assumed-keys block in the install
-      # job, so there is nothing to correct here.
+      # Dispatched against main, unlike the install: this workflow needs no
+      # change on the qa-forge side, so there is no reason to run a branch of
+      # it. The payload comes from the single keys block in the install job.
+      #
+      # Those keys are mirror-derived and unverified -- see the block there.
       - name: Dispatch the performance run
         id: dispatch
         uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
         with:
-          repo: ${{ needs.performance_install.outputs.qa_forge_repo }}
-          ref: ${{ needs.performance_install.outputs.qa_forge_ref }}
+          repo: AMD-ROCm-Internal/qa-forge
+          ref: main
           workflow: performance-test-run.yml
           token: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
           wait-for-completion: true
@@ -1237,13 +911,12 @@ jobs:
         if: ${{ always() && steps.dispatch.outputs.runId != '' }}
         env:
           GH_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
-          QA_FORGE_REPO: ${{ needs.performance_install.outputs.qa_forge_repo }}
           RUN_ID: ${{ steps.dispatch.outputs.runId }}
           PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
           WAIT_MINUTES: ${{ steps.budget.outputs.wait_minutes }}
         run: |
           set -euo pipefail
-          STATUS=$(gh api "repos/${QA_FORGE_REPO}/actions/runs/${RUN_ID}" --jq '.status')
+          STATUS=$(gh api "repos/AMD-ROCm-Internal/qa-forge/actions/runs/${RUN_ID}" --jq '.status')
           {
             echo
             if [[ "${STATUS}" != "completed" ]]; then
@@ -1263,13 +936,12 @@ jobs:
         if: ${{ always() && steps.dispatch.outputs.runId != '' }}
         env:
           GH_TOKEN: ${{ secrets.QA_FORGE_PERF_DISPATCH_TOKEN }}
-          QA_FORGE_REPO: ${{ needs.performance_install.outputs.qa_forge_repo }}
           RUN_ID: ${{ steps.dispatch.outputs.runId }}
           PERF_RUN_URL: ${{ steps.dispatch.outputs.runUrlHtml }}
         run: |
           set -euo pipefail
           read -r STATUS CONCLUSION < <(
-            gh api "repos/${QA_FORGE_REPO}/actions/runs/${RUN_ID}" \
+            gh api "repos/AMD-ROCm-Internal/qa-forge/actions/runs/${RUN_ID}" \
               --jq '[.status, (.conclusion // "none")] | @tsv'
           )
           echo "Measurement run ${RUN_ID}: status=${STATUS} conclusion=${CONCLUSION}"
@@ -1294,68 +966,16 @@ jobs:
   # ==========================================================================
   # Windows
   # ==========================================================================
-  copy_prebuilt_stages_windows:
-    name: Copy Prebuilt Stages (Windows)
-    needs: setup
-    if: >-
-      ${{
-        !inputs.dry_run &&
-        inputs.windows_amdgpu_families != '' &&
-        inputs.windows_amdgpu_families != 'none' &&
-        needs.setup.outputs.windows_build_config != '' &&
-        fromJSON(needs.setup.outputs.windows_build_config).prebuilt_stages != '' &&
-        fromJSON(needs.setup.outputs.windows_build_config).baseline_run_id != ''
-      }}
-    runs-on: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_runs_on || 'azure-windows-scale-rocm' }}
-    defaults:
-      run:
-        shell: bash
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Checking out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: "ROCm/TheRock"
-          ref: ${{ needs.setup.outputs.ref }}
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.12"
-
-      - name: Install artifact manager dependencies
-        run: pip install boto3
-
-      - name: Configure AWS credentials for artifact uploads
-        uses: ./.github/actions/configure_aws_artifacts_credentials
-        with:
-          release_type: ci
-
-      - name: Copy prebuilt stage artifacts
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_TYPE: ci
-        run: |
-          python build_tools/artifact_manager.py copy \
-            --source-run-id=${{ fromJSON(needs.setup.outputs.windows_build_config).baseline_run_id }} \
-            --stage="${{ fromJSON(needs.setup.outputs.windows_build_config).prebuilt_stages }}" \
-            --amdgpu-families="${{ fromJSON(needs.setup.outputs.windows_build_config).dist_amdgpu_families }}" \
-            --expand-family-to-targets
-
   build_windows:
     name: Windows::${{ fromJSON(needs.setup.outputs.windows_build_config || '{}').build_variant_label || 'skip' }}
     needs:
       - setup
       - cp_params
-      - copy_prebuilt_stages_windows
     if: >-
       ${{
         !cancelled() && !inputs.dry_run &&
         needs.setup.result == 'success' &&
         needs.cp_params.result == 'success' &&
-        needs.copy_prebuilt_stages_windows.result != 'failure' &&
         inputs.windows_amdgpu_families != '' &&
         inputs.windows_amdgpu_families != 'none' &&
         needs.setup.outputs.windows_build_config != '' &&
@@ -1369,7 +989,6 @@ jobs:
       build_variant_label: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_variant_label }}
       build_variant_cmake_preset: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_variant_cmake_preset }}
       build_variant_suffix: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_variant_suffix }}
-      prebuilt_stages: ${{ fromJSON(needs.setup.outputs.windows_build_config).prebuilt_stages }}
       build_runs_on: ${{ fromJSON(needs.setup.outputs.windows_build_config).build_runs_on }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: ${{ inputs.test_type }}
@@ -1414,7 +1033,6 @@ jobs:
       test_type: ${{ inputs.test_type }}
       test_labels: ${{ needs.setup.outputs.windows_test_labels }}
       sanity_check_only_for_family: ${{ matrix.family_info.sanity_check_only_for_family }}
-      changed_projects: ${{ inputs.changed_projects }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
 
@@ -1467,7 +1085,6 @@ jobs:
       - build_linux_deb_packages
       - build_linux_rpm_packages
       - build_linux_pytorch_wheels
-      - publish_linux_artifacts
       - performance_install
       - performance_tests
       - build_windows
