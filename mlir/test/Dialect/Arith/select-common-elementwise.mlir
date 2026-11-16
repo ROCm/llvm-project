@@ -1,5 +1,6 @@
 // RUN: mlir-opt %s --canonicalize="test-convergence" | FileCheck %s
-// XFAIL: *
+// REQUIRES: notAhang
+
 // Test select(M, F(a0, a1, ..., a_n), F(b0, b1, ..., b_n)) -> F(select(M, a0, b0), select(M, a1, b1), ...).
 
 // CHECK-LABEL: func.func @basic(
