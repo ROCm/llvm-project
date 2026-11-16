@@ -42,7 +42,7 @@ jobs:
           # neither is on the path to a tarball or a measurement, and both
           # cost build and runner time a first trial does not need.
           gh api -X POST \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/419188209/dispatches" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/229522644/dispatches" \
             -f ref="${TARGET_REF}" \
             -f 'inputs[LLVM_BRANCH]=amd/dev/mliyakat/triage_WW45_pytorch1' \
             -f 'inputs[THEROCK_REF]=amd-compiler-2026-10-29-COT' \
@@ -66,5 +66,5 @@ jobs:
           set -euo pipefail
           sleep 15
           gh api \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/419188209/runs?event=workflow_dispatch&per_page=5" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/229522644/runs?event=workflow_dispatch&per_page=5" \
             --jq '.workflow_runs[] | "\(.id)\t\(.created_at)\t\(.head_branch)\t\(.html_url)"'
