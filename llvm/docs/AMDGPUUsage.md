@@ -3791,6 +3791,34 @@ is off by default. Pass it to every compilation of the program. With LTO, also
 pass it to the code generation at link time, for example with
 `-plugin-opt=-amdgpu-enable-object-linking` for `ld.lld`.
 
+For HIP, the Clang driver enables object linking automatically for relocatable
+device code (RDC) when device LTO is ThinLTO or is disabled. The driver then
+passes `-amdgpu-enable-object-linking` to the device compilation and to the
+device link. There is no Clang option to enable or disable object linking.
+
+:::{list-table} Object Linking for HIP in the Clang Driver
+:name: amdgpu-object-linking-driver-table
+:header-rows: 1
+
+* - Mode
+  - Device LTO
+  - Object Linking
+* - Non-RDC (default)
+  - Any
+  - Off. Each translation unit is a complete device program.
+* - RDC (`-fgpu-rdc`)
+  - Full (default, `-foffload-lto`)
+  - Off. The device program is compiled as one module.
+* - RDC (`-fgpu-rdc`)
+  - ThinLTO (`-foffload-lto=thin`)
+  - On. Each ThinLTO backend emits a relocatable object.
+* - RDC (`-fgpu-rdc`)
+  - Disabled (`-fno-offload-lto`)
+  - On. Each device compilation emits a relocatable object.
+:::
+
+OpenMP offloading and SPIR-V device code do not use object linking.
+
 (amdgpu-object-linking-limitations)=
 
 ### Limitations
@@ -3827,6 +3855,11 @@ The thin link also propagates kernel attributes, such as
 `amdgpu-flat-work-group-size` and `amdgpu-waves-per-eu`, across modules. Each
 device function gets attribute values that are compatible with all kernels that
 can call it, directly or through other functions.
+
+For HIP, compile and link with `-fgpu-rdc -foffload-lto=thin`. The Clang
+driver then enables object linking for the device compilation and the device
+link. OpenMP offloading uses ThinLTO without object linking: each ThinLTO
+backend imports all functions that its module calls.
 
 ### Limitations
 
