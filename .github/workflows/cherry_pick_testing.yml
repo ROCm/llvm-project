@@ -917,8 +917,6 @@ jobs:
       # Dispatched against main, unlike the install: this workflow needs no
       # change on the qa-forge side, so there is no reason to run a branch of
       # it. The payload comes from the single keys block in the install job.
-      #
-      # Those keys are mirror-derived and unverified -- see the block there.
       - name: Dispatch the performance run
         id: dispatch
         uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
