@@ -123,6 +123,9 @@ on:
                            someone else's build
             url_key=       the install workflow's input name for that
                            directory, if it is not therock_packages_url
+            publish_dev=   any value: also publish this build to the dev
+                           channel. Needs IAM grants this repository does not
+                           have yet, and nothing else here depends on it.
           If multi-arch resolution rejects the package, method=therock_tarball
           installs the same tarball by the single-arch path, which does no run
           lookup. Example: server=SMC-SC-DI13-13 wait=200
@@ -417,11 +420,12 @@ jobs:
       dist_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).dist_amdgpu_families }}
       platform: linux
       package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      # A measurement installs from the dev channel, and only what was
-      # uploaded as a dev build can be published onto it. Everything else
-      # keeps going to the CI bucket exactly as before, so an ordinary
-      # cherry-pick is untouched by any of this.
-      release_type: ${{ inputs.run_performance_tests && 'dev' || 'ci' }}
+      # Stays on 'ci', which is the one bucket this repository can write:
+      # release_type 'dev' resolves to therock-dev-artifacts behind the
+      # therock-dev role, which only ROCm/TheRock is federated for. 'ci'
+      # resolves to therock-ci-artifacts-external, which is also where the
+      # measurement installs from, so the tarball lands where it is read.
+      release_type: ci
       # The perf suites run the test binaries, which live in the -tests-
       # sibling rather than the base tarball. Building it costs a second pass
       # over the artifacts, so it is asked for only when it will be used.
@@ -447,7 +451,7 @@ jobs:
       # Publication is not tarballs-only: publish_rocm_to_release_buckets.py
       # raises when it finds no python packages beside them, so these have to
       # reach the same bucket the tarballs do.
-      release_type: ${{ inputs.run_performance_tests && 'dev' || '' }}
+      release_type: ""
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
     permissions:
@@ -601,9 +605,16 @@ jobs:
   publish_linux_artifacts:
     name: Publish Linux Artifacts
     needs: [setup, build_linux_tarballs, build_linux_python_packages]
+    # Asked for explicitly, not implied by wanting a measurement. The
+    # measurement installs from the CI artifacts bucket the build already
+    # writes, so it needs nothing from here; and this cannot succeed until
+    # ROCm/llvm-project is federated for the two publication roles, so making
+    # it implicit would fail every performance run for a reason unrelated to
+    # the measurement. Set performance_options publish_dev=yes to ask.
     if: >-
       ${{
-        !cancelled() && inputs.run_performance_tests && !inputs.dry_run &&
+        !cancelled() && !inputs.dry_run &&
+        contains(inputs.performance_options, 'publish_dev=') &&
         needs.build_linux_tarballs.result == 'success' &&
         needs.build_linux_python_packages.result == 'success'
       }}
@@ -681,11 +692,15 @@ jobs:
   # machine, not for the identity of their run.
   performance_install:
     name: Performance Install
-    needs: [setup, build_linux, publish_linux_artifacts]
-    # Naming this run's own tarball requires that it was built and published.
-    # Naming someone else's, already on the channel, is the one way to run
-    # without either in front — which is also how the trigger is exercised
-    # while publication is still being wired up.
+    needs: [setup, build_linux, build_linux_tarballs]
+    # The tarball job is what this waits on, because it is what puts the
+    # tarball in the bucket the install reads. Publication to the dev channel
+    # is a separate errand and deliberately not in front of this: it needs
+    # credentials this repository does not have, and a measurement that can
+    # proceed without it should not be held up by it failing.
+    #
+    # Naming someone else's tarball is the one way to run with no build in
+    # front at all.
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
@@ -693,7 +708,7 @@ jobs:
           contains(inputs.performance_options, 'tar_name=') ||
           (
             needs.build_linux.result == 'success' &&
-            needs.publish_linux_artifacts.result == 'success'
+            needs.build_linux_tarballs.result == 'success'
           )
         )
       }}
@@ -785,8 +800,10 @@ jobs:
               ref)          QA_FORGE_REF="${value}" ;;
               packages_url) PACKAGES_URL_OVERRIDE="${value}" ;;
               url_key)      URL_KEY="${value}" ;;
+              # Read at job level, not here; accepted so it is not a typo.
+              publish_dev)  : ;;
               *)
-                echo "::error::Unknown performance_options key '${key}'. Valid keys: server, tar_name, rocm_version, label, method, suites, install_wait, wait, repo, ref, packages_url, url_key."
+                echo "::error::Unknown performance_options key '${key}'. Valid keys: server, tar_name, rocm_version, label, method, suites, install_wait, wait, repo, ref, packages_url, url_key, publish_dev."
                 exit 1
                 ;;
             esac
