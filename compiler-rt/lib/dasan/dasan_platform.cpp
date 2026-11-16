@@ -109,8 +109,7 @@ bool Grant(uptr Addr, uptr Size, hsa_amd_memory_pool_t Pool, bool WithCpu,
   if (HaveOwner)
     Descs.push_back({Executable
                          ? hsa_access_permission_t(HSA_ACCESS_PERMISSION_RW |
-  // temporary hack while we look for solution on header file inclusion. Huber.
-                                                  4/*HSA_ACCESS_PERMISSION_EX*/)
+                                                   HSA_ACCESS_PERMISSION_EX)
                          : HSA_ACCESS_PERMISSION_RW,
                      Owner});
   if (Descs.empty())
