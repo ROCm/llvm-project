@@ -333,8 +333,7 @@ void AsanSoftRssLimitExceededCallback(bool exceeded);
 }  // namespace __asan
 
 #if SANITIZER_AMDHSA
-#  include <hsa.h>
-#  include <hsa_ext_amd.h>
+#  include "sanitizer_common/sanitizer_offload_hsa.h"
 
 namespace __asan {
 hsa_status_t asan_hsa_amd_memory_pool_allocate(

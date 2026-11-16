@@ -13,8 +13,10 @@
 # Options read by this file must be passed before -C:
 #   LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR
 #       Required. Source of the SPIR-V translator, ROCm/SPIRV-LLVM-Translator.
+#   SANITIZER_AMDGPU
+#       Optional. Enables GPU support in the host sanitizers.
 #   SANITIZER_HSA_INCLUDE_PATH
-#       Directory containing hsa.h. Enables GPU support in the host sanitizers.
+#       Deprecated alias for SANITIZER_AMDGPU.
 #   THEROCK_SANITIZER
 #       Optional. When ASAN, HOST_ASAN, or TSAN, host runtimes are built with
 #       -gdwarf-4 so dwz can process the packages.
@@ -79,9 +81,8 @@ if(NOT CMAKE_HOST_WIN32)
   # libomp is loaded from several depths below <rocm>, e.g. lib/llvm/lib/<triple>.
   set(RUNTIMES_${ROCM_HOST_TRIPLE}_LIBOMP_INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib:$ORIGIN/../../lib:$ORIGIN/../../../lib:$ORIGIN/../../../../lib" CACHE STRING "")
   set(RUNTIMES_${ROCM_HOST_TRIPLE}_LIBOMPTARGET_NO_SANITIZER_AMDGPU ON CACHE BOOL "")
-  if(SANITIZER_HSA_INCLUDE_PATH)
+  if(SANITIZER_AMDGPU OR SANITIZER_HSA_INCLUDE_PATH)
     set(RUNTIMES_${ROCM_HOST_TRIPLE}_SANITIZER_AMDGPU ON CACHE BOOL "")
-    set(RUNTIMES_${ROCM_HOST_TRIPLE}_SANITIZER_HSA_INCLUDE_PATH "${SANITIZER_HSA_INCLUDE_PATH}" CACHE PATH "")
     set(RUNTIMES_${ROCM_HOST_TRIPLE}_SANITIZER_COMGR_INCLUDE_PATH "${_THEROCK_ROOT}/amd/comgr/include" CACHE PATH "")
   endif()
 endif()
