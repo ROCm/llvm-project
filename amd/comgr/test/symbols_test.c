@@ -12,8 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-void expectSymbol(const char *ObjectFilename, const char *SymbolName,
-                  amd_comgr_symbol_type_t ExpectedType) {
+static void expectSymbol(const char *ObjectFilename, const char *SymbolName,
+                         amd_comgr_symbol_type_t ExpectedType) {
   long Size;
   char *Buf;
   amd_comgr_data_t DataObject;

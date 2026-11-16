@@ -467,13 +467,10 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
       printSyncInfo(Loc, DeviceId, AsyncInfo);
       Rc = AsyncInfo.synchronize();
     }
-  }
-#if 1
-  handleTargetOutcome(Rc == OFFLOAD_SUCCESS, Loc);
-  assert(Rc == OFFLOAD_SUCCESS && "offload failed");
-  assert(Rc == OFFLOAD_SUCCESS && "__tgt_target_kernel unexpected failure!");
-#endif//>>>>>>> ec94ac53962a569a9d26cf107c3663a6880fe446
 
+    handleTargetOutcome(Rc == OFFLOAD_SUCCESS, Loc);
+    assert(Rc == OFFLOAD_SUCCESS && "__tgt_target_kernel unexpected failure!");
+  }
   return OMP_TGT_SUCCESS;
 }
 

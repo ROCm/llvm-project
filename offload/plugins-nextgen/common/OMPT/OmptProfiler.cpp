@@ -18,8 +18,8 @@
 using namespace llvm::omp::target;
 
 void ompt::OmptProfilerTy::handleDataAlloc(uint64_t StartNanos,
-                                           uint64_t EndNanos, void *HostPtr,
-                                           uint64_t Size, void *Data) {
+                                           uint64_t EndNanos, uint64_t Size,
+                                           void *Data) {
   ompt::setOmptTimestamp(StartNanos, EndNanos);
 }
 

@@ -32,6 +32,6 @@ MATH_PRIVATE(eptrigredsmallep)(double2 x)
 
     struct epredret ret;
     ret.r = add(con(yh, yt), x.lo);
-    ret.i = BUILTIN_ISNAN_F64(dn) ? 0 : ((int)dn & 0x3);
+    ret.i = (int)dn & 0x3;
     return ret;
 }

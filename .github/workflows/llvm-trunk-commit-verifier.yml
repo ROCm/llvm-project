@@ -60,7 +60,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   # Same upstream ref cancels its older run. Different refs run together.

@@ -9,14 +9,6 @@
 #define LIBOMPTARGET_PLUGINS_AMGGPU_SRC_PRINT_TRACING_H_INCLUDED
 
 enum PrintTraceControlBits {
-  LAUNCH = 1,               // print a message to stderr for each kernel launch
-  RTL_TIMING = 2,           // Print timing info around each RTL step
-  STARTUP_DETAILS = 4,      // Details around loading up kernel
-  RTL_TO_STDOUT = 8,        // Redirect RTL tracing to stdout
-  HOST_SERVICE_TRACING = 16 // Print host tracing
+  RTL_TO_STDOUT = 8, // Redirect RTL tracing to stdout
 };
-
-namespace llvm::omp::target::plugin {
-extern int PrintKernelTrace; // set by environment variable
-}
 #endif

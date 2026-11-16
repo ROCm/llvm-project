@@ -11,13 +11,13 @@
 
 // Each path must be rejected with AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT.
 // Asserting the exact status keeps this from passing on an unrelated failure.
-static int expectFail(int argc, char *argv[]) {
-  if (argc < 1)
+static int expectFail(int Argc, char *Argv[]) {
+  if (Argc < 1)
     fail("Usage: test-get-data-isa-name --expect-fail <code-object-path>...");
 
-  for (int I = 0; I < argc; ++I) {
+  for (int I = 0; I < Argc; ++I) {
     char *Buf;
-    size_t Size = setBuf(argv[I], &Buf);
+    size_t Size = setBuf(Argv[I], &Buf);
     size_t SizeIsa = 0;
     amd_comgr_data_t Data;
 
@@ -32,7 +32,7 @@ static int expectFail(int argc, char *argv[]) {
       free(Buf);
       fail("get_data_isa_name(%s): expected "
            "AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT, saw %s",
-           argv[I], Reason);
+           Argv[I], Reason);
     }
 
     amd_comgr_(release_data(Data));

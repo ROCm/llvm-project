@@ -77,25 +77,26 @@ private:
   Logger &Log;
   uint64_t Pos = 0;
 };
+} // namespace
 
-bool isLanguageValid(amd_comgr_language_t Language) {
+static bool isLanguageValid(amd_comgr_language_t Language) {
   return Language >= AMD_COMGR_LANGUAGE_NONE &&
          Language <= AMD_COMGR_LANGUAGE_LAST;
 }
 
-bool isActionValid(amd_comgr_action_kind_t ActionKind) {
+static bool isActionValid(amd_comgr_action_kind_t ActionKind) {
   return ActionKind <= AMD_COMGR_ACTION_LAST;
 }
 
-bool isSymbolInfoValid(amd_comgr_symbol_info_t SymbolInfo) {
+static bool isSymbolInfoValid(amd_comgr_symbol_info_t SymbolInfo) {
   return SymbolInfo >= AMD_COMGR_SYMBOL_INFO_NAME_LENGTH &&
          SymbolInfo <= AMD_COMGR_SYMBOL_INFO_LAST;
 }
 
-amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
-                                          DataAction *ActionInfo,
-                                          DataSet *InputSet, DataSet *ResultSet,
-                                          raw_ostream &LogS) {
+static amd_comgr_status_t
+dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
+                       DataAction *ActionInfo, DataSet *InputSet,
+                       DataSet *ResultSet, raw_ostream &LogS) {
   AMDGPUCompiler Compiler(ActionInfo, InputSet, ResultSet, LogS);
   switch (ActionKind) {
   case AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR:
@@ -136,7 +137,7 @@ amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
   }
 }
 
-StringRef getLanguageName(amd_comgr_language_t Language) {
+static StringRef getLanguageName(amd_comgr_language_t Language) {
   switch (Language) {
   case AMD_COMGR_LANGUAGE_NONE:
     return "AMD_COMGR_LANGUAGE_NONE";
@@ -154,7 +155,7 @@ StringRef getLanguageName(amd_comgr_language_t Language) {
   return "<unknown>";
 }
 
-StringRef getStatusName(amd_comgr_status_t Status) {
+static StringRef getStatusName(amd_comgr_status_t Status) {
   switch (Status) {
   case AMD_COMGR_STATUS_SUCCESS:
     return "AMD_COMGR_STATUS_SUCCESS";
@@ -173,7 +174,7 @@ StringRef getStatusName(amd_comgr_status_t Status) {
 /// Perform a simple quoting of an option to allow separating options with
 /// space in debug output. The option is surrounded by double quotes, and
 /// any embedded double quotes or backslashes are preceeded by a backslash.
-void printQuotedOption(raw_ostream &OS, StringRef Option) {
+static void printQuotedOption(raw_ostream &OS, StringRef Option) {
   OS << '"';
   for (const char C : Option) {
     if (C == '"' || C == '\\') {
@@ -183,9 +184,8 @@ void printQuotedOption(raw_ostream &OS, StringRef Option) {
   }
   OS << '"';
 }
-} // namespace
 
-StringRef getActionKindName(amd_comgr_action_kind_t ActionKind) {
+static StringRef getActionKindName(amd_comgr_action_kind_t ActionKind) {
   switch (ActionKind) {
   case AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR:
     return "AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR";
@@ -438,10 +438,7 @@ std::string DataMeta::convertDocNodeToString(msgpack::DocNode DocNode) {
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_status_string
-    //
-    (amd_comgr_status_t Status, const char **StatusString) {
+amd_comgr_status_string(amd_comgr_status_t Status, const char **StatusString) {
   if (!StatusString || Status < AMD_COMGR_STATUS_SUCCESS ||
       Status > AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
@@ -465,20 +462,12 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-void AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_version
-    //
-    (size_t *Major, size_t *Minor) {
+void AMD_COMGR_API amd_comgr_get_version(size_t *Major, size_t *Minor) {
   *Major = AMD_COMGR_INTERFACE_VERSION_MAJOR;
   *Minor = AMD_COMGR_INTERFACE_VERSION_MINOR;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_isa_count
-    //
-    (size_t *Count) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_isa_count(size_t *Count) {
   if (!Count) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
@@ -488,11 +477,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_isa_name
-    //
-    (size_t Index, const char **IsaName) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_isa_name(size_t Index,
+                                                        const char **IsaName) {
   if (!IsaName || Index >= metadata::getIsaCount()) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
@@ -502,11 +488,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_isa_metadata
-    //
-    (const char *IsaName, amd_comgr_metadata_node_t *MetadataNode) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_isa_metadata(
+    const char *IsaName, amd_comgr_metadata_node_t *MetadataNode) {
   if (!IsaName || !MetadataNode) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
@@ -537,10 +520,7 @@ amd_comgr_status_t AMD_COMGR_API
 // API functions on Data Object
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_create_data
-    //
-    (amd_comgr_data_kind_t DataKind, amd_comgr_data_t *Data) {
+amd_comgr_create_data(amd_comgr_data_kind_t DataKind, amd_comgr_data_t *Data) {
   if (!Data || DataKind <= AMD_COMGR_DATA_KIND_UNDEF ||
       DataKind > AMD_COMGR_DATA_KIND_LAST) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
@@ -556,11 +536,7 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_release_data
-    //
-    (amd_comgr_data_t Data) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_release_data(amd_comgr_data_t Data) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !DataP->hasValidDataKind()) {
@@ -572,11 +548,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_data_kind
-    //
-    (amd_comgr_data_t Data, amd_comgr_data_kind_t *DataKind) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_data_kind(
+    amd_comgr_data_t Data, amd_comgr_data_kind_t *DataKind) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !DataP->hasValidDataKind() || !DataKind) {
@@ -589,11 +562,9 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_set_data
-    //
-    (amd_comgr_data_t Data, size_t Size, const char *Bytes) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_set_data(amd_comgr_data_t Data,
+                                                    size_t Size,
+                                                    const char *Bytes) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !DataP->hasValidDataKind() || !Size || !Bytes) {
@@ -603,11 +574,8 @@ amd_comgr_status_t AMD_COMGR_API
   return DataP->setData(StringRef(Bytes, Size));
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_data
-    //
-    (amd_comgr_data_t Data, size_t *Size, char *Bytes) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_data(amd_comgr_data_t Data,
+                                                    size_t *Size, char *Bytes) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !DataP->Data || !DataP->hasValidDataKind() || !Size) {
@@ -623,11 +591,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_set_data_name
-    //
-    (amd_comgr_data_t Data, const char *Name) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_set_data_name(amd_comgr_data_t Data,
+                                                         const char *Name) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !DataP->hasValidDataKind()) {
@@ -642,11 +607,9 @@ amd_comgr_status_t AMD_COMGR_API
   return DataP->setName(Name);
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_data_name
-    //
-    (amd_comgr_data_t Data, size_t *Size, char *Name) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_data_name(amd_comgr_data_t Data,
+                                                         size_t *Size,
+                                                         char *Name) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !DataP->hasValidDataKind() || !Size) {
@@ -662,13 +625,10 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_create_symbolizer_info
-    //
-    (amd_comgr_data_t CodeObject,
-     void (*PrintSymbolCallback)(const char *, void *),
-     amd_comgr_symbolizer_info_t *SymbolizerInfo) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_create_symbolizer_info(
+    amd_comgr_data_t CodeObject,
+    void (*PrintSymbolCallback)(const char *, void *),
+    amd_comgr_symbolizer_info_t *SymbolizerInfo) {
 
   DataObject *CodeObjectP = DataObject::convert(CodeObject);
   if (!CodeObjectP || !PrintSymbolCallback ||
@@ -683,10 +643,7 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_destroy_symbolizer_info
-    //
-    (amd_comgr_symbolizer_info_t SymbolizerInfo) {
+amd_comgr_destroy_symbolizer_info(amd_comgr_symbolizer_info_t SymbolizerInfo) {
 
   Symbolizer *SI = Symbolizer::convert(SymbolizerInfo);
   if (!SI) {
@@ -698,11 +655,8 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_symbolize
-    //
-    (amd_comgr_symbolizer_info_t SymbolizeInfo, uint64_t Address, bool IsCode,
-     void *UserData) {
+amd_comgr_symbolize(amd_comgr_symbolizer_info_t SymbolizeInfo, uint64_t Address,
+                    bool IsCode, void *UserData) {
 
   Symbolizer *SI = Symbolizer::convert(SymbolizeInfo);
   if (!SI || !UserData) {
@@ -712,11 +666,8 @@ amd_comgr_status_t AMD_COMGR_API
   return SI->symbolize(Address, IsCode, UserData);
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_data_isa_name
-    //
-    (amd_comgr_data_t Data, size_t *Size, char *IsaName) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_data_isa_name(
+    amd_comgr_data_t Data, size_t *Size, char *IsaName) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !Size ||
@@ -743,10 +694,7 @@ amd_comgr_status_t AMD_COMGR_API
 // API functions on Data Set
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_create_data_set
-    //
-    (amd_comgr_data_set_t *Set) {
+amd_comgr_create_data_set(amd_comgr_data_set_t *Set) {
   if (!Set) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
@@ -762,10 +710,7 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_destroy_data_set
-    //
-    (amd_comgr_data_set_t Set) {
+amd_comgr_destroy_data_set(amd_comgr_data_set_t Set) {
   DataSet *SetP = DataSet::convert(Set);
 
   if (!SetP) {
@@ -778,10 +723,7 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_data_set_add
-    //
-    (amd_comgr_data_set_t Set, amd_comgr_data_t Data) {
+amd_comgr_data_set_add(amd_comgr_data_set_t Set, amd_comgr_data_t Data) {
   DataSet *SetP = DataSet::convert(Set);
   DataObject *DataP = DataObject::convert(Data);
 
@@ -797,11 +739,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_data_set_remove
-    //
-    (amd_comgr_data_set_t Set, amd_comgr_data_kind_t DataKind) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_data_set_remove(
+    amd_comgr_data_set_t Set, amd_comgr_data_kind_t DataKind) {
   DataSet *SetP = DataSet::convert(Set);
 
   if (!SetP || !isDataKindValid(DataKind)) {
@@ -821,11 +760,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_data_count
-    //
-    (amd_comgr_data_set_t Set, amd_comgr_data_kind_t DataKind, size_t *Count) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_data_count(
+    amd_comgr_data_set_t Set, amd_comgr_data_kind_t DataKind, size_t *Count) {
   DataSet *SetP = DataSet::convert(Set);
 
   if (!SetP || !isDataKindValid(DataKind) || !Count) {
@@ -842,12 +778,9 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_data_get_data
-    //
-    (amd_comgr_data_set_t Set, amd_comgr_data_kind_t DataKind, size_t Index,
-     amd_comgr_data_t *Data) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_data_get_data(
+    amd_comgr_data_set_t Set, amd_comgr_data_kind_t DataKind, size_t Index,
+    amd_comgr_data_t *Data) {
   DataSet *SetP = DataSet::convert(Set);
 
   if (!SetP || !isDataKindValid(DataKind) || !Data) {
@@ -877,10 +810,7 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_create_action_info
-    //
-    (amd_comgr_action_info_t *ActionInfo) {
+amd_comgr_create_action_info(amd_comgr_action_info_t *ActionInfo) {
   if (!ActionInfo) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
@@ -896,10 +826,7 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_destroy_action_info
-    //
-    (amd_comgr_action_info_t ActionInfo) {
+amd_comgr_destroy_action_info(amd_comgr_action_info_t ActionInfo) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -911,11 +838,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_isa_name
-    //
-    (amd_comgr_action_info_t ActionInfo, const char *IsaName) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_isa_name(
+    amd_comgr_action_info_t ActionInfo, const char *IsaName) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -940,11 +864,8 @@ amd_comgr_status_t AMD_COMGR_API
   return ActionP->setIsaName(IsaName);
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_isa_name
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t *Size, char *IsaName) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_isa_name(
+    amd_comgr_action_info_t ActionInfo, size_t *Size, char *IsaName) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !Size) {
@@ -960,11 +881,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_language
-    //
-    (amd_comgr_action_info_t ActionInfo, amd_comgr_language_t Language) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_language(
+    amd_comgr_action_info_t ActionInfo, amd_comgr_language_t Language) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !isLanguageValid(Language)) {
@@ -976,11 +894,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_language
-    //
-    (amd_comgr_action_info_t ActionInfo, amd_comgr_language_t *Language) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_language(
+    amd_comgr_action_info_t ActionInfo, amd_comgr_language_t *Language) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !Language) {
@@ -992,11 +907,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_option_list
-    //
-    (amd_comgr_action_info_t ActionInfo, const char *Options[], size_t Count) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_option_list(
+    amd_comgr_action_info_t ActionInfo, const char *Options[], size_t Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || (!Options && Count)) {
@@ -1006,11 +918,8 @@ amd_comgr_status_t AMD_COMGR_API
   return ActionP->setOptionList(ArrayRef<const char *>(Options, Count));
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_option_list_count
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t *Count) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_option_list_count(
+    amd_comgr_action_info_t ActionInfo, size_t *Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !Count) {
@@ -1020,12 +929,9 @@ amd_comgr_status_t AMD_COMGR_API
   return ActionP->getOptionListCount(*Count);
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_option_list_item
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t Index, size_t *Size,
-     char *Option) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_option_list_item(
+    amd_comgr_action_info_t ActionInfo, size_t Index, size_t *Size,
+    char *Option) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !Size) {
@@ -1047,10 +953,8 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_bundle_entry_id_count
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t *Count) {
+amd_comgr_action_info_get_bundle_entry_id_count(
+    amd_comgr_action_info_t ActionInfo, size_t *Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -1062,12 +966,9 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_bundle_entry_id
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t Index, size_t *Size,
-     char *BundleEntryID) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_bundle_entry_id(
+    amd_comgr_action_info_t ActionInfo, size_t Index, size_t *Size,
+    char *BundleEntryID) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !Size) {
@@ -1092,11 +993,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_bundle_entry_ids
-    //
-    (amd_comgr_action_info_t ActionInfo, const char *EntryIDs[], size_t Count) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_bundle_entry_ids(
+    amd_comgr_action_info_t ActionInfo, const char *EntryIDs[], size_t Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || (!EntryIDs && Count)) {
@@ -1107,10 +1005,8 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_package_entry_id_count
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t *Count) {
+amd_comgr_action_info_get_package_entry_id_count(
+    amd_comgr_action_info_t ActionInfo, size_t *Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -1122,12 +1018,9 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_package_entry_id
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t Index, size_t *TripleSize,
-     char *Triple, size_t *ArchSize, char *Arch) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_package_entry_id(
+    amd_comgr_action_info_t ActionInfo, size_t Index, size_t *TripleSize,
+    char *Triple, size_t *ArchSize, char *Arch) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !TripleSize || !ArchSize) {
@@ -1157,12 +1050,9 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_package_entry_ids
-    //
-    (amd_comgr_action_info_t ActionInfo, const amd_comgr_target_id_t EntryIDs[],
-     size_t Count) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_package_entry_ids(
+    amd_comgr_action_info_t ActionInfo, const amd_comgr_target_id_t EntryIDs[],
+    size_t Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || (!EntryIDs && Count)) {
@@ -1173,11 +1063,8 @@ amd_comgr_status_t AMD_COMGR_API
       ArrayRef<amd_comgr_target_id_t>(EntryIDs, Count));
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_vfs
-    //
-    (amd_comgr_action_info_t ActionInfo, bool ShouldUseVFS) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_vfs(
+    amd_comgr_action_info_t ActionInfo, bool ShouldUseVFS) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -1189,11 +1076,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_device_lib_linking
-    //
-    (amd_comgr_action_info_t ActionInfo, bool ShouldLinkDeviceLibs) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_device_lib_linking(
+    amd_comgr_action_info_t ActionInfo, bool ShouldLinkDeviceLibs) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -1206,11 +1090,8 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_block_sizes
-    //
-    (amd_comgr_action_info_t ActionInfo, const size_t *BlockSizes,
-     size_t Count) {
+amd_comgr_action_info_set_block_sizes(amd_comgr_action_info_t ActionInfo,
+                                      const size_t *BlockSizes, size_t Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || (!BlockSizes && Count)) {
@@ -1225,11 +1106,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_block_sizes_count
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t *Count) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_block_sizes_count(
+    amd_comgr_action_info_t ActionInfo, size_t *Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !Count) {
@@ -1241,11 +1119,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_block_sizes
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t Count, size_t *BlockSizes) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_block_sizes(
+    amd_comgr_action_info_t ActionInfo, size_t Count, size_t *BlockSizes) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !BlockSizes) {
@@ -1256,16 +1131,14 @@ amd_comgr_status_t AMD_COMGR_API
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
-  std::copy(ActionP->BlockSizes.begin(), ActionP->BlockSizes.end(), BlockSizes);
+  llvm::copy(ActionP->BlockSizes, BlockSizes);
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_working_directory_path
-    //
-    (amd_comgr_action_info_t ActionInfo, const char *Path) {
+amd_comgr_action_info_set_working_directory_path(
+    amd_comgr_action_info_t ActionInfo, const char *Path) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -1278,10 +1151,8 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_working_directory_path
-    //
-    (amd_comgr_action_info_t ActionInfo, size_t *Size, char *Path) {
+amd_comgr_action_info_get_working_directory_path(
+    amd_comgr_action_info_t ActionInfo, size_t *Size, char *Path) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || !Size) {
@@ -1297,11 +1168,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_set_logging
-    //
-    (amd_comgr_action_info_t ActionInfo, bool Logging) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_set_logging(
+    amd_comgr_action_info_t ActionInfo, bool Logging) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -1313,11 +1181,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_action_info_get_logging
-    //
-    (amd_comgr_action_info_t ActionInfo, bool *Logging) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_action_info_get_logging(
+    amd_comgr_action_info_t ActionInfo, bool *Logging) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP) {
@@ -1329,12 +1194,9 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_do_action
-    //
-    (amd_comgr_action_kind_t ActionKind, amd_comgr_action_info_t ActionInfo,
-     amd_comgr_data_set_t InputSet, amd_comgr_data_set_t ResultSet) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_do_action(
+    amd_comgr_action_kind_t ActionKind, amd_comgr_action_info_t ActionInfo,
+    amd_comgr_data_set_t InputSet, amd_comgr_data_set_t ResultSet) {
   DataAction *ActionInfoP = DataAction::convert(ActionInfo);
   DataSet *InputSetP = DataSet::convert(InputSet);
   DataSet *ResultSetP = DataSet::convert(ResultSet);
@@ -1394,7 +1256,7 @@ amd_comgr_status_t AMD_COMGR_API
       }
     }
 
-    InitTimeStatistics(PerfLog);
+    initTimeStatistics(PerfLog);
 
     if (Log.isEnabled(LogLevel::Debug)) {
       SmallString<256> HeaderStr;
@@ -1484,11 +1346,8 @@ amd_comgr_status_t AMD_COMGR_API
   return ActionStatus;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_data_metadata
-    //
-    (amd_comgr_data_t Data, amd_comgr_metadata_node_t *MetadataNode) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_data_metadata(
+    amd_comgr_data_t Data, amd_comgr_metadata_node_t *MetadataNode) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !DataP->hasValidDataKind() ||
@@ -1533,21 +1392,15 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_destroy_metadata
-    //
-    (amd_comgr_metadata_node_t MetadataNode) {
+amd_comgr_destroy_metadata(amd_comgr_metadata_node_t MetadataNode) {
   DataMeta *MetaP = DataMeta::convert(MetadataNode);
   delete MetaP;
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_metadata_kind
-    //
-    (amd_comgr_metadata_node_t MetadataNode,
-     amd_comgr_metadata_kind_t *MetadataKind) {
+amd_comgr_get_metadata_kind(amd_comgr_metadata_node_t MetadataNode,
+                            amd_comgr_metadata_kind_t *MetadataKind) {
   DataMeta *MetaP = DataMeta::convert(MetadataNode);
 
   if (!MetadataKind) {
@@ -1559,11 +1412,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_metadata_string
-    //
-    (amd_comgr_metadata_node_t MetadataNode, size_t *Size, char *String) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_metadata_string(
+    amd_comgr_metadata_node_t MetadataNode, size_t *Size, char *String) {
   DataMeta *MetaP = DataMeta::convert(MetadataNode);
 
   if (MetaP->getMetadataKind() != AMD_COMGR_METADATA_KIND_STRING || !Size) {
@@ -1581,11 +1431,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_metadata_map_size
-    //
-    (amd_comgr_metadata_node_t MetadataNode, size_t *Size) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_metadata_map_size(
+    amd_comgr_metadata_node_t MetadataNode, size_t *Size) {
   DataMeta *MetaP = DataMeta::convert(MetadataNode);
 
   if (MetaP->getMetadataKind() != AMD_COMGR_METADATA_KIND_MAP || !Size) {
@@ -1597,14 +1444,11 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_iterate_map_metadata
-    //
-    (amd_comgr_metadata_node_t MetadataNode,
-     amd_comgr_status_t (*Callback)(amd_comgr_metadata_node_t,
-                                    amd_comgr_metadata_node_t, void *),
-     void *UserData) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_iterate_map_metadata(
+    amd_comgr_metadata_node_t MetadataNode,
+    amd_comgr_status_t (*Callback)(amd_comgr_metadata_node_t,
+                                   amd_comgr_metadata_node_t, void *),
+    void *UserData) {
   DataMeta *MetaP = DataMeta::convert(MetadataNode);
 
   if (MetaP->getMetadataKind() != AMD_COMGR_METADATA_KIND_MAP || !Callback) {
@@ -1634,11 +1478,8 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_metadata_lookup
-    //
-    (amd_comgr_metadata_node_t MetadataNode, const char *Key,
-     amd_comgr_metadata_node_t *Value) {
+amd_comgr_metadata_lookup(amd_comgr_metadata_node_t MetadataNode,
+                          const char *Key, amd_comgr_metadata_node_t *Value) {
   DataMeta *MetaP = DataMeta::convert(MetadataNode);
 
   if (MetaP->getMetadataKind() != AMD_COMGR_METADATA_KIND_MAP || !Key ||
@@ -1667,11 +1508,8 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_ERROR;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_get_metadata_list_size
-    //
-    (amd_comgr_metadata_node_t MetadataNode, size_t *Size) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_metadata_list_size(
+    amd_comgr_metadata_node_t MetadataNode, size_t *Size) {
   DataMeta *MetaP = DataMeta::convert(MetadataNode);
 
   if (MetaP->getMetadataKind() != AMD_COMGR_METADATA_KIND_LIST || !Size) {
@@ -1684,11 +1522,8 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_index_list_metadata
-    //
-    (amd_comgr_metadata_node_t MetadataNode, size_t Index,
-     amd_comgr_metadata_node_t *Value) {
+amd_comgr_index_list_metadata(amd_comgr_metadata_node_t MetadataNode,
+                              size_t Index, amd_comgr_metadata_node_t *Value) {
   DataMeta *MetaP = DataMeta::convert(MetadataNode);
 
   if (MetaP->getMetadataKind() != AMD_COMGR_METADATA_KIND_LIST || !Value) {
@@ -1713,13 +1548,10 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_iterate_symbols
-    //
-    (amd_comgr_data_t Data,
-     amd_comgr_status_t (*Callback)(amd_comgr_symbol_t, void *),
-     void *UserData) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_iterate_symbols(
+    amd_comgr_data_t Data,
+    amd_comgr_status_t (*Callback)(amd_comgr_symbol_t, void *),
+    void *UserData) {
   SymbolHelper Helper;
   DataObject *DataP = DataObject::convert(Data);
 
@@ -1735,11 +1567,8 @@ amd_comgr_status_t AMD_COMGR_API
   return Helper.iterateTable(DataP, Callback, UserData);
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_symbol_lookup
-    //
-    (amd_comgr_data_t Data, const char *Name, amd_comgr_symbol_t *Symbol) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_symbol_lookup(
+    amd_comgr_data_t Data, const char *Name, amd_comgr_symbol_t *Symbol) {
   DataObject *DataP = DataObject::convert(Data);
   SymbolHelper Helper;
 
@@ -1771,11 +1600,8 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_symbol_get_info
-    //
-    (amd_comgr_symbol_t Symbol, amd_comgr_symbol_info_t SymbolInfo,
-     void *Value) {
+amd_comgr_symbol_get_info(amd_comgr_symbol_t Symbol,
+                          amd_comgr_symbol_info_t SymbolInfo, void *Value) {
   DataSymbol *SymP = DataSymbol::convert(Symbol);
 
   if (!Value || !isSymbolInfoValid(SymbolInfo) || !SymP->DataSym) {
@@ -1809,15 +1635,12 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_create_disassembly_info
-    //
-    (const char *IsaName,
-     uint64_t (*ReadMemoryCallback)(uint64_t, char *, uint64_t, void *),
-     void (*PrintInstructionCallback)(const char *, void *),
-     void (*PrintAddressAnnotationCallback)(uint64_t, void *),
-     amd_comgr_disassembly_info_t *DisasmInfo) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_create_disassembly_info(
+    const char *IsaName,
+    uint64_t (*ReadMemoryCallback)(uint64_t, char *, uint64_t, void *),
+    void (*PrintInstructionCallback)(const char *, void *),
+    void (*PrintAddressAnnotationCallback)(uint64_t, void *),
+    amd_comgr_disassembly_info_t *DisasmInfo) {
 
   if (!IsaName || !metadata::isValidIsaName(IsaName) || !ReadMemoryCallback ||
       !PrintInstructionCallback || !PrintAddressAnnotationCallback ||
@@ -1838,10 +1661,7 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_destroy_disassembly_info
-    //
-    (amd_comgr_disassembly_info_t DisasmInfo) {
+amd_comgr_destroy_disassembly_info(amd_comgr_disassembly_info_t DisasmInfo) {
 
   DisassemblyInfo *DI = DisassemblyInfo::convert(DisasmInfo);
 
@@ -1854,12 +1674,9 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_disassemble_instruction
-    //
-    (amd_comgr_disassembly_info_t DisasmInfo, uint64_t Address, void *UserData,
-     uint64_t *Size) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_disassemble_instruction(
+    amd_comgr_disassembly_info_t DisasmInfo, uint64_t Address, void *UserData,
+    uint64_t *Size) {
 
   DisassemblyInfo *DI = DisassemblyInfo::convert(DisasmInfo);
   if (!DI || !Size) {
@@ -1869,10 +1686,8 @@ amd_comgr_status_t AMD_COMGR_API
   return DI->disassembleInstruction(Address, UserData, *Size);
 }
 
-amd_comgr_status_t AMD_COMGR_API
-// NOLINTNEXTLINE(readability-identifier-naming)
-amd_comgr_demangle_symbol_name(amd_comgr_data_t MangledSymbolName,
-                               amd_comgr_data_t *DemangledSymbolName) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_demangle_symbol_name(
+    amd_comgr_data_t MangledSymbolName, amd_comgr_data_t *DemangledSymbolName) {
   DataObject *DataP = DataObject::convert(MangledSymbolName);
   if (!DataP || !DataP->Data || DataP->DataKind != AMD_COMGR_DATA_KIND_BYTES ||
       !DemangledSymbolName) {
@@ -1891,7 +1706,6 @@ amd_comgr_demangle_symbol_name(amd_comgr_data_t MangledSymbolName,
 }
 
 amd_comgr_status_t AMD_COMGR_API
-// NOLINTNEXTLINE(readability-identifier-naming)
 amd_comgr_populate_mangled_names(amd_comgr_data_t Data, size_t *Count) {
   DataObject *DataP = DataObject::convert(Data);
   if (!DataP || !DataP->Data ||
@@ -1966,10 +1780,8 @@ amd_comgr_populate_mangled_names(amd_comgr_data_t Data, size_t *Count) {
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-// NOLINTNEXTLINE(readability-identifier-naming)
-amd_comgr_get_mangled_name(amd_comgr_data_t Data, size_t Index, size_t *Size,
-                           char *MangledName) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_mangled_name(
+    amd_comgr_data_t Data, size_t Index, size_t *Size, char *MangledName) {
   DataObject *DataP = DataObject::convert(Data);
   if (!DataP || !DataP->Data ||
       (DataP->DataKind != AMD_COMGR_DATA_KIND_BC &&
@@ -1989,7 +1801,6 @@ amd_comgr_get_mangled_name(amd_comgr_data_t Data, size_t Index, size_t *Size,
 }
 
 amd_comgr_status_t AMD_COMGR_API
-// NOLINTNEXTLINE(readability-identifier-naming)
 amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
 
   DataObject *DataP = DataObject::convert(Data);
@@ -2059,10 +1870,8 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
             }
           }
 
-          MapKey.erase(std::find(MapKey.begin(), MapKey.end(), '\0'),
-                       MapKey.end());
-          MapVal.erase(std::find(MapVal.begin(), MapVal.end(), '\0'),
-                       MapVal.end());
+          MapKey.erase(llvm::find(MapKey, '\0'), MapKey.end());
+          MapVal.erase(llvm::find(MapVal, '\0'), MapVal.end());
           if (env::shouldEmitVerboseLogs()) {
             llvm::errs() << "   Comgr NameExpressionMap[" << MapKey
                          << "] = " << MapVal << "\n";
@@ -2251,12 +2060,9 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-// NOLINTNEXTLINE(readability-identifier-naming)
-amd_comgr_map_name_expression_to_symbol_name(amd_comgr_data_t Data,
-                                             size_t *Size,
-                                             const char *NameExpression,
-                                             char *SymbolName) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_map_name_expression_to_symbol_name(
+    amd_comgr_data_t Data, size_t *Size, const char *NameExpression,
+    char *SymbolName) {
   DataObject *DataP = DataObject::convert(Data);
   if (!DataP || !DataP->Data ||
       (DataP->DataKind != AMD_COMGR_DATA_KIND_BC &&
@@ -2284,11 +2090,8 @@ amd_comgr_map_name_expression_to_symbol_name(amd_comgr_data_t Data,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_set_data_from_file_slice
-    //
-    (amd_comgr_data_t Data, int FD, uint64_t Offset, uint64_t Size) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_set_data_from_file_slice(
+    amd_comgr_data_t Data, int FD, uint64_t Offset, uint64_t Size) {
   DataObject *DataP = DataObject::convert(Data);
   if (!DataP || !DataP->hasValidDataKind())
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
@@ -2305,12 +2108,9 @@ amd_comgr_status_t AMD_COMGR_API
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMD_COMGR_API
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    amd_comgr_lookup_code_object
-    //
-    (amd_comgr_data_t Data, amd_comgr_code_object_info_t *QueryList,
-     size_t QueryListSize) {
+amd_comgr_status_t AMD_COMGR_API amd_comgr_lookup_code_object(
+    amd_comgr_data_t Data, amd_comgr_code_object_info_t *QueryList,
+    size_t QueryListSize) {
   DataObject *DataP = DataObject::convert(Data);
 
   if (!DataP || !DataP->hasValidDataKind() ||
@@ -2326,7 +2126,6 @@ amd_comgr_status_t AMD_COMGR_API
 }
 
 amd_comgr_status_t AMD_COMGR_API
-// NOLINTNEXTLINE(readability-identifier-naming)
 amd_comgr_map_elf_virtual_address_to_code_object_offset(
     amd_comgr_data_t Data, uint64_t ElfVirtualAddress,
     uint64_t *CodeObjectOffset, uint64_t *SliceSize, bool *Nobits) {

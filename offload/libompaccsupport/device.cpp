@@ -25,6 +25,7 @@
 // user-device-number mapping used when emitting trace records.
 #include "OmptDeviceTracing.h"
 #endif
+#include "RecordReplay.h"
 #include "Shared/APITypes.h"
 #include "Shared/Debug.h"
 #include "omptarget.h"
@@ -51,22 +52,15 @@ using namespace ompt;
 #endif
 
 using namespace llvm::omp::target::error;
-using namespace llvm::omp::target::plugin;
+using namespace llvm::omp::target::rr;
 using namespace llvm::omp::target::debug;
 
 namespace llvm::offload::tmp {
-GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
-int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
-RecordReplayTy *__ol_tgt_GetRecordReplay(ol_device_handle_t Device);
-llvm::omp::target::plugin::DeviceImageTy *
-__ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program);
-llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
-                                         ol_device_handle_t Device,
-                                         TargetAllocTy Kind, int64_t Size,
-                                         void *HostPtr);
-llvm::Error __ol_tgt_MemFree(ol_context_handle_t Context,
-                             ol_device_handle_t Device, void *Ptr,
-                             TargetAllocTy Kind);
+// Downstream: OMPT support.
+llvm::omp::target::plugin::GenericDeviceTy *
+__ol_tgt_GetPluginDevice(ol_device_handle_t Device);
+llvm::omp::target::plugin::GenericProfilerTy *
+__ol_tgt_GetProfiler(ol_device_handle_t Device);
 } // namespace llvm::offload::tmp
 
 int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
@@ -110,48 +104,46 @@ inline void setAsyncInfoSynchronous(__tgt_async_info *AI, bool SetSynchronous) {
 }
 
 llvm::Error DeviceTy::initGeometryProps() {
-  auto Query = [&](DeviceInfo Info, auto &Dest) -> llvm::Error {
-    if (auto Res =
-            olGetDeviceInfo(DeviceHandle, static_cast<ol_device_info_t>(Info),
-                            sizeof(Dest), &Dest))
+  auto Query = [&](ol_device_info_t Info, auto &Dest) -> llvm::Error {
+    if (auto Res = olGetDeviceInfo(DeviceHandle, Info, sizeof(Dest), &Dest))
       return createError(ErrorCode::BackendFailure,
                          "failed to get property %d of device %d: %s",
                          static_cast<int>(Info), DeviceID, Res->Details);
     return llvm::Error::success();
   };
 
-  if (auto Err = Query(DeviceInfo::NUM_LANES, GeometryProps.WarpSize))
+  if (auto Err = Query(OL_DEVICE_INFO_NUM_LANES, GeometryProps.WarpSize))
     return Err;
   // A block is one dimensional, so it is limited both by the maximum number of
   // threads a block can have and by the maximum size of its first dimension.
   uint32_t MaxBlockSize = 0;
-  if (auto Err = Query(DeviceInfo::MAX_WORK_GROUP_SIZE, MaxBlockSize))
+  if (auto Err = Query(OL_DEVICE_INFO_MAX_WORK_GROUP_SIZE, MaxBlockSize))
     return Err;
   ol_dimensions_t MaxBlockSizePerDim{};
-  if (auto Err = Query(DeviceInfo::MAX_WORK_GROUP_SIZE_PER_DIMENSION,
+  if (auto Err = Query(OL_DEVICE_INFO_MAX_WORK_GROUP_SIZE_PER_DIMENSION,
                        MaxBlockSizePerDim))
     return Err;
   GeometryProps.ThreadLimit = std::min(MaxBlockSize, MaxBlockSizePerDim.x);
-  if (auto Err = Query(DeviceInfo::LAUNCH_DEFAULT_WORK_GROUP_SIZE,
+  if (auto Err = Query(OL_DEVICE_INFO_LAUNCH_DEFAULT_WORK_GROUP_SIZE,
                        GeometryProps.DefaultNumThreads))
     return Err;
-  if (auto Err = Query(DeviceInfo::LAUNCH_DEFAULT_NUM_WORK_GROUPS,
+  if (auto Err = Query(OL_DEVICE_INFO_LAUNCH_DEFAULT_NUM_WORK_GROUPS,
                        GeometryProps.DefaultNumBlocks))
     return Err;
-  if (auto Err = Query(DeviceInfo::LAUNCH_MAX_NUM_WORK_GROUPS,
+  if (auto Err = Query(OL_DEVICE_INFO_LAUNCH_MAX_NUM_WORK_GROUPS,
                        GeometryProps.MaxNumBlocks))
     return Err;
   if (auto Err =
-          Query(DeviceInfo::LAUNCH_MAX_GRID_SIZE, GeometryProps.MaxGridSize))
+          Query(OL_DEVICE_INFO_LAUNCH_MAX_GRID_SIZE, GeometryProps.MaxGridSize))
     return Err;
   // This is the same property reported by omp_get_gprivate_limit().
-  if (auto Err = Query(DeviceInfo::WORK_GROUP_LOCAL_MEM_SIZE,
+  if (auto Err = Query(OL_DEVICE_INFO_WORK_GROUP_LOCAL_MEM_SIZE,
                        GeometryProps.MaxBlockSharedMemSize))
     return Err;
   // Not every device reports its number of compute units; zero turns off the
   // heuristics that need it.
   GeometryProps.NumComputeUnits =
-      getInfo<uint32_t>(DeviceInfo::NUM_COMPUTE_UNITS);
+      getInfo<uint32_t>(OL_DEVICE_INFO_NUM_COMPUTE_UNITS);
   // Some defaults depend on the backend. If it is unknown, the generic ones
   // apply.
   GeometryProps.Backend = Backend;
@@ -173,17 +165,18 @@ llvm::Error DeviceTy::init() {
                        "failed to create context for device %d: %s", DeviceID,
                        Res->Details);
 
-  RTL = llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
-  RTLDeviceID = llvm::offload::tmp::__ol_tgt_GetPluginDeviceId(DeviceHandle);
+  // Downstream: see getProfiler() and getPluginDevice().
+  Profiler = llvm::offload::tmp::__ol_tgt_GetProfiler(DeviceHandle);
+  PluginDevice = llvm::offload::tmp::__ol_tgt_GetPluginDevice(DeviceHandle);
 
   // Needs to be initialized before the GeometryProps.
   if (olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND, sizeof(Backend),
                         &Backend))
     Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 
-  MaxDirectWriteSize = getInfo<uint64_t>(DeviceInfo::MAX_DIRECT_WRITE_SIZE);
+  MaxDirectWriteSize = getInfo<uint64_t>(OL_DEVICE_INFO_MAX_DIRECT_WRITE_SIZE);
 
-  getInfoString(DeviceInfo::UID, Uid);
+  getInfoString(OL_DEVICE_INFO_UID, Uid);
   if (Uid.empty())
     ODBG(ODT_Init) << "Failed to get UID for device " << DeviceID;
 
@@ -193,8 +186,7 @@ llvm::Error DeviceTy::init() {
   OMPT_IF_BUILT({
     // Downstream: tools get the plugin device rather than this DeviceTy, since
     // the device tracing entry points (ompt_start_trace, ...) cast it back.
-    GenericDeviceTy &GenericDevice = RTL->getDevice(RTLDeviceID);
-    auto *DevicePtr = reinterpret_cast<ompt_device_t *>(&GenericDevice);
+    auto *DevicePtr = reinterpret_cast<ompt_device_t *>(PluginDevice);
     // Register the device->user-id mapping unconditionally: a device can be
     // initialized before the tool connects, yet the plugin still needs this to
     // recover the user device number via 'ompt::getDeviceId()' when it later
@@ -202,7 +194,7 @@ llvm::Error DeviceTy::init() {
     ompt::setDeviceId(DevicePtr, DeviceID);
     performIfOmptInitialized({
       llvm::SmallString<32> ComputeUnitKind;
-      getInfoString(DeviceInfo::COMPUTE_UNIT_KIND, ComputeUnitKind);
+      getInfoString(OL_DEVICE_INFO_COMPUTE_UNIT_KIND, ComputeUnitKind);
       // 'lookupDeviceTracingFn' is the only lookup that resolves the device
       // tracing entry points (ompt_set_trace_ompt, ompt_start_trace, ...).
       performOmptCallback(device_initialize, DeviceID, ComputeUnitKind.c_str(),
@@ -248,41 +240,185 @@ llvm::Error DeviceTy::init() {
     BoolEnvar OMPX_EmitRecordReport("LIBOMPTARGET_RECORD_REPORT", false);
     StringEnvar OMPX_RecordReportFilename("LIBOMPTARGET_RECORD_REPORT_FILENAME",
                                           "");
-    if (OMPX_RecordDevice != RTLDeviceID)
+    if (OMPX_RecordDevice != DeviceID)
       return llvm::Error::success();
+
+    if (OMPX_RecordMemSize <= 0) {
+      REPORT() << "invalid LIBOMPTARGET_RECORD_MEMSIZE=" << OMPX_RecordMemSize;
+      return createError(ErrorCode::InvalidValue,
+                         "invalid LIBOMPTARGET_RECORD_MEMSIZE");
+    }
 
     // Print report if it was enabled explicitly or a report file was indicated.
     bool EmitReport =
         OMPX_EmitRecordReport || !OMPX_RecordReportFilename.get().empty();
 
-    int32_t Ret = RTL->initialize_record_replay(
-        RTLDeviceID, OMPX_RecordMemSize, nullptr,
-        /*IsRecord=*/true, /*IsNative=*/true, OMPX_RecordOutput, EmitReport,
-        OMPX_RecordReportFilename.get().c_str(),
-        OMPX_RecordOutputDir.get().c_str());
-    if (Ret != OFFLOAD_SUCCESS)
+    if (auto Err = activateRecordReplay(OMPX_RecordMemSize, nullptr,
+                                        /*IsRecord=*/true, /*IsNative=*/true,
+                                        OMPX_RecordOutput, EmitReport,
+                                        OMPX_RecordReportFilename.get().c_str(),
+                                        OMPX_RecordOutputDir.get().c_str())) {
+      REPORT() << toString(std::move(Err));
       return createError(ErrorCode::BackendFailure,
-                         "failed to initialize RR in device %d\n", DeviceID);
+                         "failed to initialize RR in device %d", DeviceID);
+    }
   }
 
   return llvm::Error::success();
+}
+
+ProgramTy &DeviceTy::addProgram(const void *Key, ProgramTy Program) {
+  auto &Slot = (*Programs.getExclusiveAccessor())[Key];
+  assert(!Slot && "a program is already loaded for this library");
+  Slot = std::make_unique<ProgramTy>(std::move(Program));
+  return *Slot;
+}
+
+void DeviceTy::unloadProgram(
+    const void *Key, llvm::ArrayRef<llvm::offloading::EntryTy> Entries,
+    llvm::ArrayRef<llvm::offloading::EntryTy> HostEntries) {
+  std::unique_ptr<ProgramTy> Program;
+  {
+    auto Accessor = Programs.getExclusiveAccessor();
+    auto It = Accessor->find(Key);
+    if (It == Accessor->end())
+      return;
+    Program = std::move(It->second);
+    Accessor->erase(It);
+  }
+
+  {
+    auto Accessor = KernelLaunchInfoMap.getExclusiveAccessor();
+    for (const llvm::offloading::EntryTy &Entry : Entries) {
+      if (Entry.Kind == llvm::object::OffloadKind::OFK_OpenMP && !Entry.Size)
+        Accessor->erase(Entry.Address);
+    }
+  }
+
+  // Declare-target globals were mapped (with an infinite reference count) to
+  // addresses inside this program; they dangle once it is destroyed.
+  {
+    auto HDTTMap = getMappingInfo().HostDataToTargetMap.getExclusiveAccessor();
+    for (size_t I = 0, E = std::min(Entries.size(), HostEntries.size()); I < E;
+         ++I) {
+      const llvm::offloading::EntryTy &Entry = Entries[I];
+      const llvm::offloading::EntryTy &HostEntry = HostEntries[I];
+      if (Entry.Kind != llvm::object::OffloadKind::OFK_OpenMP || !Entry.Size)
+        continue;
+      auto It = HDTTMap->find(HostEntry.Address);
+      if (It == HDTTMap->end())
+        continue;
+      HostDataToTargetTy *HDTT = It->HDTT;
+      // A weak symbol may have been mapped by another program; only drop the
+      // mapping if it points into this one. The converse is not handled: if
+      // this program owned the mapping of a weak global that another live
+      // library also defines, the global is left unmapped (not supported).
+      // Indirect entries point at the pointee instead of the global, so they
+      // cannot be compared.
+      if (!(Entry.Flags & OMP_DECLARE_TARGET_INDIRECT) &&
+          HDTT->TgtPtrBegin != uintptr_t(Entry.Address))
+        continue;
+      void *Event = HDTT->getEvent();
+      HDTTMap->erase(It);
+      delete HDTT;
+      notifyDataUnmapped(HostEntry.Address);
+      if (Event)
+        destroyEvent(Event);
+    }
+  }
+
+  if (llvm::Error Err = releaseProgram(*Program))
+    REPORT() << "Failed to destroy program on device " << DeviceID << ": "
+             << llvm::toString(std::move(Err));
+}
+
+llvm::Error DeviceTy::releaseProgram(ProgramTy &Program) {
+  llvm::Error Result = llvm::Error::success();
+  if (ol_result_t Res = olDestroyProgram(Program.getHandle()))
+    Result = llvm::joinErrors(
+        std::move(Result),
+        createError(ErrorCode::BackendFailure,
+                    "failed to destroy program on device %d: %s", DeviceID,
+                    Res->Details));
+  // The kernels of the program are gone, so its indirect call table is dead.
+  if (void *Table = Program.getIndirectCallTable()) {
+    Program.setIndirectCallTable(nullptr);
+    if (deleteData(Table))
+      Result = llvm::joinErrors(
+          std::move(Result),
+          createError(ErrorCode::BackendFailure,
+                      "failed to free indirect call table on device %d",
+                      DeviceID));
+  }
+  return Result;
 }
 
 llvm::Error DeviceTy::deinit() {
   OMPT_IF_BUILT({
     performIfOmptInitialized(performOmptCallback(device_finalize, DeviceID));
     // Pairs the unconditional 'setDeviceId' in DeviceTy::init().
-    ompt::removeDeviceId(
-        reinterpret_cast<ompt_device_t *>(&RTL->getDevice(RTLDeviceID)));
+    ompt::removeDeviceId(reinterpret_cast<ompt_device_t *>(PluginDevice));
   });
 
+  // Keep tearing down even if record/replay fails to finish cleanly.
+  llvm::Error Result =
+      RecordReplay ? RecordReplay->deinit() : llvm::Error::success();
+  RecordReplay.reset();
+
+  // Programs must go before the context they belong to.
+  // Destroy them in reverse load order so that global destructors run in the
+  // opposite order of the libraries' registration.
+  {
+    auto Accessor = Programs.getExclusiveAccessor();
+    for (auto &[Key, Program] : llvm::reverse(*Accessor))
+      Result = llvm::joinErrors(std::move(Result), releaseProgram(*Program));
+    Accessor->clear();
+  }
+  KernelLaunchInfoMap.getExclusiveAccessor()->clear();
+
   if (!Context)
-    return llvm::Error::success();
+    return Result;
   if (auto Res = olDestroyContext(Context))
-    return createError(ErrorCode::BackendFailure,
-                       "failed to destroy context for device %d: %s", DeviceID,
-                       Res->Details);
+    Result = llvm::joinErrors(
+        std::move(Result),
+        createError(ErrorCode::BackendFailure,
+                    "failed to destroy context for device %d: %s", DeviceID,
+                    Res->Details));
   Context = nullptr;
+  return Result;
+}
+
+bool DeviceTy::isRecordingOrReplaying() const {
+  return RecordReplay && RecordReplay->isRecordingOrReplaying();
+}
+
+llvm::Error DeviceTy::activateRecordReplay(uint64_t MemorySize, void *VAddr,
+                                           bool IsRecord, bool IsNative,
+                                           bool SaveOutput, bool EmitReport,
+                                           const char *ReportFilename,
+                                           const char *OutputDirPath) {
+  if (RecordReplay)
+    return createError(ErrorCode::InvalidValue,
+                       "RR already initialized on device %d", DeviceID);
+  // Other formats could be supported in the future.
+  if (!IsNative)
+    return createError(ErrorCode::InvalidValue, "non-native RR not available");
+
+  RecordReplayTy::StatusTy Status = IsRecord
+                                        ? RecordReplayTy::StatusTy::Recording
+                                        : RecordReplayTy::StatusTy::Replaying;
+  auto RR = std::make_unique<NativeRecordReplayTy>(
+      Status, OutputDirPath ? OutputDirPath : "", SaveOutput, EmitReport,
+      ReportFilename ? ReportFilename : "", *this);
+  if (auto Err = RR->init(MemorySize, VAddr)) {
+    // Release anything init() acquired before failing.
+    llvm::consumeError(RR->deinit());
+    return createError(ErrorCode::BackendFailure,
+                       "failed to initialize RR with %" PRIu64
+                       " bytes on device %d: %s",
+                       MemorySize, DeviceID, toString(std::move(Err)).c_str());
+  }
+  RecordReplay = std::move(RR);
   return llvm::Error::success();
 }
 
@@ -302,8 +438,6 @@ DeviceTy::getAndRecordGlobalAddress(const ProgramTy &Program, const char *Name,
                        "(expected %zu, got %zu)",
                        Name, ExpectedSize, Size);
 
-  RecordReplayTy *RecordReplay =
-      llvm::offload::tmp::__ol_tgt_GetRecordReplay(DeviceHandle);
   if (RecordReplay && RecordReplay->isRecording())
     RecordReplay->addGlobal(Name, Size, *AddrOrErr);
 
@@ -383,11 +517,16 @@ setupIndirectCallTable(DeviceTy &Device, __tgt_device_image *Image,
   void *DevicePtr = Device.allocData(TableSize, nullptr, TARGET_ALLOC_DEVICE);
   // The IndirectCallTable is on the stack, so the copy must be synchronous to
   // ensure the data is copied before we return.
+  if (!DevicePtr)
+    return createError(ErrorCode::BackendFailure,
+                       "failed to allocate the indirect call table");
   if (Device.submitDataSync(DevicePtr, IndirectCallTable.data(), TableSize,
                             /*Entry=*/nullptr,
                             /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr,
-                            /*Name=*/"IndirectCallTable"))
+                            /*Name=*/"IndirectCallTable")) {
+    Device.deleteData(DevicePtr);
     return createError(ErrorCode::InvalidBinary, "failed to copy data");
+  }
 
   return std::pair<void *, uint64_t>(DevicePtr, IndirectCallTable.size());
 }
@@ -400,11 +539,16 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
   ProgramTy Program = std::move(*ProgramOrErr);
 
   OMPT_IF_BUILT_AND_INITIALIZED({
-    auto &Image = *llvm::offload::tmp::__ol_tgt_GetDeviceImageFromProgram(
-        Program.getHandle());
+    auto ImageOrErr = Program.getImage();
+    if (!ImageOrErr) {
+      llvm::consumeError(releaseProgram(Program));
+      return ImageOrErr.takeError();
+    }
+    llvm::MemoryBufferRef Image = *ImageOrErr;
     performOmptCallback(device_load, DeviceID, /*FileName=*/nullptr,
                         /*FileOffset=*/0, /*VmaInFile=*/nullptr,
-                        Image.getSize(), const_cast<void *>(Image.getStart()),
+                        Image.getBufferSize(),
+                        const_cast<char *>(Image.getBufferStart()),
                         /*DeviceAddr=*/nullptr, /*ModuleId=*/0);
   });
 
@@ -419,25 +563,27 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
 
   // Obtain a table mapping host function pointers to device function pointers.
   auto CallTablePairOrErr = setupIndirectCallTable(*this, Img, Program);
-  if (!CallTablePairOrErr)
+  if (!CallTablePairOrErr) {
+    llvm::consumeError(releaseProgram(Program));
     return CallTablePairOrErr.takeError();
+  }
+  Program.setIndirectCallTable(CallTablePairOrErr->first);
 
   // Debug flags for the device runtime.
   static Int32Envar OMPX_DebugKind("LIBOMPTARGET_DEVICE_RTL_DEBUG");
 
   DeviceEnvironmentTy DeviceEnvironment;
   DeviceEnvironment.DeviceDebugKind = OMPX_DebugKind.get();
-  DeviceEnvironment.NumDevices = RTL->getNumDevices();
-  // TODO: The device ID used here is not the real device ID used by OpenMP.
-  DeviceEnvironment.DeviceNum = RTLDeviceID;
+  DeviceEnvironment.NumDevices = PM->getNumDevices();
+  DeviceEnvironment.DeviceNum = DeviceID;
   DeviceEnvironment.DynamicMemSize = 0;
   DeviceEnvironment.ClockFrequency =
-      getInfo<uint64_t>(DeviceInfo::TIMESTAMP_FREQUENCY);
+      getInfo<uint64_t>(OL_DEVICE_INFO_TIMESTAMP_FREQUENCY);
   DeviceEnvironment.IndirectCallTable =
       reinterpret_cast<uintptr_t>(CallTablePairOrErr->first);
   DeviceEnvironment.IndirectCallTableSize = CallTablePairOrErr->second;
   DeviceEnvironment.HardwareParallelism =
-      getInfo<uint64_t>(DeviceInfo::HARDWARE_PARALLELISM);
+      getInfo<uint64_t>(OL_DEVICE_INFO_HARDWARE_PARALLELISM);
 
   // DeviceEnvironment is on the stack, so the copy must be synchronous.
   if (submitDataSync(DeviceEnvironmentPtr, &DeviceEnvironment,
@@ -445,8 +591,10 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
                      /*Entry=*/nullptr,
                      /*HDTTMapPtr=*/nullptr,
                      /*Loc=*/nullptr,
-                     /*Name=*/"DeviceEnvironment"))
+                     /*Name=*/"DeviceEnvironment")) {
+    llvm::consumeError(releaseProgram(Program));
     return createError(ErrorCode::InvalidBinary, "failed to copy data");
+  }
 
   return Program;
 }
@@ -461,31 +609,55 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);
       InterfaceRAII TargetDataAllocTraceRAII(
           RegionInterface.getTraceGenerators<ompt_target_data_alloc>(),
-          RTLDeviceID, HstPtr, &TargetPtr, Size,
+          DeviceID, HstPtr, &TargetPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
   // Time the allocation here: the offload API below carries no profiler, and
   // the trace record built by the RAII above reads these timestamps. Declared
   // after that RAII, so it is destroyed -- and stamps -- first.
-  auto *Profiler = RTL->getProfiler();
   assert(Profiler && "Plugin provides no profiler instance");
-  auto ProfTimer = Profiler->getScopedDataAllocTimer(
-      &RTL->getDevice(RTLDeviceID), HstPtr, Size);
+  auto ProfTimer = Profiler->getScopedDataAllocTimer(PluginDevice, Size);
 
-  auto AllocOrErr = llvm::offload::tmp::__ol_tgt_MemAlloc(
-      Context, DeviceHandle, static_cast<TargetAllocTy>(Kind), Size, HstPtr);
-  if (!AllocOrErr) {
-    REPORT() << "Failure to allocate device memory: "
-             << llvm::toString(AllocOrErr.takeError());
+  // Record-replay serves every allocation from its preallocated region so
+  // recorded kernels can re-execute at their original addresses.
+  if (isRecordingOrReplaying()) {
+    auto AllocOrErr = RecordReplay->allocate(Size);
+    if (!AllocOrErr) {
+      REPORT() << "Failure to allocate record replay memory: "
+               << toString(AllocOrErr.takeError());
+      return nullptr;
+    }
+    // Set TargetPtr so the OMPT end callback sees the allocation.
+    return TargetPtr = *AllocOrErr;
+  }
+
+  // liboffload has no default allocation kind; it is a device allocation.
+  ol_result_t Res = OL_SUCCESS;
+  switch (Kind) {
+  case TARGET_ALLOC_HOST:
+    Res = olMemAllocHost(Context, DeviceHandle, Size, &TargetPtr);
+    break;
+  case TARGET_ALLOC_SHARED:
+    Res = olMemAlloc(Context, DeviceHandle, OL_ALLOC_TYPE_MANAGED, Size,
+                     &TargetPtr);
+    break;
+  case TARGET_ALLOC_DEVICE:
+  case TARGET_ALLOC_DEFAULT:
+    Res = olMemAlloc(Context, DeviceHandle, OL_ALLOC_TYPE_DEVICE, Size,
+                     &TargetPtr);
+    break;
+  default:
+    llvm_unreachable("unhandled TargetAllocTy");
+  }
+  if (Res) {
+    REPORT() << "Failure to allocate device memory: " << Res->Details;
     return nullptr;
   }
-  assert(*AllocOrErr && "Null pointer upon successful allocation");
-
-  TargetPtr = *AllocOrErr;
+  assert(TargetPtr && "Null pointer upon successful allocation");
   return TargetPtr;
 }
 
-int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
+int32_t DeviceTy::deleteData(void *TgtAllocBegin) {
   /// RAII to establish tool anchors before and after data deletion
   OMPT_IF_BUILT(
       InterfaceRAII TargetDataDeleteRAII(
@@ -499,16 +671,24 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
 
   // See allocData: the trace record built by the RAII above reads these
   // timestamps, so this must be declared after it.
-  auto *Profiler = RTL->getProfiler();
   assert(Profiler && "Plugin provides no profiler instance");
-  auto ProfTimer = Profiler->getScopedDataDeleteTimer(
-      &RTL->getDevice(RTLDeviceID), TgtAllocBegin);
+  auto ProfTimer =
+      Profiler->getScopedDataDeleteTimer(PluginDevice, TgtAllocBegin);
 
-  if (auto Err = llvm::offload::tmp::__ol_tgt_MemFree(
-          Context, DeviceHandle, TgtAllocBegin,
-          static_cast<TargetAllocTy>(Kind))) {
+  // Record/replay owns the memory: forward the deallocation to its region
+  // instead of the plugin.
+  if (isRecordingOrReplaying()) {
+    if (auto Err = RecordReplay->deallocate(TgtAllocBegin)) {
+      REPORT() << "Failure to free record replay memory: "
+               << toString(std::move(Err));
+      return OFFLOAD_FAIL;
+    }
+    return OFFLOAD_SUCCESS;
+  }
+
+  if (auto Res = olMemFree(Context, TgtAllocBegin)) {
     REPORT() << "Failure to deallocate device pointer " << TgtAllocBegin << ": "
-             << llvm::toString(std::move(Err));
+             << Res->Details;
     return OFFLOAD_FAIL;
   }
 
@@ -517,6 +697,9 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
 
 llvm::Expected<void *> DeviceTy::allocCtxMem(int64_t Size,
                                              ol_alloc_type_t Type) {
+  if (isRecordingOrReplaying())
+    return RecordReplay->allocate(Size);
+
   void *Ptr = nullptr;
   if (auto Res = olMemAlloc(Context, DeviceHandle, Type, Size, &Ptr))
     return createError(ErrorCode::BackendFailure,
@@ -526,6 +709,9 @@ llvm::Expected<void *> DeviceTy::allocCtxMem(int64_t Size,
 }
 
 llvm::Error DeviceTy::freeCtxMem(void *Ptr) {
+  if (isRecordingOrReplaying())
+    return RecordReplay->deallocate(Ptr);
+
   if (auto Res = olMemFree(Context, Ptr))
     return createError(ErrorCode::BackendFailure,
                        "failed to free memory %p on device %d: %s", Ptr,
@@ -597,7 +783,7 @@ int32_t DeviceTy::submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin,
       TracerInterfaceRAII TargetDataSubmitTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_to_device>(),
-          AI, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
+          AI, Profiler, /*TracedDeviceId=*/DeviceID,
           /*EventType=*/ompt_callback_target_data_op, omp_initial_device,
           HstPtrBegin, DeviceID, TgtPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
@@ -663,7 +849,7 @@ int32_t DeviceTy::retrieveDataImpl(void *HstPtrBegin, void *TgtPtrBegin,
       TracerInterfaceRAII TargetDataSubmitTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_from_device>(),
-          AI, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
+          AI, Profiler, /*TracedDeviceId=*/DeviceID,
           /*EventType=*/ompt_callback_target_data_op, DeviceID, TgtPtrBegin,
           omp_initial_device, HstPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
@@ -691,16 +877,16 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
   OMPT_IF_BUILT(
       InterfaceRAII TargetDataExchangeRAII(
           RegionInterface.getCallbacks<ompt_target_data_transfer_from_device>(),
-          RTLDeviceID, SrcPtr, DstDev.RTLDeviceID, DstPtr, Size,
+          DeviceID, SrcPtr, DstDev.DeviceID, DstPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);
       // Only if 'TracedDeviceId' is actually traced, AsyncInfo->OmptEventInfo
       // is set and a trace record generated. Otherwise: No OMPT device tracing.
       TracerInterfaceRAII TargetDataExchangeTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_from_device>(),
-          AsyncInfo, RTL->getProfiler(), /*TracedDeviceId=*/RTLDeviceID,
-          /*EventType=*/ompt_callback_target_data_op, RTLDeviceID, SrcPtr,
-          DstDev.RTLDeviceID, DstPtr, Size,
+          AsyncInfo, Profiler, /*TracedDeviceId=*/DeviceID,
+          /*EventType=*/ompt_callback_target_data_op, DeviceID, SrcPtr,
+          DstDev.DeviceID, DstPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
@@ -709,8 +895,8 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
     return OFFLOAD_FAIL;
   if (auto Res = olMemcpy(queue, DstPtr, DstDev.DeviceHandle, SrcPtr,
                           DeviceHandle, Size)) {
-    REPORT() << "Failure to copy data from device (" << RTLDeviceID
-             << ") to device (" << DstDev.RTLDeviceID
+    REPORT() << "Failure to copy data from device (" << DeviceID
+             << ") to device (" << DstDev.DeviceID
              << "). Pointers: host = " << SrcPtr << ", device = " << DstPtr
              << ", size = " << Size << ": " << Res->Details;
     return OFFLOAD_FAIL;
@@ -832,7 +1018,6 @@ prepareBlockMemory(DeviceTy &Device, const KernelLaunchInfoTy &KernelEnv,
                    uint32_t DynCGroupMem,
                    DynCGroupMemFallbackType DynCGroupMemFallback,
                    uint64_t NumBlocks) {
-
   // If the fallback is abort, don't try to adjust the block memory size.
   if (DynCGroupMemFallback == DynCGroupMemFallbackType::Abort)
     return DynBlockMemConfTy{DynCGroupMem, DynCGroupMem,
@@ -888,8 +1073,7 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
                            const DynBlockMemConfTy &DynBlockMemConf,
                            uint32_t DynCGroupMem, void **DynPtrSlot,
                            AsyncInfoTy &AsyncInfo, uint32_t NumBlocks0) {
-  RecordReplayTy *RecordReplay =
-      llvm::offload::tmp::__ol_tgt_GetRecordReplay(Device.DeviceHandle);
+  RecordReplayTy *RecordReplay = Device.getRecordReplay();
 
   // Ctor/Dtor have no arguments, replaying uses the original kernel launch
   // environment, and launches with no reserved dyn_ptr slot (e.g. older
@@ -1533,13 +1717,19 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
        KernelLaunchInfo.getExecutionModeName(), KernelArgs.Tripcount);
 
   // Record the kernel prologue data before the launch.
-  RecordReplayTy *RecordReplay =
-      llvm::offload::tmp::__ol_tgt_GetRecordReplay(DeviceHandle);
   RecordReplayTy::HandleTy RRHandle;
   KernelInfoTy Kernel;
   if (RecordReplay) {
-    Kernel = KernelInfoTy(KernelLaunchInfo.Name, KernelLaunchInfo.Image,
-                          KernelLaunchInfo.IRImage);
+    assert(KernelLaunchInfo.Program &&
+           "Kernel program must be valid for record replay.");
+    auto ImageOrErr = KernelLaunchInfo.Program->getImage();
+    if (!ImageOrErr) {
+      REPORT() << "Failure to get the image of kernel " << KernelLaunchInfo.Name
+               << ": " << toString(ImageOrErr.takeError());
+      return OFFLOAD_FAIL;
+    }
+    Kernel = KernelInfoTy(KernelLaunchInfo.Name, *ImageOrErr,
+                          KernelLaunchInfo.Program->getIRImage());
 
     // Record replay requires synchronization of any previous operation.
     if (synchronize(AsyncInfo) != OFFLOAD_SUCCESS)
@@ -1678,21 +1868,15 @@ void DeviceTy::dumpOffloadEntries() {
 bool DeviceTy::useAutoZeroCopy() {
   if (PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY)
     return false;
-
-  return RTL->use_auto_zero_copy(RTLDeviceID);
-}
-
-bool DeviceTy::checkIfAPU() { return RTL->has_apu_device(RTLDeviceID); }
-
-bool DeviceTy::supportsUnifiedMemory() {
-  return RTL->supports_unified_memory(RTLDeviceID);
-}
-
-void DeviceTy::zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
-                                           bool isAutoZeroCopy,
-                                           bool isEagerMaps) {
-  RTL->zero_copy_sanity_checks_and_diag(RTLDeviceID, isUnifiedSharedMemory,
-                                        isAutoZeroCopy, isEagerMaps);
+  bool PrefersHost = false;
+  if (auto Res =
+          olGetDeviceInfo(DeviceHandle, OL_DEVICE_INFO_PREFERRED_LOCATION_HOST,
+                          sizeof(PrefersHost), &PrefersHost)) {
+    REPORT() << "Failed to query zero-copy preference of device " << DeviceID
+             << ": " << Res->Details;
+    return false;
+  }
+  return PrefersHost;
 }
 
 bool DeviceTy::isAccessiblePtr(const void *Ptr, size_t Size) {

@@ -48,13 +48,14 @@ namespace TimeStatistics {
 
 namespace {
 std::unique_ptr<PerfStats> PS = nullptr;
-void dump() {
+} // namespace
+
+static void dump() {
   PS->dumpPerfStats();
   PS.reset();
 }
-} // namespace
 
-void getLogFile(std::string &PerfLog) {
+static void getLogFile(std::string &PerfLog) {
   if (std::optional<StringRef> RedirectLogs = env::getRedirectLogs()) {
     PerfLog = (*RedirectLogs).str();
     return;
@@ -62,7 +63,7 @@ void getLogFile(std::string &PerfLog) {
   PerfLog = "PerfStatsLog.txt";
 }
 
-bool InitTimeStatistics(std::string LogFile) {
+bool initTimeStatistics(std::string LogFile) {
   // Thread-safe lazy init: call_once creates PS and registers the atexit dump
   // exactly once, even if concurrent Comgr calls reach here simultaneously.
   static std::once_flag InitFlag;
@@ -74,7 +75,7 @@ bool InitTimeStatistics(std::string LogFile) {
       getLogFile(LogFile);
 
     std::unique_ptr<PerfStats> Stats = std::make_unique<PerfStats>();
-    if (!Stats->Init(LogFile)) {
+    if (!Stats->init(LogFile)) {
       std::cerr << "TimeStatistics failed to initialize\n";
       return;
     }
@@ -87,21 +88,21 @@ bool InitTimeStatistics(std::string LogFile) {
 void ProfilePoint::finish() {
   if (PS) {
     double End = PS->getCurrentTime();
-    PS->AddToStats(Name, End - StartTime);
+    PS->addToStats(Name, End - StartTime);
   }
 
-  isFinished = true;
+  IsFinished = true;
 }
 
 ProfilePoint::ProfilePoint(StringRef Tag) : Name(Tag) {
-  InitTimeStatistics("");
+  initTimeStatistics("");
   if (PS) {
     StartTime = PS->getCurrentTime();
   }
 }
 
 ProfilePoint::~ProfilePoint() {
-  if (!isFinished) {
+  if (!IsFinished) {
     finish();
   }
 }
@@ -109,19 +110,20 @@ ProfilePoint::~ProfilePoint() {
 void mergeStats(llvm::ArrayRef<PerfStatRecord> Records) {
   // Lazily stand up the sink (and the atexit dump) exactly as ProfilePoint
   // does; a no-op when AMD_COMGR_TIME_STATISTICS is unset.
-  if (!InitTimeStatistics(""))
+  if (!initTimeStatistics(""))
     return;
   if (PS)
     PS->mergeStats(Records);
 }
 
 // Timer implementation
+namespace {
 #if defined _WIN64 || defined _WIN32
 class PerfTimerWindows : public PerfTimerImpl {
 
 public:
   PerfTimerWindows() {};
-  virtual bool Init() override {
+  virtual bool init() override {
     LARGE_INTEGER li;
     if (QueryPerformanceCounter(&li))
       CounterStart = li.QuadPart;
@@ -155,7 +157,7 @@ public:
 #else
 class PerfTimerPosix : public PerfTimerImpl {
 public:
-  virtual bool Init() override {
+  virtual bool init() override {
     struct timespec StartTime;
     if (!clock_gettime(CLOCK_MONOTONIC_RAW, &StartTime)) {
       CounterStart = StartTime.tv_sec * 1e9 + StartTime.tv_nsec;
@@ -186,14 +188,15 @@ public:
   }
 };
 #endif
+} // namespace
 
-bool PerfTimer::Init() {
+bool PerfTimer::init() {
 #if defined _WIN64 || defined _WIN32
-  pImpl = std::make_unique<PerfTimerWindows>();
+  Impl = std::make_unique<PerfTimerWindows>();
 #else
-  pImpl = std::make_unique<PerfTimerPosix>();
+  Impl = std::make_unique<PerfTimerPosix>();
 #endif
-  return pImpl->Init();
+  return Impl->init();
 }
 
 } // namespace TimeStatistics

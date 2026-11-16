@@ -13,9 +13,7 @@
 #include <cstring>
 #include <string>
 
-namespace {
-
-void setEnv(const char *Name, const char *Value) {
+static void setEnv(const char *Name, const char *Value) {
 #ifdef _WIN32
   _putenv_s(Name, Value ? Value : "");
 #else
@@ -25,6 +23,8 @@ void setEnv(const char *Name, const char *Value) {
     unsetenv(Name);
 #endif
 }
+
+namespace {
 
 // AMD_COMGR_USE_VFS and AMD_COMGR_SAVE_TEMPS both take precedence over the
 // per-action setting these tests pin, and the command cache would let the
@@ -59,7 +59,9 @@ const char *const Source = "#include \"subdir/header1.h\"\n"
                            "#include \"sub/dir/header2.h\"\n"
                            "#include \"sub/dir/header3.h\"\n";
 
-std::string preprocess(bool UseVFS) {
+} // namespace
+
+static std::string preprocess(bool UseVFS) {
   amd_comgr_data_set_t In, Out;
   amd_comgr_action_info_t Action;
   amd_comgr_data_t Data;
@@ -112,11 +114,16 @@ std::string preprocess(bool UseVFS) {
   return Result;
 }
 
+namespace {
+
 class IncludeMaterializationTest : public ::testing::TestWithParam<bool> {};
 
 // Includes are written into the in-memory VFS rather than to real temp files,
 // so cover both filesystems: the contents have to reach the preprocessor
 // either way, including from nested subdirectories.
+// gtest's TEST_P declares the generated TestBody() public, while
+// Test::TestBody() is private.
+// NOLINTNEXTLINE(misc-override-with-different-visibility)
 TEST_P(IncludeMaterializationTest, SubdirectoryIncludesAreVisible) {
   const std::string Preprocessed = preprocess(GetParam());
   ASSERT_FALSE(Preprocessed.empty());

@@ -31,6 +31,6 @@ MATH_PRIVATE(eptrigredsmall)(float x)
     struct epredret ret;
     ret.r.hi = rh;
     ret.r.lo = rt;
-    ret.i = BUILTIN_ISNAN_F32(fn) ? 0 : ((int)fn & 0x3);
+    ret.i = (int)fn & 0x3;
     return ret;
 }

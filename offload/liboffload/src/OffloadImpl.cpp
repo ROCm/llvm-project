@@ -219,11 +219,21 @@ struct ol_context_impl_t {
   }
 
   llvm::Expected<void *> allocate(ol_device_handle_t Device, int64_t Size,
-                                  TargetAllocTy Kind, size_t Alignment) {
+                                  ol_alloc_type_t Kind, size_t Alignment) {
     if (auto Err = requireDevice(Device))
       return std::move(Err);
-    return PluginCtx->allocate(*Device->Device, Size, /*HostPtr=*/nullptr, Kind,
-                               Alignment);
+    auto AllocOrErr =
+        PluginCtx->allocate(*Device->Device, Size, Kind, Alignment);
+    if (!AllocOrErr)
+      return AllocOrErr.takeError();
+
+    // Check max alignment only when no explicit alignment was requested.
+    if (Alignment == 0)
+      assert(reinterpret_cast<uintptr_t>(*AllocOrErr) %
+                     alignof(std::max_align_t) ==
+                 0 &&
+             "allocation does not meet max_align_t alignment");
+    return *AllocOrErr;
   }
 
   llvm::Error deallocate(void *Ptr) { return PluginCtx->deallocate(Ptr); }
@@ -844,39 +854,13 @@ Error olGetContextInfoSize_impl(ol_context_handle_t Context,
   return olGetContextInfoImplDetail(Context, PropName, 0, nullptr, PropSizeRet);
 }
 
-TargetAllocTy convertOlToPluginAllocTy(ol_alloc_type_t Type) {
-  switch (Type) {
-  case OL_ALLOC_TYPE_DEVICE:
-    return TARGET_ALLOC_DEVICE;
-  case OL_ALLOC_TYPE_HOST:
-    return TARGET_ALLOC_HOST;
-  case OL_ALLOC_TYPE_MANAGED:
-  default:
-    return TARGET_ALLOC_SHARED;
-  }
-}
-
-ol_alloc_type_t convertPluginToOlAllocTy(TargetAllocTy Kind) {
-  switch (Kind) {
-  case TARGET_ALLOC_HOST:
-    return OL_ALLOC_TYPE_HOST;
-  case TARGET_ALLOC_SHARED:
-    return OL_ALLOC_TYPE_MANAGED;
-  case TARGET_ALLOC_DEVICE:
-  case TARGET_ALLOC_DEFAULT:
-    return OL_ALLOC_TYPE_DEVICE;
-  }
-  llvm_unreachable("unhandled TargetAllocTy");
-}
-
 Error olMemAlloc_impl(ol_context_handle_t Context, ol_device_handle_t Device,
                       ol_alloc_type_t Type, size_t Size, void **AllocationOut) {
   if (Type == OL_ALLOC_TYPE_HOST)
     return createOffloadError(ErrorCode::INVALID_ENUMERATION,
                               "use olMemAllocHost for host allocations");
-  auto AllocOrErr =
-      Context->allocate(Device, static_cast<int64_t>(Size),
-                        convertOlToPluginAllocTy(Type), /*Alignment=*/0);
+  auto AllocOrErr = Context->allocate(Device, static_cast<int64_t>(Size), Type,
+                                      /*Alignment=*/0);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
   *AllocationOut = *AllocOrErr;
@@ -887,7 +871,7 @@ Error olMemAllocHost_impl(ol_context_handle_t Context,
                           ol_device_handle_t Device, size_t Size,
                           void **AllocationOut) {
   auto AllocOrErr = Context->allocate(Device, static_cast<int64_t>(Size),
-                                      TARGET_ALLOC_HOST, /*Alignment=*/0);
+                                      OL_ALLOC_TYPE_HOST, /*Alignment=*/0);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
   *AllocationOut = *AllocOrErr;
@@ -902,8 +886,7 @@ Error olMemAllocAligned_impl(ol_context_handle_t Context,
     return createOffloadError(ErrorCode::INVALID_ENUMERATION,
                               "use olMemAllocAlignedHost for host allocations");
   auto AllocOrErr =
-      Context->allocate(Device, static_cast<int64_t>(Size),
-                        convertOlToPluginAllocTy(Type), Alignment);
+      Context->allocate(Device, static_cast<int64_t>(Size), Type, Alignment);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
   *AllocationOut = *AllocOrErr;
@@ -914,7 +897,7 @@ Error olMemAllocAlignedHost_impl(ol_context_handle_t Context,
                                  ol_device_handle_t Device, size_t Size,
                                  size_t Alignment, void **AllocationOut) {
   auto AllocOrErr = Context->allocate(Device, static_cast<int64_t>(Size),
-                                      TARGET_ALLOC_HOST, Alignment);
+                                      OL_ALLOC_TYPE_HOST, Alignment);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
   *AllocationOut = *AllocOrErr;
@@ -941,7 +924,7 @@ Error olGetMemInfoImplDetail(ol_context_handle_t Context, const void *Ptr,
     // allocation has no per-device affinity. This does not affect the
     // size-only query (PropValue == nullptr): the answer is always
     // sizeof(ol_device_handle_t).
-    if (PropValue && Alloc.Kind == TARGET_ALLOC_HOST)
+    if (PropValue && Alloc.Kind == OL_ALLOC_TYPE_HOST)
       return createOffloadError(
           ErrorCode::INVALID_ARGUMENT,
           "OL_MEM_INFO_DEVICE is not valid for host allocations");
@@ -959,7 +942,7 @@ Error olGetMemInfoImplDetail(ol_context_handle_t Context, const void *Ptr,
   case OL_MEM_INFO_SIZE:
     return Info.write<size_t>(Alloc.Size);
   case OL_MEM_INFO_TYPE:
-    return Info.write<ol_alloc_type_t>(convertPluginToOlAllocTy(Alloc.Kind));
+    return Info.write<ol_alloc_type_t>(Alloc.Kind);
   default:
     return createOffloadError(ErrorCode::INVALID_ENUMERATION,
                               "olGetMemInfo enum '%i' is invalid", PropName);
@@ -1314,14 +1297,19 @@ Error olIsValidBinary_impl(ol_device_handle_t Device, const void *ProgData,
 
 Error olDestroyProgram_impl(ol_program_handle_t Program) {
   auto &Device = Program->Image->getDevice();
-  if (auto Err = Device.unloadBinary(Program->Image))
-    return Err;
+  auto *Image = Program->Image;
 
+  // Unregister the image first: unloading frees it, and deinit must not run
+  // its destructors a second time if something below fails. A failed unload
+  // therefore leaks the image instead of retrying it at deinit.
   auto &LoadedImages = Device.LoadedImages;
-  LoadedImages.erase(
-      std::find(LoadedImages.begin(), LoadedImages.end(), Program->Image));
+  auto It = std::find(LoadedImages.begin(), LoadedImages.end(), Image);
+  if (It != LoadedImages.end())
+    LoadedImages.erase(It);
 
-  return olDestroy(Program);
+  Error Result = Device.callGlobalDestructors(Device.Plugin, *Image);
+  Result = joinErrors(std::move(Result), Device.unloadBinary(Image));
+  return joinErrors(std::move(Result), olDestroy(Program));
 }
 
 Error olCalculateOptimalOccupancy_impl(ol_device_handle_t Device,
@@ -1630,6 +1618,36 @@ Error olGetSymbolInfoSize_impl(ol_symbol_handle_t Symbol,
   return olGetSymbolInfoImplDetail(Symbol, PropName, 0, nullptr, PropSizeRet);
 }
 
+Error olGetProgramInfoImplDetail(ol_program_handle_t Program,
+                                 ol_program_info_t PropName, size_t PropSize,
+                                 void *PropValue, size_t *PropSizeRet) {
+  InfoWriter Info(PropSize, PropValue, PropSizeRet);
+
+  switch (PropName) {
+  case OL_PROGRAM_INFO_IMAGE_BASE:
+    return Info.write<void *>(const_cast<void *>(Program->Image->getStart()));
+  case OL_PROGRAM_INFO_IMAGE_SIZE:
+    return Info.write<size_t>(Program->Image->getSize());
+  default:
+    return createOffloadError(ErrorCode::INVALID_ENUMERATION,
+                              "olGetProgramInfo enum '%i' is invalid",
+                              PropName);
+  }
+}
+
+Error olGetProgramInfo_impl(ol_program_handle_t Program,
+                            ol_program_info_t PropName, size_t PropSize,
+                            void *PropValue) {
+  return olGetProgramInfoImplDetail(Program, PropName, PropSize, PropValue,
+                                    nullptr);
+}
+
+Error olGetProgramInfoSize_impl(ol_program_handle_t Program,
+                                ol_program_info_t PropName,
+                                size_t *PropSizeRet) {
+  return olGetProgramInfoImplDetail(Program, PropName, 0, nullptr, PropSizeRet);
+}
+
 Error olLaunchHostFunction_impl(ol_queue_handle_t Queue,
                                 ol_host_function_cb_t Callback,
                                 void *UserData) {
@@ -1671,7 +1689,7 @@ Error olMemIsAccessible_impl(ol_context_handle_t Context,
       size_t Offset = Begin - AllocBegin;
       bool InRange = Begin >= AllocBegin && Offset <= AllocOrErr->Size &&
                      Size <= AllocOrErr->Size - Offset;
-      if (InRange && (AllocOrErr->Kind != TARGET_ALLOC_DEVICE ||
+      if (InRange && (AllocOrErr->Kind != OL_ALLOC_TYPE_DEVICE ||
                       AllocOrErr->Device == Device->Device)) {
         *IsAccessible = true;
         return Error::success();
@@ -1703,12 +1721,59 @@ Error olQueryQueue_impl(ol_queue_handle_t Queue, bool *IsQueueWorkCompleted) {
 
 namespace tmp {
 // Temporary helpers to help transition of libomptarget to liboffload
-GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform) {
-  return Platform->Plugin.get();
+// Downstream: AMD-specific device queries and OMPT support for libomptarget.
+GenericDeviceTy *__ol_tgt_GetPluginDevice(ol_device_handle_t Device) {
+  return Device->Device;
 }
 
-int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device) {
-  return Device->DeviceNum;
+GenericProfilerTy *__ol_tgt_GetProfiler(ol_device_handle_t Device) {
+  return Device->Platform.Plugin->getProfiler();
+}
+
+void __ol_tgt_CheckInvalidImage(ol_platform_handle_t Platform,
+                                __tgt_device_image *Image) {
+  Platform->Plugin->check_invalid_image(Image);
+}
+
+bool __ol_tgt_IsAPU(ol_device_handle_t Device) {
+  return Device->Platform.Plugin->has_apu_device(Device->DeviceNum);
+}
+
+void __ol_tgt_ZeroCopySanityChecksAndDiag(ol_device_handle_t Device,
+                                          bool IsUnifiedSharedMemory,
+                                          bool IsAutoZeroCopy,
+                                          bool IsEagerMaps) {
+  Device->Platform.Plugin->zero_copy_sanity_checks_and_diag(
+      Device->DeviceNum, IsUnifiedSharedMemory, IsAutoZeroCopy, IsEagerMaps);
+}
+
+bool __ol_tgt_IsGfx90aCoarseGrainUsmMapEnabled(ol_device_handle_t Device) {
+  auto &Plugin = *Device->Platform.Plugin;
+  return Plugin.is_gfx90a(Device->DeviceNum) &&
+         Plugin.is_gfx90a_coarse_grain_usm_map_enabled(Device->DeviceNum);
+}
+
+void __ol_tgt_SetCoarseGrainMemRegion(ol_device_handle_t Device, void *Ptr,
+                                      int64_t Size) {
+  Device->Platform.Plugin->set_coarse_grain_mem_region(Device->DeviceNum, Ptr,
+                                                       Size);
+}
+
+void __ol_tgt_SetCoarseGrainMem(ol_device_handle_t Device, const void *Ptr,
+                                int64_t Size, bool SetAttr) {
+  Device->Platform.Plugin->set_coarse_grain_mem(Device->DeviceNum, Ptr, Size,
+                                                SetAttr);
+}
+
+int32_t __ol_tgt_QueryCoarseGrainMemRegion(ol_device_handle_t Device,
+                                           const void *Ptr, int64_t Size) {
+  return Device->Platform.Plugin->query_coarse_grain_mem_region(
+      Device->DeviceNum, Ptr, Size);
+}
+
+void __ol_tgt_PrepopulatePageTable(ol_device_handle_t Device, void *Ptr,
+                                   int64_t Size) {
+  Device->Platform.Plugin->prepopulate_page_table(Device->DeviceNum, Ptr, Size);
 }
 
 // Downstream: used by libomptarget for OMPT device tracing and forced
@@ -1717,36 +1782,20 @@ __tgt_async_info *__ol_tgt_GetAsyncInfoFromQueue(ol_queue_handle_t Queue) {
   return Queue ? Queue->AsyncInfo : nullptr;
 }
 
-DeviceImageTy *__ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program) {
-  return Program->Image;
+// Helpers for virtual address management that are only used RecordReplay until
+// it transitions to a new code.
+void *__ol_tgt_GetSuggestedVirtualAddress(ol_device_handle_t Device) {
+  return Device->Device->getSuggestedVirtualAddress();
 }
 
-RecordReplayTy *__ol_tgt_GetRecordReplay(ol_device_impl_t *Device) {
-  return Device->Device->getRecordReplay();
+Expected<void *> __ol_tgt_AllocWithVirtualAddress(ol_device_handle_t Device,
+                                                  uint64_t Size, void *VAddr) {
+  return Device->Device->allocateWithVirtualAddress(Size, VAddr);
 }
 
-// Same as olMemAlloc/olMemAllocHost, but takes the plugin allocation kind and
-// also passes on the host pointer the allocation is made for, which is only a
-// hint for diagnostics and profiling that the public API cannot express.
-llvm::Expected<void *> __ol_tgt_MemAlloc(ol_context_handle_t Context,
-                                         ol_device_handle_t Device,
-                                         TargetAllocTy Kind, int64_t Size,
-                                         void *HostPtr) {
-  if (auto Err = Context->requireDevice(Device))
-    return std::move(Err);
-  return Context->PluginCtx->allocate(*Device->Device, Size, HostPtr, Kind,
-                                      /*Alignment=*/0);
-}
-
-// Same as olMemFree, but for a caller that knows the kind of memory it is
-// freeing: the plugin diagnoses a kind that differs from the allocated one,
-// which olMemFree, resolving the kind from the allocation, cannot.
-llvm::Error __ol_tgt_MemFree(ol_context_handle_t Context,
-                             ol_device_handle_t Device, void *Ptr,
-                             TargetAllocTy Kind) {
-  if (auto Err = Context->requireDevice(Device))
-    return Err;
-  return Context->PluginCtx->deallocate(*Device->Device, Ptr, Kind);
+Error __ol_tgt_DeallocWithVirtualAddress(ol_device_handle_t Device, void *VAddr,
+                                         uint64_t Size) {
+  return Device->Device->deallocateWithVirtualAddress(VAddr, Size);
 }
 
 } // namespace tmp

@@ -20,7 +20,8 @@ int main(int argc, char *argv[]) {
   amd_comgr_action_info_t DataAction;
   size_t Count;
   const char *CompileOptions[] = {"-nogpuinc", "-fsanitize=address"};
-  size_t CompileOptionsCount = sizeof(CompileOptions) / sizeof(CompileOptions[0]);
+  size_t CompileOptionsCount =
+      sizeof(CompileOptions) / sizeof(CompileOptions[0]);
 
   if (argc != 3) {
     fprintf(stderr, "Usage: compile-hip-asan <input.hip> <output.bin>\n");
@@ -37,14 +38,15 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_HIP));
-  amd_comgr_(action_info_set_isa_name(DataAction, "amdgcn-amd-amdhsa--gfx900:xnack+"));
+  amd_comgr_(
+      action_info_set_isa_name(DataAction, "amdgcn-amd-amdhsa--gfx900:xnack+"));
   amd_comgr_(action_info_set_option_list(DataAction, CompileOptions,
                                          CompileOptionsCount));
   amd_comgr_(action_info_set_device_lib_linking(DataAction, true));
 
   amd_comgr_(create_data_set(&DataSetBc));
-  amd_comgr_(do_action(AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC,
-                       DataAction, DataSetIn, DataSetBc));
+  amd_comgr_(do_action(AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC, DataAction,
+                       DataSetIn, DataSetBc));
   amd_comgr_(action_data_count(DataSetBc, AMD_COMGR_DATA_KIND_BC, &Count));
 
   if (Count != 1) {

@@ -72,7 +72,7 @@ std::optional<bool> shouldUseVFS() {
   if (UseVFS) {
     if (StringRef(UseVFS) == "0")
       return false;
-    else if (StringRef(UseVFS) == "1")
+    if (StringRef(UseVFS) == "1")
       return true;
   }
 
@@ -96,7 +96,7 @@ uint32_t getGranularityUnitsPerSecond() {
   StringRef G = getTimeStatisticsGranularity();
   if (G == "us")
     return 1e6;
-  else if (G == "ns")
+  if (G == "ns")
     return 1e9;
   return 1e3;
 }
@@ -144,10 +144,12 @@ static bool probeClangResourceDir(StringRef P) {
   return sys::fs::is_directory(ResourceDir);
 }
 
+namespace {
 struct ClangInstallPaths {
   std::string LLVMPrefix;
   std::string ClangBinaryPath;
 };
+} // namespace
 
 static ClangInstallPaths makeClangInstallPaths(StringRef LLVMPrefix) {
   SmallString<256> ClangBinaryPath(LLVMPrefix);
