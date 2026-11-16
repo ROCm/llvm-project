@@ -566,7 +566,15 @@ jobs:
           BUILD_CONFIG: ${{ needs.setup.outputs.linux_build_config }}
           PACKAGE_VERSION: ${{ needs.setup.outputs.rocm_package_version }}
           PERFORMANCE_FAMILY: ${{ inputs.performance_family }}
-          TRIGGERED_BY: ${{ github.triggering_actor }} (CP ${{ inputs.LLVM_BRANCH }})
+          # Whoever pressed Run workflow. Sent bare rather than decorated with
+          # the branch, because qa-forge records it as the requester of a
+          # measurement, and an id is what reads there. The cherry-pick a
+          # measurement belongs to is already carried by package_name.
+          #
+          # This is only ever as good as the identity that started this run.
+          # A run this repository's own automation starts with a token is
+          # attributed to that token, so the value here is the bot, truthfully.
+          TRIGGERED_BY: ${{ github.triggering_actor }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
@@ -584,6 +592,30 @@ jobs:
           SUITES="hip-hipperf,rocmlibs-rocrand-perf,rocmlibs-rocfft-perf,rocmlibs-rccl-perf"
           QA_FORGE_REPO="AMD-ROCm-Internal/qa-forge"
           INSTALL_WAIT_MINUTES="120"
+          # 1=Prod_Test. Sent rather than left to qa-forge's default, which is
+          # the same value: a measurement lands in production tracking, so the
+          # tier it is recorded under should be visible in the payload rather
+          # than inherited from a default that could change.
+          TEST_FLAG="1"
+
+          # execution_label is a choice on both target workflows, and the two
+          # option lists are not the same -- stg-rocm-staging, for one, is
+          # offered by the measurement workflow and not by the install. A
+          # label has to be in both, since the same one is sent to each.
+          #
+          # Checked here because the alternative is a dispatch the API refuses
+          # for a value it will not name back to us, halfway through: the
+          # install would already have taken the machine before the
+          # measurement was turned away.
+          INSTALL_LABELS="sqa-core-nightly sqa-core-weekly sqa-core-rel-cp sqa-frameworks-nightly sqa-frameworks-weekly stg-compiler-nightly stg-compiler-weekly stg-compiler-full stg-gfx-staging sqa-npi-nightly sqa-npi-mainline sqa-npi-release sqa-npi-phtm sqa-npi-aws sqa-npi-msft sqa-npi-oai sqa-npi-oci sqa-npi-row sqa-npi-at2-bm sqa-npi-phtm-mc-hm-a0 sqa-npi-phtm-mc-hm-b0 sqa-npi-phtm-mc-lt sqa-npi-phtm-mc-lt-a0 sqa-npi-phtm-mc-lt-b0 workflow-test"
+          PERF_LABELS="sqa-core-nightly sqa-core-weekly sqa-core-nightly-amdgpu sqa-core-weekly-amdgpu sqa-core-rel-cp sqa-core-robustness sqa-frameworks-nightly sqa-frameworks-weekly stg-compiler-nightly stg-compiler-weekly stg-compiler-full stg-rocm-staging stg-gfx-staging stg-gfx-nightly stg-gfx-weekly stg-rocm-nightly-windows stg-rocm-weekly-windows stg-rocm-windows sqa-npi-nightly sqa-npi-weekly sqa-npi-mainline sqa-npi-release sqa-npi-phtm sqa-npi-aws sqa-npi-msft sqa-npi-oai sqa-npi-oci sqa-npi-row sqa-npi-at2-bm sqa-npi-phtm-mc-hm-a0 sqa-npi-phtm-mc-hm-b0 sqa-npi-phtm-mc-lt sqa-npi-phtm-mc-lt-a0 sqa-npi-phtm-mc-lt-b0 new-test sqa-core-new-tct workflow-test"
+          for target in INSTALL PERF; do
+            offered="${target}_LABELS"
+            if [[ " ${!offered} " != *" ${EXECUTION_LABEL} "* ]]; then
+              echo "::error::'${EXECUTION_LABEL}' is not an option that the ${target,,} workflow's execution_label offers, so the dispatch would be refused. Pick a label both workflows list, or update the mirrored lists here if qa-forge's have changed."
+              exit 1
+            fi
+          done
 
           # Perf machines are qa-forge's, not TheRock's, so they are absent
           # from runner-config-v2.json and the family's `benchmark-runs-on`
@@ -717,13 +749,38 @@ jobs:
           #     build_type            'dev'
           #     triggered_by          attribution, optional
           #
-          # The performance-test-run.yml keys below are STILL UNVERIFIED. They
-          # were read off the archived public mirror, not off the internal
-          # workflow, and none of workflow_id, target_server, execution_label
-          # or triggered_by has been confirmed against the file qa-forge
-          # actually runs. The first dispatch is what will say.
+          #   performance-test-run.yml
+          #     workflow_id       comma-separated suite ids
+          #     target_server     the same perf machine the install just used
+          #     execution_label   recorded against the same label
+          #     test_flag         result tier
+          #     triggered_by      attribution, optional
+          #
+          # Its other four inputs are left to their defaults, deliberately:
+          #     params                 every key it carries selects a docker
+          #                            image or a framework branch, for
+          #                            pytorch, jax, tf, vllm, ORT, kokkos or
+          #                            gromacs. None of the four suites here
+          #                            is one of those, so each key would be
+          #                            empty, which is what the default
+          #                            already is.
+          #     max_parallel           0, meaning fan out to however many
+          #                            runners the one machine turns out to
+          #                            have. A number here would be this
+          #                            workflow asserting a machine's runner
+          #                            count from the outside.
+          #     force_ufb_docker       false. The escape hatch is for pulling
+          #                            a docker image; this installs a tarball
+          #                            onto baremetal.
+          #     prebuilt_rocm_version  declared but read by nothing in that
+          #                            workflow -- not passed to the batch
+          #                            workflow, not in its template vars. So
+          #                            it cannot reach the suites whatever it
+          #                            is set to, and its own description
+          #                            scopes it to RVS, RBT and TransferBench
+          #                            regardless, none of which are here.
           # ════════════════════════════════════════════════════════════════
-          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL INSTALL_METHOD EXECUTION_LABEL SUITES
+          export SERVER ROCM_VERSION TAR_NAME PACKAGES_URL INSTALL_METHOD EXECUTION_LABEL SUITES TEST_FLAG
           python3 - <<'PAYLOADS' >> "$GITHUB_OUTPUT"
           import json
           import os
@@ -746,6 +803,7 @@ jobs:
               "workflow_id": os.environ["SUITES"],
               "target_server": os.environ["SERVER"],
               "execution_label": os.environ["EXECUTION_LABEL"],
+              "test_flag": os.environ["TEST_FLAG"],
               "triggered_by": os.environ["TRIGGERED_BY"],
           }
 
