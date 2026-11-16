@@ -970,6 +970,8 @@ uint32_t GVNValueTable::lookupOrAdd(Value *V) {
     case Instruction::InsertElement:
     case Instruction::ShuffleVector:
     case Instruction::InsertValue:
+    case Instruction::BitExtract:
+    case Instruction::BitInsert:
       Exp = createExpr(I);
       break;
     case Instruction::ICmp:
@@ -2369,7 +2371,8 @@ static void reportLoadElim(LoadInst *Load, Value *AvailableValue,
 bool GVNPassImpl::processNonLocalLoad(LoadInst *Load) {
   // Non-local speculations are not allowed under asan.
   if (Load->getFunction()->hasFnAttribute(Attribute::SanitizeAddress) ||
-      Load->getFunction()->hasFnAttribute(Attribute::SanitizeHWAddress))
+      Load->getFunction()->hasFnAttribute(Attribute::SanitizeHWAddress) ||
+      Load->getFunction()->hasFnAttribute(Attribute::SanitizeDeviceAddress))
     return false;
 
   // Find the non-local dependencies of the load.
@@ -2976,7 +2979,8 @@ bool GVNPassImpl::findReachingValuesForLoad(
 
   // Non-local speculations are not allowed under ASan.
   if (L->getFunction()->hasFnAttribute(Attribute::SanitizeAddress) ||
-      L->getFunction()->hasFnAttribute(Attribute::SanitizeHWAddress))
+      L->getFunction()->hasFnAttribute(Attribute::SanitizeHWAddress) ||
+      L->getFunction()->hasFnAttribute(Attribute::SanitizeDeviceAddress))
     return false;
 
   // Phase 2. Walk backwards through the CFG, collecting all the blocks that
