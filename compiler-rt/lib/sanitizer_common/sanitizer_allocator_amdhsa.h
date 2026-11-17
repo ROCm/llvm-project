@@ -19,6 +19,9 @@
 static const DeviceAllocationType DAT_AMDHSA =
     static_cast<DeviceAllocationType>(1);
 
+// dlopen handle for the loaded ROCr (libhsa-runtime64), or null.
+void* GetHsaRuntimeHandle();
+
 class AmdHsaDeviceAllocator {
  public:
   static constexpr bool kEnableDeviceBackend = true;
