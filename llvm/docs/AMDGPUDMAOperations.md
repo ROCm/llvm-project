@@ -7,19 +7,21 @@
 
 DMA (or "Direct Memory Access") operations transfer data between different kinds
 of memory directly without occupying registers in the invoking wave. They are
-usually {ref}`asynchronous<amdgpu-async-operations>` asynchronous, and require
-the user to explicitly track completion using
-{ref}`asyncmarks<amdgpu-async-operations>`.
+usually {ref}`asynchronous<amdgpu-async-operations>`, and require additional
+mechanisms to track completion such as
+{ref}`asyncmarks<amdgpu-async-operations>` or {ref}`LDS memory
+barriers<amdgpu-lds-memory-barriers>`.
 
 All DMA operations support the same cache modifiers as ordinary load/store
 operations from registers. They cannot be performed atomically.
 
-### GFX9 DMA
+## GFX9 LDS DMA Operations
 
 Each GFX9 DMA instruction has a synchronous counterpart (e.g.,
 `@llvm.amdgcn.load.to.lds` for `@llvm.amdgcn.load.async.to.lds`). The
 synchronous variants perform the same operation, but the compiler automatically
-ensures completion before their side-effects are used.
+ensures completion before their effects are used. The asynchronous variants use
+{ref}`asyncmarks<amdgpu-asyncmarks>` to track completion.
 
 GFX9 DMA instructions implement volatile (via `aux/cpol` bit 31) and
 nontemporal (via metadata) as if they were loads from the global address space.
@@ -85,7 +87,14 @@ The intrinsics differ in two orthogonal ways:
 - **ptr** vs non-ptr: The `ptr` variants use `ptr addrspace(8)` for the
   buffer resource descriptor; the non-ptr variants use `<4 x i32>`.
 
-### GFX1250
+## GFX1250 DMA Operations
+
+All GFX1250 DMA operations are asynchronous and can use
+{ref}`asyncmarks<amdgpu-asyncmarks>` to track completion. Some loads and tensor
+operations can also use {ref}`LDS memory barriers<amdgpu-lds-memory-barriers>`
+as described below. There are no synchronous variants.
+
+### LDS DMA Operations
 
 GFX1250 LDS DMA instructions implement nontemporal (via metadata) as if they
 were loads from the global address space. Tensor DMA instructions do not support
@@ -220,6 +229,11 @@ pointer arguments or inaccessible memory.
 Despite the absence of `.async` in their names, these intrinsics are
 asynchronous.
 
+The tensor descriptor can encode an optional LDS barrier. A tensor load or
+store using such a descriptor performs one {ref}`barrier
+arrive<amdgpu-barrier-operations>` when it completes. The barrier is encoded in
+the descriptor arguments rather than passed separately to these intrinsics.
+
 All arguments must be wave-uniform.
 
 (amdgpu-lds-dma-scope)=
@@ -238,14 +252,6 @@ availability and visibility. Additional {ref}`explicit availability and
 visibility<amdgpu-dma-visibility>` operations are often required at the
 corresponding "lds-dma" scope to establish
 {ref}`location-order<amdgpu-location-order>`.
-
-### Memory Accesses
-
-A DMA operation performs a {ref}`load-visible<amdgpu-load-visible>` operation
-on each source location and a
-{ref}`store-available<amdgpu-store-available>` operation on each destination
-location, both with "lds-dma" scope. This applies to accesses to both global
-memory and LDS, including locations specified through tensor descriptors.
 
 ### Effect on Inclusive Scopes
 
@@ -375,3 +381,85 @@ Note how these examples use the *make-available* and *make-visible* operations
 performed by fences. A better replacement would be to introduce new specialized
 intrinsics such as `%llvm.amdgpu.make.available` and
 `%llvm.amdgpu.make.visible`.
+
+(amdgpu-dma-memmodel)=
+
+## AMDGPU DMA Memory Model
+
+The operations initiated by a dynamic instance `D` of a DMA instruction are
+contained in its "lds-dma" scope instance. The programmer can also supply an
+optional scope argument `S` that controls the availability and visibility of
+these operations:
+- The global memory access uses A/V scope `M = max("lds-dma", S)`.
+- The LDS access uses A/V scope "lds-dma".
+
+### DMA Expansion
+
+Each dynamic instance `D` of a DMA instruction executes a hypothetical sequence
+of instructions in its "lds-dma" scope instance, as listed below:
+
+`dma_start<D>`
+: A fictitious dynamic instance that represents the start of instructions
+  executed by `D` in the "lds-dma" scope instance.
+
+`dma_end<D>`
+: A fictitious dynamic instance that represents the end of instructions
+  executed by `D` in the "lds-dma" scope instance.
+
+`dma_wait<D>`
+: A fictitious dynamic instance that marks the point in *program-order* just after
+  `D`.
+
+```{code-block} llvm
+global.load.async.to.lds(ptr %src, ptr %dst, scope S)     ; dynamic instance D
+
+dma_start<D>
+%tmp = load-visible ptr addrspace(1) %src, M              ; non-atomic
+store-available ptr addrspace(3) %dst, %tmp, "lds-dma"    ; non-atomic
+; Only when a barrier is specified:
+fence syncscope(M) release, !mmra !{!"amdgcn-av", !"none"} ; non-av
+barrier-arrive %barrier
+dma_end<D>
+```
+
+```{code-block} llvm
+global.store.async.from.lds(ptr %dst, ptr %src, scope S)  ; dynamic instance D
+
+dma_start<D>
+%tmp = load-visible ptr addrspace(3) %src, "lds-dma"      ; non-atomic
+store-available ptr addrspace(1) %dst, %tmp, M            ; non-atomic
+; Only when a barrier is specified:
+fence syncscope(M) release, !mmra !{!"amdgcn-av", !"none"} ; non-av
+barrier-arrive %barrier
+dma_end<D>
+```
+
+The release fence and associated barrier arrival are performed only when a
+barrier is specified.
+
+The candidate set for the release fence consists of only the source and
+destination bytes accessed by the DMA operation.
+
+### Ordering
+
+In the sequence of instructions executed by `D`, the dynamic instances are
+related in *program-order* from top to bottom as listed, starting from
+`dma_start<D>` and ending at `dma_end<D>`.
+
+`D` *synchronizes-with\<B\>* `dma_start<D>` for each byte `B` accessed by `D`.
+
+- If `D` is a synchronous DMA instruction:
+  - `D` performs a `dma_wait<D>` operation such that:
+     - `D` is *program-ordered* before `dma_wait<D>`, and,
+     - `dma_wait<D>` is *program-ordered* before any other operation `X` that is
+       *program-ordered* after `D`.
+     [Informational note --- Thus, `dma_wait<D>` exists *between* `D` and
+     anything else performed by the same thread.]
+  - `dma_end<D>` *synchronizes-with\<B\>* `dma_wait<D>` for each byte `B`
+    accessed by `D`.
+- Otherwise, `D` is an asynchronous operation:
+  - If `dma_end<D>` is *completed-at* a `wait.asyncmark()` operation `Y`, then
+    it *synchronizes-with\<B\>* `Y` for each byte `B` accessed by `D`.
+  - If a barrier argument is supplied to `D`, the release fence performed by `D`
+    *synchronizes-with* other fences through {ref}`barrier synchronization
+    <amdgpu-barrier-memory-model>`.
