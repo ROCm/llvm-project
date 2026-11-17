@@ -52,10 +52,6 @@
   X(hsa_amd_vmem_unmap)                   \
   X(hsa_amd_vmem_set_access)
 
-// ROCr's hsa_ext_amd.h interface version this mirror tracks.
-#define HSA_AMD_INTERFACE_VERSION_MAJOR 1
-#define HSA_AMD_INTERFACE_VERSION_MINOR 2
-
 extern "C" {
 
 typedef struct hsa_agent_s {
