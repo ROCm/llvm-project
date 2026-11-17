@@ -509,6 +509,12 @@ jobs:
   performance_preflight:
     name: Performance Preflight
     if: ${{ inputs.run_performance_tests }}
+    # Reports, does not gate. An absent or unapproved qa-forge token is a
+    # fact about the organisation that issued it, not about the patch, and
+    # the person who pressed Run workflow cannot fix it. It still fails this
+    # job, loudly and with its diagnostics, so the reason stays visible; it
+    # just stops short of failing the run. See the note in ci_summary.
+    continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -628,13 +634,19 @@ jobs:
     # The tarball job is the one that matters: it is what puts the tarball in
     # the bucket the install is pointed at. Nothing is published to a release
     # channel on the way, and nothing here waits on anything that would be.
+    # Preflight is deliberately absent from this condition. The copy into
+    # tarball-multi-arch/ depends on the artifacts bucket, not on qa-forge, so
+    # it can be done -- and proved -- on a run whose dispatch token is not yet
+    # approved. Only the dispatch step itself waits on preflight.
     if: >-
       ${{
         !cancelled() && inputs.run_performance_tests &&
-        needs.performance_preflight.result == 'success' &&
         needs.build_linux.result == 'success' &&
         needs.build_linux_tarballs.result == 'success'
       }}
+    # As with preflight: a refused bucket write or a dispatch that does not
+    # land is an infrastructure fault, not a verdict on the patch.
+    continue-on-error: true
     runs-on: ubuntu-24.04
     # The hard ceiling. The wait itself is bounded below this by
     # PERFORMANCE_INSTALL_WAIT_MINUTES, so the action reports a timeout and the
@@ -1065,8 +1077,21 @@ jobs:
       # therock_packages_url is declared there and not yet on main. A
       # workflow_dispatch carrying an input the target does not declare is
       # rejected outright, so this ref is load-bearing.
+      - name: Say why no install was dispatched
+        if: ${{ needs.performance_preflight.result != 'success' }}
+        run: |
+          echo "::warning::The qa-forge preflight did not pass, so no install was dispatched and no measurement will be taken. The tarball was still built, published and staged under tarball-multi-arch/, so this run's artifacts are complete and can be installed by hand or re-dispatched once the token is approved."
+          {
+            echo "> [!WARNING]"
+            echo "> **No performance measurement.** The qa-forge preflight did not pass, so the"
+            echo "> install was not dispatched. Everything up to and including the"
+            echo "> \`tarball-multi-arch/\` copy ran, so the artifacts are complete."
+            echo "> See the Performance Preflight job for which check failed."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Dispatch the ROCm install onto the perf machine
         id: dispatch
+        if: ${{ needs.performance_preflight.result == 'success' }}
         uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
         with:
           repo: ${{ steps.plan.outputs.qa_forge_repo }}
@@ -1147,7 +1172,16 @@ jobs:
     # A failed install takes this with it: GitHub skips a job whose dependency
     # did not succeed. Measuring a stack that did not install is worse than
     # not measuring.
-    if: ${{ needs.performance_install.result == 'success' }}
+    # install_run_url is empty when the dispatch step was skipped, which is
+    # exactly the no-token case: the job succeeded, but no install happened,
+    # so there is nothing on the machine to measure.
+    if: >-
+      ${{
+        needs.performance_install.result == 'success' &&
+        needs.performance_install.outputs.install_run_url != ''
+      }}
+    # As with the two jobs above.
+    continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
@@ -1444,6 +1478,59 @@ jobs:
       - name: Evaluate workflow results
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
+          set -euo pipefail
+
+          # The performance path reports; it does not judge. Nothing in it
+          # compares against a baseline -- the measurement, in its own words,
+          # "can only fail for not having run" -- so every way it fails is an
+          # infrastructure fault: a qa-forge token that is absent or not yet
+          # approved, a refused bucket write, a dispatch that did not land.
+          # None of that is a statement about the patch, and none of it is
+          # something the person who pressed Run workflow can fix, so it does
+          # not turn this run red. The jobs still fail, in red, with their
+          # diagnostics intact.
+          #
+          # Revisit this the day the measurement gains a baseline comparison.
+          # At that point a perf failure becomes a verdict on the patch and
+          # should be able to fail the run, and these three jobs stop being
+          # interchangeable: the measurement would judge, while the token and
+          # the bucket would still only report.
+          #
+          # workflow_summary.py already carries the contract for this -- a job
+          # with a truthy continue_on_error output counts as ok. Setting it
+          # here rather than on the jobs keeps the verdict from depending on
+          # whether a failed job propagates its outputs.
+          PATCHED_NEEDS="$(python3 -c '
+          import json, os, sys
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          for name in ("performance_preflight", "performance_install", "performance_tests"):
+              if name in needs:
+                  needs[name].setdefault("outputs", {})["continue_on_error"] = "true"
+          sys.stdout.write(json.dumps(needs))
+          ')"
+
+          # Said once, in the run summary, so a green run that took no
+          # measurement cannot be mistaken for one that did.
+          python3 -c '
+          import json, os
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          bad = {
+              n: needs[n].get("result")
+              for n in ("performance_preflight", "performance_install", "performance_tests")
+              if n in needs and needs[n].get("result") not in ("success", "skipped", None)
+          }
+          if bad:
+              listed = ", ".join(f"`{n}` ({r})" for n, r in bad.items())
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+                  f.write(
+                      "\n> [!WARNING]\n"
+                      f"> **The performance path did not complete:** {listed}.\n"
+                      "> This does not fail the run, because nothing there judges the patch.\n"
+                      "> Open those jobs for the reason.\n"
+                  )
+          '
+
           python build_tools/github_actions/workflow_summary.py \
-            --needs-json '${{ toJSON(needs) }}'
+            --needs-json "${PATCHED_NEEDS}"
