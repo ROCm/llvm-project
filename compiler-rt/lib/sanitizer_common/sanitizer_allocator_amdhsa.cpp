@@ -54,6 +54,11 @@ static StaticSpinMutex hsa_runtime_init_mu;
 static const char kDefaultHsaRuntimePath[] = "libhsa-runtime64.so.1";
 static const char kHsaRuntimeName[] = "libhsa-runtime64";
 
+// HSA_EXT_POINTER_TYPE_SVM: a reservation registered with
+// hsa_amd_svm_attributes_set (e.g. HIP managed memory). Older ROCr reports
+// these as RESERVED_ADDR and older hsa_ext_amd.h does not define the value.
+static constexpr int kHsaExtPointerTypeSvm = 7;
+
 // Always align to page boundary to match current ROCr behavior
 static const size_t kPageSize_ = 4096;
 
@@ -250,7 +255,8 @@ void AmdHsaDeviceAllocator::Deallocate(void* p) {
                                             &DevPtrInfo)) {
     if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_HSA) {
       UNUSED hsa_status_t status = hsa_amd.memory_pool_free(p);
-    } else if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR) {
+    } else if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR ||
+               DevPtrInfo.type == kHsaExtPointerTypeSvm) {
       UNUSED hsa_status_t status =
           hsa_amd.vmem_address_free(p, DevPtrInfo.map_size);
     }
@@ -259,8 +265,9 @@ void AmdHsaDeviceAllocator::Deallocate(void* p) {
 
 static uptr AmdHsaPointerInfoMapBase(uptr ptr,
                                      const hsa_amd_pointer_info_t& info) {
-  switch (info.type) {
-    case HSA_EXT_POINTER_TYPE_RESERVED_ADDR: {
+  switch (static_cast<int>(info.type)) {
+    case HSA_EXT_POINTER_TYPE_RESERVED_ADDR:
+    case kHsaExtPointerTypeSvm: {
       uptr map_beg = reinterpret_cast<uptr>(info.hostBaseAddress);
       // ROCr sets hostBaseAddress to the OS/KFD reservation base (os_addr).
       // With HSA_AMD_VMEM_ADDRESS_NO_REGISTER the user VA from reserve_align
