@@ -786,6 +786,18 @@ jobs:
           #   therock-dist-{platform}-{family|multiarch}[-tests]-{version}.tar.gz
           # Perf takes the multiarch tests variant, because the suites need the
           # test binaries that the plain tarball leaves out.
+          #
+          # One tarball, not two. The -tests- variant is a superset rather than
+          # a companion: build_tarballs.py fetches the plain multiarch tree with
+          # exclude_components=["test"] and exclude_artifacts=["fftw3"], and
+          # fetches the -tests- tree with no exclusions at all. So it carries
+          # everything the plain tarball has, plus the test components and
+          # fftw3. Copying both would stage the same files twice.
+          #
+          # It exists only when build_linux_tarballs ran with
+          # include_test_tarballs, which this workflow wires from
+          # run_performance_tests -- so a "Build only" run has no -tests-
+          # tarball, and the checks below are what catch that.
           if [[ -z "${PACKAGE_VERSION}" ]]; then
             echo "::error::setup resolved no package version, so there is no tarball name to derive."
             exit 1
@@ -1036,6 +1048,8 @@ jobs:
             echo "${COPY_ERR}"
             if grep -qiE 'AccessDenied|not authorized|ExpiredToken' <<<"${COPY_ERR}"; then
               echo "::error::The artifacts role was refused the write to ${DEST_KEY}. If this is AccessDenied, the therock-ci-external policy does not permit writing this key even inside this run's own prefix, and the tarball cannot be staged where ROCmTest looks for it. That is a question for TheRock's CI owners, not something this workflow can work around."
+            elif grep -qiE 'NoSuchKey|does not exist|Not Found|404' <<<"${COPY_ERR}"; then
+              echo "::error::${SOURCE_KEY##*/} is not in the bucket, so the packaging job produced the plain multiarch tarball but not the -tests- one. The suites need the test binaries, so installing the plain tarball would measure a tree without them. Check that build_linux_tarballs ran with include_test_tarballs true, which this workflow wires from run_performance_tests."
             else
               echo "::error::Could not copy the tarball to ${DEST_KEY}. The install would have been dispatched at a directory with nothing in it, so it is stopped here instead."
             fi
