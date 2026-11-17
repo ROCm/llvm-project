@@ -13,9 +13,11 @@
 
 #if SANITIZER_AMDHSA
 #  include <dlfcn.h>  // For dlopen, dlsym
+#  include <link.h>   // For dl_iterate_phdr
 
 #  include "sanitizer_allocator.h"
 #  include "sanitizer_atomic.h"
+#  include "sanitizer_libc.h"
 
 namespace __sanitizer {
 
@@ -44,10 +46,13 @@ static HsaFunctions hsa_amd;
 // ROCr handle
 static void* hsa_runtime_handle = nullptr;
 // Mutex to protect the ROCr handle
+static StaticSpinMutex hsa_runtime_handle_mu;
+// Mutex to protect hsa_amd symbol loading
 static StaticSpinMutex hsa_runtime_init_mu;
 
-// Default ROCr library path
-static const char kDefaultHsaRuntimePath[] = "libhsa-runtime64.so";
+// Default ROCr library soname
+static const char kDefaultHsaRuntimePath[] = "libhsa-runtime64.so.1";
+static const char kHsaRuntimeName[] = "libhsa-runtime64";
 
 // Always align to page boundary to match current ROCr behavior
 static const size_t kPageSize_ = 4096;
@@ -100,11 +105,55 @@ void AmdHsaDeviceAllocator::NoteDeviceAllocatorFailure(
   }
 }
 
+static int FindLoadedHsaRuntime(struct dl_phdr_info* info, size_t, void* arg) {
+  if (!info->dlpi_name || !internal_strstr(info->dlpi_name, kHsaRuntimeName))
+    return 0;
+  internal_strncpy(static_cast<char*>(arg), info->dlpi_name,
+                   kMaxPathLength - 1);
+  return 1;
+}
+
+// The handle is looked up from the loaded objects rather than by name: ROCr
+// may live in an RTLD_LOCAL group (e.g. a HIP library dlopen'ed by Python)
+// found via another object's RUNPATH, which neither RTLD_NEXT nor a name-based
+// dlopen from this runtime can see. dlsym() on this handle returns ROCr's own
+// definitions, never the sanitizer interceptors.
+void* GetHsaRuntimeHandle() {
+  SpinMutexLock l(&hsa_runtime_handle_mu);
+  if (hsa_runtime_handle)
+    return hsa_runtime_handle;
+
+  const char* path = GetEnv("SANITIZER_HSA_RUNTIME_PATH");
+  if (path && path[0])
+    hsa_runtime_handle = dlopen(path, RTLD_LAZY | RTLD_NOLOAD);
+
+  if (!hsa_runtime_handle) {
+    char loaded_path[kMaxPathLength] = {};
+    if (dl_iterate_phdr(FindLoadedHsaRuntime, loaded_path)) {
+      hsa_runtime_handle = dlopen(loaded_path, RTLD_LAZY | RTLD_NOLOAD);
+      VReport(2, "AmdHsa: loaded ROCr %s, handle %p\n", loaded_path,
+              hsa_runtime_handle);
+    }
+  }
+
+  if (!hsa_runtime_handle) {
+    if (!path || !path[0])
+      path = kDefaultHsaRuntimePath;
+    hsa_runtime_handle = dlopen(path, RTLD_NOW);
+    if (!hsa_runtime_handle) {
+      const char* err = dlerror();
+      VReport(2, "AmdHsa: dlopen(%s) failed: %s\n", path,
+              err ? err : "unknown error");
+    }
+  }
+  return hsa_runtime_handle;
+}
+
 // Init(false): no-op during __asan_init (no dlopen, no dlsym).
 // Init(true): from asan_hsa_init() after REAL(hsa_init); ROCr may be up while
 // this still fails (hsa_init can succeed with an unloaded device backend).
-// Bind hsa_amd_* via dlopen(RTLD_NOLOAD) + dlsym(handle) — not REAL() here
-// and not RTLD_NEXT/DEFAULT (those resolve ASan interceptors and recurse).
+// Bind hsa_amd_* via dlsym(handle) — not REAL() here and not
+// RTLD_NEXT/DEFAULT (those resolve ASan interceptors and recurse).
 bool AmdHsaDeviceAllocator::Init(bool allow_dlopen) {
   SpinMutexLock l(&hsa_runtime_init_mu);
   if (HsaSymbolsLoaded())
@@ -114,23 +163,8 @@ bool AmdHsaDeviceAllocator::Init(bool allow_dlopen) {
   if (!allow_dlopen)
     return false;
 
-  if (!hsa_runtime_handle) {
-    const char* path = GetEnv("SANITIZER_HSA_RUNTIME_PATH");
-    if (!path || !path[0])
-      path = kDefaultHsaRuntimePath;
-    // Prefer first `RTLD_NOLOAD` when ROCr is already mapped(after successful
-    // REAL(hsa_init)). If RTLD_NOLOAD fails, try `RTLD_NOW` (when ROCr is not
-    // loaded).
-    hsa_runtime_handle = dlopen(path, RTLD_LAZY | RTLD_NOLOAD);
-    if (!hsa_runtime_handle)
-      hsa_runtime_handle = dlopen(path, RTLD_NOW);
-    if (!hsa_runtime_handle) {
-      const char* err = dlerror();
-      VReport(2, "AmdHsa Init: dlopen(%s) failed: %s\n", path,
-              err ? err : "unknown error");
-      return false;
-    }
-  }
+  if (!GetHsaRuntimeHandle())
+    return false;
 
   struct HsaSymbolEntry {
     const char* name;

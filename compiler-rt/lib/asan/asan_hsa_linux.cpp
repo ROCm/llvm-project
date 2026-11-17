@@ -14,6 +14,8 @@
 
 #if SANITIZER_AMDHSA
 
+#  include <dlfcn.h>
+
 #  include "asan_hsa_linux.h"
 #  include "asan_interceptors.h"
 #  include "asan_interceptors_memintrinsics.h"
@@ -59,13 +61,10 @@ DEFINE_REAL(hsa_status_t, hsa_amd_pointer_info, const void* ptr,
 
 namespace __asan {
 
-static void ENSURE_HSA_INITED() {
-  // The HSA interceptors are initialized lazily: if the program calls into HSA
-  // before ASan's global interceptor init runs, we still need the REAL() slots
-  // to be populated so we can call through to ROCr.
-  if (!REAL(hsa_init))
-    InitializeHSAInterceptors();
-}
+// Defined after the INTERCEPTORs: each INTERCEPTOR in this namespace creates
+// its own __asan::__interception::real_* slot, which REAL() only resolves to
+// once that INTERCEPTOR has been seen.
+static void ENSURE_HSA_INITED();
 
 INTERCEPTOR(hsa_status_t, hsa_amd_memory_pool_allocate,
             hsa_amd_memory_pool_t memory_pool, size_t size, uint32_t flags,
@@ -205,6 +204,62 @@ INTERCEPTOR(hsa_status_t, hsa_init) {
   AsanInitFromRtl();
   ENSURE_HSA_INITED();
   return asan_hsa_init();
+}
+
+static StaticSpinMutex hsa_reals_mu;
+
+// RTLD_NEXT cannot see a ROCr that was loaded into an RTLD_LOCAL group after
+// ASan initialized, yet the interceptors still win symbol resolution because
+// the ASan runtime is in the global scope. Bind such REAL() slots from the
+// loaded ROCr handle instead.
+static void BindHSARealsFromRuntime() {
+  void* handle = __sanitizer::GetHsaRuntimeHandle();
+  if (!handle)
+    return;
+#  define BIND_HSA_REAL(name) \
+    if (!REAL(name))          \
+    REAL(name) = reinterpret_cast<decltype(REAL(name))>(dlsym(handle, #name))
+  BIND_HSA_REAL(hsa_memory_copy);
+  BIND_HSA_REAL(hsa_amd_memory_pool_allocate);
+  BIND_HSA_REAL(hsa_amd_memory_pool_free);
+  BIND_HSA_REAL(hsa_memory_free);
+  BIND_HSA_REAL(hsa_amd_agents_allow_access);
+  BIND_HSA_REAL(hsa_amd_memory_async_copy);
+#  if HSA_AMD_INTERFACE_VERSION_MINOR >= 1
+  BIND_HSA_REAL(hsa_amd_memory_async_copy_on_engine);
+#  endif
+  BIND_HSA_REAL(hsa_amd_ipc_memory_create);
+  BIND_HSA_REAL(hsa_amd_ipc_memory_attach);
+  BIND_HSA_REAL(hsa_amd_ipc_memory_detach);
+  BIND_HSA_REAL(hsa_amd_vmem_address_reserve_align);
+  BIND_HSA_REAL(hsa_amd_vmem_address_free);
+  BIND_HSA_REAL(hsa_amd_pointer_info);
+#  undef BIND_HSA_REAL
+  // Bound last: a non-null REAL(hsa_init) publishes the whole set.
+  auto init =
+      reinterpret_cast<decltype(REAL(hsa_init))>(dlsym(handle, "hsa_init"));
+  if (!init) {
+    const char* err = dlerror();
+    VReport(1, "AddressSanitizer: dlsym(hsa_init) failed: %s\n",
+            err ? err : "unknown error");
+    return;
+  }
+  __atomic_store_n(&REAL(hsa_init), init, __ATOMIC_RELEASE);
+  VReport(1, "AddressSanitizer: bound HSA interceptors from loaded ROCr\n");
+}
+
+static void ENSURE_HSA_INITED() {
+  // The HSA interceptors are initialized lazily: if the program calls into HSA
+  // before ASan's global interceptor init runs, we still need the REAL() slots
+  // to be populated so we can call through to ROCr.
+  if (LIKELY(__atomic_load_n(&REAL(hsa_init), __ATOMIC_ACQUIRE)))
+    return;
+  SpinMutexLock l(&hsa_reals_mu);
+  if (REAL(hsa_init))
+    return;
+  InitializeHSAInterceptors();
+  if (!REAL(hsa_init))
+    BindHSARealsFromRuntime();
 }
 
 void InitializeHSAInterceptors() {
