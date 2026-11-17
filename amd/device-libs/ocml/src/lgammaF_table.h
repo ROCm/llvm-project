@@ -65,59 +65,42 @@ DECLARE_TABLE(float, LGAMMAF_NEG_ZP, 19*11)
     0x1.4353d6p+1f,    0x1.9ad346p+0f,    0x1.14d9e8p-8f,    0x1.ebe992p-2f,    0x1.498818p-2f,    -0x1.f50808p-2f,    0x1.ddd2dep-1f,    0x0p+0f
 END_TABLE()
 
-DECLARE_TABLE(float, LGAMMAF_NEG_S3_ZBP, 4)
-    0x1.06370ap+1f,
-    0x1.b6866p+0f,
-    0x1.27f524p-1f,
-    0x1.322f5ep-1f
+// (-3,-2) pieces (lgamma_rF.cl): S(u) for u = x - zb on [-3,-2.7] and u = x - za
+// on [-2.47,-2] (lgamma = u*S(u) - log(1 + u/(z + m))), and Q(t), t = x + 2.59375,
+// on (-2.7,-2.47) (lgamma = (x - za)(x - zb)*Q(t), last entry is the low part of
+// Q's constant term).  Near-minimax relative to lgamma.
+DECLARE_TABLE(float, LGAMMAF_NEG_S3_ZBP, 7)
+    0x1.0642c6p+1f,
+    0x1.b8b1cep+0f,
+    0x1.4fc5dep-1f,
+    0x1.e494ecp-1f,
+    0x1.96e016p-1f,
+    0x1.d18b22p-1f,
+    0x1.0e1562p-1f
 END_TABLE()
 
 DECLARE_TABLE(float, LGAMMAF_NEG_S3_ZAP, 10)
-    -0x1.584cbep-1f,
-    0x1.3b72bp+1f,
-    -0x1.0a206ep+1f,
-    0x1.7c881p+1f,
-    -0x1.05127p+2f,
-    0x1.6bfb6ep+2f,
-    -0x1.b70e7ep+2f,
-    0x1.9d7daep+2f,
-    -0x1.fdc17cp+1f,
-    0x1.2eb17p+0f
+    -0x1.584ceep-1f,
+    0x1.3b74fp+1f,
+    -0x1.0a506ap+1f,
+    0x1.7ecbc6p+1f,
+    -0x1.0d891p+2f,
+    0x1.9465c8p+2f,
+    -0x1.191944p+3f,
+    0x1.42468ap+3f,
+    -0x1.f1b3bp+2f,
+    0x1.71c12ep+1f
 END_TABLE()
 
-DECLARE_TABLE(float, LGAMMAF_NEG_S3_ZFB, 11)
-    -0x1.ea12dcp+0f,
-    0x1.3267fcp+3f,
-    -0x1.41847ap+4f,
-    0x1.f4f0b2p+5f,
-    -0x1.868cacp+7f,
-    0x1.45afc8p+9f,
-    -0x1.d66252p+10f,
-    0x1.1892eap+13f,
-    -0x1.456a28p+16f,
-    -0x1.46ff6cp+19f,
-    -0x1.a6842cp+21f
+DECLARE_TABLE(float, LGAMMAF_NEG_S3_ZZ, 10)
+    0x1.640cd8p+2f,
+    -0x1.024b4p+2f,
+    0x1.93374ap+3f,
+    -0x1.1fa498p+4f,
+    0x1.7545eep+5f,
+    -0x1.51d7a6p+6f,
+    0x1.9c2c5cp+7f,
+    -0x1.e07602p+8f,
+    0x1.e805f6p+9f,
+    -0x1.f2f85ep-23f
 END_TABLE()
-
-DECLARE_TABLE(float, LGAMMAF_NEG_S3_ZFA, 6)
-    0x1.83fe96p+0f,
-    0x1.36eeap+2f,
-    0x1.693c76p+0f,
-    0x1.18428ep+3f,
-    0x1.3122fcp+2f,
-    0x1.1911bcp+5f
-END_TABLE()
-
-DECLARE_TABLE(float, LGAMMAF_NEG_S3_DD, 10)
-    -0x1.ccbfap-5f,
-    0x1.1a6878p+0f,
-    0x1.31418ap+2f,
-    -0x1.2458f4p-6f,
-    0x1.03b236p+3f,
-    -0x1.f5712p-4f,
-    0x1.26531cp+4f,
-    -0x1.df28dp+4f,
-    -0x1.57834ap+6f,
-    -0x1.56a788p+8f
-END_TABLE()
-

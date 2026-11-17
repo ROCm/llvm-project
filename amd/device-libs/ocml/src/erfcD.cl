@@ -7,8 +7,12 @@
 
 #include "mathD.h"
 
+#define DOUBLE_SPECIALIZATION
+#include "ep.h"
+
 #if !defined EXTRA_ACCURACY
-CONSTATTR extern double MATH_PRIVATE(erfcx)(double);
+CONSTATTR extern double2 MATH_PRIVATE(erfcxep)(double);
+extern CONSTATTR double MATH_PRIVATE(expep)(double2);
 
 CONSTATTR double
 MATH_MANGLE(erfc)(double x)
@@ -16,9 +20,9 @@ MATH_MANGLE(erfc)(double x)
     double ax = BUILTIN_ABS_F64(x);
     double x2h = -x*x;
     double x2l = MATH_MAD(-x, x, -x2h);
-    double e = MATH_MANGLE(exp)(x2h);
-    e = MATH_MAD(e, x2l, e);
-    double ret = e * MATH_PRIVATE(erfcx)(ax);
+    double e = MATH_PRIVATE(expep)(con(x2h, x2l));
+    double2 q = MATH_PRIVATE(erfcxep)(ax);
+    double ret = BUILTIN_FMA_F64(e, q.hi, e * q.lo);
     ret = ax > 0x1.b39dc41e48bfcp+4 ? 0.0f : ret;
     double nret = 2.0 - ret;
     return x < 0.0 ? nret : ret;

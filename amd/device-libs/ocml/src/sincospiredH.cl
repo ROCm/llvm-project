@@ -11,18 +11,16 @@
 CONSTATTR struct scret
 MATH_PRIVATE(sincospired)(half x)
 {
-    half t = x * x;
-
-    half sx = MATH_MAD(t, 0x1.b84p+0h, -0x1.46cp+2h);
-    sx = x * t * sx;
-    sx = MATH_MAD(x, 0x1.92p+1h, sx);
-
-    half cx = MATH_MAD(t, 0x1.fbp+1h, -0x1.3bcp+2h);
-    cx = MATH_MAD(t, cx, 1.0h);
+    // Evaluate in float so that only the final conversion rounds to half
+    float fx = (float)x;
+    float t = fx * fx;
+    float sx = fx * BUILTIN_FMA_F32(t, BUILTIN_FMA_F32(t, 0x1.3f3f3cp+1f, -0x1.4aa618p+2f), 0x1.921f8ep+1f);
+    float cx = BUILTIN_FMA_F32(t, BUILTIN_FMA_F32(t, BUILTIN_FMA_F32(t, -0x1.4e7de8p+0f, 0x1.03b068p+2f),
+                                                -0x1.3bd39cp+2f), 1.0f);
 
     struct scret ret;
-    ret.c = cx;
-    ret.s = sx;
+    ret.c = (half)cx;
+    ret.s = (half)sx;
     return ret;
 }
 
