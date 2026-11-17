@@ -6,10 +6,13 @@
 ## Introduction
 
 Asynchronous operations are operations whose completion is not tracked
-internally by the compiler. A thread that initiates one or more async operations can use
-*asyncmarks* to track their completion.
+internally by the compiler. A thread that initiates one or more async operations
+can use execution synchronization mechanisms such as *asyncmarks* or *LDS memory
+barriers* to track their completion.
 
 - Most {ref}`DMA operations <amdgpu-dma-operations>` are asynchronous.
+
+(amdgpu-asyncmarks)=
 
 ## Asyncmarks
 
@@ -94,28 +97,102 @@ a `wait.asyncmark()` operation `Y` with mask `B` in the same function body if:
 - `M` is not in the current sequence at any operation `Z` that
   immediately follows `Y` in *program-order*.
 
+(amdgpu-lds-memory-barriers)=
+
+## LDS Memory Barriers
+
+An LDS memory barrier is a barrier that uses LDS for its state. This barrier can
+track async global loads to LDS and tensor operations, but not global stores
+from LDS. Global loads to LDS can be tracked using the barrier arrive intrinsic
+described below, while tensor operations can be tracked by passing a reference
+to an LDS memory barrier as part of the tensor descriptor.
+
+```llvm
+void @llvm.amdgcn.ds.atomic.async.barrier.arrive.b64(ptr addrspace(3) %barrier)
+```
+
+The intrinsic synchronizes the effects of previous async global loads to LDS
+performed by the initiating thread, through suitable barrier wait operations
+performed by other threads.
+
+Each dynamic instance `D` of this intrinsic initiates its own asynchronous
+sequence, tracked by ASYNCcnt:
+
+`async_start<D>`
+: A fictitious dynamic instance that represents the start of the asynchronous
+  sequence initiated by `D` in the "xxx" scope instance.
+
+`async_end<D>`
+: A fictitious dynamic instance that represents the end of the asynchronous
+  sequence initiated by `D` in the "xxx" scope instance.
+
+```{code-block} llvm
+async_start<D>       ; non-av acquire endpoint
+FR                   ; non-av release fence
+BA                   ; barrier-arrive %barrier
+async_end<D>         ; completion endpoint
+```
+
+The operations in this sequence are *program-ordered* from top to bottom.
+
+`async_start<D>`, `FR`, and `async_end<D>` are synchronizing operations that can
+synchronize all bytes in memory. The actual synchronization is limited by the
+other operations that they synchronize with. None of these operations performs a
+*make-available* or *make-visible* operation.
+
+Let `I` be a dynamic instance that initiates an async global load to LDS and is
+*program-ordered* before `D` in the initiating thread. Let `E<I>` denote the last
+operation in the asynchronous sequence initiated by `I`. `E<I>`
+*synchronizes-with\<B\>* `async_start<D>` for all bytes `B`.
+
+If `async_end<D>` is *completed-at* a `wait.asyncmark()` operation `Y`, it
+*synchronizes-with\<B\>* `Y` for all bytes.
+
+:::{note}
+- No synchronization edge from a preceding async global store from LDS is
+  established by this rule.
+- The intrinsic performs one arrival at `%barrier`, not one arrival for each
+  preceding async global load to LDS.
+- Waiting on an asyncmark that tracks `D` establishes completion of its arrival.
+  It does not establish that the barrier has received all its expected arrivals;
+  that requires a barrier wait.
+:::
+
+(amdgpu-async-completed-at)=
+
 ## Completion of Async Operations
 
-An async operation executes outside the thread that initiated it, i.e., it is
-not related in *program-order* with any other operations from that thread. But
-the thread can use an asyncmark to ensure that the async operation is
-*completed-at* some later operation.
+A dynamic instance `D` of an async instruction initiates a sequence of one or
+more asynchronous operations, which is not related in *program-order* with `D`.
+Additional primitives are required to explicitly track the completion of these
+async operations.
 
-An async operation `A` *initiated-by* an instruction `I` is *completed-at* some
-`wait.asyncmark()` operation `Y` with stage mask `B` if there exists an
-`asyncmark()` operation `X` with mask `C`:
+### Using Asyncmarks
 
-- `I` is *program-ordered* before `X`, and
-- `I` belongs to a stage in `C`, and
-- `X` is *completed-at* `Y`.
+Appropriate calls to `asyncmark()` and `wait.asyncmark()` can be used to track
+completion as follows.
 
-### happens-before
+Let `E` be the last operation in an asynchronous sequence initiated by a dynamic
+instance `D`. Then `E` is *completed-at* some `wait.asyncmark()` operation `Y`
+if there exists an `asyncmark()` operation `X` such that:
+- `D` is *program-ordered* before `X`, and,
+- `D` belongs to a stage in the mask specified by `X`, and,
+- The asyncmark produced by `X` for that stage is *completed-at* `Y`.
 
-When an instruction `I` initiates an async operation `A`, `I` *happens-before*
-`A`.
+### Using Barriers
 
-If `A` is *completed-at* a `wait.asyncmark()` operation `Y`, then `A`
-*happens-before* `Y`.
+The completion of some async operations can be tracked using {ref}`LDS memory
+barriers<amdgpu-lds-memory-barriers>` as follows:
+
+- The tensor descriptor passed to a tensor instruction instance `D` may contain
+  a reference to a barrier. The asynchronous sequence initiated by `D` then
+  includes a non-av release fence followed by a {ref}`barrier
+  arrive<amdgpu-barrier-operations>` which can {ref}`synchronize-with through
+  the barrier<amdgpu-barrier-memory-model>`.
+- A call to
+  {ref}`@llvm.amdgcn.ds.atomic.async.barrier.arrive.b64<amdgpu-lds-memory-barriers>`
+  can track async global loads to LDS initiated in *program-order* before that
+  call.
 
 ## Examples
 
