@@ -359,7 +359,12 @@ jobs:
       windows_amdgpu_families: ${{ fromJSON(needs.setup.outputs.linux_build_config).windows_amdgpu_families }}
       multiarch_index: true
       package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      release_type: ""
+      # Must be a real release type. The called workflow defaults this input to
+      # the empty string, but write_artifacts_bucket_info.py rejects it, so an
+      # empty value fails the job after the wheels have already been built.
+      # 'ci' for the same reason the tarballs use it: it is the one bucket this
+      # repository is federated to write.
+      release_type: ci
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}
     permissions:
