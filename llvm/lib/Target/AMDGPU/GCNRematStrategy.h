@@ -34,9 +34,8 @@ namespace llvm {
 ///    non-ignorable physical register use.
 /// 3  The register has no virtual register use whose live range would be
 ///    extended by the rematerialization.
-/// 4. The register has at least one user outside its defining region. If
-///    rematerialized, one copy is made per using region and the original
-///    register stays if the defining region has users.
+/// 4. The register has a single non-debug user in a different region from its
+///    defining region.
 /// 5. The register is not used by or using another register that is going to be
 ///    rematerialized.
 class GCNRematStrategy {
@@ -322,13 +321,6 @@ private:
   /// Creates rematerialization candidates. The strategy has more restrictions
   /// on what it can rematerialize compared to the rematerializer.
   void createCandidates();
-
-  /// Determines whether users of rematerialization candidate \p CandIdx are
-  /// compatible with the strategy's rematerialization constraints/limitations.
-  /// Registers in \p MarkedRegs have already been deemed rematerializable by
-  /// the strategy.
-  bool candidateHasValidUsers(RegisterIdx CandIdx,
-                              const SmallSet<Register, 4> &MarkedRegs) const;
 };
 
 } // namespace llvm
