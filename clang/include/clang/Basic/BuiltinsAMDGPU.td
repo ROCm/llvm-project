@@ -295,28 +295,28 @@ def __builtin_amdgcn_struct_ptr_buffer_load_async_lds : AMDGPUBuiltin<"void(__am
 
 let Documentation = [DocSBufferLoad], ArgNames = ["rsrc", "offset", "aux"] in {
 def __builtin_amdgcn_s_buffer_load_i32 : AMDGPUBuiltin<"int(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v2i32 : AMDGPUBuiltin<"_ExtVector<2, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v3i32 : AMDGPUBuiltin<"_ExtVector<3, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v4i32 : AMDGPUBuiltin<"_ExtVector<4, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v8i32 : AMDGPUBuiltin<"_ExtVector<8, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v16i32 : AMDGPUBuiltin<"_ExtVector<16, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v2i32 : AMDGPUBuiltin<"_Vector<2, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v3i32 : AMDGPUBuiltin<"_Vector<3, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v4i32 : AMDGPUBuiltin<"_Vector<4, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v8i32 : AMDGPUBuiltin<"_Vector<8, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v16i32 : AMDGPUBuiltin<"_Vector<16, int>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
 def __builtin_amdgcn_s_buffer_load_f32 : AMDGPUBuiltin<"float(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v2f32 : AMDGPUBuiltin<"_ExtVector<2, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v3f32 : AMDGPUBuiltin<"_ExtVector<3, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v4f32 : AMDGPUBuiltin<"_ExtVector<4, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v8f32 : AMDGPUBuiltin<"_ExtVector<8, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v16f32 : AMDGPUBuiltin<"_ExtVector<16, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v2f32 : AMDGPUBuiltin<"_Vector<2, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v3f32 : AMDGPUBuiltin<"_Vector<3, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v4f32 : AMDGPUBuiltin<"_Vector<4, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v8f32 : AMDGPUBuiltin<"_Vector<8, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v16f32 : AMDGPUBuiltin<"_Vector<16, float>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
 def __builtin_amdgcn_s_buffer_load_i8 : AMDGPUBuiltin<"char(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
 def __builtin_amdgcn_s_buffer_load_u8 : AMDGPUBuiltin<"unsigned char(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
 def __builtin_amdgcn_s_buffer_load_i16 : AMDGPUBuiltin<"short(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
 def __builtin_amdgcn_s_buffer_load_u16 : AMDGPUBuiltin<"unsigned short(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v2i8 : AMDGPUBuiltin<"_ExtVector<2, char>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v3i8 : AMDGPUBuiltin<"_ExtVector<3, char>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v4i8 : AMDGPUBuiltin<"_ExtVector<4, char>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v2i8 : AMDGPUBuiltin<"_Vector<2, char>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v3i8 : AMDGPUBuiltin<"_Vector<3, char>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v4i8 : AMDGPUBuiltin<"_Vector<4, char>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
 def __builtin_amdgcn_s_buffer_load_f16 : AMDGPUBuiltin<"_Float16(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v2f16 : AMDGPUBuiltin<"_ExtVector<2, _Float16>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v3f16 : AMDGPUBuiltin<"_ExtVector<3, _Float16>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
-def __builtin_amdgcn_s_buffer_load_v4f16 : AMDGPUBuiltin<"_ExtVector<4, _Float16>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v2f16 : AMDGPUBuiltin<"_Vector<2, _Float16>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v3f16 : AMDGPUBuiltin<"_Vector<3, _Float16>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
+def __builtin_amdgcn_s_buffer_load_v4f16 : AMDGPUBuiltin<"_Vector<4, _Float16>(__amdgpu_buffer_rsrc_t, int, _Constant int)", [Const]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1387,11 +1387,11 @@ def __builtin_amdgcn_cooperative_atomic_store_8x16B : AMDGPUBuiltin<"void(_ExtVe
 //===----------------------------------------------------------------------===//
 // GFX13+ only builtins.
 //===----------------------------------------------------------------------===//
-def __builtin_amdgcn_cvt_scalef32_pk32_bf6_f32 : AMDGPUBuiltin<"_ExtVector<6, unsigned int>(_ExtVector<32, float>, float)", [Const], "f32-to-fp6bf6-cvt-scale-insts"> {
+def __builtin_amdgcn_cvt_scalef32_pk32_bf6_f32 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, float>, float)", [Const], "f32-to-fp6bf6-cvt-scale-insts"> {
   let Documentation = [DocCvtScaleF32Pk32BF6F32];
   let ArgNames = ["src", "scale"];
 }
-def __builtin_amdgcn_cvt_scalef32_pk32_fp6_f32 : AMDGPUBuiltin<"_ExtVector<6, unsigned int>(_ExtVector<32, float>, float)", [Const], "f32-to-fp6bf6-cvt-scale-insts"> {
+def __builtin_amdgcn_cvt_scalef32_pk32_fp6_f32 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, float>, float)", [Const], "f32-to-fp6bf6-cvt-scale-insts"> {
   let Documentation = [DocCvtScaleF32Pk32FP6F32];
   let ArgNames = ["src", "scale"];
 }
