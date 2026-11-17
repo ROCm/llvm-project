@@ -2647,6 +2647,75 @@ static bool hoistMulAddAssociation(const ScalarOptions &Opts, Instruction &I,
   return true;
 }
 
+/// Return a pair [KeepsNSW, MergedFlags] describing effects with regard to
+/// overflow of reassociating:
+///  (LV op C1) op C2 ==> LV op (C1 op C2)
+///      ^BO0   ^BO          ^......^ new instrs
+///
+/// bool KeepsNSW
+///    true if the instructions hoistBOAssociation creates from \p BO and \p BO0
+///    can carry no-signed-wrap once \p C1 op \p C2 is hoisted into the
+///    preheader of \p L. Only \p Opcode == Add is ever eligible to keep the
+///    flag.
+///
+/// OverflowTracking MergedFlags
+///    Set to the no-wrap flags those instructions should be given, which is the
+///    intersection of the flags on \p BO and \p BO0.
+static std::pair<bool, OverflowTracking>
+getReassocOverflowEffects(Instruction::BinaryOps Opcode, BinaryOperator *BO,
+                          BinaryOperator *BO0, Value *C1, Value *C2, Loop &L,
+                          const LICMDependencies &Deps) {
+  OverflowTracking MergedFlags;
+  MergedFlags.AllKnownNonNegative = false;
+  MergedFlags.AllKnownNonZero = false;
+  MergedFlags.mergeFlags(*BO);
+  MergedFlags.mergeFlags(*BO0);
+
+  // OverflowTracking::applyFlags only ever restores nsw on adds, and only when
+  // both originals carried it.
+  if (Opcode != Instruction::Add || !MergedFlags.HasNSW)
+    return {false, MergedFlags};
+
+  // Both operations being nuw as well is enough: applyFlags carries nsw over
+  // without reasoning about the hoisted sum.
+  if (MergedFlags.HasNUW)
+    return {true, MergedFlags};
+
+  // Otherwise nsw survives only if the hoisted sum is itself representable.
+  SimplifyQuery SQ(L.getHeader()->getDataLayout(), &Deps.DT, &Deps.AC,
+                   L.getLoopPreheader()->getTerminator());
+  bool KeepsNSW =
+      computeOverflowForSignedAdd(C1, C2, SQ) == OverflowResult::NeverOverflows;
+  return {KeepsNSW, MergedFlags};
+}
+
+/// Return true if \p BO is sign extended and currently carries nsw, so that
+/// reassociating it is only worthwhile if the flag survives.
+///
+/// hoistBOAssociation is about to perform this rewrite:
+///
+///     preheader:                        preheader:
+///       ...                               %inv = C1 op C2
+///                              ==>
+///     loop body:                        loop body:
+///       %BO0 = LV op C1                   %new = LV op %inv
+///       %BO  = %BO0 op C2                 %ext = sext %new
+///       %ext = sext %BO
+///
+/// %inv is a value the original program never computed, so it can overflow
+/// where LV op C1 op C2 cannot, and %new then has to be built without nsw.
+///
+/// This may negatively impact downstream passes which may need to distribute
+/// sign extension over arithmetic (e.g. isSafeToFactorGepIndex() in
+/// StraightLineStrengthReduce.cpp).
+static bool nswIsNeededBySExtUser(BinaryOperator *BO) {
+  auto *OBO = dyn_cast<OverflowingBinaryOperator>(BO);
+  if (!OBO || !OBO->hasNoSignedWrap())
+    return false;
+
+  return llvm::any_of(BO->users(), IsaPred<SExtInst>);
+}
+
 /// Reassociate associative binary expressions of the form
 ///
 /// 1. "(LV op C1) op C2" ==> "LV op (C1 op C2)"
@@ -2684,6 +2753,11 @@ static bool hoistBOAssociation(Instruction &I, Loop &L,
   auto *Preheader = L.getLoopPreheader();
   assert(Preheader && "Loop is not in simplify form?");
 
+  auto [KeepsNSW, MergedFlags] =
+      getReassocOverflowEffects(Opcode, BO, BO0, C1, C2, L, Deps);
+  if (!KeepsNSW && nswIsNeededBySExtUser(BO))
+    return false;
+
   IRBuilder<> Builder(Preheader->getTerminator());
   auto *Inv = Builder.CreateBinOp(Opcode, C1, C2, "invariant.op");
 
@@ -2698,24 +2772,13 @@ static bool hoistBOAssociation(Instruction &I, Loop &L,
       I->setFastMathFlags(Intersect);
     NewBO->setFastMathFlags(Intersect);
   } else {
-    OverflowTracking Flags;
-    Flags.AllKnownNonNegative = false;
-    Flags.AllKnownNonZero = false;
-    Flags.mergeFlags(*BO);
-    Flags.mergeFlags(*BO0);
     // If `Inv` was not constant-folded, a new Instruction has been created.
     auto *InvI = dyn_cast<Instruction>(Inv);
     if (InvI)
-      Flags.applyFlags(*InvI);
-    Flags.applyFlags(*NewBO);
+      MergedFlags.applyFlags(*InvI);
+    MergedFlags.applyFlags(*NewBO);
 
-    // The original nsw flags guarantee that LV + C1 + C2 is representable.
-    // If C1 + C2 is representable too, both reassociated adds keep nsw.
-    SimplifyQuery SQ(L.getHeader()->getDataLayout(), &Deps.DT, &Deps.AC,
-                     Preheader->getTerminator());
-    if (Opcode == Instruction::Add && Flags.HasNSW && !Flags.HasNUW &&
-        computeOverflowForSignedAdd(C1, C2, SQ) ==
-            OverflowResult::NeverOverflows) {
+    if (KeepsNSW) {
       if (InvI)
         InvI->setHasNoSignedWrap();
       NewBO->setHasNoSignedWrap();
