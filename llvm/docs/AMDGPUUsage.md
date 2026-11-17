@@ -8734,29 +8734,33 @@ these sequences.
 - {ref}`amdgpu-amdhsa-memory-model-gfx12`
 - {ref}`amdgpu-amdhsa-memory-model-gfx12_5`
 
-(amdgpu-amdhsa-execution-barriers-memory-model)=
+(amdgpu-barrier-memory-model)=
 
-##### Execution Barriers
+##### `synchronize-with` Using Barriers
 
 :::{note}
 See {ref}`amdgpu-execution-synchronization-barriers-execution-model` for definitions of
 the terminology used in this section.
 :::
 
-- A barrier *arrive* operation `A` can pair with a release fence program-ordered before it
-  to form a `barrier-arrive-release` `BR`. The synchronization scope and the set of address
-  spaces affected are determined by the release fence.
-- A barrier *wait* operation `W` can pair with an acquire fence program-ordered after it to
-  form a `barrier-wait-acquire` `BA`. The synchronization scope and the set of address
-  spaces affected are determined by the acquire fence.
+A release fence `FR` *synchronizes-with* an acquire fence `FA` in address
+space *AS* if and only if there exist a barrier *arrive* `A` and barrier *wait*
+`W` such that:
 
-A `BR` *synchronizes-with* `BA` in an address space *AS* if and only if:
-
+- `FR` is *program-ordered* before `A`.
 - `A` *barrier-executes-before* `W`.
-- *BA* and *BR*'s {ref}`synchronization scope<amdgpu-memory-scopes>` overlap.
-- *BA* and *BR*'s {ref}`synchronization scope<amdgpu-memory-scopes>`
-  allow cross address space synchronization (they cannot have `one-as`) {sup}`1`.
-- *BA* and *BR*'s address spaces both include *AS*.
+- `W` is *program-ordered* before `FA`.
+- The {ref}`synchronization scopes<amdgpu-memory-scopes>` of `FR` and `FA` overlap.
+- Both fences include *AS* in their sets of synchronized address spaces.
+
+In the {ref}`per-byte AMDGPU memory model<amdgpu-synchronizes-with>`, `FR`
+*synchronizes-with\<B\>* `FA` if and only if the conditions above hold for the
+address space of byte `B`, and both fences include `B` in their candidate sets.
+A non-av fence can participate in this synchronization without performing a
+*make-available* or *make-visible* operation.
+
+The current implementation additionally requires that neither paired fence use
+a `one-as` synchronization scope. {sup}`1`
 
 Informally, we can deduce from the above rules that:
 
