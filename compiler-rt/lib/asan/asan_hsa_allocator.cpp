@@ -49,6 +49,48 @@ DECLARE_REAL(hsa_status_t, hsa_amd_pointer_info, const void* ptr,
              hsa_amd_pointer_info_t* info, void* (*alloc)(size_t),
              uint32_t* num_agents_accessible, hsa_agent_t** accessible)
 
+static __sanitizer_amdgpu_hsa_table hsa_table;
+enum : u8 { kHsaTableNone, kHsaTableRegistering, kHsaTableRegistered };
+static atomic_uint8_t hsa_table_state{kHsaTableNone};
+static atomic_uint8_t hsa_intercepted{0};
+
+bool AsanHsaTableRegistered() {
+  return atomic_load(&hsa_table_state, memory_order_acquire) ==
+         kHsaTableRegistered;
+}
+
+static u8 WaitForHsaTableState(memory_order mo) {
+  u8 state;
+  while ((state = atomic_load(&hsa_table_state, mo)) == kHsaTableRegistering)
+    internal_sched_yield();
+  return state;
+}
+
+bool AsanHsaPassThrough() {
+  if (AsanHsaTableRegistered())
+    return true;
+  // Pairs with __sanitizer_amdgpu_set_hsa_table: either the registration sees
+  // this call and fails, or this call sees the registration.
+  if (!atomic_load(&hsa_intercepted, memory_order_seq_cst))
+    atomic_store(&hsa_intercepted, 1, memory_order_seq_cst);
+  return WaitForHsaTableState(memory_order_seq_cst) == kHsaTableRegistered;
+}
+
+const __sanitizer_amdgpu_hsa_table& GetAsanHsaTable() { return hsa_table; }
+
+static int RefuseHsaTable() {
+  VReport(1,
+          "AddressSanitizer: HSA table registered after an intercepted HSA "
+          "call, GPU memory not tracked\n");
+  return 0;
+}
+
+// The registered table's function, else the ROCr's. Registration fails once an
+// interceptor got this far, so a call that started in an interceptor never
+// reaches the table.
+#  define ASAN_HSA_CALL(func) \
+    (AsanHsaTableRegistered() ? hsa_table.func : REAL(func))
+
 // Always align to page boundary to match current ROCr behavior.
 static const size_t kPageSize_ = 4096;
 
@@ -86,7 +128,7 @@ hsa_status_t asan_hsa_amd_memory_pool_free(void* ptr,
     AsanHsaDeallocate(ptr, stack);
     return HSA_STATUS_SUCCESS;
   }
-  return REAL(hsa_amd_memory_pool_free)(ptr);
+  return ASAN_HSA_CALL(hsa_amd_memory_pool_free)(ptr);
 }
 
 hsa_status_t asan_hsa_amd_agents_allow_access(uint32_t num_agents,
@@ -96,8 +138,8 @@ hsa_status_t asan_hsa_amd_agents_allow_access(uint32_t num_agents,
                                               BufferedStackTrace* stack) {
   (void)stack;
   void* p = AsanHsaGetBlockBegin(ptr);
-  return REAL(hsa_amd_agents_allow_access)(num_agents, agents, flags,
-                                           p ? p : ptr);
+  return ASAN_HSA_CALL(hsa_amd_agents_allow_access)(num_agents, agents, flags,
+                                                    p ? p : ptr);
 }
 
 hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
@@ -105,8 +147,8 @@ hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
   void* ptr_;
   size_t len_;
   if (AsanHsaTranslateIpcCreate(ptr, len, &ptr_, &len_))
-    return REAL(hsa_amd_ipc_memory_create)(ptr_, len_, handle);
-  return REAL(hsa_amd_ipc_memory_create)(ptr, len, handle);
+    return ASAN_HSA_CALL(hsa_amd_ipc_memory_create)(ptr_, len_, handle);
+  return ASAN_HSA_CALL(hsa_amd_ipc_memory_create)(ptr, len, handle);
 }
 
 hsa_status_t asan_hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t* handle,
@@ -114,7 +156,7 @@ hsa_status_t asan_hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t* handle,
                                             const hsa_agent_t* mapping_agents,
                                             void** mapped_ptr) {
   size_t len_ = len + kPageSize_;
-  hsa_status_t status = REAL(hsa_amd_ipc_memory_attach)(
+  hsa_status_t status = ASAN_HSA_CALL(hsa_amd_ipc_memory_attach)(
       handle, len_, num_agents, mapping_agents, mapped_ptr);
   if (status == HSA_STATUS_SUCCESS && mapped_ptr) {
     uptr mapped_base = reinterpret_cast<uptr>(*mapped_ptr);
@@ -153,13 +195,13 @@ hsa_status_t asan_hsa_amd_ipc_memory_detach(void* mapped_ptr) {
   hsa_amd_pointer_info_t info;
   info.size = sizeof(hsa_amd_pointer_info_t);
   uptr mapped_sz = 0;
-  if (REAL(hsa_amd_pointer_info)(reinterpret_cast<void*>(mapped_base), &info,
-                                 nullptr, nullptr,
-                                 nullptr) == HSA_STATUS_SUCCESS)
+  if (ASAN_HSA_CALL(hsa_amd_pointer_info)(reinterpret_cast<void*>(mapped_base),
+                                          &info, nullptr, nullptr,
+                                          nullptr) == HSA_STATUS_SUCCESS)
     mapped_sz = static_cast<uptr>(info.sizeInBytes);
 
-  const hsa_status_t status =
-      REAL(hsa_amd_ipc_memory_detach)(reinterpret_cast<void*>(mapped_base));
+  const hsa_status_t status = ASAN_HSA_CALL(hsa_amd_ipc_memory_detach)(
+      reinterpret_cast<void*>(mapped_base));
   if (status == HSA_STATUS_SUCCESS && mapped_sz) {
     PoisonShadow(mapped_base, mapped_sz, 0);
     FlushUnneededASanShadowMemory(mapped_base, mapped_sz);
@@ -176,8 +218,8 @@ hsa_status_t asan_hsa_amd_vmem_address_reserve_align(
   //  2. Requested range overlaps an existing reserved/mapped range.
   //  3. Insufficient VA space to honor that exact placement.
   if (address)
-    return REAL(hsa_amd_vmem_address_reserve_align)(ptr, size, address,
-                                                    alignment, flags);
+    return ASAN_HSA_CALL(hsa_amd_vmem_address_reserve_align)(ptr, size, address,
+                                                             alignment, flags);
 
   if (alignment < kPageSize_)
     alignment = kPageSize_;
@@ -188,8 +230,9 @@ hsa_status_t asan_hsa_amd_vmem_address_reserve_align(
   }
 
   if (!__sanitizer::AmdHsaVmemReserveUsesHostMapping(flags)) {
-    const hsa_status_t status = REAL(hsa_amd_vmem_address_reserve_align)(
-        ptr, size, address, alignment, flags);
+    const hsa_status_t status =
+        ASAN_HSA_CALL(hsa_amd_vmem_address_reserve_align)(ptr, size, address,
+                                                          alignment, flags);
     if (status == HSA_STATUS_SUCCESS && ptr && *ptr)
       __sanitizer::VmemGpuReserveTracker::Get().OnReserve(
           reinterpret_cast<uptr>(*ptr), size, StackDepotPut(*stack),
@@ -239,7 +282,8 @@ hsa_status_t asan_hsa_amd_vmem_address_free(void* ptr, size_t size,
     case VmemGpuReserveTracker::kNotTracked:
       break;
     case VmemGpuReserveTracker::kFirstFree: {
-      const hsa_status_t status = REAL(hsa_amd_vmem_address_free)(ptr, size);
+      const hsa_status_t status =
+          ASAN_HSA_CALL(hsa_amd_vmem_address_free)(ptr, size);
       if (status == HSA_STATUS_SUCCESS)
         VmemGpuReserveTracker::Get().MarkFreed(
             ptr_uptr, size, StackDepotPut(*stack), GetCurrentTidOrInvalid());
@@ -259,7 +303,7 @@ hsa_status_t asan_hsa_amd_vmem_address_free(void* ptr, size_t size,
   }
   // Passthrough: untracked vmem frees (eg: fixed-address reservations) go
   // straight to ROCr.
-  return REAL(hsa_amd_vmem_address_free)(ptr, size);
+  return ASAN_HSA_CALL(hsa_amd_vmem_address_free)(ptr, size);
 }
 
 // ROCr reports an unowned address as an all-zero struct with only size and
@@ -284,7 +328,7 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
   uptr used_size;
   uptr offset;
   if (!AsanHsaGetLiveMappingInfo(ptr, &hsa_map_base, &used_size, &offset)) {
-    hsa_status_t status = REAL(hsa_amd_pointer_info)(
+    hsa_status_t status = ASAN_HSA_CALL(hsa_amd_pointer_info)(
         ptr, info, alloc, num_agents_accessible, accessible);
     // Quarantine keeps the block mapped in ROCr, but the user allocation is
     // gone. Report it as unowned, as ROCr does for memory it does not own.
@@ -293,7 +337,7 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
     return status;
   }
 
-  hsa_status_t status = REAL(hsa_amd_pointer_info)(
+  hsa_status_t status = ASAN_HSA_CALL(hsa_amd_pointer_info)(
       hsa_map_base, info, alloc, num_agents_accessible, accessible);
   if (status == HSA_STATUS_SUCCESS && info) {
     // Adjust base address of agent,host and sizeInBytes so as to return
@@ -320,13 +364,13 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
 }
 
 hsa_status_t asan_hsa_init() {
-  if (UNLIKELY(!REAL(hsa_init))) {
+  if (UNLIKELY(!ASAN_HSA_CALL(hsa_init))) {
     Report(
         "ERROR: AddressSanitizer: could not resolve the ROCr hsa_init; set "
         "SANITIZER_HSA_RUNTIME_PATH to libhsa-runtime64.so.1\n");
     return HSA_STATUS_ERROR_NOT_INITIALIZED;
   }
-  hsa_status_t status = REAL(hsa_init)();
+  hsa_status_t status = ASAN_HSA_CALL(hsa_init)();
   if (status == HSA_STATUS_SUCCESS) {
     // Only clear state when recovering from a prior shutdown (avoids clearing
     // amdhsa_event_registered on every refcount bump and re-registering).
@@ -341,5 +385,52 @@ hsa_status_t asan_hsa_init() {
 }
 
 }  // namespace __asan
+
+extern "C" SANITIZER_INTERFACE_ATTRIBUTE int __sanitizer_amdgpu_set_hsa_table(
+    const __sanitizer_amdgpu_hsa_table* table) {
+  using namespace __asan;
+  AsanInitFromRtl();
+  // Fields appended after these are optional.
+  constexpr uptr kMinSize =
+      __builtin_offsetof(__sanitizer_amdgpu_hsa_table,
+                         hsa_amd_register_system_event_handler) +
+      sizeof(
+          __sanitizer_amdgpu_hsa_table::hsa_amd_register_system_event_handler);
+  __sanitizer_amdgpu_hsa_table t;
+  internal_memset(&t, 0, sizeof(t));
+  if (table && table->size >= kMinSize)
+    internal_memcpy(&t, table, Min<uptr>(table->size, sizeof(t)));
+  if (!t.hsa_init || !t.hsa_memory_copy || !t.hsa_amd_memory_pool_allocate ||
+      !t.hsa_amd_memory_pool_free || !t.hsa_amd_agents_allow_access ||
+      !t.hsa_amd_memory_async_copy || !t.hsa_amd_memory_async_copy_on_engine ||
+      !t.hsa_amd_ipc_memory_create || !t.hsa_amd_ipc_memory_attach ||
+      !t.hsa_amd_ipc_memory_detach || !t.hsa_amd_vmem_address_reserve_align ||
+      !t.hsa_amd_vmem_address_free || !t.hsa_amd_pointer_info ||
+      !t.hsa_amd_register_system_event_handler) {
+    VReport(1,
+            "AddressSanitizer: incomplete HSA table, GPU memory not tracked\n");
+    return 0;
+  }
+  if (atomic_load(&hsa_intercepted, memory_order_seq_cst))
+    return RefuseHsaTable();
+  u8 state = kHsaTableNone;
+  if (!atomic_compare_exchange_strong(
+          &hsa_table_state, &state, kHsaTableRegistering, memory_order_seq_cst))
+    return WaitForHsaTableState(memory_order_acquire) == kHsaTableRegistered &&
+           internal_memcmp(&t, &hsa_table, sizeof(t)) == 0;
+  if (atomic_load(&hsa_intercepted, memory_order_seq_cst)) {
+    atomic_store(&hsa_table_state, kHsaTableNone, memory_order_release);
+    return RefuseHsaTable();
+  }
+  internal_memcpy(&hsa_table, &t, sizeof(t));
+  __sanitizer::AmdHsaDeviceAllocator::SetFunctions(
+      {hsa_table.hsa_amd_memory_pool_allocate,
+       hsa_table.hsa_amd_memory_pool_free, hsa_table.hsa_amd_pointer_info,
+       hsa_table.hsa_amd_vmem_address_reserve_align,
+       hsa_table.hsa_amd_vmem_address_free,
+       hsa_table.hsa_amd_register_system_event_handler});
+  atomic_store(&hsa_table_state, kHsaTableRegistered, memory_order_release);
+  return 1;
+}
 
 #endif  // SANITIZER_AMDHSA

@@ -1,6 +1,7 @@
 if (COMPILER_RT_BUILD_SANITIZERS)
   set(SANITIZER_HEADERS
     sanitizer/allocator_interface.h
+    sanitizer/amdgpu_interface.h
     sanitizer/asan_interface.h
     sanitizer/common_interface_defs.h
     sanitizer/coverage_interface.h

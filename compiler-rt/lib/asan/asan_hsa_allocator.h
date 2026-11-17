@@ -18,9 +18,19 @@
 #if SANITIZER_AMDHSA
 
 #  include "asan_stack.h"
+#  include "sanitizer/amdgpu_interface.h"
 #  include "sanitizer_common/sanitizer_offload_hsa.h"
 
 namespace __asan {
+
+// A GPU runtime that doesn't export the HSA API registers its functions with
+// __sanitizer_amdgpu_set_hsa_table.
+bool AsanHsaTableRegistered();
+// Called by the hsa_* interceptors: true if the call goes to the real function
+// untouched, because a runtime's table is registered. Otherwise records that an
+// HSA call went through the interceptors, which fails a later registration.
+bool AsanHsaPassThrough();
+const __sanitizer_amdgpu_hsa_table& GetAsanHsaTable();
 
 hsa_status_t asan_hsa_amd_memory_pool_allocate(
     hsa_amd_memory_pool_t memory_pool, size_t size, uint32_t flags, void** ptr,

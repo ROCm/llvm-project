@@ -102,6 +102,7 @@ SET(ASAN_HEADERS
   )
 
 include_directories(..)
+include_directories(../../include)
 if(MSVC)
   # asan on windows only supports the release dll version of the runtimes, in the interest of
   # only having one asan dll to support/test. Having asan statically linked
