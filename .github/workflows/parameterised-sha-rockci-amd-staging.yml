@@ -658,8 +658,11 @@ jobs:
     timeout-minutes: 360
     # No actions: write. The dispatch crosses into another repository on a
     # separate token, so GITHUB_TOKEN needs nothing beyond the default read.
+    # id-token is for the artifacts bucket: the copy step assumes the same
+    # OIDC role the tarball job used, and there is no secret behind it.
     permissions:
       contents: read
+      id-token: write
     env:
       # The secrets context is not available in a step `if:`, and the token
       # itself must never be compared in one. Mirror only whether it is set.
@@ -794,12 +797,38 @@ jobs:
           # credentials the build already has -- so naming that prefix needs
           # nothing published anywhere first, and it is derived rather than
           # configured, so it cannot drift from the run it describes.
-          PACKAGES_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/${GITHUB_REPOSITORY//\//-}/${GITHUB_RUN_ID}-linux/tarballs/"
+          BUCKET="therock-ci-artifacts-external"
+          BUCKET_HOST="https://${BUCKET}.s3.amazonaws.com"
+          RUN_PREFIX="${GITHUB_REPOSITORY//\//-}/${GITHUB_RUN_ID}-linux/tarballs"
+
+          # ROCmTest does not fetch from the directory it is handed. Its
+          # _normalize_multi_arch_packages_url keeps the scheme and host and
+          # drops the path, then re-appends the channel subpath, because it
+          # assumes the URL names a release channel root:
+          #
+          #   root = f"{parsed.scheme}://{parsed.netloc}/"
+          #   return f"{root}{sub}"
+          #
+          # 'tarball-multi-arch' is that subpath -- it is AMD's legacy
+          # multi-arch channel layout, as served at
+          # rocm.nightlies.amd.com/tarball-multi-arch/ and its siblings. So the
+          # tarball has to sit under that name for the URL it derives to
+          # resolve, and the copy step below puts a second copy of it there.
+          #
+          # Inside this run's own prefix, not at the bucket root. The tarball
+          # name carries the llvm-project commit but not the TheRock ref, so at
+          # the root the same cherry-pick built against two different refs
+          # would collide on one key and a measurement could silently be taken
+          # against the wrong compiler. Run-scoped, that cannot happen.
+          MULTIARCH_SUBDIR="tarball-multi-arch"
+          SOURCE_KEY="${RUN_PREFIX}/${TAR_NAME}"
+          DEST_KEY="${RUN_PREFIX}/${MULTIARCH_SUBDIR}/${TAR_NAME}"
+          PACKAGES_URL="${BUCKET_HOST}/${RUN_PREFIX}/${MULTIARCH_SUBDIR}/"
 
           # The '+' in the version must be sent as %2B. A literal '+' is a 404
           # on the bucket and on the ROCm channels alike, so the encoding is a
           # property of the name rather than of the host.
-          TARBALL_URL="${PACKAGES_URL%/}/${TAR_NAME//+/%2B}"
+          SOURCE_URL="${BUCKET_HOST}/${SOURCE_KEY//+/%2B}"
 
           # Checked before dispatching rather than after. The install takes a
           # perf machine exclusively and holds it for as long as the install
@@ -807,20 +836,20 @@ jobs:
           # there spends the scarce thing in this pipeline to reach a 404.
           # Unreachable is not the same as absent: this host may be closed to
           # some runners, so only a definitive answer is treated as one.
-          TARBALL_CODE="$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 "${TARBALL_URL}" || echo "000")"
-          case "${TARBALL_CODE}" in
+          SOURCE_CODE="$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 "${SOURCE_URL}" || echo "000")"
+          case "${SOURCE_CODE}" in
             200)
-              echo "Found ${TAR_NAME}."
+              echo "Found ${TAR_NAME} as built."
               ;;
             000)
-              echo "::warning::Could not reach the artifacts bucket to check that ${TAR_NAME} is present. Continuing without the check."
+              echo "::warning::Could not reach the artifacts bucket to check that ${TAR_NAME} is present. Continuing; the copy step verifies it with credentials."
               ;;
             404)
-              echo "::error::${TAR_NAME} is not at ${PACKAGES_URL}. The -tests- tarball is only built when run_performance_tests is on, so a build that ran without it will not have one."
+              echo "::error::${TAR_NAME} is not at ${BUCKET_HOST}/${RUN_PREFIX}/. The -tests- tarball is only built when run_performance_tests is on, so a build that ran without it will not have one."
               exit 1
               ;;
             *)
-              echo "::warning::The artifacts bucket answered ${TARBALL_CODE} for ${TAR_NAME}, which is neither a hit nor a clear miss. Continuing."
+              echo "::warning::The artifacts bucket answered ${SOURCE_CODE} for ${TAR_NAME}, which is neither a hit nor a clear miss. Continuing."
               ;;
           esac
 
@@ -953,10 +982,86 @@ jobs:
             echo "rocm_version=${ROCM_VERSION}"
             echo "tar_name=${TAR_NAME}"
             echo "packages_url=${PACKAGES_URL}"
+            echo "bucket=${BUCKET}"
+            echo "source_key=${SOURCE_KEY}"
+            echo "dest_key=${DEST_KEY}"
             echo "suites=${SUITES}"
             echo "qa_forge_repo=${QA_FORGE_REPO}"
             echo "install_wait_seconds=$(( INSTALL_WAIT_MINUTES * 60 ))"
           } >> "$GITHUB_OUTPUT"
+
+      # TheRock, not this repository: the credentials action and the script it
+      # runs live there, and checking it out is how the build itself reaches
+      # them. Same ref the tarballs were built from, so the role this assumes
+      # is the one that wrote them.
+      - name: Check out TheRock for its artifact credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          repository: ROCm/TheRock
+          ref: ${{ needs.setup.outputs.ref }}
+
+      # The credentials script is stdlib-only, but it is invoked as `python`,
+      # which ubuntu-24.04 does not provide until this runs.
+      - name: Set up Python for the credentials script
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      # release_type ci resolves, for a repository that is not ROCm/TheRock, to
+      # bucket therock-ci-artifacts-external and role therock-ci-external --
+      # the same identity the tarball job used to write the object being
+      # copied. OIDC, so nothing here depends on a stored secret.
+      - name: Configure AWS credentials for the artifacts bucket
+        uses: ./.github/actions/configure_aws_artifacts_credentials
+        with:
+          release_type: ci
+
+      - name: Publish the tarball under the channel subpath ROCmTest derives
+        id: multiarch_copy
+        env:
+          BUCKET: ${{ steps.plan.outputs.bucket }}
+          SOURCE_KEY: ${{ steps.plan.outputs.source_key }}
+          DEST_KEY: ${{ steps.plan.outputs.dest_key }}
+          PACKAGES_URL: ${{ steps.plan.outputs.packages_url }}
+        run: |
+          set -euo pipefail
+
+          # Server-side copy. Both sides are s3:// URIs rather than a
+          # --copy-source header, so the '+' in the version stays a literal '+'
+          # instead of being re-encoded into a space by the header's own
+          # escaping rules.
+          echo "Copying to ${DEST_KEY}"
+          if ! COPY_ERR="$(aws s3 cp "s3://${BUCKET}/${SOURCE_KEY}" "s3://${BUCKET}/${DEST_KEY}" 2>&1 >/dev/null)"; then
+            echo "${COPY_ERR}"
+            if grep -qiE 'AccessDenied|not authorized|ExpiredToken' <<<"${COPY_ERR}"; then
+              echo "::error::The artifacts role was refused the write to ${DEST_KEY}. If this is AccessDenied, the therock-ci-external policy does not permit writing this key even inside this run's own prefix, and the tarball cannot be staged where ROCmTest looks for it. That is a question for TheRock's CI owners, not something this workflow can work around."
+            else
+              echo "::error::Could not copy the tarball to ${DEST_KEY}. The install would have been dispatched at a directory with nothing in it, so it is stopped here instead."
+            fi
+            exit 1
+          fi
+
+          # Proved, not assumed. A copy that reported success but left nothing
+          # readable would otherwise be found by a perf machine, which is the
+          # expensive place to find it.
+          SOURCE_SIZE="$(aws s3api head-object --bucket "${BUCKET}" --key "${SOURCE_KEY}" --query ContentLength --output text)"
+          DEST_SIZE="$(aws s3api head-object --bucket "${BUCKET}" --key "${DEST_KEY}" --query ContentLength --output text)"
+          if [[ "${SOURCE_SIZE}" != "${DEST_SIZE}" ]]; then
+            echo "::error::The copy at ${DEST_KEY} is ${DEST_SIZE} bytes but the tarball it came from is ${SOURCE_SIZE}. Refusing to dispatch an install against a partial object."
+            exit 1
+          fi
+          echo "Verified ${DEST_SIZE} bytes at ${DEST_KEY}."
+
+          # The machine fetches it anonymously over HTTPS, which is a different
+          # path from the authenticated head above, so it is worth confirming
+          # separately that the object is publicly readable.
+          PUBLIC_CODE="$(curl -sI -o /dev/null -w '%{http_code}' --max-time 30 "${PACKAGES_URL}$(sed 's/+/%2B/g' <<<"${DEST_KEY##*/}")" || echo "000")"
+          case "${PUBLIC_CODE}" in
+            200) echo "Publicly readable." ;;
+            000) echo "::warning::Could not reach the bucket over HTTPS from this runner to confirm public readability. The authenticated check above passed." ;;
+            *)   echo "::error::The copy is in the bucket but answers ${PUBLIC_CODE} over HTTPS, so the perf machine could not fetch it."; exit 1 ;;
+          esac
 
       # Dispatched against mliyakat_amdeng/custom rather than main, because
       # therock_packages_url is declared there and not yet on main. A
