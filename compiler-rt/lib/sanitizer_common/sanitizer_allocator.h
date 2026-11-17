@@ -25,8 +25,7 @@
 #include "sanitizer_type_traits.h"
 
 #if SANITIZER_AMDHSA
-#  include <hsa.h>
-#  include <hsa_ext_amd.h>
+#  include "sanitizer_offload_hsa.h"
 #endif
 
 namespace __sanitizer {
