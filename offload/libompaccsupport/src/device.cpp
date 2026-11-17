@@ -1338,7 +1338,7 @@ static uint64_t getOneIterationPerThreadNumBlocks(uint64_t LoopTripCount,
 /// Downstream: the low-trip-count knobs of the former AMDGPU launch-geometry
 static uint64_t getLowTripCountOverrideNumBlocks(
     const DeviceGeometryPropsTy &Props, uint32_t UserNumBlocks,
-    uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
+    uint64_t LoopTripCount, uint64_t &EffectiveNumThreads,
     bool IsNumThreadsStrict, bool IsNumThreadsFromUser,
     const KernelLaunchInfoTy &KernelEnv) {
   static UInt32Envar OMPX_LowTripCount("LIBOMPTARGET_AMDGPU_LOW_TRIPCOUNT", 0);

@@ -653,7 +653,7 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
                                                    ? DefaultNumThreads
                                                    : ConstWGSize;
               uint32_t MaxNumThreads =
-                  std::min(uint32_t(ConstWGSize), Device.getThreadLimit());
+                  std::min(uint64_t(ConstWGSize), Device.getThreadLimit());
               if (Cfg.MaxThreads > 0 &&
                   uint32_t(Cfg.MaxThreads) < DefaultNumThreads)
                 MaxNumThreads =
