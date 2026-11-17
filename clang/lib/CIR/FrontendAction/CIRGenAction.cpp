@@ -222,7 +222,7 @@ static void emitCIRModuleOutput(
     EmbedBitcode(LLVMModule.get(), CGO, llvm::MemoryBufferRef());
 
     BackendAction BEAction = getBackendActionFromOutputType(Action);
-    emitBackendOutput(CI, CGO, LLVMModule.get(), BEAction,
+    emitBackendOutput(CI, CGO, "", LLVMModule.get(), BEAction,
                       CI.getVirtualFileSystemPtr(), std::move(OutputStream));
     break;
   }
