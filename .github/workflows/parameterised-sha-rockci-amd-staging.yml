@@ -538,6 +538,12 @@ jobs:
     continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # continue-on-error makes needs.performance_preflight.result read 'success'
+    # to every dependent job even when this one fails, so the result cannot be
+    # used to gate the dispatch. This output can: it is written only on the
+    # path that reaches the end of the check, and is empty otherwise.
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
     permissions:
       contents: read
     env:
@@ -547,6 +553,7 @@ jobs:
       PERF_WORKFLOW: performance-test-run.yml
     steps:
       - name: Check the dispatch token reaches both qa-forge workflows
+        id: check
         run: |
           set -uo pipefail
 
@@ -621,6 +628,7 @@ jobs:
           fi
 
           echo "Both workflows are readable."
+          echo "ok=true" >> "${GITHUB_OUTPUT}"
           {
             echo "### Performance preflight"
             echo
@@ -690,6 +698,12 @@ jobs:
       perf_dispatch_inputs: ${{ steps.plan.outputs.perf_dispatch_inputs }}
       suites: ${{ steps.plan.outputs.suites }}
       install_run_url: ${{ steps.dispatch.outputs.runUrlHtml }}
+      # Same reason as the preflight: continue-on-error hides this job's
+      # failure from every consumer of needs.*.result, so the run summary
+      # needs a signal that a failed step actually suppresses. A step with no
+      # condition does not run once an earlier one has failed, which is
+      # exactly the semantics wanted here.
+      ok: ${{ steps.done.outputs.ok }}
     steps:
       - name: Plan the performance run
         id: plan
@@ -1094,12 +1108,31 @@ jobs:
             *)   echo "::error::The copy is in the bucket but answers ${PUBLIC_CODE} over HTTPS, so the perf machine could not fetch it."; exit 1 ;;
           esac
 
+          # upload_tarballs.py reports only the plain multiarch URL in its
+          # tarball_urls output, so a run that built the -tests- tarball shows
+          # no sign of it outside this log. Name it in the summary: 'was the
+          # test tarball built' should not need a log read to answer.
+          {
+            echo "### Tarball staged for the measurement"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tarball | \`${SOURCE_KEY##*/}\` |"
+            echo "| Size | $(numfmt --to=iec --suffix=B "${DEST_SIZE}" 2>/dev/null || echo "${DEST_SIZE} bytes") |"
+            echo "| Staged at | \`${DEST_KEY}\` |"
+            echo "| Fetched from | ${PACKAGES_URL} |"
+            echo
+            echo "This is the \`-tests-\` tarball, which carries the test binaries the"
+            echo "perf suites execute. It is a superset of the plain multiarch tarball,"
+            echo "so only the one object is staged."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       # Dispatched against mliyakat_amdeng/custom rather than main, because
       # therock_packages_url is declared there and not yet on main. A
       # workflow_dispatch carrying an input the target does not declare is
       # rejected outright, so this ref is load-bearing.
       - name: Say why no install was dispatched
-        if: ${{ needs.performance_preflight.result != 'success' }}
+        if: ${{ needs.performance_preflight.outputs.ok != 'true' }}
         run: |
           echo "::warning::The qa-forge preflight did not pass, so no install was dispatched and no measurement will be taken. The tarball was still built, published and staged under tarball-multi-arch/, so this run's artifacts are complete and can be installed by hand or re-dispatched once the token is approved."
           {
@@ -1112,7 +1145,7 @@ jobs:
 
       - name: Dispatch the ROCm install onto the perf machine
         id: dispatch
-        if: ${{ needs.performance_preflight.result == 'success' }}
+        if: ${{ needs.performance_preflight.outputs.ok == 'true' }}
         uses: benc-uk/workflow-dispatch@d004979be141727c7a17c28f603e2facc40d0855 # v1.3.3
         with:
           repo: ${{ steps.plan.outputs.qa_forge_repo }}
@@ -1187,24 +1220,38 @@ jobs:
             exit 1
           fi
 
+      - name: Record that this job got to the end
+        id: done
+        run: echo "ok=true" >> "${GITHUB_OUTPUT}"
+
   performance_tests:
     name: Performance Tests
     needs: [performance_install]
-    # A failed install takes this with it: GitHub skips a job whose dependency
-    # did not succeed. Measuring a stack that did not install is worse than
-    # not measuring.
+    # A failed install must take this with it. Measuring a stack that did not
+    # install is worse than not measuring.
+    #
+    # This tests the install job's own 'ok' output rather than its result:
+    # continue-on-error there makes needs.performance_install.result read
+    # 'success' even when the job failed, so result cannot tell a completed
+    # install from a broken one. The failure mode that guards against is a
+    # real one -- a dispatch that succeeds followed by an install that
+    # concludes failure leaves install_run_url set, so without this the
+    # measurement would go ahead against a machine it already knows is bad.
+    #
     # install_run_url is empty when the dispatch step was skipped, which is
     # exactly the no-token case: the job succeeded, but no install happened,
     # so there is nothing on the machine to measure.
     if: >-
       ${{
-        needs.performance_install.result == 'success' &&
+        needs.performance_install.outputs.ok == 'true' &&
         needs.performance_install.outputs.install_run_url != ''
       }}
     # As with the two jobs above.
     continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+    outputs:
+      ok: ${{ steps.done.outputs.ok }}
     permissions:
       contents: read
     env:
@@ -1328,6 +1375,10 @@ jobs:
             echo "::error::The measurement run concluded '${CONCLUSION}'. See ${PERF_RUN_URL}."
             exit 1
           fi
+
+      - name: Record that this job got to the end
+        id: done
+        run: echo "ok=true" >> "${GITHUB_OUTPUT}"
 
   # ==========================================================================
   # Windows
@@ -1537,13 +1588,24 @@ jobs:
           python3 -c '
           import json, os
           needs = json.loads(os.environ["NEEDS_JSON"])
-          bad = {
-              n: needs[n].get("result")
-              for n in ("performance_preflight", "performance_install", "performance_tests")
-              if n in needs and needs[n].get("result") not in ("success", "skipped", None)
-          }
+          # Deliberately not needs[n]["result"]. continue-on-error on these
+          # three jobs makes result read "success" to every consumer even
+          # when the job failed, which would leave this warning silent in
+          # precisely the case it exists for. Each job instead publishes
+          # ok=true from a final step that a failure earlier in the job
+          # suppresses. result is still right for "skipped", which
+          # continue-on-error does not touch, and that is all it is used for.
+          bad = []
+          for n in ("performance_preflight", "performance_install", "performance_tests"):
+              if n not in needs:
+                  continue
+              result = needs[n].get("result")
+              if result == "skipped":
+                  continue
+              if (needs[n].get("outputs") or {}).get("ok") != "true":
+                  bad.append(n)
           if bad:
-              listed = ", ".join(f"`{n}` ({r})" for n, r in bad.items())
+              listed = ", ".join(f"`{n}`" for n in bad)
               with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
                   f.write(
                       "\n> [!WARNING]\n"
