@@ -420,7 +420,8 @@ void GCNRematStrategy::createCandidates() {
 
   for (unsigned RegIdx = 0, E = Remater.getNumRegs(); RegIdx < E; ++RegIdx) {
     const Rematerializer::Reg &CandReg = Remater.getReg(RegIdx);
-    if (!CandReg.hasUsersOutsideDefRegion())
+    // All users must be in a single region.
+    if (CandReg.Uses.size() != 1)
       continue;
 
     // Rematerialization moves the defining instruction into the region of its
