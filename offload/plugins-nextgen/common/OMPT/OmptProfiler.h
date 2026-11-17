@@ -17,9 +17,9 @@
 
 #include "GenericProfiler.h"
 
+#include "APITypes.h"
 #include "OmptDeviceTracing.h"
 #include "OpenMP/OMPT/Callback.h"
-#include "Shared/APITypes.h"
 #include "Shared/Debug.h"
 #include "omp-tools.h"
 
