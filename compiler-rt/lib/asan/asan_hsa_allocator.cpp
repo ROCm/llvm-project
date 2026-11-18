@@ -411,8 +411,6 @@ extern "C" SANITIZER_INTERFACE_ATTRIBUTE int __sanitizer_amdgpu_set_hsa_table(
             "AddressSanitizer: incomplete HSA table, GPU memory not tracked\n");
     return 0;
   }
-  if (atomic_load(&hsa_intercepted, memory_order_seq_cst))
-    return RefuseHsaTable();
   u8 state = kHsaTableNone;
   if (!atomic_compare_exchange_strong(
           &hsa_table_state, &state, kHsaTableRegistering, memory_order_seq_cst))
