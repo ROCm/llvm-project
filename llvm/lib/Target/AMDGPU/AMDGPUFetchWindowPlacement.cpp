@@ -20,10 +20,14 @@
 ///
 /// This pass runs after all code size changes. It computes exact byte offsets,
 /// scores the eight 4-byte shifts of each innermost loop by the frequency
-/// weighted cost above, and inserts the chosen number of s_nop in the coldest
-/// block that precedes the loop in layout. A shift that would move a block
-/// hotter than the loop being placed is refused when that block is not part of
-/// an innermost loop scored later. The 32-byte header alignment from
+/// weighted cost above, and inserts the chosen number of s_nop in a block that
+/// precedes the loop in layout. A shallower loop is preferred, and the coldest
+/// block breaks a tie. The search stops at an aligned block, which would absorb
+/// a pad placed before it. A pad block that is itself in a loop gets at most
+/// one s_nop: a longer chain would run on every iteration of that loop, and the
+/// trip count is not known. A shift that would move a block hotter than the
+/// loop being placed is refused when that block is not part of an innermost
+/// loop scored later. The 32-byte header alignment from
 /// SITargetLowering::getPrefLoopAlignment is dropped for loops handled here.
 /// Loops with a user requested alignment (llvm.loop.align, -align-loops) are
 /// left alone, and no shift may break a later user requested alignment.
@@ -84,6 +88,7 @@ public:
 
 private:
   const SIInstrInfo *TII = nullptr;
+  const MachineLoopInfo *MLI = nullptr;
   const MachineBlockFrequencyInfo *MBFI = nullptr;
   DenseMap<const MachineBasicBlock *, unsigned> Offset;
   SmallPtrSet<const MachineBasicBlock *, 8> UserAligned;
@@ -281,16 +286,20 @@ bool AMDGPUFetchWindowPlacement::placeLoop(MachineLoop &L,
   for (const MachineInstr &MI : Last->instrs())
     Bytes += size(MI);
 
-  // Padding goes into the coldest block between the previous placed loop and
-  // this one, so earlier placements are not disturbed. An aligned block in
-  // between would absorb the padding, so do not look past one.
+  // Padding goes into a block between the previous placed loop and this one,
+  // so earlier placements are not disturbed. A block in a shallower loop is
+  // preferred, because a pad inside a loop runs on every iteration of it; the
+  // coldest block wins at the same depth. An aligned block in between would
+  // absorb the padding, so do not look past one.
   MachineBasicBlock *PadMBB = nullptr;
   auto Stop = Fence ? Fence->getIterator() : MF.end();
   for (auto I = First->getIterator(); I != MF.begin();) {
     --I;
     if (I == Stop)
       break;
-    if (!PadMBB || MBFI->getBlockFreq(&*I) < MBFI->getBlockFreq(PadMBB))
+    if (!PadMBB || MLI->getLoopDepth(&*I) < MLI->getLoopDepth(PadMBB) ||
+        (MLI->getLoopDepth(&*I) == MLI->getLoopDepth(PadMBB) &&
+         MBFI->getBlockFreq(&*I) < MBFI->getBlockFreq(PadMBB)))
       PadMBB = &*I;
     if (I->getAlignment() > Align(1))
       break;
@@ -309,15 +318,22 @@ bool AMDGPUFetchWindowPlacement::placeLoop(MachineLoop &L,
 
   // The model does not resolve differences below CostSlack, so act only on a
   // larger gain and then take the least padding within CostSlack of the best.
+  // A pad inside a loop is limited to one s_nop. More than that runs on every
+  // iteration of the enclosing loop, and a chain that long is not safe on
+  // gfx950. One s_nop is the same cap the header alignment already uses.
+  unsigned PadDepth = MLI->getLoopDepth(PadMBB);
+  unsigned MaxNops = PadDepth ? 1 : FetchWindow / NopBytes - 1;
   double Base = cost(L, First, Last, 0, /*KeepAlign=*/true);
   SmallVector<double, 8> Costs;
   for (unsigned S = 0; S < FetchWindow; S += NopBytes)
     Costs.push_back(cost(L, First, Last, S, /*KeepAlign=*/false));
-  double Best = *llvm::min_element(Costs);
+  double Best = Costs[0];
+  for (unsigned Idx = 1; Idx <= MaxNops; ++Idx)
+    Best = std::min(Best, Costs[Idx]);
   unsigned BestShift = ~0u;
   if (Base > Best + CostSlack)
-    for (auto [Idx, C] : enumerate(Costs))
-      if (C <= Best + CostSlack) {
+    for (unsigned Idx = 0; Idx <= MaxNops; ++Idx)
+      if (Costs[Idx] <= Best + CostSlack) {
         BestShift = Idx * NopBytes;
         break;
       }
@@ -332,7 +348,8 @@ bool AMDGPUFetchWindowPlacement::placeLoop(MachineLoop &L,
     errs() << " ] shift="
            << (BestShift == ~0u ? std::string("keep")
                                 : std::to_string(BestShift))
-           << " pad-in " << printMBBReference(*PadMBB) << '\n';
+           << " pad-in " << printMBBReference(*PadMBB) << " depth=" << PadDepth
+           << '\n';
   }
   if (BestShift == ~0u)
     return false;
@@ -411,7 +428,7 @@ bool AMDGPUFetchWindowPlacement::runOnMachineFunction(MachineFunction &MF) {
         return false;
 
   MBFI = &getAnalysis<MachineBlockFrequencyInfoWrapperPass>().getMBFI();
-  MachineLoopInfo &MLI = getAnalysis<MachineLoopInfoWrapperPass>().getLI();
+  MLI = &getAnalysis<MachineLoopInfoWrapperPass>().getLI();
 
   // MachineBlockPlacement takes the larger of llvm.loop.align and the fetch
   // window alignment, but the latter caps the padding at one s_nop. Lift the
@@ -421,7 +438,7 @@ bool AMDGPUFetchWindowPlacement::runOnMachineFunction(MachineFunction &MF) {
   for (MachineBasicBlock &MBB : MF) {
     if (MBB.getAlignment() == Align(1))
       continue;
-    const MachineLoop *L = MLI.getLoopFor(&MBB);
+    const MachineLoop *L = MLI->getLoopFor(&MBB);
     if (L && getLoopAlignMetadata(*L) > NopBytes && !hasUserAlignment(MBB)) {
       MBB.setMaxBytesForAlignment(0);
       Changed = true;
@@ -431,7 +448,7 @@ bool AMDGPUFetchWindowPlacement::runOnMachineFunction(MachineFunction &MF) {
   }
 
   SmallVector<MachineLoop *, 8> Inner;
-  for (MachineLoop *L : MLI.getLoopsInPreorder())
+  for (MachineLoop *L : MLI->getLoopsInPreorder())
     if (L->isInnermost())
       Inner.push_back(L);
   if (Inner.empty())
