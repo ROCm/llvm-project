@@ -13,11 +13,16 @@
 # Options read by this file must be passed before -C:
 #   LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR
 #       Required. Source of the SPIR-V translator, ROCm/SPIRV-LLVM-Translator.
+#   SANITIZER_AMDGPU
+#       Optional. Enables GPU support in the host sanitizers.
 #   SANITIZER_HSA_INCLUDE_PATH
-#       Directory containing hsa.h. Enables GPU support in the host sanitizers.
+#       Deprecated alias for SANITIZER_AMDGPU.
 #   THEROCK_SANITIZER
 #       Optional. When ASAN, HOST_ASAN, or TSAN, host runtimes are built with
 #       -gdwarf-4 so dwz can process the packages.
+#   THEROCK_COMPILER_RT_DEBUG
+#       Optional. COMPILER_RT_DEBUG on Windows. BUILTINS_<triple>_COMPILER_RT_DEBUG
+#       and RUNTIMES_<triple>_COMPILER_RT_DEBUG elsewhere.
 
 if(NOT LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR)
   message(FATAL_ERROR "LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR must point to the SPIR-V translator source")
@@ -59,6 +64,18 @@ if(NOT CMAKE_HOST_WIN32)
     sqtt-marker)
 
   # Builds compiler-rt for every architecture the host compiler supports.
+  # Per-target builds only see BUILTINS_<triple>_* and RUNTIMES_<triple>_*.
+  # FORCE so a later -DTHEROCK_COMPILER_RT_DEBUG=ON replaces a cached OFF.
+  if(NOT DEFINED THEROCK_COMPILER_RT_DEBUG)
+    set(THEROCK_COMPILER_RT_DEBUG OFF)
+  endif()
+  foreach(_triple ${ROCM_HOST_TRIPLE} ${ROCM_DEVICE_TRIPLE})
+    set(BUILTINS_${_triple}_COMPILER_RT_DEBUG "${THEROCK_COMPILER_RT_DEBUG}"
+      CACHE BOOL "" FORCE)
+    set(RUNTIMES_${_triple}_COMPILER_RT_DEBUG "${THEROCK_COMPILER_RT_DEBUG}"
+      CACHE BOOL "" FORCE)
+  endforeach()
+
   set(BUILTINS_${ROCM_HOST_TRIPLE}_COMPILER_RT_DEFAULT_TARGET_ONLY OFF CACHE BOOL "")
   set(RUNTIMES_${ROCM_HOST_TRIPLE}_COMPILER_RT_DEFAULT_TARGET_ONLY OFF CACHE BOOL "")
 
@@ -79,9 +96,15 @@ if(NOT CMAKE_HOST_WIN32)
   # libomp is loaded from several depths below <rocm>, e.g. lib/llvm/lib/<triple>.
   set(RUNTIMES_${ROCM_HOST_TRIPLE}_LIBOMP_INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib:$ORIGIN/../../lib:$ORIGIN/../../../lib:$ORIGIN/../../../../lib" CACHE STRING "")
   set(RUNTIMES_${ROCM_HOST_TRIPLE}_LIBOMPTARGET_NO_SANITIZER_AMDGPU ON CACHE BOOL "")
-  if(SANITIZER_HSA_INCLUDE_PATH)
+  if(SANITIZER_AMDGPU OR SANITIZER_HSA_INCLUDE_PATH)
     set(RUNTIMES_${ROCM_HOST_TRIPLE}_SANITIZER_AMDGPU ON CACHE BOOL "")
-    set(RUNTIMES_${ROCM_HOST_TRIPLE}_SANITIZER_HSA_INCLUDE_PATH "${SANITIZER_HSA_INCLUDE_PATH}" CACHE PATH "")
     set(RUNTIMES_${ROCM_HOST_TRIPLE}_SANITIZER_COMGR_INCLUDE_PATH "${_THEROCK_ROOT}/amd/comgr/include" CACHE PATH "")
   endif()
+else()
+  # Default-target builtins and runtimes forward COMPILER_RT_*.
+  # FORCE so a later -DTHEROCK_COMPILER_RT_DEBUG=ON replaces a cached OFF.
+  if(NOT DEFINED THEROCK_COMPILER_RT_DEBUG)
+    set(THEROCK_COMPILER_RT_DEBUG OFF)
+  endif()
+  set(COMPILER_RT_DEBUG "${THEROCK_COMPILER_RT_DEBUG}" CACHE BOOL "" FORCE)
 endif()
