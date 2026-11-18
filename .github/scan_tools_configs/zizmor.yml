@@ -32,6 +32,11 @@ rules:
         # ROCm security baseline, shared across ROCm repos. Exempt from the
         # commit-SHA pin requirement.
         ROCm/rocm-security-gh/.github/workflows/security-baseline.yml: ref-pin
+        # LLVM trunk verifier calls these on amd-compiler-ci so the build
+        # workflows move with that branch. A branch pin is the intended ref.
+        ROCm/llvm-project/.github/workflows/setup_multi_arch.yml: ref-pin
+        ROCm/llvm-project/.github/workflows/multi_arch_ci_linux.yml: ref-pin
+        ROCm/llvm-project/.github/workflows/multi_arch_ci_windows.yml: ref-pin
   dangerous-triggers:
     ignore:
       # LLVM release-backport workflow (/cherry-pick via issue_comment).
