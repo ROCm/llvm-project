@@ -22,12 +22,10 @@ copyright = (
 )
 
 # Enable the per-page Markdown download button.
-html_theme_options.update(
-    {
-        "repository_url": "https://github.com/ROCm/llvm-project",
-        "path_to_docs": "amd/docs",
-        "use_repository_button": True,
-        "use_issues_button": True,
-        "use_download_button": True,
-    }
-)
+html_theme_options.update({
+    "repository_url": "https://github.com/ROCm/llvm-project",
+    "path_to_docs": "amd/docs",
+    "use_repository_button": True,
+    "use_issues_button": True,
+    "use_download_button": True,
+})
