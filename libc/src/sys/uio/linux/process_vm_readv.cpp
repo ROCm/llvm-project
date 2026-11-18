@@ -7,33 +7,33 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Linux implementation of copy_file_range.
+/// Linux implementation of process_vm_readv.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "src/unistd/copy_file_range.h"
+#include "src/sys/uio/process_vm_readv.h"
 
-#include "hdr/types/off_t.h"
-#include "hdr/types/size_t.h"
+#include "hdr/types/pid_t.h"
 #include "hdr/types/ssize_t.h"
-#include "src/__support/OSUtil/linux/syscall_wrappers/copy_file_range.h"
+#include "hdr/types/struct_iovec.h"
+#include "src/__support/OSUtil/linux/syscall_wrappers/process_vm_readv.h"
 #include "src/__support/common.h"
 #include "src/__support/libc_errno.h"
 #include "src/__support/macros/config.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
-LLVM_LIBC_FUNCTION(ssize_t, copy_file_range,
-                   (int fd_in, off_t *off_in, int fd_out, off_t *off_out,
-                    size_t len, unsigned int flags)) {
-  auto result = linux_syscalls::copy_file_range(fd_in, off_in, fd_out, off_out,
-                                                len, flags);
-
-  if (!result.has_value()) {
-    libc_errno = result.error();
+LLVM_LIBC_FUNCTION(ssize_t, process_vm_readv,
+                   (pid_t pid, const struct iovec *local_iov,
+                    unsigned long liovcnt, const struct iovec *remote_iov,
+                    unsigned long riovcnt, unsigned long flags)) {
+  ErrorOr<ssize_t> ret = linux_syscalls::process_vm_readv(
+      pid, local_iov, liovcnt, remote_iov, riovcnt, flags);
+  if (!ret) {
+    libc_errno = ret.error();
     return -1;
   }
-  return result.value();
+  return ret.value();
 }
 
 } // namespace LIBC_NAMESPACE_DECL
