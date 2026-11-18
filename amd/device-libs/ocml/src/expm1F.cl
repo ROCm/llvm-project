@@ -25,8 +25,11 @@ MATH_MANGLE(expm1)(float x)
                     0x1.000000p-1f);
     p = BUILTIN_FMA_F32(t, t*p, t);
     int e = fn == 128.0f ? 127 : (int)fn;
+
     float s = BUILTIN_FLDEXP_F32(1.0f, e);
+
     float z = BUILTIN_FMA_F32(s, p, s - 1.0f);
+
     z = fn == 128.0 ? 2.0f*z : z;
 #endif
     
