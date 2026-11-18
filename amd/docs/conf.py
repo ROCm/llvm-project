@@ -12,13 +12,13 @@ html_theme_options = {"flavor": "rocm"}
 extensions = ["rocm_docs"]
 external_toc_path = "./sphinx/_toc.yml"
 
-version = "22.0.0"
+version = "24.0.0"
 # release = "6.3.2"
 html_title = f"llvm-project {version} Documentation"
 project = "llvm-project Documentation"
 author = "Advanced Micro Devices, Inc."
 copyright = (
-    "Copyright (c) 2024-2025 Advanced Micro Devices, Inc. All rights reserved."
+    "Copyright (c) 2025-2026 Advanced Micro Devices, Inc. All rights reserved."
 )
 
 # Enable the per-page Markdown download button.
