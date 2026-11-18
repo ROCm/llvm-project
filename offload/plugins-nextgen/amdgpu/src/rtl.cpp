@@ -34,6 +34,7 @@
 #include "Shared/Utils.h"
 #include "Utils/ELF.h"
 
+#include "AMDGPUDeviceOptions.h"
 #include "GenericProfiler.h"
 #include "GlobalHandler.h"
 #include "OffloadAPI.h"
@@ -2904,9 +2905,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
                                64),
         OMPX_ForceSyncRegions("OMPX_FORCE_SYNC_REGIONS", 0),
         OMPX_StreamBusyWait("LIBOMPTARGET_AMDGPU_STREAM_BUSYWAIT", 2000000),
-        OMPX_UseMultipleSdmaEngines(
-            // setting default to true here appears to solve random sdma problem
-            "LIBOMPTARGET_AMDGPU_USE_MULTIPLE_SDMA_ENGINES", true),
         OMPX_ApuMaps("OMPX_APU_MAPS", false),
         OMPX_EnableGFX90ACoarseGrainUsmMaps(
             "OMPX_ENABLE_GFX90A_COARSE_GRAIN_USM_MAPS", false),
@@ -2921,18 +2919,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         OMPX_EnableDevice2DeviceMemAccess(
             "OMPX_ENABLE_DEVICE_TO_DEVICE_MEM_ACCESS", false),
         AMDGPUStreamManager(*this, Agent), AMDGPUEventManager(*this),
-        AMDGPUSignalManager(*this), Agent(Agent), HostDevice(HostDevice) {
-    // Get config for envars.
-    const DeviceEnvarConfigTy &EnvarConfig = getEnvarConfig();
-    // Check each envar if it was set by user.
-    if (!OMPX_UseMultipleSdmaEngines.isPresent()) {
-      OMPX_UseMultipleSdmaEngines = EnvarConfig.OMPX_UseMultipleSdmaEngines;
-    }
-    // Print potential GPU envars.
-    ODBG(ODT_Tool) << "Loaded per GPU envars:"
-                   << "  OMPX_UseMultipleSdmaEngines="
-                   << EnvarConfig.OMPX_UseMultipleSdmaEngines;
-  }
+        AMDGPUSignalManager(*this), Agent(Agent), HostDevice(HostDevice) {}
 
   ~AMDGPUDeviceTy() {}
 
@@ -3071,6 +3058,11 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return Err;
     HardwareParallelism = ComputeUnits * WavesPerCU;
 
+    if (auto Err = checkIfAPU())
+      return Err;
+
+    DeviceOptions = AMDGPUDeviceOptionsTy(ComputeUnitKind, IsAPU);
+
     // Get maximum size of any device queues and maximum number of queues.
     uint32_t MaxQueueSize;
     if (auto Err = getDeviceAttr(HSA_AGENT_INFO_QUEUE_MAX_SIZE, MaxQueueSize))
@@ -3121,10 +3113,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return Err;
     if (!Targets.empty() && Targets[0].str().contains("xnack+"))
       IsXnackEnabled = true;
-
-    // detect if device is an APU.
-    if (auto Err = checkIfAPU())
-      return Err;
 
     // detect if device is GFX90a.
     if (auto Err = checkIfGFX90a())
@@ -4561,7 +4549,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     return Plugin::success();
   }
 
-  bool useMultipleSdmaEngines() const { return OMPX_UseMultipleSdmaEngines; }
+  bool useMultipleSdmaEngines() const {
+    return DeviceOptions.UseMultipleSdmaEngines;
+  }
 
   bool useStrictSanityChecks() const { return OMPX_StrictSanityChecks; }
 
@@ -4698,6 +4688,9 @@ private:
     return "UNKNOWN";
   }
 
+  /// Runtime options of the device.
+  AMDGPUDeviceOptionsTy DeviceOptions;
+
   /// Envar for controlling the number of HSA queues per device. High number of
   /// queues may degrade performance.
   UInt32Envar OMPX_NumQueues;
@@ -4732,9 +4725,6 @@ private:
   /// before going into a blocking HSA wait state. The unit for these variables
   /// are microseconds.
   UInt32Envar OMPX_StreamBusyWait;
-
-  /// Use ROCm 5.7 interface for multiple SDMA engines
-  BoolEnvar OMPX_UseMultipleSdmaEngines;
 
   /// Value of OMPX_APU_MAPS env var used to force
   /// automatic zero-copy behavior on non-APU GPUs.
@@ -4891,45 +4881,6 @@ private:
     double Offset = Start.Host - Slope * Start.Device;
     ODBG(ODT_Tool) << "Translate time Slope: " << Slope << " Offset: " << Offset;
     Plugin.getProfiler()->setTimeConversionFactors(Slope, Offset);
-  }
-
-  /// Representing all the runtime envar configs for a device.
-  struct DeviceEnvarConfigTy {
-    bool
-        OMPX_UseMultipleSdmaEngines; // LIBOMPTARGET_AMDGPU_USE_MULTIPLE_SDMA_ENGINES
-  };
-
-  static inline const std::unordered_map<std::string, DeviceEnvarConfigTy>
-      EnvarConfigs = {{"MI210", {.OMPX_UseMultipleSdmaEngines = true}},
-                      {"MI250X", {.OMPX_UseMultipleSdmaEngines = true}},
-                      {"MI250X/MI250", {.OMPX_UseMultipleSdmaEngines = true}},
-                      {"MI300A", {.OMPX_UseMultipleSdmaEngines = false}},
-                      {"MI300X", {.OMPX_UseMultipleSdmaEngines = true}},
-                      {"MI308X", {.OMPX_UseMultipleSdmaEngines = true}},
-                      {"MI350X", {.OMPX_UseMultipleSdmaEngines = true}},
-                      {"MI355X", {.OMPX_UseMultipleSdmaEngines = true}},
-                      // Default config for unknown devices.
-                      {"DEFAULT", {.OMPX_UseMultipleSdmaEngines = false}}};
-
-  const DeviceEnvarConfigTy &getEnvarConfig() const {
-    std::string DeviceMarketingName = getNormMarketingName();
-    auto It = EnvarConfigs.find(DeviceMarketingName);
-
-    if (DeviceMarketingName == "UNKNOWN" || It == EnvarConfigs.end()) {
-      // Return default config
-      ODBG(ODT_Tool) << "Default envar config is used.";
-      auto DefaultIt = EnvarConfigs.find("DEFAULT");
-
-      assert(DefaultIt != EnvarConfigs.end() &&
-             "Default envar config not found!\n");
-      return DefaultIt->second;
-    }
-
-    ODBG(ODT_Tool) << "Envar config for "
-                   << DeviceMarketingName.c_str()
-                   << " is used.";
-
-    return It->second;
   }
 
   /// Launch the device memory initialization kernel.
