@@ -141,6 +141,8 @@ INTERCEPTOR(hsa_status_t, hsa_memory_copy, void* dst, const void* src,
     ASAN_READ_RANGE(nullptr, src, size);
     ASAN_WRITE_RANGE(nullptr, dst, size);
   }
+  if (!REAL(hsa_memory_copy))
+    return HSA_STATUS_ERROR_NOT_INITIALIZED;
   return REAL(hsa_memory_copy)(dst, src, size);
 }
 
@@ -157,6 +159,8 @@ INTERCEPTOR(hsa_status_t, hsa_amd_memory_async_copy, void* dst,
     ASAN_READ_RANGE(nullptr, src, size);
     ASAN_WRITE_RANGE(nullptr, dst, size);
   }
+  if (!REAL(hsa_amd_memory_async_copy))
+    return HSA_STATUS_ERROR_NOT_INITIALIZED;
   return REAL(hsa_amd_memory_async_copy)(dst, dst_agent, src, src_agent, size,
                                          num_dep_signals, dep_signals,
                                          completion_signal);
@@ -177,6 +181,8 @@ INTERCEPTOR(hsa_status_t, hsa_amd_memory_async_copy_on_engine, void* dst,
     ASAN_READ_RANGE(nullptr, src, size);
     ASAN_WRITE_RANGE(nullptr, dst, size);
   }
+  if (!REAL(hsa_amd_memory_async_copy_on_engine))
+    return HSA_STATUS_ERROR_NOT_INITIALIZED;
   return REAL(hsa_amd_memory_async_copy_on_engine)(
       dst, dst_agent, src, src_agent, size, num_dep_signals, dep_signals,
       completion_signal, engine_id, force_copy_on_sdma);

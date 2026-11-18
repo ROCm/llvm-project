@@ -15,6 +15,23 @@ int main(int argc, char **argv) {
   // CHECK: hsa_init without ROCr: 1
   printf("hsa_init without ROCr: %d\n",
          hsa_init() == HSA_STATUS_ERROR_NOT_INITIALIZED);
+  char dst[8], src[8];
+  hsa_agent_t agent = {};
+  hsa_signal_t signal = {};
+  // CHECK: hsa_memory_copy without ROCr: 1
+  printf("hsa_memory_copy without ROCr: %d\n",
+         hsa_memory_copy(dst, src, sizeof(src)) ==
+             HSA_STATUS_ERROR_NOT_INITIALIZED);
+  // CHECK: async copy without ROCr: 1
+  printf("async copy without ROCr: %d\n",
+         hsa_amd_memory_async_copy(dst, agent, src, agent, sizeof(src), 0,
+                                   nullptr,
+                                   signal) == HSA_STATUS_ERROR_NOT_INITIALIZED);
+  // CHECK: async copy on engine without ROCr: 1
+  printf("async copy on engine without ROCr: %d\n",
+         hsa_amd_memory_async_copy_on_engine(
+             dst, agent, src, agent, sizeof(src), 0, nullptr, signal,
+             HSA_AMD_SDMA_ENGINE_0, false) == HSA_STATUS_ERROR_NOT_INITIALIZED);
   // CHECK: ROCr loaded: 0
   printf("ROCr loaded: %d\n",
          dlopen(argv[1], RTLD_LAZY | RTLD_NOLOAD) != nullptr);
