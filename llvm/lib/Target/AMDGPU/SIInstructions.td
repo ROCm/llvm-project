@@ -106,6 +106,18 @@ def SIMULATED_TRAP : SPseudoInstSI<(outs), (ins), [(AMDGPUsimulated_trap)],
   let usesCustomInserter = 1;
 }
 
+// Experiment: llvm.amdgcn.sqtt.event is lowered to a pseudo that is printed as a
+// comment and emits no code (instead of an s_ttracedata).
+def SQTT_EVENT_COMMENT : SPseudoInstSI<(outs), (ins i32imm:$event_id), [],
+                                       "SQTT_EVENT_COMMENT $event_id"> {
+  let hasSideEffects = 1;
+  let SchedRW = [];
+  let hasNoSchedulingInfo = 1;
+  let FixedSize = 1;
+  let Size = 0;
+  let isMeta = 1;
+}
+
 def ATOMIC_FENCE : SPseudoInstSI<
   (outs), (ins i32imm:$ordering, i32imm:$scope),
   [(atomic_fence (i32 timm:$ordering), (i32 timm:$scope))],

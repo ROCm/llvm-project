@@ -66,6 +66,8 @@ extern int __attribute__((alias("__One_var"))) One_var_;
 // DEVICE-LABEL: define hidden i32 @__Two(
 // DEVICE-SAME: ) #[[ATTR0:[0-9]+]] {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 2
 //
 int __Two(void) { return 2; }
@@ -86,6 +88,8 @@ extern int __attribute__((alias("__Two_var"))) Two_var_;
 // DEVICE-LABEL: define hidden i32 @__Three(
 // DEVICE-SAME: ) #[[ATTR0]] {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 3
 //
 int __Three(void) { return 3; }
@@ -99,6 +103,7 @@ extern int __attribute__((alias("__Three_var"))) Three_var_;
 // HOST: attributes #[[ATTR0]] = { noinline nounwind optnone "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-features"="+cx8,+mmx,+sse,+sse2,+x87" }
 //.
 // DEVICE: attributes #[[ATTR0]] = { convergent noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
+// DEVICE: attributes #[[ATTR1:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // HOST: [[META0:![0-9]+]] = !{i32 1, !"__Two_var", i32 0, i32 0}
 // HOST: [[META1:![0-9]+]] = !{i32 1, !"__Three_var", i32 0, i32 1}
@@ -113,4 +118,8 @@ extern int __attribute__((alias("__Three_var"))) Three_var_;
 // DEVICE: [[META3:![0-9]+]] = !{i32 7, !"openmp", i32 51}
 // DEVICE: [[META4:![0-9]+]] = !{i32 7, !"openmp-device", i32 51}
 // DEVICE: [[META5:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// DEVICE: [[META6]] = !{i32 0, !"__Two"}
+// DEVICE: [[META7]] = !{i32 1, !"__Two"}
+// DEVICE: [[META8]] = !{i32 0, !"__Three"}
+// DEVICE: [[META9]] = !{i32 1, !"__Three"}
 //.

@@ -7,7 +7,9 @@ typedef int    v4i   __attribute__((ext_vector_type(4)));
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_global_load_monitor_b32(
 // CHECK-GFX1250-NEXT:  entry:
-// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.global.load.monitor.b32.i32(ptr addrspace(1) [[INPTR:%.*]], i32 0, metadata [[META7:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.global.load.monitor.b32.i32(ptr addrspace(1) [[INPTR:%.*]], i32 0, metadata [[META9:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret i32 [[TMP0]]
 //
 int test_amdgcn_global_load_monitor_b32(global int* inptr)
@@ -17,7 +19,9 @@ int test_amdgcn_global_load_monitor_b32(global int* inptr)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_global_load_monitor_b64(
 // CHECK-GFX1250-NEXT:  entry:
-// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <2 x i32> @llvm.amdgcn.global.load.monitor.b64.v2i32(ptr addrspace(1) [[INPTR:%.*]], i32 2, metadata [[META8:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
+// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <2 x i32> @llvm.amdgcn.global.load.monitor.b64.v2i32(ptr addrspace(1) [[INPTR:%.*]], i32 2, metadata [[META12:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret <2 x i32> [[TMP0]]
 //
 v2i test_amdgcn_global_load_monitor_b64(global v2i* inptr)
@@ -27,7 +31,9 @@ v2i test_amdgcn_global_load_monitor_b64(global v2i* inptr)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_global_load_monitor_b128(
 // CHECK-GFX1250-NEXT:  entry:
-// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.global.load.monitor.b128.v4i32(ptr addrspace(1) [[INPTR:%.*]], i32 2, metadata [[META9:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
+// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.global.load.monitor.b128.v4i32(ptr addrspace(1) [[INPTR:%.*]], i32 2, metadata [[META15:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret <4 x i32> [[TMP0]]
 //
 v4i test_amdgcn_global_load_monitor_b128(global v4i* inptr)
@@ -37,7 +43,9 @@ v4i test_amdgcn_global_load_monitor_b128(global v4i* inptr)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_flat_load_monitor_b32(
 // CHECK-GFX1250-NEXT:  entry:
-// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.flat.load.monitor.b32.i32(ptr [[INPTR:%.*]], i32 0, metadata [[META7]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
+// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.flat.load.monitor.b32.i32(ptr [[INPTR:%.*]], i32 0, metadata [[META9]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret i32 [[TMP0]]
 //
 int test_amdgcn_flat_load_monitor_b32(int* inptr)
@@ -47,7 +55,9 @@ int test_amdgcn_flat_load_monitor_b32(int* inptr)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_flat_load_monitor_b64(
 // CHECK-GFX1250-NEXT:  entry:
-// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <2 x i32> @llvm.amdgcn.flat.load.monitor.b64.v2i32(ptr [[INPTR:%.*]], i32 5, metadata [[META10:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
+// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <2 x i32> @llvm.amdgcn.flat.load.monitor.b64.v2i32(ptr [[INPTR:%.*]], i32 5, metadata [[META20:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret <2 x i32> [[TMP0]]
 //
 v2i test_amdgcn_flat_load_monitor_b64(v2i* inptr)
@@ -57,7 +67,9 @@ v2i test_amdgcn_flat_load_monitor_b64(v2i* inptr)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_flat_load_monitor_b128(
 // CHECK-GFX1250-NEXT:  entry:
-// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.flat.load.monitor.b128.v4i32(ptr [[INPTR:%.*]], i32 0, metadata [[META7]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
+// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.flat.load.monitor.b128.v4i32(ptr [[INPTR:%.*]], i32 0, metadata [[META9]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret <4 x i32> [[TMP0]]
 //
 v4i test_amdgcn_flat_load_monitor_b128(v4i* inptr)
@@ -67,7 +79,9 @@ v4i test_amdgcn_flat_load_monitor_b128(v4i* inptr)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_global_load_monitor_b32_wavefront(
 // CHECK-GFX1250-NEXT:  entry:
-// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.global.load.monitor.b32.i32(ptr addrspace(1) [[INPTR:%.*]], i32 0, metadata [[META11:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
+// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.global.load.monitor.b32.i32(ptr addrspace(1) [[INPTR:%.*]], i32 0, metadata [[META25:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret i32 [[TMP0]]
 //
 int test_amdgcn_global_load_monitor_b32_wavefront(global int* inptr)
@@ -77,7 +91,9 @@ int test_amdgcn_global_load_monitor_b32_wavefront(global int* inptr)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_global_load_monitor_b32_single(
 // CHECK-GFX1250-NEXT:  entry:
-// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.global.load.monitor.b32.i32(ptr addrspace(1) [[INPTR:%.*]], i32 0, metadata [[META12:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
+// CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.global.load.monitor.b32.i32(ptr addrspace(1) [[INPTR:%.*]], i32 0, metadata [[META28:![0-9]+]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret i32 [[TMP0]]
 //
 int test_amdgcn_global_load_monitor_b32_single(global int* inptr)

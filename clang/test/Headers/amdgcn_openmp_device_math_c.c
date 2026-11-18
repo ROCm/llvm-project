@@ -10,12 +10,14 @@
 // CHECK-NEXT:  entry:
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[__SGN_I:%.*]] = alloca i32, align 4, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[L1:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
 // CHECK-NEXT:    [[L1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[L1]] to ptr
 // CHECK-NEXT:    store i32 [[X:%.*]], ptr [[X_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[X_ADDR_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__SGN_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__SGN_I]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[__X_ADDR_ASCAST_I]], align 4
@@ -27,7 +29,9 @@
 // CHECK-NEXT:    [[XOR_I:%.*]] = xor i32 [[TMP2]], [[TMP3]]
 // CHECK-NEXT:    [[TMP4:%.*]] = load i32, ptr [[__SGN_ASCAST_I]], align 4
 // CHECK-NEXT:    [[SUB_I:%.*]] = sub nsw i32 [[XOR_I]], [[TMP4]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store i32 [[SUB_I]], ptr [[L1_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_math_int(int x) {
@@ -38,12 +42,14 @@ void test_math_int(int x) {
 // CHECK-NEXT:  entry:
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[__SGN_I:%.*]] = alloca i64, align 8, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[L1:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
 // CHECK-NEXT:    [[L1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[L1]] to ptr
 // CHECK-NEXT:    store i64 [[X:%.*]], ptr [[X_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load i64, ptr [[X_ADDR_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__SGN_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__SGN_I]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[__X_ADDR_ASCAST_I]], align 8
@@ -55,7 +61,9 @@ void test_math_int(int x) {
 // CHECK-NEXT:    [[XOR_I:%.*]] = xor i64 [[TMP2]], [[TMP3]]
 // CHECK-NEXT:    [[TMP4:%.*]] = load i64, ptr [[__SGN_ASCAST_I]], align 8
 // CHECK-NEXT:    [[SUB_I:%.*]] = sub nsw i64 [[XOR_I]], [[TMP4]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store i64 [[SUB_I]], ptr [[L1_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_math_long(long x) {
@@ -66,12 +74,14 @@ void test_math_long(long x) {
 // CHECK-NEXT:  entry:
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[__SGN_I:%.*]] = alloca i64, align 8, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[L1:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
 // CHECK-NEXT:    [[L1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[L1]] to ptr
 // CHECK-NEXT:    store i64 [[X:%.*]], ptr [[X_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load i64, ptr [[X_ADDR_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__SGN_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__SGN_I]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[__X_ADDR_ASCAST_I]], align 8
@@ -83,7 +93,9 @@ void test_math_long(long x) {
 // CHECK-NEXT:    [[XOR_I:%.*]] = xor i64 [[TMP2]], [[TMP3]]
 // CHECK-NEXT:    [[TMP4:%.*]] = load i64, ptr [[__SGN_ASCAST_I]], align 8
 // CHECK-NEXT:    [[SUB_I:%.*]] = sub nsw i64 [[XOR_I]], [[TMP4]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store i64 [[SUB_I]], ptr [[L1_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_math_long_long(long long x) {

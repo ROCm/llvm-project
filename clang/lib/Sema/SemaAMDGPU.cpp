@@ -475,6 +475,18 @@ bool SemaAMDGPU::CheckAMDGCNBuiltinFunctionCall(const TargetInfo &TI,
     }
     return false;
   }
+  case AMDGPU::BI__builtin_amdgcn_sqtt_user_entry:
+  case AMDGPU::BI__builtin_amdgcn_sqtt_user_exit: {
+    Expr *Name = TheCall->getArg(0);
+    if (Name->isInstantiationDependent())
+      return false;
+    if (!isa<StringLiteral>(Name->IgnoreParenImpCasts())) {
+      SemaRef.Diag(Name->getBeginLoc(), diag::err_expr_not_string_literal)
+          << Name->getSourceRange();
+      return true;
+    }
+    return false;
+  }
   default:
     return false;
   }

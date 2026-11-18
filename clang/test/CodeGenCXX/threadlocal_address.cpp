@@ -129,7 +129,7 @@ int h() {
 // CHECK: attributes #[[ATTR2:[0-9]+]] = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-features"="+cx8,+mmx,+sse,+sse2,+x87" }
 // CHECK: attributes #[[ATTR3:[0-9]+]] = { noinline nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-features"="+cx8,+mmx,+sse,+sse2,+x87" }
 //.
-// NON-ZERO-GLOBAL-AS: attributes #[[ATTR0]] = { convergent mustprogress noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
+// NON-ZERO-GLOBAL-AS: attributes #[[ATTR0]] = { convergent mustprogress noinline nounwind optnone "amdgpu-sqtt-instrument" "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // NON-ZERO-GLOBAL-AS: attributes #[[ATTR1:[0-9]+]] = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
 // NON-ZERO-GLOBAL-AS: attributes #[[ATTR2:[0-9]+]] = { convergent "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // NON-ZERO-GLOBAL-AS: attributes #[[ATTR3:[0-9]+]] = { convergent noinline nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" }

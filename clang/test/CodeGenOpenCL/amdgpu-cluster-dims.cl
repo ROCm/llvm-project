@@ -24,8 +24,8 @@ kernel void foo(global int *p) { *p = 1; }
 // CHECK-NEXT:    ret void
 //
 //.
-// CHECK: attributes #[[ATTR0]] = { convergent norecurse nounwind "amdgpu-cluster-dims"="0,0,0" "amdgpu-flat-work-group-size"="1,256" "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
-// CHECK: attributes #[[ATTR1]] = { alwaysinline convergent norecurse nounwind "amdgpu-cluster-dims"="0,0,0" "amdgpu-flat-work-group-size"="1,256" "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
+// CHECK: attributes #[[ATTR0]] = { convergent norecurse nounwind "amdgpu-cluster-dims"="0,0,0" "amdgpu-flat-work-group-size"="1,256" "amdgpu-sqtt-instrument" "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
+// CHECK: attributes #[[ATTR1]] = { alwaysinline convergent norecurse nounwind "amdgpu-cluster-dims"="0,0,0" "amdgpu-flat-work-group-size"="1,256" "amdgpu-sqtt-instrument" "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // CHECK: attributes #[[ATTR2]] = { convergent nounwind }
 //.
 // CHECK: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}

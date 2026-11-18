@@ -39,10 +39,12 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    store float -2.000000e+00, ptr [[__X_ADDR_ASCAST_I]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[__X_ADDR_ASCAST_I]], align 4
-// CHECK-NEXT:    [[CALL_I:%.*]] = call noundef float @__ocml_sin_f32(float noundef [[TMP0]]) #[[ATTR3:[0-9]+]]
+// CHECK-NEXT:    [[CALL_I:%.*]] = call noundef float @__ocml_sin_f32(float noundef [[TMP0]]) #[[ATTR4:[0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store float [[CALL_I]], ptr addrspacecast (ptr addrspace(1) @_ZL18constexpr_sinf_f32 to ptr), align 4
 // CHECK-NEXT:    ret void
 //
@@ -52,13 +54,17 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-NEXT:  entry:
 // CHECK-NEXT:    [[__X_ADDR_I_I:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    store float -2.000000e+00, ptr [[__X_ADDR_ASCAST_I]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[__X_ADDR_ASCAST_I]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I_I]] to ptr
 // CHECK-NEXT:    store float [[TMP0]], ptr [[__X_ADDR_ASCAST_I_I]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[__X_ADDR_ASCAST_I_I]], align 4
-// CHECK-NEXT:    [[CALL_I_I:%.*]] = call noundef float @__ocml_sin_f32(float noundef [[TMP1]]) #[[ATTR3]]
+// CHECK-NEXT:    [[CALL_I_I:%.*]] = call noundef float @__ocml_sin_f32(float noundef [[TMP1]]) #[[ATTR4]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19]], i32 poison, i1 true)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store float [[CALL_I_I]], ptr addrspacecast (ptr addrspace(1) @_ZL17constexpr_sin_f32 to ptr), align 4
 // CHECK-NEXT:    ret void
 //
@@ -67,10 +73,12 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-SAME: () #[[ATTR0]] {
 // CHECK-NEXT:  entry:
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    store float -2.000000e+00, ptr [[__X_ADDR_ASCAST_I]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[__X_ADDR_ASCAST_I]], align 4
-// CHECK-NEXT:    [[CALL_I:%.*]] = call noundef float @__ocml_cos_f32(float noundef [[TMP0]]) #[[ATTR3]]
+// CHECK-NEXT:    [[CALL_I:%.*]] = call noundef float @__ocml_cos_f32(float noundef [[TMP0]]) #[[ATTR4]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store float [[CALL_I]], ptr addrspacecast (ptr addrspace(1) @_ZL18constexpr_cosf_f32 to ptr), align 4
 // CHECK-NEXT:    ret void
 //
@@ -80,13 +88,17 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-NEXT:  entry:
 // CHECK-NEXT:    [[__X_ADDR_I_I:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    store float -2.000000e+00, ptr [[__X_ADDR_ASCAST_I]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[__X_ADDR_ASCAST_I]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I_I]] to ptr
 // CHECK-NEXT:    store float [[TMP0]], ptr [[__X_ADDR_ASCAST_I_I]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[__X_ADDR_ASCAST_I_I]], align 4
-// CHECK-NEXT:    [[CALL_I_I:%.*]] = call noundef float @__ocml_cos_f32(float noundef [[TMP1]]) #[[ATTR3]]
+// CHECK-NEXT:    [[CALL_I_I:%.*]] = call noundef float @__ocml_cos_f32(float noundef [[TMP1]]) #[[ATTR4]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23]], i32 poison, i1 true)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store float [[CALL_I_I]], ptr addrspacecast (ptr addrspace(1) @_ZL17constexpr_cos_f32 to ptr), align 4
 // CHECK-NEXT:    ret void
 //
@@ -97,6 +109,7 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[__Y_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[__Z_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__Y_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__Y_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__Z_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__Z_ADDR_I]] to ptr
@@ -107,6 +120,7 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[__Y_ADDR_ASCAST_I]], align 4
 // CHECK-NEXT:    [[TMP2:%.*]] = load float, ptr [[__Z_ADDR_ASCAST_I]], align 4
 // CHECK-NEXT:    [[TMP3:%.*]] = call noundef float @llvm.fma.f32(float [[TMP0]], float [[TMP1]], float [[TMP2]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store float [[TMP3]], ptr addrspacecast (ptr addrspace(1) @_ZL18constexpr_fmaf_f32 to ptr), align 4
 // CHECK-NEXT:    ret void
 //
@@ -120,6 +134,7 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-NEXT:    [[__X_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[__Y_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[__Z_ADDR_I:%.*]] = alloca float, align 4, addrspace(5)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__Y_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__Y_ADDR_I]] to ptr
 // CHECK-NEXT:    [[__Z_ADDR_ASCAST_I:%.*]] = addrspacecast ptr addrspace(5) [[__Z_ADDR_I]] to ptr
@@ -129,6 +144,7 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[__X_ADDR_ASCAST_I]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[__Y_ADDR_ASCAST_I]], align 4
 // CHECK-NEXT:    [[TMP2:%.*]] = load float, ptr [[__Z_ADDR_ASCAST_I]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26]], i32 poison, i1 true)
 // CHECK-NEXT:    [[__X_ADDR_ASCAST_I_I:%.*]] = addrspacecast ptr addrspace(5) [[__X_ADDR_I_I]] to ptr
 // CHECK-NEXT:    [[__Y_ADDR_ASCAST_I_I:%.*]] = addrspacecast ptr addrspace(5) [[__Y_ADDR_I_I]] to ptr
 // CHECK-NEXT:    [[__Z_ADDR_ASCAST_I_I:%.*]] = addrspacecast ptr addrspace(5) [[__Z_ADDR_I_I]] to ptr
@@ -139,6 +155,8 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-NEXT:    [[TMP4:%.*]] = load float, ptr [[__Y_ADDR_ASCAST_I_I]], align 4
 // CHECK-NEXT:    [[TMP5:%.*]] = load float, ptr [[__Z_ADDR_ASCAST_I_I]], align 4
 // CHECK-NEXT:    [[TMP6:%.*]] = call noundef float @llvm.fma.f32(float [[TMP3]], float [[TMP4]], float [[TMP5]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27]], i32 poison, i1 true)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store float [[TMP6]], ptr addrspacecast (ptr addrspace(1) @_ZL17constexpr_fma_f32 to ptr), align 4
 // CHECK-NEXT:    ret void
 //
@@ -146,7 +164,7 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-LABEL: define {{[^@]+}}@__cxx_global_var_init.6
 // CHECK-SAME: () #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[CALL:%.*]] = call noundef float @_Z4fminff(float noundef 2.000000e+00, float noundef -4.000000e+00) #[[ATTR4:[0-9]+]]
+// CHECK-NEXT:    [[CALL:%.*]] = call noundef float @_Z4fminff(float noundef 2.000000e+00, float noundef -4.000000e+00) #[[ATTR5:[0-9]+]]
 // CHECK-NEXT:    store float [[CALL]], ptr addrspacecast (ptr addrspace(1) @_ZL18constexpr_fmin_f32 to ptr), align 4
 // CHECK-NEXT:    ret void
 //
@@ -154,7 +172,7 @@ const float constexpr_fmaxf_f32 = fmaxf(2.0f, -4.0f);
 // CHECK-LABEL: define {{[^@]+}}@__cxx_global_var_init.7
 // CHECK-SAME: () #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[CALL:%.*]] = call noundef float @_Z4fmaxff(float noundef 2.000000e+00, float noundef -4.000000e+00) #[[ATTR4]]
+// CHECK-NEXT:    [[CALL:%.*]] = call noundef float @_Z4fmaxff(float noundef 2.000000e+00, float noundef -4.000000e+00) #[[ATTR5]]
 // CHECK-NEXT:    store float [[CALL]], ptr addrspacecast (ptr addrspace(1) @_ZL18constexpr_fmax_f32 to ptr), align 4
 // CHECK-NEXT:    ret void
 //

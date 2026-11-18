@@ -8,9 +8,11 @@ extern __attribute__((address_space(5))) unsigned char * ptr_as5; // private add
 // CHECK-LABEL: define dso_local noundef ptr @_Z11get_ptr_as3b(
 // CHECK-SAME: i1 noundef zeroext [[V:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr addrspace(3), ptr addrspace(1) @ptr_as3, align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = select i1 [[V]], ptr addrspace(3) [[TMP0]], ptr addrspace(3) addrspacecast (ptr null to ptr addrspace(3))
 // CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(3) [[TMP1]] to ptr
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret ptr [[TMP2]]
 //
 unsigned char *get_ptr_as3(bool v) {
@@ -20,9 +22,11 @@ unsigned char *get_ptr_as3(bool v) {
 // CHECK-LABEL: define dso_local noundef ptr @_Z20get_ptr_as3_with_tmpb(
 // CHECK-SAME: i1 noundef zeroext [[V:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr addrspace(3), ptr addrspace(1) @ptr_as3, align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = select i1 [[V]], ptr addrspace(3) [[TMP0]], ptr addrspace(3) addrspacecast (ptr null to ptr addrspace(3))
 // CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(3) [[TMP1]] to ptr
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret ptr [[TMP2]]
 //
 unsigned char *get_ptr_as3_with_tmp(bool v) {
@@ -33,9 +37,11 @@ unsigned char *get_ptr_as3_with_tmp(bool v) {
 // CHECK-LABEL: define dso_local noundef ptr @_Z11get_ptr_as5b(
 // CHECK-SAME: i1 noundef zeroext [[V:%.*]]) local_unnamed_addr #[[ATTR1:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr addrspace(5), ptr addrspace(1) @ptr_as5, align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = select i1 [[V]], ptr addrspace(5) [[TMP0]], ptr addrspace(5) addrspacecast (ptr null to ptr addrspace(5))
 // CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret ptr [[TMP2]]
 //
 unsigned char *get_ptr_as5(bool v) {
@@ -45,12 +51,24 @@ unsigned char *get_ptr_as5(bool v) {
 // CHECK-LABEL: define dso_local noundef ptr @_Z20get_ptr_as5_with_tmpb(
 // CHECK-SAME: i1 noundef zeroext [[V:%.*]]) local_unnamed_addr #[[ATTR1]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr addrspace(5), ptr addrspace(1) @ptr_as5, align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = select i1 [[V]], ptr addrspace(5) [[TMP0]], ptr addrspace(5) addrspacecast (ptr null to ptr addrspace(5))
 // CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret ptr [[TMP2]]
 //
 unsigned char *get_ptr_as5_with_tmp(bool v) {
   unsigned char *tmp = nullptr;
   return v ? ptr_as5 : tmp;
 }
+//.
+// CHECK: [[META7]] = !{i32 0, !"_Z11get_ptr_as3b"}
+// CHECK: [[META8]] = !{i32 1, !"_Z11get_ptr_as3b"}
+// CHECK: [[META9]] = !{i32 0, !"_Z20get_ptr_as3_with_tmpb"}
+// CHECK: [[META10]] = !{i32 1, !"_Z20get_ptr_as3_with_tmpb"}
+// CHECK: [[META11]] = !{i32 0, !"_Z11get_ptr_as5b"}
+// CHECK: [[META12]] = !{i32 1, !"_Z11get_ptr_as5b"}
+// CHECK: [[META13]] = !{i32 0, !"_Z20get_ptr_as5_with_tmpb"}
+// CHECK: [[META14]] = !{i32 1, !"_Z20get_ptr_as5_with_tmpb"}
+//.

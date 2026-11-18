@@ -10,6 +10,7 @@
 // CHECK-LABEL: define dso_local bfloat @div(
 // CHECK-SAME: bfloat noundef [[A:%.*]], bfloat noundef [[B:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca bfloat, align 2, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca bfloat, align 2, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -19,8 +20,13 @@
 // CHECK-NEXT:    [[TMP0:%.*]] = load bfloat, ptr [[A_ADDR_ASCAST]], align 2
 // CHECK-NEXT:    [[TMP1:%.*]] = load bfloat, ptr [[B_ADDR_ASCAST]], align 2
 // CHECK-NEXT:    [[DIV:%.*]] = fdiv bfloat [[TMP0]], [[TMP1]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret bfloat [[DIV]]
 //
 __bf16 div(__bf16 a, __bf16 b) {
   return a / b;
 }
+//.
+// CHECK: [[META2]] = !{i32 0, !"div"}
+// CHECK: [[META3]] = !{i32 1, !"div"}
+//.

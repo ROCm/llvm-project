@@ -13,6 +13,7 @@
 // DEFAULT-LABEL: define dso_local void @test_logbf(
 // DEFAULT-SAME: ) #[[ATTR0:[0-9]+]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // DEFAULT-NEXT:    [[TMP0:%.*]] = call { float, i32 } @llvm.frexp.f32.i32(float 1.610000e+01)
@@ -24,11 +25,13 @@
 // DEFAULT-NEXT:    [[TMP6:%.*]] = select i1 [[TMP5]], float [[TMP3]], float [[TMP4]]
 // DEFAULT-NEXT:    [[TMP7:%.*]] = select i1 false, float -inf, float [[TMP6]]
 // DEFAULT-NEXT:    store float [[TMP7]], ptr [[D1_ASCAST]], align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_logbf(
 // IGNORE-SAME: ) #[[ATTR0:[0-9]+]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // IGNORE-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // IGNORE-NEXT:    [[TMP0:%.*]] = call { float, i32 } @llvm.frexp.f32.i32(float 1.610000e+01)
@@ -40,11 +43,13 @@
 // IGNORE-NEXT:    [[TMP6:%.*]] = select i1 [[TMP5]], float [[TMP3]], float [[TMP4]]
 // IGNORE-NEXT:    [[TMP7:%.*]] = select i1 false, float -inf, float [[TMP6]]
 // IGNORE-NEXT:    store float [[TMP7]], ptr [[D1_ASCAST]], align 4
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_logbf(
 // STRICT-SAME: ) #[[ATTR0:[0-9]+]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // STRICT-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // STRICT-NEXT:    [[TMP0:%.*]] = call { float, i32 } @llvm.frexp.f32.i32(float 1.610000e+01)
@@ -56,11 +61,13 @@
 // STRICT-NEXT:    [[TMP6:%.*]] = select i1 [[TMP5]], float [[TMP3]], float [[TMP4]]
 // STRICT-NEXT:    [[TMP7:%.*]] = select i1 false, float -inf, float [[TMP6]]
 // STRICT-NEXT:    store float [[TMP7]], ptr [[D1_ASCAST]], align 4
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_logbf(
 // MAYTRAP-SAME: ) #[[ATTR0:[0-9]+]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // MAYTRAP-NEXT:    [[TMP0:%.*]] = call { float, i32 } @llvm.frexp.f32.i32(float 1.610000e+01)
@@ -72,15 +79,18 @@
 // MAYTRAP-NEXT:    [[TMP6:%.*]] = select i1 [[TMP5]], float [[TMP3]], float [[TMP4]]
 // MAYTRAP-NEXT:    [[TMP7:%.*]] = select i1 false, float -inf, float [[TMP6]]
 // MAYTRAP-NEXT:    store float [[TMP7]], ptr [[D1_ASCAST]], align 4
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_logbf(
 // ERRNO-SAME: ) #[[ATTR0:[0-9]+]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
-// ERRNO-NEXT:    [[CALL:%.*]] = call float @logbf(float noundef 1.610000e+01) #[[ATTR2:[0-9]+]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call float @logbf(float noundef 1.610000e+01) #[[ATTR3:[0-9]+]]
 // ERRNO-NEXT:    store float [[CALL]], ptr [[D1_ASCAST]], align 4
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_logbf(
@@ -162,6 +172,7 @@ void test_logbf() {
 // DEFAULT-LABEL: define dso_local void @test_logbf_var(
 // DEFAULT-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -179,11 +190,13 @@ void test_logbf() {
 // DEFAULT-NEXT:    [[TMP9:%.*]] = fcmp oeq float [[TMP0]], 0.000000e+00
 // DEFAULT-NEXT:    [[TMP10:%.*]] = select i1 [[TMP9]], float -inf, float [[TMP8]]
 // DEFAULT-NEXT:    store float [[TMP10]], ptr [[D1_ASCAST]], align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_logbf_var(
 // IGNORE-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // IGNORE-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -201,11 +214,13 @@ void test_logbf() {
 // IGNORE-NEXT:    [[TMP9:%.*]] = fcmp oeq float [[TMP0]], 0.000000e+00
 // IGNORE-NEXT:    [[TMP10:%.*]] = select i1 [[TMP9]], float -inf, float [[TMP8]]
 // IGNORE-NEXT:    store float [[TMP10]], ptr [[D1_ASCAST]], align 4
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_logbf_var(
 // STRICT-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // STRICT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // STRICT-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -223,11 +238,13 @@ void test_logbf() {
 // STRICT-NEXT:    [[TMP9:%.*]] = fcmp oeq float [[TMP0]], 0.000000e+00
 // STRICT-NEXT:    [[TMP10:%.*]] = select i1 [[TMP9]], float -inf, float [[TMP8]]
 // STRICT-NEXT:    store float [[TMP10]], ptr [[D1_ASCAST]], align 4
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_logbf_var(
 // MAYTRAP-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -245,19 +262,22 @@ void test_logbf() {
 // MAYTRAP-NEXT:    [[TMP9:%.*]] = fcmp oeq float [[TMP0]], 0.000000e+00
 // MAYTRAP-NEXT:    [[TMP10:%.*]] = select i1 [[TMP9]], float -inf, float [[TMP8]]
 // MAYTRAP-NEXT:    store float [[TMP10]], ptr [[D1_ASCAST]], align 4
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_logbf_var(
 // ERRNO-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // ERRNO-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // ERRNO-NEXT:    store float [[A]], ptr [[A_ADDR_ASCAST]], align 4
 // ERRNO-NEXT:    [[TMP0:%.*]] = load float, ptr [[A_ADDR_ASCAST]], align 4
-// ERRNO-NEXT:    [[CALL:%.*]] = call float @logbf(float noundef [[TMP0]]) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call float @logbf(float noundef [[TMP0]]) #[[ATTR3]]
 // ERRNO-NEXT:    store float [[CALL]], ptr [[D1_ASCAST]], align 4
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_logbf_var(
@@ -382,6 +402,7 @@ void test_logbf_var(float a) {
 // DEFAULT-LABEL: define dso_local void @test_logb(
 // DEFAULT-SAME: ) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // DEFAULT-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // DEFAULT-NEXT:    [[TMP0:%.*]] = call { double, i32 } @llvm.frexp.f64.i32(double 1.510000e+01)
@@ -393,11 +414,13 @@ void test_logbf_var(float a) {
 // DEFAULT-NEXT:    [[TMP6:%.*]] = select i1 [[TMP5]], double [[TMP3]], double [[TMP4]]
 // DEFAULT-NEXT:    [[TMP7:%.*]] = select i1 false, double -inf, double [[TMP6]]
 // DEFAULT-NEXT:    store double [[TMP7]], ptr [[D1_ASCAST]], align 8
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_logb(
 // IGNORE-SAME: ) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // IGNORE-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // IGNORE-NEXT:    [[TMP0:%.*]] = call { double, i32 } @llvm.frexp.f64.i32(double 1.510000e+01)
@@ -409,11 +432,13 @@ void test_logbf_var(float a) {
 // IGNORE-NEXT:    [[TMP6:%.*]] = select i1 [[TMP5]], double [[TMP3]], double [[TMP4]]
 // IGNORE-NEXT:    [[TMP7:%.*]] = select i1 false, double -inf, double [[TMP6]]
 // IGNORE-NEXT:    store double [[TMP7]], ptr [[D1_ASCAST]], align 8
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_logb(
 // STRICT-SAME: ) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // STRICT-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // STRICT-NEXT:    [[TMP0:%.*]] = call { double, i32 } @llvm.frexp.f64.i32(double 1.510000e+01)
@@ -425,11 +450,13 @@ void test_logbf_var(float a) {
 // STRICT-NEXT:    [[TMP6:%.*]] = select i1 [[TMP5]], double [[TMP3]], double [[TMP4]]
 // STRICT-NEXT:    [[TMP7:%.*]] = select i1 false, double -inf, double [[TMP6]]
 // STRICT-NEXT:    store double [[TMP7]], ptr [[D1_ASCAST]], align 8
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_logb(
 // MAYTRAP-SAME: ) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // MAYTRAP-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // MAYTRAP-NEXT:    [[TMP0:%.*]] = call { double, i32 } @llvm.frexp.f64.i32(double 1.510000e+01)
@@ -441,15 +468,18 @@ void test_logbf_var(float a) {
 // MAYTRAP-NEXT:    [[TMP6:%.*]] = select i1 [[TMP5]], double [[TMP3]], double [[TMP4]]
 // MAYTRAP-NEXT:    [[TMP7:%.*]] = select i1 false, double -inf, double [[TMP6]]
 // MAYTRAP-NEXT:    store double [[TMP7]], ptr [[D1_ASCAST]], align 8
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_logb(
 // ERRNO-SAME: ) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
-// ERRNO-NEXT:    [[CALL:%.*]] = call double @logb(double noundef 1.510000e+01) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call double @logb(double noundef 1.510000e+01) #[[ATTR3]]
 // ERRNO-NEXT:    store double [[CALL]], ptr [[D1_ASCAST]], align 8
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_logb(
@@ -552,6 +582,7 @@ void test_logb() {
 // DEFAULT-LABEL: define dso_local void @test_logb_var(
 // DEFAULT-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // DEFAULT-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -569,11 +600,13 @@ void test_logb() {
 // DEFAULT-NEXT:    [[TMP9:%.*]] = fcmp oeq double [[TMP0]], 0.000000e+00
 // DEFAULT-NEXT:    [[TMP10:%.*]] = select i1 [[TMP9]], double -inf, double [[TMP8]]
 // DEFAULT-NEXT:    store double [[TMP10]], ptr [[D1_ASCAST]], align 8
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_logb_var(
 // IGNORE-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // IGNORE-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -591,11 +624,13 @@ void test_logb() {
 // IGNORE-NEXT:    [[TMP9:%.*]] = fcmp oeq double [[TMP0]], 0.000000e+00
 // IGNORE-NEXT:    [[TMP10:%.*]] = select i1 [[TMP9]], double -inf, double [[TMP8]]
 // IGNORE-NEXT:    store double [[TMP10]], ptr [[D1_ASCAST]], align 8
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_logb_var(
 // STRICT-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // STRICT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // STRICT-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -613,11 +648,13 @@ void test_logb() {
 // STRICT-NEXT:    [[TMP9:%.*]] = fcmp oeq double [[TMP0]], 0.000000e+00
 // STRICT-NEXT:    [[TMP10:%.*]] = select i1 [[TMP9]], double -inf, double [[TMP8]]
 // STRICT-NEXT:    store double [[TMP10]], ptr [[D1_ASCAST]], align 8
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_logb_var(
 // MAYTRAP-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // MAYTRAP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -635,19 +672,22 @@ void test_logb() {
 // MAYTRAP-NEXT:    [[TMP9:%.*]] = fcmp oeq double [[TMP0]], 0.000000e+00
 // MAYTRAP-NEXT:    [[TMP10:%.*]] = select i1 [[TMP9]], double -inf, double [[TMP8]]
 // MAYTRAP-NEXT:    store double [[TMP10]], ptr [[D1_ASCAST]], align 8
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_logb_var(
 // ERRNO-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // ERRNO-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // ERRNO-NEXT:    store double [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // ERRNO-NEXT:    [[TMP0:%.*]] = load double, ptr [[A_ADDR_ASCAST]], align 8
-// ERRNO-NEXT:    [[CALL:%.*]] = call double @logb(double noundef [[TMP0]]) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call double @logb(double noundef [[TMP0]]) #[[ATTR3]]
 // ERRNO-NEXT:    store double [[CALL]], ptr [[D1_ASCAST]], align 8
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_logb_var(
@@ -766,46 +806,56 @@ void test_logb_var(double a) {
 // DEFAULT-LABEL: define dso_local void @test_scalbnf(
 // DEFAULT-SAME: ) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // DEFAULT-NEXT:    [[TMP0:%.*]] = call float @llvm.ldexp.f32.i32(float 1.670000e+01, i32 10)
 // DEFAULT-NEXT:    store float [[TMP0]], ptr [[D1_ASCAST]], align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_scalbnf(
 // IGNORE-SAME: ) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // IGNORE-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // IGNORE-NEXT:    [[TMP0:%.*]] = call float @llvm.ldexp.f32.i32(float 1.670000e+01, i32 10)
 // IGNORE-NEXT:    store float [[TMP0]], ptr [[D1_ASCAST]], align 4
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_scalbnf(
 // STRICT-SAME: ) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // STRICT-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // STRICT-NEXT:    [[TMP0:%.*]] = call float @llvm.ldexp.f32.i32(float 1.670000e+01, i32 10)
 // STRICT-NEXT:    store float [[TMP0]], ptr [[D1_ASCAST]], align 4
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_scalbnf(
 // MAYTRAP-SAME: ) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // MAYTRAP-NEXT:    [[TMP0:%.*]] = call float @llvm.ldexp.f32.i32(float 1.670000e+01, i32 10)
 // MAYTRAP-NEXT:    store float [[TMP0]], ptr [[D1_ASCAST]], align 4
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_scalbnf(
 // ERRNO-SAME: ) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
-// ERRNO-NEXT:    [[CALL:%.*]] = call float @scalbnf(float noundef 1.670000e+01, i32 noundef 10) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call float @scalbnf(float noundef 1.670000e+01, i32 noundef 10) #[[ATTR3]]
 // ERRNO-NEXT:    store float [[CALL]], ptr [[D1_ASCAST]], align 4
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_scalbnf(
@@ -871,6 +921,7 @@ void test_scalbnf() {
 // DEFAULT-LABEL: define dso_local void @test_scalbnf_var1(
 // DEFAULT-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -879,11 +930,13 @@ void test_scalbnf() {
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load float, ptr [[A_ADDR_ASCAST]], align 4
 // DEFAULT-NEXT:    [[TMP1:%.*]] = call float @llvm.ldexp.f32.i32(float [[TMP0]], i32 9)
 // DEFAULT-NEXT:    store float [[TMP1]], ptr [[D1_ASCAST]], align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_scalbnf_var1(
 // IGNORE-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // IGNORE-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -892,11 +945,13 @@ void test_scalbnf() {
 // IGNORE-NEXT:    [[TMP0:%.*]] = load float, ptr [[A_ADDR_ASCAST]], align 4
 // IGNORE-NEXT:    [[TMP1:%.*]] = call float @llvm.ldexp.f32.i32(float [[TMP0]], i32 9)
 // IGNORE-NEXT:    store float [[TMP1]], ptr [[D1_ASCAST]], align 4
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_scalbnf_var1(
 // STRICT-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // STRICT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // STRICT-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -905,11 +960,13 @@ void test_scalbnf() {
 // STRICT-NEXT:    [[TMP0:%.*]] = load float, ptr [[A_ADDR_ASCAST]], align 4
 // STRICT-NEXT:    [[TMP1:%.*]] = call float @llvm.ldexp.f32.i32(float [[TMP0]], i32 9)
 // STRICT-NEXT:    store float [[TMP1]], ptr [[D1_ASCAST]], align 4
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_scalbnf_var1(
 // MAYTRAP-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -918,19 +975,22 @@ void test_scalbnf() {
 // MAYTRAP-NEXT:    [[TMP0:%.*]] = load float, ptr [[A_ADDR_ASCAST]], align 4
 // MAYTRAP-NEXT:    [[TMP1:%.*]] = call float @llvm.ldexp.f32.i32(float [[TMP0]], i32 9)
 // MAYTRAP-NEXT:    store float [[TMP1]], ptr [[D1_ASCAST]], align 4
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_scalbnf_var1(
 // ERRNO-SAME: float noundef [[A:%.*]]) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // ERRNO-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // ERRNO-NEXT:    store float [[A]], ptr [[A_ADDR_ASCAST]], align 4
 // ERRNO-NEXT:    [[TMP0:%.*]] = load float, ptr [[A_ADDR_ASCAST]], align 4
-// ERRNO-NEXT:    [[CALL:%.*]] = call float @scalbnf(float noundef [[TMP0]], i32 noundef 9) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call float @scalbnf(float noundef [[TMP0]], i32 noundef 9) #[[ATTR3]]
 // ERRNO-NEXT:    store float [[CALL]], ptr [[D1_ASCAST]], align 4
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_scalbnf_var1(
@@ -1016,6 +1076,7 @@ void test_scalbnf_var1(float a) {
 // DEFAULT-LABEL: define dso_local void @test_scalbnf_var2(
 // DEFAULT-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
@@ -1024,11 +1085,13 @@ void test_scalbnf_var1(float a) {
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // DEFAULT-NEXT:    [[TMP1:%.*]] = call float @llvm.ldexp.f32.i32(float 1.520000e+01, i32 [[TMP0]])
 // DEFAULT-NEXT:    store float [[TMP1]], ptr [[D1_ASCAST]], align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_scalbnf_var2(
 // IGNORE-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // IGNORE-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
@@ -1037,11 +1100,13 @@ void test_scalbnf_var1(float a) {
 // IGNORE-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // IGNORE-NEXT:    [[TMP1:%.*]] = call float @llvm.ldexp.f32.i32(float 1.520000e+01, i32 [[TMP0]])
 // IGNORE-NEXT:    store float [[TMP1]], ptr [[D1_ASCAST]], align 4
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_scalbnf_var2(
 // STRICT-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // STRICT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // STRICT-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
@@ -1050,11 +1115,13 @@ void test_scalbnf_var1(float a) {
 // STRICT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // STRICT-NEXT:    [[TMP1:%.*]] = call float @llvm.ldexp.f32.i32(float 1.520000e+01, i32 [[TMP0]])
 // STRICT-NEXT:    store float [[TMP1]], ptr [[D1_ASCAST]], align 4
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_scalbnf_var2(
 // MAYTRAP-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
@@ -1063,19 +1130,22 @@ void test_scalbnf_var1(float a) {
 // MAYTRAP-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // MAYTRAP-NEXT:    [[TMP1:%.*]] = call float @llvm.ldexp.f32.i32(float 1.520000e+01, i32 [[TMP0]])
 // MAYTRAP-NEXT:    store float [[TMP1]], ptr [[D1_ASCAST]], align 4
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_scalbnf_var2(
 // ERRNO-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
 // ERRNO-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // ERRNO-NEXT:    store i32 [[B]], ptr [[B_ADDR_ASCAST]], align 4
 // ERRNO-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
-// ERRNO-NEXT:    [[CALL:%.*]] = call float @scalbnf(float noundef 1.520000e+01, i32 noundef [[TMP0]]) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call float @scalbnf(float noundef 1.520000e+01, i32 noundef [[TMP0]]) #[[ATTR3]]
 // ERRNO-NEXT:    store float [[CALL]], ptr [[D1_ASCAST]], align 4
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_scalbnf_var2(
@@ -1165,6 +1235,7 @@ void test_scalbnf_var2(int b) {
 // DEFAULT-LABEL: define dso_local void @test_scalbnf_var3(
 // DEFAULT-SAME: float noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
@@ -1177,11 +1248,13 @@ void test_scalbnf_var2(int b) {
 // DEFAULT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // DEFAULT-NEXT:    [[TMP2:%.*]] = call float @llvm.ldexp.f32.i32(float [[TMP0]], i32 [[TMP1]])
 // DEFAULT-NEXT:    store float [[TMP2]], ptr [[D1_ASCAST]], align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_scalbnf_var3(
 // IGNORE-SAME: float noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // IGNORE-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
@@ -1194,11 +1267,13 @@ void test_scalbnf_var2(int b) {
 // IGNORE-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // IGNORE-NEXT:    [[TMP2:%.*]] = call float @llvm.ldexp.f32.i32(float [[TMP0]], i32 [[TMP1]])
 // IGNORE-NEXT:    store float [[TMP2]], ptr [[D1_ASCAST]], align 4
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_scalbnf_var3(
 // STRICT-SAME: float noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // STRICT-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // STRICT-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
@@ -1211,11 +1286,13 @@ void test_scalbnf_var2(int b) {
 // STRICT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // STRICT-NEXT:    [[TMP2:%.*]] = call float @llvm.ldexp.f32.i32(float [[TMP0]], i32 [[TMP1]])
 // STRICT-NEXT:    store float [[TMP2]], ptr [[D1_ASCAST]], align 4
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_scalbnf_var3(
 // MAYTRAP-SAME: float noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
@@ -1228,11 +1305,13 @@ void test_scalbnf_var2(int b) {
 // MAYTRAP-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // MAYTRAP-NEXT:    [[TMP2:%.*]] = call float @llvm.ldexp.f32.i32(float [[TMP0]], i32 [[TMP1]])
 // MAYTRAP-NEXT:    store float [[TMP2]], ptr [[D1_ASCAST]], align 4
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_scalbnf_var3(
 // ERRNO-SAME: float noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // ERRNO-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca float, align 4, addrspace(5)
@@ -1243,8 +1322,9 @@ void test_scalbnf_var2(int b) {
 // ERRNO-NEXT:    store i32 [[B]], ptr [[B_ADDR_ASCAST]], align 4
 // ERRNO-NEXT:    [[TMP0:%.*]] = load float, ptr [[A_ADDR_ASCAST]], align 4
 // ERRNO-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
-// ERRNO-NEXT:    [[CALL:%.*]] = call float @scalbnf(float noundef [[TMP0]], i32 noundef [[TMP1]]) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call float @scalbnf(float noundef [[TMP0]], i32 noundef [[TMP1]]) #[[ATTR3]]
 // ERRNO-NEXT:    store float [[CALL]], ptr [[D1_ASCAST]], align 4
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_scalbnf_var3(
@@ -1347,46 +1427,56 @@ void test_scalbnf_var3(float a, int b) {
 // DEFAULT-LABEL: define dso_local void @test_scalbn(
 // DEFAULT-SAME: ) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // DEFAULT-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // DEFAULT-NEXT:    [[TMP0:%.*]] = call double @llvm.ldexp.f64.i32(double 1.720000e+01, i32 10)
 // DEFAULT-NEXT:    store double [[TMP0]], ptr [[D1_ASCAST]], align 8
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_scalbn(
 // IGNORE-SAME: ) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // IGNORE-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // IGNORE-NEXT:    [[TMP0:%.*]] = call double @llvm.ldexp.f64.i32(double 1.720000e+01, i32 10)
 // IGNORE-NEXT:    store double [[TMP0]], ptr [[D1_ASCAST]], align 8
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_scalbn(
 // STRICT-SAME: ) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // STRICT-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // STRICT-NEXT:    [[TMP0:%.*]] = call double @llvm.ldexp.f64.i32(double 1.720000e+01, i32 10)
 // STRICT-NEXT:    store double [[TMP0]], ptr [[D1_ASCAST]], align 8
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_scalbn(
 // MAYTRAP-SAME: ) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // MAYTRAP-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // MAYTRAP-NEXT:    [[TMP0:%.*]] = call double @llvm.ldexp.f64.i32(double 1.720000e+01, i32 10)
 // MAYTRAP-NEXT:    store double [[TMP0]], ptr [[D1_ASCAST]], align 8
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_scalbn(
 // ERRNO-SAME: ) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
-// ERRNO-NEXT:    [[CALL:%.*]] = call double @scalbn(double noundef 1.720000e+01, i32 noundef 10) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call double @scalbn(double noundef 1.720000e+01, i32 noundef 10) #[[ATTR3]]
 // ERRNO-NEXT:    store double [[CALL]], ptr [[D1_ASCAST]], align 8
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_scalbn(
@@ -1452,6 +1542,7 @@ void test_scalbn() {
 // DEFAULT-LABEL: define dso_local void @test_scalbn_var1(
 // DEFAULT-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // DEFAULT-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -1460,11 +1551,13 @@ void test_scalbn() {
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load double, ptr [[A_ADDR_ASCAST]], align 8
 // DEFAULT-NEXT:    [[TMP1:%.*]] = call double @llvm.ldexp.f64.i32(double [[TMP0]], i32 9)
 // DEFAULT-NEXT:    store double [[TMP1]], ptr [[D1_ASCAST]], align 8
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_scalbn_var1(
 // IGNORE-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // IGNORE-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -1473,11 +1566,13 @@ void test_scalbn() {
 // IGNORE-NEXT:    [[TMP0:%.*]] = load double, ptr [[A_ADDR_ASCAST]], align 8
 // IGNORE-NEXT:    [[TMP1:%.*]] = call double @llvm.ldexp.f64.i32(double [[TMP0]], i32 9)
 // IGNORE-NEXT:    store double [[TMP1]], ptr [[D1_ASCAST]], align 8
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_scalbn_var1(
 // STRICT-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // STRICT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // STRICT-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -1486,11 +1581,13 @@ void test_scalbn() {
 // STRICT-NEXT:    [[TMP0:%.*]] = load double, ptr [[A_ADDR_ASCAST]], align 8
 // STRICT-NEXT:    [[TMP1:%.*]] = call double @llvm.ldexp.f64.i32(double [[TMP0]], i32 9)
 // STRICT-NEXT:    store double [[TMP1]], ptr [[D1_ASCAST]], align 8
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_scalbn_var1(
 // MAYTRAP-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // MAYTRAP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
@@ -1499,19 +1596,22 @@ void test_scalbn() {
 // MAYTRAP-NEXT:    [[TMP0:%.*]] = load double, ptr [[A_ADDR_ASCAST]], align 8
 // MAYTRAP-NEXT:    [[TMP1:%.*]] = call double @llvm.ldexp.f64.i32(double [[TMP0]], i32 9)
 // MAYTRAP-NEXT:    store double [[TMP1]], ptr [[D1_ASCAST]], align 8
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_scalbn_var1(
 // ERRNO-SAME: double noundef [[A:%.*]]) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // ERRNO-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // ERRNO-NEXT:    store double [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // ERRNO-NEXT:    [[TMP0:%.*]] = load double, ptr [[A_ADDR_ASCAST]], align 8
-// ERRNO-NEXT:    [[CALL:%.*]] = call double @scalbn(double noundef [[TMP0]], i32 noundef 9) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call double @scalbn(double noundef [[TMP0]], i32 noundef 9) #[[ATTR3]]
 // ERRNO-NEXT:    store double [[CALL]], ptr [[D1_ASCAST]], align 8
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_scalbn_var1(
@@ -1597,6 +1697,7 @@ void test_scalbn_var1(double a) {
 // DEFAULT-LABEL: define dso_local void @test_scalbn_var2(
 // DEFAULT-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // DEFAULT-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
@@ -1605,11 +1706,13 @@ void test_scalbn_var1(double a) {
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // DEFAULT-NEXT:    [[TMP1:%.*]] = call double @llvm.ldexp.f64.i32(double 1.540000e+01, i32 [[TMP0]])
 // DEFAULT-NEXT:    store double [[TMP1]], ptr [[D1_ASCAST]], align 8
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_scalbn_var2(
 // IGNORE-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // IGNORE-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
@@ -1618,11 +1721,13 @@ void test_scalbn_var1(double a) {
 // IGNORE-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // IGNORE-NEXT:    [[TMP1:%.*]] = call double @llvm.ldexp.f64.i32(double 1.540000e+01, i32 [[TMP0]])
 // IGNORE-NEXT:    store double [[TMP1]], ptr [[D1_ASCAST]], align 8
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_scalbn_var2(
 // STRICT-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // STRICT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // STRICT-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
@@ -1631,11 +1736,13 @@ void test_scalbn_var1(double a) {
 // STRICT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // STRICT-NEXT:    [[TMP1:%.*]] = call double @llvm.ldexp.f64.i32(double 1.540000e+01, i32 [[TMP0]])
 // STRICT-NEXT:    store double [[TMP1]], ptr [[D1_ASCAST]], align 8
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_scalbn_var2(
 // MAYTRAP-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // MAYTRAP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
@@ -1644,19 +1751,22 @@ void test_scalbn_var1(double a) {
 // MAYTRAP-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // MAYTRAP-NEXT:    [[TMP1:%.*]] = call double @llvm.ldexp.f64.i32(double 1.540000e+01, i32 [[TMP0]])
 // MAYTRAP-NEXT:    store double [[TMP1]], ptr [[D1_ASCAST]], align 8
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_scalbn_var2(
 // ERRNO-SAME: i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
 // ERRNO-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // ERRNO-NEXT:    [[D1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D1]] to ptr
 // ERRNO-NEXT:    store i32 [[B]], ptr [[B_ADDR_ASCAST]], align 4
 // ERRNO-NEXT:    [[TMP0:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
-// ERRNO-NEXT:    [[CALL:%.*]] = call double @scalbn(double noundef 1.540000e+01, i32 noundef [[TMP0]]) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call double @scalbn(double noundef 1.540000e+01, i32 noundef [[TMP0]]) #[[ATTR3]]
 // ERRNO-NEXT:    store double [[CALL]], ptr [[D1_ASCAST]], align 8
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_scalbn_var2(
@@ -1746,6 +1856,7 @@ void test_scalbn_var2(int b) {
 // DEFAULT-LABEL: define dso_local void @test_scalbn_var3(
 // DEFAULT-SAME: double noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // DEFAULT-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // DEFAULT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
@@ -1758,11 +1869,13 @@ void test_scalbn_var2(int b) {
 // DEFAULT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // DEFAULT-NEXT:    [[TMP2:%.*]] = call double @llvm.ldexp.f64.i32(double [[TMP0]], i32 [[TMP1]])
 // DEFAULT-NEXT:    store double [[TMP2]], ptr [[D1_ASCAST]], align 8
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // IGNORE-LABEL: define dso_local void @test_scalbn_var3(
 // IGNORE-SAME: double noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // IGNORE-NEXT:  [[ENTRY:.*:]]
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // IGNORE-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // IGNORE-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
@@ -1775,11 +1888,13 @@ void test_scalbn_var2(int b) {
 // IGNORE-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // IGNORE-NEXT:    [[TMP2:%.*]] = call double @llvm.ldexp.f64.i32(double [[TMP0]], i32 [[TMP1]])
 // IGNORE-NEXT:    store double [[TMP2]], ptr [[D1_ASCAST]], align 8
+// IGNORE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // IGNORE-NEXT:    ret void
 //
 // STRICT-LABEL: define dso_local void @test_scalbn_var3(
 // STRICT-SAME: double noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // STRICT-NEXT:  [[ENTRY:.*:]]
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // STRICT-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // STRICT-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
@@ -1792,11 +1907,13 @@ void test_scalbn_var2(int b) {
 // STRICT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // STRICT-NEXT:    [[TMP2:%.*]] = call double @llvm.ldexp.f64.i32(double [[TMP0]], i32 [[TMP1]])
 // STRICT-NEXT:    store double [[TMP2]], ptr [[D1_ASCAST]], align 8
+// STRICT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // STRICT-NEXT:    ret void
 //
 // MAYTRAP-LABEL: define dso_local void @test_scalbn_var3(
 // MAYTRAP-SAME: double noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // MAYTRAP-NEXT:  [[ENTRY:.*:]]
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // MAYTRAP-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // MAYTRAP-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
@@ -1809,11 +1926,13 @@ void test_scalbn_var2(int b) {
 // MAYTRAP-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
 // MAYTRAP-NEXT:    [[TMP2:%.*]] = call double @llvm.ldexp.f64.i32(double [[TMP0]], i32 [[TMP1]])
 // MAYTRAP-NEXT:    store double [[TMP2]], ptr [[D1_ASCAST]], align 8
+// MAYTRAP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // MAYTRAP-NEXT:    ret void
 //
 // ERRNO-LABEL: define dso_local void @test_scalbn_var3(
 // ERRNO-SAME: double noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // ERRNO-NEXT:  [[ENTRY:.*:]]
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    [[A_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // ERRNO-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // ERRNO-NEXT:    [[D1:%.*]] = alloca double, align 8, addrspace(5)
@@ -1824,8 +1943,9 @@ void test_scalbn_var2(int b) {
 // ERRNO-NEXT:    store i32 [[B]], ptr [[B_ADDR_ASCAST]], align 4
 // ERRNO-NEXT:    [[TMP0:%.*]] = load double, ptr [[A_ADDR_ASCAST]], align 8
 // ERRNO-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B_ADDR_ASCAST]], align 4
-// ERRNO-NEXT:    [[CALL:%.*]] = call double @scalbn(double noundef [[TMP0]], i32 noundef [[TMP1]]) #[[ATTR2]]
+// ERRNO-NEXT:    [[CALL:%.*]] = call double @scalbn(double noundef [[TMP0]], i32 noundef [[TMP1]]) #[[ATTR3]]
 // ERRNO-NEXT:    store double [[CALL]], ptr [[D1_ASCAST]], align 8
+// ERRNO-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // ERRNO-NEXT:    ret void
 //
 // AMDGCNSPIRV-DEFAULT-LABEL: define spir_func void @test_scalbn_var3(
@@ -1916,3 +2036,129 @@ void test_scalbn_var2(int b) {
 void test_scalbn_var3(double a, int b) {
   double D1 = __builtin_scalbn(a, b);
 }
+//.
+// DEFAULT: [[META2]] = !{i32 0, !"test_logbf"}
+// DEFAULT: [[META3]] = !{i32 1, !"test_logbf"}
+// DEFAULT: [[META4]] = !{i32 0, !"test_logbf_var"}
+// DEFAULT: [[META5]] = !{i32 1, !"test_logbf_var"}
+// DEFAULT: [[META6]] = !{i32 0, !"test_logb"}
+// DEFAULT: [[META7]] = !{i32 1, !"test_logb"}
+// DEFAULT: [[META8]] = !{i32 0, !"test_logb_var"}
+// DEFAULT: [[META9]] = !{i32 1, !"test_logb_var"}
+// DEFAULT: [[META10]] = !{i32 0, !"test_scalbnf"}
+// DEFAULT: [[META11]] = !{i32 1, !"test_scalbnf"}
+// DEFAULT: [[META12]] = !{i32 0, !"test_scalbnf_var1"}
+// DEFAULT: [[META13]] = !{i32 1, !"test_scalbnf_var1"}
+// DEFAULT: [[META14]] = !{i32 0, !"test_scalbnf_var2"}
+// DEFAULT: [[META15]] = !{i32 1, !"test_scalbnf_var2"}
+// DEFAULT: [[META16]] = !{i32 0, !"test_scalbnf_var3"}
+// DEFAULT: [[META17]] = !{i32 1, !"test_scalbnf_var3"}
+// DEFAULT: [[META18]] = !{i32 0, !"test_scalbn"}
+// DEFAULT: [[META19]] = !{i32 1, !"test_scalbn"}
+// DEFAULT: [[META20]] = !{i32 0, !"test_scalbn_var1"}
+// DEFAULT: [[META21]] = !{i32 1, !"test_scalbn_var1"}
+// DEFAULT: [[META22]] = !{i32 0, !"test_scalbn_var2"}
+// DEFAULT: [[META23]] = !{i32 1, !"test_scalbn_var2"}
+// DEFAULT: [[META24]] = !{i32 0, !"test_scalbn_var3"}
+// DEFAULT: [[META25]] = !{i32 1, !"test_scalbn_var3"}
+//.
+// IGNORE: [[META2]] = !{i32 0, !"test_logbf"}
+// IGNORE: [[META3]] = !{i32 1, !"test_logbf"}
+// IGNORE: [[META4]] = !{i32 0, !"test_logbf_var"}
+// IGNORE: [[META5]] = !{i32 1, !"test_logbf_var"}
+// IGNORE: [[META6]] = !{i32 0, !"test_logb"}
+// IGNORE: [[META7]] = !{i32 1, !"test_logb"}
+// IGNORE: [[META8]] = !{i32 0, !"test_logb_var"}
+// IGNORE: [[META9]] = !{i32 1, !"test_logb_var"}
+// IGNORE: [[META10]] = !{i32 0, !"test_scalbnf"}
+// IGNORE: [[META11]] = !{i32 1, !"test_scalbnf"}
+// IGNORE: [[META12]] = !{i32 0, !"test_scalbnf_var1"}
+// IGNORE: [[META13]] = !{i32 1, !"test_scalbnf_var1"}
+// IGNORE: [[META14]] = !{i32 0, !"test_scalbnf_var2"}
+// IGNORE: [[META15]] = !{i32 1, !"test_scalbnf_var2"}
+// IGNORE: [[META16]] = !{i32 0, !"test_scalbnf_var3"}
+// IGNORE: [[META17]] = !{i32 1, !"test_scalbnf_var3"}
+// IGNORE: [[META18]] = !{i32 0, !"test_scalbn"}
+// IGNORE: [[META19]] = !{i32 1, !"test_scalbn"}
+// IGNORE: [[META20]] = !{i32 0, !"test_scalbn_var1"}
+// IGNORE: [[META21]] = !{i32 1, !"test_scalbn_var1"}
+// IGNORE: [[META22]] = !{i32 0, !"test_scalbn_var2"}
+// IGNORE: [[META23]] = !{i32 1, !"test_scalbn_var2"}
+// IGNORE: [[META24]] = !{i32 0, !"test_scalbn_var3"}
+// IGNORE: [[META25]] = !{i32 1, !"test_scalbn_var3"}
+//.
+// STRICT: [[META2]] = !{i32 0, !"test_logbf"}
+// STRICT: [[META3]] = !{i32 1, !"test_logbf"}
+// STRICT: [[META4]] = !{i32 0, !"test_logbf_var"}
+// STRICT: [[META5]] = !{i32 1, !"test_logbf_var"}
+// STRICT: [[META6]] = !{i32 0, !"test_logb"}
+// STRICT: [[META7]] = !{i32 1, !"test_logb"}
+// STRICT: [[META8]] = !{i32 0, !"test_logb_var"}
+// STRICT: [[META9]] = !{i32 1, !"test_logb_var"}
+// STRICT: [[META10]] = !{i32 0, !"test_scalbnf"}
+// STRICT: [[META11]] = !{i32 1, !"test_scalbnf"}
+// STRICT: [[META12]] = !{i32 0, !"test_scalbnf_var1"}
+// STRICT: [[META13]] = !{i32 1, !"test_scalbnf_var1"}
+// STRICT: [[META14]] = !{i32 0, !"test_scalbnf_var2"}
+// STRICT: [[META15]] = !{i32 1, !"test_scalbnf_var2"}
+// STRICT: [[META16]] = !{i32 0, !"test_scalbnf_var3"}
+// STRICT: [[META17]] = !{i32 1, !"test_scalbnf_var3"}
+// STRICT: [[META18]] = !{i32 0, !"test_scalbn"}
+// STRICT: [[META19]] = !{i32 1, !"test_scalbn"}
+// STRICT: [[META20]] = !{i32 0, !"test_scalbn_var1"}
+// STRICT: [[META21]] = !{i32 1, !"test_scalbn_var1"}
+// STRICT: [[META22]] = !{i32 0, !"test_scalbn_var2"}
+// STRICT: [[META23]] = !{i32 1, !"test_scalbn_var2"}
+// STRICT: [[META24]] = !{i32 0, !"test_scalbn_var3"}
+// STRICT: [[META25]] = !{i32 1, !"test_scalbn_var3"}
+//.
+// MAYTRAP: [[META2]] = !{i32 0, !"test_logbf"}
+// MAYTRAP: [[META3]] = !{i32 1, !"test_logbf"}
+// MAYTRAP: [[META4]] = !{i32 0, !"test_logbf_var"}
+// MAYTRAP: [[META5]] = !{i32 1, !"test_logbf_var"}
+// MAYTRAP: [[META6]] = !{i32 0, !"test_logb"}
+// MAYTRAP: [[META7]] = !{i32 1, !"test_logb"}
+// MAYTRAP: [[META8]] = !{i32 0, !"test_logb_var"}
+// MAYTRAP: [[META9]] = !{i32 1, !"test_logb_var"}
+// MAYTRAP: [[META10]] = !{i32 0, !"test_scalbnf"}
+// MAYTRAP: [[META11]] = !{i32 1, !"test_scalbnf"}
+// MAYTRAP: [[META12]] = !{i32 0, !"test_scalbnf_var1"}
+// MAYTRAP: [[META13]] = !{i32 1, !"test_scalbnf_var1"}
+// MAYTRAP: [[META14]] = !{i32 0, !"test_scalbnf_var2"}
+// MAYTRAP: [[META15]] = !{i32 1, !"test_scalbnf_var2"}
+// MAYTRAP: [[META16]] = !{i32 0, !"test_scalbnf_var3"}
+// MAYTRAP: [[META17]] = !{i32 1, !"test_scalbnf_var3"}
+// MAYTRAP: [[META18]] = !{i32 0, !"test_scalbn"}
+// MAYTRAP: [[META19]] = !{i32 1, !"test_scalbn"}
+// MAYTRAP: [[META20]] = !{i32 0, !"test_scalbn_var1"}
+// MAYTRAP: [[META21]] = !{i32 1, !"test_scalbn_var1"}
+// MAYTRAP: [[META22]] = !{i32 0, !"test_scalbn_var2"}
+// MAYTRAP: [[META23]] = !{i32 1, !"test_scalbn_var2"}
+// MAYTRAP: [[META24]] = !{i32 0, !"test_scalbn_var3"}
+// MAYTRAP: [[META25]] = !{i32 1, !"test_scalbn_var3"}
+//.
+// ERRNO: [[META2]] = !{i32 0, !"test_logbf"}
+// ERRNO: [[META3]] = !{i32 1, !"test_logbf"}
+// ERRNO: [[META4]] = !{i32 0, !"test_logbf_var"}
+// ERRNO: [[META5]] = !{i32 1, !"test_logbf_var"}
+// ERRNO: [[META6]] = !{i32 0, !"test_logb"}
+// ERRNO: [[META7]] = !{i32 1, !"test_logb"}
+// ERRNO: [[META8]] = !{i32 0, !"test_logb_var"}
+// ERRNO: [[META9]] = !{i32 1, !"test_logb_var"}
+// ERRNO: [[META10]] = !{i32 0, !"test_scalbnf"}
+// ERRNO: [[META11]] = !{i32 1, !"test_scalbnf"}
+// ERRNO: [[META12]] = !{i32 0, !"test_scalbnf_var1"}
+// ERRNO: [[META13]] = !{i32 1, !"test_scalbnf_var1"}
+// ERRNO: [[META14]] = !{i32 0, !"test_scalbnf_var2"}
+// ERRNO: [[META15]] = !{i32 1, !"test_scalbnf_var2"}
+// ERRNO: [[META16]] = !{i32 0, !"test_scalbnf_var3"}
+// ERRNO: [[META17]] = !{i32 1, !"test_scalbnf_var3"}
+// ERRNO: [[META18]] = !{i32 0, !"test_scalbn"}
+// ERRNO: [[META19]] = !{i32 1, !"test_scalbn"}
+// ERRNO: [[META20]] = !{i32 0, !"test_scalbn_var1"}
+// ERRNO: [[META21]] = !{i32 1, !"test_scalbn_var1"}
+// ERRNO: [[META22]] = !{i32 0, !"test_scalbn_var2"}
+// ERRNO: [[META23]] = !{i32 1, !"test_scalbn_var2"}
+// ERRNO: [[META24]] = !{i32 0, !"test_scalbn_var3"}
+// ERRNO: [[META25]] = !{i32 1, !"test_scalbn_var3"}
+//.

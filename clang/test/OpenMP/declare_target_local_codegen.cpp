@@ -173,7 +173,7 @@ int use_new_local_vars() {
 // HOST-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8
 // HOST-NEXT:    store ptr [[RESULT]], ptr [[RESULT_ADDR]], align 8
 // HOST-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR]], align 8
-// HOST-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// HOST-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR]], align 8, !nonnull [[META9:![0-9]+]], !align [[META10:![0-9]+]]
 // HOST-NEXT:    store i32 42, ptr @local_scalar, align 4
 // HOST-NEXT:    store i32 1, ptr @local_array, align 4
 // HOST-NEXT:    store i32 100, ptr @_ZN12LocalStorageIiE5valueE, align 4
@@ -260,7 +260,7 @@ int use_new_local_vars() {
 // HOST-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8
 // HOST-NEXT:    store ptr [[RESULT]], ptr [[RESULT_ADDR]], align 8
 // HOST-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR]], align 8
-// HOST-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR]], align 8, !nonnull [[META8]], !align [[META9]]
+// HOST-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR]], align 8, !nonnull [[META9]], !align [[META10]]
 // HOST-NEXT:    store i32 7, ptr @local_nohost_var, align 4
 // HOST-NEXT:    [[TMP1:%.*]] = load i32, ptr @local_nohost_var, align 4
 // HOST-NEXT:    store i32 [[TMP1]], ptr [[TMP0]], align 4
@@ -334,7 +334,7 @@ int use_new_local_vars() {
 // HOST-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8
 // HOST-NEXT:    store ptr [[RESULT]], ptr [[RESULT_ADDR]], align 8
 // HOST-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR]], align 8
-// HOST-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR]], align 8, !nonnull [[META8]], !align [[META9]]
+// HOST-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR]], align 8, !nonnull [[META9]], !align [[META10]]
 // HOST-NEXT:    store i32 55, ptr @_ZN11PlainStruct8s_memberE, align 4
 // HOST-NEXT:    store i32 77, ptr @local_init_var, align 4
 // HOST-NEXT:    [[TMP1:%.*]] = load i32, ptr @_ZN11PlainStruct8s_memberE, align 4
@@ -347,16 +347,17 @@ int use_new_local_vars() {
 // DEVICE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z14use_local_varsv_l70
 // DEVICE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[RESULT:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0:[0-9]+]] {
 // DEVICE-NEXT:  entry:
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    [[RESULT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEVICE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEVICE-NEXT:    [[RESULT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[RESULT_ADDR]] to ptr
 // DEVICE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // DEVICE-NEXT:    store ptr [[RESULT]], ptr [[RESULT_ADDR_ASCAST]], align 8
 // DEVICE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// DEVICE-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR_ASCAST]], align 8, !nonnull [[META7:![0-9]+]], !align [[META8:![0-9]+]]
+// DEVICE-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
 // DEVICE-NEXT:    [[TMP1:%.*]] = call i32 @__kmpc_target_init(ptr addrspacecast (ptr addrspace(1) @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z14use_local_varsv_l70_kernel_environment to ptr), ptr [[DYN_PTR]])
 // DEVICE-NEXT:    [[EXEC_USER_CODE:%.*]] = icmp eq i32 [[TMP1]], -1
-// DEVICE-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[WORKER_EXIT:%.*]]
+// DEVICE-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[UNIFIEDRETURNBLOCK:%.*]]
 // DEVICE:       user_code.entry:
 // DEVICE-NEXT:    store i32 42, ptr addrspacecast (ptr addrspace(1) @local_scalar to ptr), align 4
 // DEVICE-NEXT:    store i32 1, ptr addrspacecast (ptr addrspace(1) @local_array to ptr), align 4
@@ -364,58 +365,64 @@ int use_new_local_vars() {
 // DEVICE-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspacecast (ptr addrspace(1) @local_scalar to ptr), align 4
 // DEVICE-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspacecast (ptr addrspace(1) @local_array to ptr), align 4
 // DEVICE-NEXT:    [[ADD:%.*]] = add nsw i32 [[TMP2]], [[TMP3]]
-// DEVICE-NEXT:    [[CALL:%.*]] = call noundef i32 @_Z18read_local_storageIiET_v() #[[ATTR2:[0-9]+]]
+// DEVICE-NEXT:    [[CALL:%.*]] = call noundef i32 @_Z18read_local_storageIiET_v() #[[ATTR3:[0-9]+]]
 // DEVICE-NEXT:    [[ADD1:%.*]] = add nsw i32 [[ADD]], [[CALL]]
 // DEVICE-NEXT:    store i32 [[ADD1]], ptr [[TMP0]], align 4
 // DEVICE-NEXT:    call void @__kmpc_target_deinit()
-// DEVICE-NEXT:    ret void
-// DEVICE:       worker.exit:
+// DEVICE-NEXT:    br label [[UNIFIEDRETURNBLOCK]]
+// DEVICE:       UnifiedReturnBlock:
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret void
 //
 //
 // DEVICE-LABEL: define {{[^@]+}}@_Z18read_local_storageIiET_v
 // DEVICE-SAME: () #[[ATTR1:[0-9]+]] comdat {
 // DEVICE-NEXT:  entry:
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspacecast (ptr addrspace(1) @_ZN12LocalStorageIiE5valueE to ptr), align 4
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 [[TMP0]]
 //
 //
 // DEVICE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z21use_nohost_local_varsv_l86
 // DEVICE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[RESULT:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0]] {
 // DEVICE-NEXT:  entry:
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    [[RESULT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEVICE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEVICE-NEXT:    [[RESULT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[RESULT_ADDR]] to ptr
 // DEVICE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // DEVICE-NEXT:    store ptr [[RESULT]], ptr [[RESULT_ADDR_ASCAST]], align 8
 // DEVICE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// DEVICE-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// DEVICE-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // DEVICE-NEXT:    [[TMP1:%.*]] = call i32 @__kmpc_target_init(ptr addrspacecast (ptr addrspace(1) @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z21use_nohost_local_varsv_l86_kernel_environment to ptr), ptr [[DYN_PTR]])
 // DEVICE-NEXT:    [[EXEC_USER_CODE:%.*]] = icmp eq i32 [[TMP1]], -1
-// DEVICE-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[WORKER_EXIT:%.*]]
+// DEVICE-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[UNIFIEDRETURNBLOCK:%.*]]
 // DEVICE:       user_code.entry:
 // DEVICE-NEXT:    store i32 7, ptr addrspacecast (ptr addrspace(1) @local_nohost_var to ptr), align 4
 // DEVICE-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspacecast (ptr addrspace(1) @local_nohost_var to ptr), align 4
 // DEVICE-NEXT:    store i32 [[TMP2]], ptr [[TMP0]], align 4
 // DEVICE-NEXT:    call void @__kmpc_target_deinit()
-// DEVICE-NEXT:    ret void
-// DEVICE:       worker.exit:
+// DEVICE-NEXT:    br label [[UNIFIEDRETURNBLOCK]]
+// DEVICE:       UnifiedReturnBlock:
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret void
 //
 //
 // DEVICE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z18use_new_local_varsv_l99
 // DEVICE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[RESULT:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0]] {
 // DEVICE-NEXT:  entry:
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    [[RESULT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEVICE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEVICE-NEXT:    [[RESULT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[RESULT_ADDR]] to ptr
 // DEVICE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // DEVICE-NEXT:    store ptr [[RESULT]], ptr [[RESULT_ADDR_ASCAST]], align 8
 // DEVICE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// DEVICE-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// DEVICE-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[RESULT_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // DEVICE-NEXT:    [[TMP1:%.*]] = call i32 @__kmpc_target_init(ptr addrspacecast (ptr addrspace(1) @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z18use_new_local_varsv_l99_kernel_environment to ptr), ptr [[DYN_PTR]])
 // DEVICE-NEXT:    [[EXEC_USER_CODE:%.*]] = icmp eq i32 [[TMP1]], -1
-// DEVICE-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[WORKER_EXIT:%.*]]
+// DEVICE-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[UNIFIEDRETURNBLOCK:%.*]]
 // DEVICE:       user_code.entry:
 // DEVICE-NEXT:    store i32 55, ptr addrspacecast (ptr addrspace(1) @_ZN11PlainStruct8s_memberE to ptr), align 4
 // DEVICE-NEXT:    store i32 77, ptr addrspacecast (ptr addrspace(1) @local_init_var to ptr), align 4
@@ -424,7 +431,8 @@ int use_new_local_vars() {
 // DEVICE-NEXT:    [[ADD:%.*]] = add nsw i32 [[TMP2]], [[TMP3]]
 // DEVICE-NEXT:    store i32 [[ADD]], ptr [[TMP0]], align 4
 // DEVICE-NEXT:    call void @__kmpc_target_deinit()
-// DEVICE-NEXT:    ret void
-// DEVICE:       worker.exit:
+// DEVICE-NEXT:    br label [[UNIFIEDRETURNBLOCK]]
+// DEVICE:       UnifiedReturnBlock:
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret void
 //

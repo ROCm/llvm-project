@@ -9,6 +9,7 @@ typedef _Float16 __attribute__((ext_vector_type(2))) half2;
 // CHECK-LABEL: define dso_local void @_Z29test_amdgcn_fdot2_f16_f16_hipPDF16_Dv2_DF16_S0_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <2 x half> noundef [[A:%.*]], <2 x half> noundef [[B:%.*]], half noundef [[C:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
@@ -27,9 +28,14 @@ typedef _Float16 __attribute__((ext_vector_type(2))) half2;
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract half @llvm.amdgcn.fdot2.f16.f16(<2 x half> [[TMP0]], <2 x half> [[TMP1]], half [[TMP2]])
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP3]], ptr [[TMP4]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_amdgcn_fdot2_f16_f16_hip(_Float16* out, half2 a, half2 b, _Float16 c) {
   *out = __builtin_amdgcn_fdot2_f16_f16(a, b, c);
 }
 
+//.
+// CHECK: [[META3]] = !{i32 0, !"_Z29test_amdgcn_fdot2_f16_f16_hipPDF16_Dv2_DF16_S0_DF16_"}
+// CHECK: [[META4]] = !{i32 1, !"_Z29test_amdgcn_fdot2_f16_f16_hipPDF16_Dv2_DF16_S0_DF16_"}
+//.

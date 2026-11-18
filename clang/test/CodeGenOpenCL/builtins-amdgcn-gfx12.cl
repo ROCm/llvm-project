@@ -9,11 +9,13 @@ typedef unsigned int uint;
 
 // CHECK-LABEL: @test_s_sleep_var(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[D_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 [[D:%.*]], ptr addrspace(5) [[D_ADDR]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[D_ADDR]], align 4
 // CHECK-NEXT:    call void @llvm.amdgcn.s.sleep.var(i32 [[TMP0]])
 // CHECK-NEXT:    call void @llvm.amdgcn.s.sleep.var(i32 15)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_sleep_var(int d)
@@ -24,6 +26,7 @@ void test_s_sleep_var(int d)
 
 // CHECK-LABEL: @test_permlane16_var(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -38,6 +41,7 @@ void test_s_sleep_var(int d)
 // CHECK-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.permlane16.var(i32 [[TMP0]], i32 [[TMP1]], i32 [[TMP2]], i1 false, i1 false)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
 // CHECK-NEXT:    store i32 [[TMP3]], ptr addrspace(1) [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_permlane16_var(global uint* out, uint a, uint b, uint c) {
@@ -46,6 +50,7 @@ void test_permlane16_var(global uint* out, uint a, uint b, uint c) {
 
 // CHECK-LABEL: @test_permlanex16_var(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -60,6 +65,7 @@ void test_permlane16_var(global uint* out, uint a, uint b, uint c) {
 // CHECK-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.permlanex16.var(i32 [[TMP0]], i32 [[TMP1]], i32 [[TMP2]], i1 false, i1 false)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
 // CHECK-NEXT:    store i32 [[TMP3]], ptr addrspace(1) [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_permlanex16_var(global uint* out, uint a, uint b, uint c) {
@@ -68,8 +74,10 @@ void test_permlanex16_var(global uint* out, uint a, uint b, uint c) {
 
 // CHECK-LABEL: @test_s_barrier_signal(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    call void @llvm.amdgcn.s.barrier.signal(i32 -1)
 // CHECK-NEXT:    call void @llvm.amdgcn.s.barrier.wait(i16 -1)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_barrier_signal()
@@ -80,6 +88,7 @@ void test_s_barrier_signal()
 
 // CHECK-LABEL: @test_s_barrier_signal_var(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[BAR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store ptr [[BAR:%.*]], ptr addrspace(5) [[BAR_ADDR]], align 8
@@ -88,6 +97,7 @@ void test_s_barrier_signal()
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr [[TMP0]] to ptr addrspace(15)
 // CHECK-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(5) [[A_ADDR]], align 4
 // CHECK-NEXT:    call void @llvm.amdgcn.s.barrier.signal.var(ptr addrspace(15) [[TMP1]], i32 [[TMP2]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_barrier_signal_var(void *bar, int a)
@@ -97,6 +107,7 @@ void test_s_barrier_signal_var(void *bar, int a)
 
 // CHECK-LABEL: @test_s_barrier_signal_isfirst(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[C_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -115,6 +126,7 @@ void test_s_barrier_signal_var(void *bar, int a)
 // CHECK-NEXT:    br label [[IF_END]]
 // CHECK:       if.end:
 // CHECK-NEXT:    call void @llvm.amdgcn.s.barrier.wait(i16 1)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_barrier_signal_isfirst(int* a, int* b, int *c)
@@ -129,6 +141,7 @@ void test_s_barrier_signal_isfirst(int* a, int* b, int *c)
 
 // CHECK-LABEL: @test_s_barrier_init(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[BAR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store ptr [[BAR:%.*]], ptr addrspace(5) [[BAR_ADDR]], align 8
@@ -137,6 +150,7 @@ void test_s_barrier_signal_isfirst(int* a, int* b, int *c)
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr [[TMP0]] to ptr addrspace(15)
 // CHECK-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(5) [[A_ADDR]], align 4
 // CHECK-NEXT:    call void @llvm.amdgcn.s.barrier.init(ptr addrspace(15) [[TMP1]], i32 [[TMP2]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_barrier_init(void *bar, int a)
@@ -146,11 +160,13 @@ void test_s_barrier_init(void *bar, int a)
 
 // CHECK-LABEL: @test_s_barrier_join(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[BAR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    store ptr [[BAR:%.*]], ptr addrspace(5) [[BAR_ADDR]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr addrspace(5) [[BAR_ADDR]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr [[TMP0]] to ptr addrspace(15)
 // CHECK-NEXT:    call void @llvm.amdgcn.s.barrier.join(ptr addrspace(15) [[TMP1]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_barrier_join(void *bar)
@@ -160,7 +176,9 @@ void test_s_barrier_join(void *bar)
 
 // CHECK-LABEL: @test_s_barrier_leave(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    call void @llvm.amdgcn.s.barrier.leave(i16 1)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_barrier_leave()
@@ -170,6 +188,7 @@ void test_s_barrier_leave()
 
 // CHECK-LABEL: @test_s_get_barrier_state(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[STATE:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 [[A:%.*]], ptr addrspace(5) [[A_ADDR]], align 4
@@ -177,6 +196,7 @@ void test_s_barrier_leave()
 // CHECK-NEXT:    [[TMP1:%.*]] = call i32 @llvm.amdgcn.s.get.barrier.state(i32 [[TMP0]])
 // CHECK-NEXT:    store i32 [[TMP1]], ptr addrspace(5) [[STATE]], align 4
 // CHECK-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(5) [[STATE]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[TMP2]]
 //
 unsigned test_s_get_barrier_state(int a)
@@ -187,6 +207,7 @@ unsigned test_s_get_barrier_state(int a)
 
 // CHECK-LABEL: @test_s_get_named_barrier_state(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[BAR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[STATE:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store ptr [[BAR:%.*]], ptr addrspace(5) [[BAR_ADDR]], align 8
@@ -195,6 +216,7 @@ unsigned test_s_get_barrier_state(int a)
 // CHECK-NEXT:    [[TMP2:%.*]] = call i32 @llvm.amdgcn.s.get.named.barrier.state(ptr addrspace(15) [[TMP1]])
 // CHECK-NEXT:    store i32 [[TMP2]], ptr addrspace(5) [[STATE]], align 4
 // CHECK-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspace(5) [[STATE]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[TMP3]]
 //
 unsigned test_s_get_named_barrier_state(void *bar)
@@ -205,7 +227,9 @@ unsigned test_s_get_named_barrier_state(void *bar)
 
 // CHECK-LABEL: @test_s_ttracedata(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    call void @llvm.amdgcn.s.ttracedata(i32 1)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_ttracedata()
@@ -215,7 +239,9 @@ void test_s_ttracedata()
 
 // CHECK-LABEL: @test_s_ttracedata_imm(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    call void @llvm.amdgcn.s.ttracedata.imm(i16 1)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_ttracedata_imm()
@@ -225,6 +251,7 @@ void test_s_ttracedata_imm()
 
 // CHECK-LABEL: @test_s_prefetch_data(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[FP_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[GP_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[CP_ADDR:%.*]] = alloca ptr addrspace(4), align 8, addrspace(5)
@@ -240,6 +267,7 @@ void test_s_ttracedata_imm()
 // CHECK-NEXT:    call void @llvm.amdgcn.s.prefetch.data.p1(ptr addrspace(1) [[TMP1]], i32 [[TMP2]])
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr addrspace(4), ptr addrspace(5) [[CP_ADDR]], align 8
 // CHECK-NEXT:    call void @llvm.amdgcn.s.prefetch.data.p4(ptr addrspace(4) [[TMP3]], i32 31)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_prefetch_data(int *fp, global float *gp, constant char *cp, unsigned int len)
@@ -251,6 +279,7 @@ void test_s_prefetch_data(int *fp, global float *gp, constant char *cp, unsigned
 
 // CHECK-LABEL: @test_s_prefetch_inst(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[FP_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[GP_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[CP_ADDR:%.*]] = alloca ptr addrspace(4), align 8, addrspace(5)
@@ -266,6 +295,7 @@ void test_s_prefetch_data(int *fp, global float *gp, constant char *cp, unsigned
 // CHECK-NEXT:    call void @llvm.amdgcn.s.prefetch.inst.p1(ptr addrspace(1) [[TMP1]], i32 [[TMP2]])
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr addrspace(4), ptr addrspace(5) [[CP_ADDR]], align 8
 // CHECK-NEXT:    call void @llvm.amdgcn.s.prefetch.inst.p4(ptr addrspace(4) [[TMP3]], i32 31)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_prefetch_inst(int *fp, global float *gp, constant char *cp, unsigned int len)
@@ -277,6 +307,7 @@ void test_s_prefetch_inst(int *fp, global float *gp, constant char *cp, unsigned
 
 // CHECK-LABEL: @test_s_buffer_prefetch_data(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[RSRC_ADDR:%.*]] = alloca ptr addrspace(8), align 16, addrspace(5)
 // CHECK-NEXT:    [[LEN_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store ptr addrspace(8) [[RSRC:%.*]], ptr addrspace(5) [[RSRC_ADDR]], align 16
@@ -286,6 +317,7 @@ void test_s_prefetch_inst(int *fp, global float *gp, constant char *cp, unsigned
 // CHECK-NEXT:    call void @llvm.amdgcn.s.buffer.prefetch.data(ptr addrspace(8) [[TMP0]], i32 128, i32 [[TMP1]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr addrspace(8), ptr addrspace(5) [[RSRC_ADDR]], align 16
 // CHECK-NEXT:    call void @llvm.amdgcn.s.buffer.prefetch.data(ptr addrspace(8) [[TMP2]], i32 0, i32 31)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_s_buffer_prefetch_data(__amdgpu_buffer_rsrc_t rsrc, unsigned int len)
@@ -296,6 +328,7 @@ void test_s_buffer_prefetch_data(__amdgpu_buffer_rsrc_t rsrc, unsigned int len)
 
 // CHECK-LABEL: @test_ds_bpermute_fi_b32(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -307,6 +340,7 @@ void test_s_buffer_prefetch_data(__amdgpu_buffer_rsrc_t rsrc, unsigned int len)
 // CHECK-NEXT:    [[TMP2:%.*]] = call i32 @llvm.amdgcn.ds.bpermute.fi.b32(i32 [[TMP0]], i32 [[TMP1]])
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
 // CHECK-NEXT:    store i32 [[TMP2]], ptr addrspace(1) [[TMP3]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_ds_bpermute_fi_b32(global int* out, int a, int b)

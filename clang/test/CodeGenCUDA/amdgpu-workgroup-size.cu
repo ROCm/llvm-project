@@ -18,6 +18,7 @@
 // PRECOV5-LABEL: define dso_local void @_Z23test_get_workgroup_sizeiPi(
 // PRECOV5-SAME: i32 noundef [[D:%.*]], ptr noundef [[OUT:%.*]]) #[[ATTR0:[0-9]+]] {
 // PRECOV5-NEXT:  [[ENTRY:.*:]]
+// PRECOV5-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // PRECOV5-NEXT:    [[D_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // PRECOV5-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // PRECOV5-NEXT:    [[D_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D_ADDR]] to ptr
@@ -33,7 +34,7 @@
 // PRECOV5:       [[SW_BB]]:
 // PRECOV5-NEXT:    [[TMP1:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // PRECOV5-NEXT:    [[TMP2:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP1]], i64 4
-// PRECOV5-NEXT:    [[TMP3:%.*]] = load i16, ptr addrspace(4) [[TMP2]], align 2, !range [[RNG3:![0-9]+]], !invariant.load [[META4:![0-9]+]], !noundef [[META4]]
+// PRECOV5-NEXT:    [[TMP3:%.*]] = load i16, ptr addrspace(4) [[TMP2]], align 2, !range [[RNG4:![0-9]+]], !invariant.load [[META5:![0-9]+]], !noundef [[META5]]
 // PRECOV5-NEXT:    [[TMP4:%.*]] = zext i16 [[TMP3]] to i32
 // PRECOV5-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // PRECOV5-NEXT:    store i32 [[TMP4]], ptr [[TMP5]], align 4
@@ -41,7 +42,7 @@
 // PRECOV5:       [[SW_BB1]]:
 // PRECOV5-NEXT:    [[TMP6:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // PRECOV5-NEXT:    [[TMP7:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP6]], i64 6
-// PRECOV5-NEXT:    [[TMP8:%.*]] = load i16, ptr addrspace(4) [[TMP7]], align 2, !range [[RNG3]], !invariant.load [[META4]], !noundef [[META4]]
+// PRECOV5-NEXT:    [[TMP8:%.*]] = load i16, ptr addrspace(4) [[TMP7]], align 2, !range [[RNG4]], !invariant.load [[META5]], !noundef [[META5]]
 // PRECOV5-NEXT:    [[TMP9:%.*]] = zext i16 [[TMP8]] to i32
 // PRECOV5-NEXT:    [[TMP10:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // PRECOV5-NEXT:    store i32 [[TMP9]], ptr [[TMP10]], align 4
@@ -49,7 +50,7 @@
 // PRECOV5:       [[SW_BB2]]:
 // PRECOV5-NEXT:    [[TMP11:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // PRECOV5-NEXT:    [[TMP12:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP11]], i64 8
-// PRECOV5-NEXT:    [[TMP13:%.*]] = load i16, ptr addrspace(4) [[TMP12]], align 2, !range [[RNG3]], !invariant.load [[META4]], !noundef [[META4]]
+// PRECOV5-NEXT:    [[TMP13:%.*]] = load i16, ptr addrspace(4) [[TMP12]], align 2, !range [[RNG4]], !invariant.load [[META5]], !noundef [[META5]]
 // PRECOV5-NEXT:    [[TMP14:%.*]] = zext i16 [[TMP13]] to i32
 // PRECOV5-NEXT:    [[TMP15:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // PRECOV5-NEXT:    store i32 [[TMP14]], ptr [[TMP15]], align 4
@@ -59,11 +60,13 @@
 // PRECOV5-NEXT:    store i32 0, ptr [[TMP16]], align 4
 // PRECOV5-NEXT:    br label %[[SW_EPILOG]]
 // PRECOV5:       [[SW_EPILOG]]:
+// PRECOV5-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // PRECOV5-NEXT:    ret void
 //
 // COV5-LABEL: define dso_local void @_Z23test_get_workgroup_sizeiPi(
 // COV5-SAME: i32 noundef [[D:%.*]], ptr noundef [[OUT:%.*]]) #[[ATTR0:[0-9]+]] {
 // COV5-NEXT:  [[ENTRY:.*:]]
+// COV5-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // COV5-NEXT:    [[D_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // COV5-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // COV5-NEXT:    [[D_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[D_ADDR]] to ptr
@@ -79,7 +82,7 @@
 // COV5:       [[SW_BB]]:
 // COV5-NEXT:    [[TMP1:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // COV5-NEXT:    [[TMP2:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP1]], i64 12
-// COV5-NEXT:    [[TMP3:%.*]] = load i16, ptr addrspace(4) [[TMP2]], align 2, !range [[RNG3:![0-9]+]], !invariant.load [[META4:![0-9]+]], !noundef [[META4]]
+// COV5-NEXT:    [[TMP3:%.*]] = load i16, ptr addrspace(4) [[TMP2]], align 2, !range [[RNG4:![0-9]+]], !invariant.load [[META5:![0-9]+]], !noundef [[META5]]
 // COV5-NEXT:    [[TMP4:%.*]] = zext i16 [[TMP3]] to i32
 // COV5-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // COV5-NEXT:    store i32 [[TMP4]], ptr [[TMP5]], align 4
@@ -87,7 +90,7 @@
 // COV5:       [[SW_BB1]]:
 // COV5-NEXT:    [[TMP6:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // COV5-NEXT:    [[TMP7:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP6]], i64 14
-// COV5-NEXT:    [[TMP8:%.*]] = load i16, ptr addrspace(4) [[TMP7]], align 2, !range [[RNG3]], !invariant.load [[META4]], !noundef [[META4]]
+// COV5-NEXT:    [[TMP8:%.*]] = load i16, ptr addrspace(4) [[TMP7]], align 2, !range [[RNG4]], !invariant.load [[META5]], !noundef [[META5]]
 // COV5-NEXT:    [[TMP9:%.*]] = zext i16 [[TMP8]] to i32
 // COV5-NEXT:    [[TMP10:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // COV5-NEXT:    store i32 [[TMP9]], ptr [[TMP10]], align 4
@@ -95,7 +98,7 @@
 // COV5:       [[SW_BB2]]:
 // COV5-NEXT:    [[TMP11:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // COV5-NEXT:    [[TMP12:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP11]], i64 16
-// COV5-NEXT:    [[TMP13:%.*]] = load i16, ptr addrspace(4) [[TMP12]], align 2, !range [[RNG3]], !invariant.load [[META4]], !noundef [[META4]]
+// COV5-NEXT:    [[TMP13:%.*]] = load i16, ptr addrspace(4) [[TMP12]], align 2, !range [[RNG4]], !invariant.load [[META5]], !noundef [[META5]]
 // COV5-NEXT:    [[TMP14:%.*]] = zext i16 [[TMP13]] to i32
 // COV5-NEXT:    [[TMP15:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // COV5-NEXT:    store i32 [[TMP14]], ptr [[TMP15]], align 4
@@ -105,6 +108,7 @@
 // COV5-NEXT:    store i32 0, ptr [[TMP16]], align 4
 // COV5-NEXT:    br label %[[SW_EPILOG]]
 // COV5:       [[SW_EPILOG]]:
+// COV5-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // COV5-NEXT:    ret void
 //
 __device__ void test_get_workgroup_size(int d, int *out)
@@ -119,9 +123,13 @@ __device__ void test_get_workgroup_size(int d, int *out)
 
 // CHECK-DAG: [[$WS_RANGE]] = !{i16 1, i16 1025}
 //.
-// PRECOV5: [[RNG3]] = !{i16 1, i16 1025}
-// PRECOV5: [[META4]] = !{}
+// PRECOV5: [[META3]] = !{i32 0, !"_Z23test_get_workgroup_sizeiPi"}
+// PRECOV5: [[RNG4]] = !{i16 1, i16 1025}
+// PRECOV5: [[META5]] = !{}
+// PRECOV5: [[META6]] = !{i32 1, !"_Z23test_get_workgroup_sizeiPi"}
 //.
-// COV5: [[RNG3]] = !{i16 1, i16 1025}
-// COV5: [[META4]] = !{}
+// COV5: [[META3]] = !{i32 0, !"_Z23test_get_workgroup_sizeiPi"}
+// COV5: [[RNG4]] = !{i16 1, i16 1025}
+// COV5: [[META5]] = !{}
+// COV5: [[META6]] = !{i32 1, !"_Z23test_get_workgroup_sizeiPi"}
 //.

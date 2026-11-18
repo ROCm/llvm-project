@@ -59,6 +59,8 @@ float One_(float f) __attribute__((alias("_Z5__Onef")));
 // DEVICE-LABEL: define hidden noundef i32 @_Z5__Twov(
 // DEVICE-SAME: ) #[[ATTR0:[0-9]+]] {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 2
 //
 int __Two(void) { return 2; }
@@ -74,11 +76,13 @@ int __Two(void) { return 2; }
 // DEVICE-LABEL: define hidden noundef float @_Z5__Twof(
 // DEVICE-SAME: float noundef [[F:%.*]]) #[[ATTR0]] {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    [[F_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // DEVICE-NEXT:    [[F_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[F_ADDR]] to ptr
 // DEVICE-NEXT:    store float [[F]], ptr [[F_ADDR_ASCAST]], align 4
 // DEVICE-NEXT:    [[TMP0:%.*]] = load float, ptr [[F_ADDR_ASCAST]], align 4
 // DEVICE-NEXT:    [[MUL:%.*]] = fmul float 2.000000e+00, [[TMP0]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret float [[MUL]]
 //
 float __Two(float f) { return 2.0f * f; }
@@ -97,6 +101,8 @@ float Two_(float f) __attribute__((alias("_Z5__Twof")));
 // DEVICE-LABEL: define linkonce_odr hidden noundef i32 @_Z7__Threev(
 // DEVICE-SAME: ) #[[ATTR0]] comdat {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 3
 //
 constexpr int __Three(void) { return 3; }
@@ -116,6 +122,7 @@ int Four_(void) __attribute__((alias("_Z6__Fourv")));
 // HOST: attributes #[[ATTR0]] = { mustprogress noinline nounwind optnone "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-features"="+cx8,+mmx,+sse,+sse2,+x87" }
 //.
 // DEVICE: attributes #[[ATTR0]] = { convergent mustprogress noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
+// DEVICE: attributes #[[ATTR1:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // HOST: [[META0:![0-9]+]] = !{i32 7, !"openmp", i32 51}
 // HOST: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
@@ -124,4 +131,10 @@ int Four_(void) __attribute__((alias("_Z6__Fourv")));
 // DEVICE: [[META1:![0-9]+]] = !{i32 7, !"openmp", i32 51}
 // DEVICE: [[META2:![0-9]+]] = !{i32 7, !"openmp-device", i32 51}
 // DEVICE: [[META3:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// DEVICE: [[META4]] = !{i32 0, !"_Z5__Twov"}
+// DEVICE: [[META5]] = !{i32 1, !"_Z5__Twov"}
+// DEVICE: [[META6]] = !{i32 0, !"_Z5__Twof"}
+// DEVICE: [[META7]] = !{i32 1, !"_Z5__Twof"}
+// DEVICE: [[META8]] = !{i32 0, !"_Z7__Threev"}
+// DEVICE: [[META9]] = !{i32 1, !"_Z7__Threev"}
 //.

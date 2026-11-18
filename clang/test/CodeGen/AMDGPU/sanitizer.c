@@ -4,6 +4,8 @@
 // CHECK-LABEL: define dso_local void @function(
 // CHECK-SAME: ) #[[ATTR0:[0-9]+]] !func_sanitize [[META2:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void function() {}
@@ -11,10 +13,16 @@ void function() {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @kernel(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    call void @function() #[[ATTR1:[0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    call void @function() #[[ATTR2:[0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 [[clang::device_kernel]] void kernel() { function(); }
 //.
 // CHECK: [[META2]] = !{i32 -1056584962, i32 1717976574}
+// CHECK: [[META3]] = !{i32 0, !"function"}
+// CHECK: [[META4]] = !{i32 1, !"function"}
+// CHECK: [[META5]] = !{i32 0, !"kernel"}
+// CHECK: [[META6]] = !{i32 1, !"kernel"}
 //.

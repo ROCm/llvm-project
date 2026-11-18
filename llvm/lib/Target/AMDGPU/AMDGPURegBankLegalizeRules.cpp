@@ -1860,6 +1860,9 @@ RegBankLegalizeRules::RegBankLegalizeRules(const GCNSubtarget &_ST,
 
   addRulesForIOpcs({amdgcn_s_ttracedata}).Any({{}, {{}, {IntrId, SgprB32_M0}}});
 
+  addRulesForIOpcs({amdgcn_sqtt_event})
+      .Any({{}, {{}, {IntrId, None, Sgpr32, Imm}}});
+
   addRulesForIOpcs({amdgcn_s_sleep_var})
       .Any({{}, {{}, {IntrId, SgprB32_ReadFirstLane}}});
 

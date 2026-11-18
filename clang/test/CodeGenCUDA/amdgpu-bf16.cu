@@ -9,6 +9,7 @@
 
 // CHECK-LABEL: @_Z8test_argPDF16bDF16b(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[IN_ADDR:%.*]] = alloca bfloat, align 2, addrspace(5)
 // CHECK-NEXT:    [[BF16:%.*]] = alloca bfloat, align 2, addrspace(5)
@@ -22,6 +23,7 @@
 // CHECK-NEXT:    [[TMP1:%.*]] = load bfloat, ptr [[BF16_ASCAST]], align 2
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store bfloat [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_arg(__bf16 *out, __bf16 in) {
@@ -31,6 +33,7 @@ __device__ void test_arg(__bf16 *out, __bf16 in) {
 
 // CHECK-LABEL: @_Z9test_loadPDF16bS_(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[BF16:%.*]] = alloca bfloat, align 2, addrspace(5)
@@ -45,6 +48,7 @@ __device__ void test_arg(__bf16 *out, __bf16 in) {
 // CHECK-NEXT:    [[TMP2:%.*]] = load bfloat, ptr [[BF16_ASCAST]], align 2
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store bfloat [[TMP2]], ptr [[TMP3]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_load(__bf16 *out, __bf16 *in) {
@@ -54,10 +58,12 @@ __device__ void test_load(__bf16 *out, __bf16 *in) {
 
 // CHECK-LABEL: @_Z8test_retDF16b(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[IN_ADDR:%.*]] = alloca bfloat, align 2, addrspace(5)
 // CHECK-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-NEXT:    store bfloat [[IN:%.*]], ptr [[IN_ADDR_ASCAST]], align 2
 // CHECK-NEXT:    [[TMP0:%.*]] = load bfloat, ptr [[IN_ADDR_ASCAST]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret bfloat [[TMP0]]
 //
 __device__ __bf16 test_ret( __bf16 in) {
@@ -66,11 +72,13 @@ __device__ __bf16 test_ret( __bf16 in) {
 
 // CHECK-LABEL: @_Z9test_callDF16b(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[IN_ADDR:%.*]] = alloca bfloat, align 2, addrspace(5)
 // CHECK-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-NEXT:    store bfloat [[IN:%.*]], ptr [[IN_ADDR_ASCAST]], align 2
 // CHECK-NEXT:    [[TMP0:%.*]] = load bfloat, ptr [[IN_ADDR_ASCAST]], align 2
-// CHECK-NEXT:    [[CALL:%.*]] = call contract noundef bfloat @_Z8test_retDF16b(bfloat noundef [[TMP0]]) #[[ATTR1:[0-9]+]]
+// CHECK-NEXT:    [[CALL:%.*]] = call contract noundef bfloat @_Z8test_retDF16b(bfloat noundef [[TMP0]]) #[[ATTR2:[0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret bfloat [[CALL]]
 //
 __device__ __bf16 test_call( __bf16 in) {
@@ -80,6 +88,7 @@ __device__ __bf16 test_call( __bf16 in) {
 
 // CHECK-LABEL: @_Z15test_vec_assignv(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[VEC2_A:%.*]] = alloca <2 x bfloat>, align 4, addrspace(5)
 // CHECK-NEXT:    [[VEC2_B:%.*]] = alloca <2 x bfloat>, align 4, addrspace(5)
 // CHECK-NEXT:    [[VEC4_A:%.*]] = alloca <4 x bfloat>, align 8, addrspace(5)
@@ -104,6 +113,7 @@ __device__ __bf16 test_call( __bf16 in) {
 // CHECK-NEXT:    store <8 x bfloat> [[TMP2]], ptr [[VEC8_A_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP3:%.*]] = load <16 x bfloat>, ptr [[VEC16_B_ASCAST]], align 32
 // CHECK-NEXT:    store <16 x bfloat> [[TMP3]], ptr [[VEC16_A_ASCAST]], align 32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_vec_assign() {

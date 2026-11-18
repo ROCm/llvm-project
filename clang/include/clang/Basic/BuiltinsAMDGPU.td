@@ -156,6 +156,8 @@ def __builtin_amdgcn_s_sendmsg : AMDGPUBuiltin<"void(_Constant int, unsigned int
 def __builtin_amdgcn_s_sendmsghalt : AMDGPUBuiltin<"void(_Constant int, unsigned int)">;
 def __builtin_amdgcn_s_barrier : AMDGPUBuiltin<"void()">;
 def __builtin_amdgcn_s_ttracedata : AMDGPUBuiltin<"void(int)">;
+def __builtin_amdgcn_sqtt_user_entry : AMDGPUBuiltin<"void(char const *)">;
+def __builtin_amdgcn_sqtt_user_exit : AMDGPUBuiltin<"void(char const *)">;
 def __builtin_amdgcn_wave_barrier : AMDGPUBuiltin<"void()">;
 def __builtin_amdgcn_sched_barrier : AMDGPUBuiltin<"void(_Constant int)">;
 def __builtin_amdgcn_sched_group_barrier : AMDGPUBuiltin<"void(_Constant int, _Constant int, _Constant int)">;

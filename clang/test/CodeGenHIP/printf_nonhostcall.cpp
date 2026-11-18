@@ -12,7 +12,9 @@
 extern "C" __device__ int printf(const char *format, ...);
 
 // CHECK-LABEL: define dso_local noundef i32 @_Z4foo1v
+// CHECK-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[S:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[S_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[S]] to ptr
 // CHECK-NEXT:    store ptr addrspacecast (ptr addrspace(4) @.str to ptr), ptr [[S_ASCAST]], align 8
@@ -44,6 +46,7 @@ extern "C" __device__ int printf(const char *format, ...);
 // CHECK:       end.block:
 // CHECK-NEXT:    [[TMP17:%.*]] = xor i1 [[TMP16]], true
 // CHECK-NEXT:    [[PRINTF_RESULT:%.*]] = sext i1 [[TMP17]] to i32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[PRINTF_RESULT]]
 // CHECK:       argpush.block:
 // CHECK-NEXT:    [[TMP18:%.*]] = shl i32 [[TMP15]], 2
@@ -67,7 +70,9 @@ extern "C" __device__ int printf(const char *format, ...);
 // CHECK-NEXT:    br label [[END_BLOCK]]
 //
 // CHECK_CONSTRAINED-LABEL: define dso_local noundef i32 @_Z4foo1v
+// CHECK_CONSTRAINED-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK_CONSTRAINED-NEXT:  entry:
+// CHECK_CONSTRAINED-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK_CONSTRAINED-NEXT:    [[S:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK_CONSTRAINED-NEXT:    [[S_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[S]] to ptr
 // CHECK_CONSTRAINED-NEXT:    store ptr addrspacecast (ptr addrspace(4) @.str to ptr), ptr [[S_ASCAST]], align 8
@@ -99,6 +104,7 @@ extern "C" __device__ int printf(const char *format, ...);
 // CHECK_CONSTRAINED:       end.block:
 // CHECK_CONSTRAINED-NEXT:    [[TMP17:%.*]] = xor i1 [[TMP16]], true
 // CHECK_CONSTRAINED-NEXT:    [[PRINTF_RESULT:%.*]] = sext i1 [[TMP17]] to i32
+// CHECK_CONSTRAINED-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK_CONSTRAINED-NEXT:    ret i32 [[PRINTF_RESULT]]
 // CHECK_CONSTRAINED:       argpush.block:
 // CHECK_CONSTRAINED-NEXT:    [[TMP18:%.*]] = shl i32 [[TMP15]], 2
@@ -129,7 +135,9 @@ __device__ int foo1() {
 __device__ char *dstr;
 __device__ const
 // CHECK-LABEL: define dso_local noundef i32 @_Z4foo2v
+// CHECK-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[LCVAL:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[LCVAL_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[LCVAL]] to ptr
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr addrspacecast (ptr addrspace(1) @dstr to ptr), align 8
@@ -160,6 +168,7 @@ __device__ const
 // CHECK:       end.block:
 // CHECK-NEXT:    [[TMP17:%.*]] = xor i1 [[TMP16]], true
 // CHECK-NEXT:    [[PRINTF_RESULT:%.*]] = sext i1 [[TMP17]] to i32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[PRINTF_RESULT]]
 // CHECK:       argpush.block:
 // CHECK-NEXT:    [[TMP18:%.*]] = shl i32 [[TMP15]], 2
@@ -179,7 +188,9 @@ __device__ const
 // CHECK-NEXT:    br label [[END_BLOCK]]
 //
 // CHECK_CONSTRAINED-LABEL: define dso_local noundef i32 @_Z4foo2v
+// CHECK_CONSTRAINED-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK_CONSTRAINED-NEXT:  entry:
+// CHECK_CONSTRAINED-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK_CONSTRAINED-NEXT:    [[LCVAL:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK_CONSTRAINED-NEXT:    [[LCVAL_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[LCVAL]] to ptr
 // CHECK_CONSTRAINED-NEXT:    [[TMP0:%.*]] = load ptr, ptr addrspacecast (ptr addrspace(1) @dstr to ptr), align 8
@@ -210,6 +221,7 @@ __device__ const
 // CHECK_CONSTRAINED:       end.block:
 // CHECK_CONSTRAINED-NEXT:    [[TMP17:%.*]] = xor i1 [[TMP16]], true
 // CHECK_CONSTRAINED-NEXT:    [[PRINTF_RESULT:%.*]] = sext i1 [[TMP17]] to i32
+// CHECK_CONSTRAINED-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK_CONSTRAINED-NEXT:    ret i32 [[PRINTF_RESULT]]
 // CHECK_CONSTRAINED:       argpush.block:
 // CHECK_CONSTRAINED-NEXT:    [[TMP18:%.*]] = shl i32 [[TMP15]], 2
@@ -246,7 +258,9 @@ __device__ _BitInt(44) Int44 = 312;
 __device__ _BitInt(128) Int128 = 45637;
 
 // CHECK-LABEL: define dso_local noundef i32 @_Z4foo3v
+// CHECK-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store i32 25, ptr addrspacecast (ptr addrspace(3) @_ZZ4foo3vE1s to ptr), align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspacecast (ptr addrspace(3) @_ZZ4foo3vE1s to ptr), align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = load i16, ptr addrspacecast (ptr addrspace(1) @g to ptr), align 2
@@ -268,6 +282,7 @@ __device__ _BitInt(128) Int128 = 45637;
 // CHECK:       end.block:
 // CHECK-NEXT:    [[TMP11:%.*]] = xor i1 [[TMP10]], true
 // CHECK-NEXT:    [[PRINTF_RESULT:%.*]] = sext i1 [[TMP11]] to i32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[PRINTF_RESULT]]
 // CHECK:       argpush.block:
 // CHECK-NEXT:    store i32 434, ptr addrspace(1) [[PRINTF_ALLOC_FN]], align 4
@@ -305,7 +320,9 @@ __device__ _BitInt(128) Int128 = 45637;
 // CHECK-NEXT:    br label [[END_BLOCK]]
 //
 // CHECK_CONSTRAINED-LABEL: define dso_local noundef i32 @_Z4foo3v
+// CHECK_CONSTRAINED-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK_CONSTRAINED-NEXT:  entry:
+// CHECK_CONSTRAINED-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK_CONSTRAINED-NEXT:    store i32 25, ptr addrspacecast (ptr addrspace(3) @_ZZ4foo3vE1s to ptr), align 4
 // CHECK_CONSTRAINED-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspacecast (ptr addrspace(3) @_ZZ4foo3vE1s to ptr), align 4
 // CHECK_CONSTRAINED-NEXT:    [[TMP1:%.*]] = load i16, ptr addrspacecast (ptr addrspace(1) @g to ptr), align 2
@@ -327,6 +344,7 @@ __device__ _BitInt(128) Int128 = 45637;
 // CHECK_CONSTRAINED:       end.block:
 // CHECK_CONSTRAINED-NEXT:    [[TMP11:%.*]] = xor i1 [[TMP10]], true
 // CHECK_CONSTRAINED-NEXT:    [[PRINTF_RESULT:%.*]] = sext i1 [[TMP11]] to i32
+// CHECK_CONSTRAINED-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK_CONSTRAINED-NEXT:    ret i32 [[PRINTF_RESULT]]
 // CHECK_CONSTRAINED:       argpush.block:
 // CHECK_CONSTRAINED-NEXT:    store i32 434, ptr addrspace(1) [[PRINTF_ALLOC_FN]], align 4
@@ -371,7 +389,9 @@ __device__ int foo3() {
 
 //A non trivial case,
 // CHECK-LABEL: define dso_local noundef i32 @_Z4foo4v
+// CHECK-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[S:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[S_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[S]] to ptr
 // CHECK-NEXT:    store ptr addrspacecast (ptr addrspace(4) @.str.4 to ptr), ptr [[S_ASCAST]], align 8
@@ -402,6 +422,7 @@ __device__ int foo3() {
 // CHECK:       end.block:
 // CHECK-NEXT:    [[TMP16:%.*]] = xor i1 [[TMP15]], true
 // CHECK-NEXT:    [[PRINTF_RESULT:%.*]] = sext i1 [[TMP16]] to i32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[PRINTF_RESULT]]
 // CHECK:       argpush.block:
 // CHECK-NEXT:    [[TMP17:%.*]] = shl i32 [[TMP14]], 2
@@ -414,7 +435,9 @@ __device__ int foo3() {
 // CHECK-NEXT:    br label [[END_BLOCK]]
 //
 // CHECK_CONSTRAINED-LABEL: define dso_local noundef i32 @_Z4foo4v
+// CHECK_CONSTRAINED-SAME: () #[[ATTR0:[0-9]+]] {
 // CHECK_CONSTRAINED-NEXT:  entry:
+// CHECK_CONSTRAINED-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK_CONSTRAINED-NEXT:    [[S:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK_CONSTRAINED-NEXT:    [[S_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[S]] to ptr
 // CHECK_CONSTRAINED-NEXT:    store ptr addrspacecast (ptr addrspace(4) @.str.4 to ptr), ptr [[S_ASCAST]], align 8
@@ -445,6 +468,7 @@ __device__ int foo3() {
 // CHECK_CONSTRAINED:       end.block:
 // CHECK_CONSTRAINED-NEXT:    [[TMP16:%.*]] = xor i1 [[TMP15]], true
 // CHECK_CONSTRAINED-NEXT:    [[PRINTF_RESULT:%.*]] = sext i1 [[TMP16]] to i32
+// CHECK_CONSTRAINED-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK_CONSTRAINED-NEXT:    ret i32 [[PRINTF_RESULT]]
 // CHECK_CONSTRAINED:       argpush.block:
 // CHECK_CONSTRAINED-NEXT:    [[TMP17:%.*]] = shl i32 [[TMP14]], 2

@@ -12,6 +12,7 @@ typedef unsigned long ulong;
 // CHECK-GFX1030-LABEL: define dso_local void @_Z34test_image_bvh_intersect_ray_h_hipPDv4_jjfDv4_fDv4_DF16_S2_S_(
 // CHECK-GFX1030-SAME: ptr noundef [[OUT:%.*]], i32 noundef [[NODE:%.*]], float noundef [[TMAX:%.*]], <4 x float> noundef [[ORIGIN:%.*]], <4 x half> noundef [[DIR:%.*]], <4 x half> noundef [[INV_DIR:%.*]], <4 x i32> noundef [[EXT:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-GFX1030-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1030-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1030-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-GFX1030-NEXT:    [[NODE_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-GFX1030-NEXT:    [[TMAX_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -45,6 +46,7 @@ typedef unsigned long ulong;
 // CHECK-GFX1030-NEXT:    [[TMP9:%.*]] = call <4 x i32> @llvm.amdgcn.image.bvh.intersect.ray.i32.v3f16(i32 [[TMP0]], float [[TMP1]], <3 x float> [[TMP6]], <3 x half> [[TMP7]], <3 x half> [[TMP8]], <4 x i32> [[TMP5]])
 // CHECK-GFX1030-NEXT:    [[TMP10:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-GFX1030-NEXT:    store <4 x i32> [[TMP9]], ptr [[TMP10]], align 16
+// CHECK-GFX1030-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1030-NEXT:    ret void
 //
 __device__ void test_image_bvh_intersect_ray_h_hip(v4ui* out, unsigned int node, float tmax, v4f origin, v4h dir, v4h inv_dir, v4ui ext) {
@@ -55,6 +57,7 @@ __device__ void test_image_bvh_intersect_ray_h_hip(v4ui* out, unsigned int node,
 // CHECK-GFX1030-LABEL: define dso_local void @_Z35test_image_bvh_intersect_ray_lh_hipPDv4_jmfDv4_fDv4_DF16_S2_S_(
 // CHECK-GFX1030-SAME: ptr noundef [[OUT:%.*]], i64 noundef [[NODE:%.*]], float noundef [[TMAX:%.*]], <4 x float> noundef [[ORIGIN:%.*]], <4 x half> noundef [[DIR:%.*]], <4 x half> noundef [[INV_DIR:%.*]], <4 x i32> noundef [[EXT:%.*]]) #[[ATTR0]] {
 // CHECK-GFX1030-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1030-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1030-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-GFX1030-NEXT:    [[NODE_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-GFX1030-NEXT:    [[TMAX_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -88,9 +91,16 @@ __device__ void test_image_bvh_intersect_ray_h_hip(v4ui* out, unsigned int node,
 // CHECK-GFX1030-NEXT:    [[TMP9:%.*]] = call <4 x i32> @llvm.amdgcn.image.bvh.intersect.ray.i64.v3f16(i64 [[TMP0]], float [[TMP1]], <3 x float> [[TMP6]], <3 x half> [[TMP7]], <3 x half> [[TMP8]], <4 x i32> [[TMP5]])
 // CHECK-GFX1030-NEXT:    [[TMP10:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-GFX1030-NEXT:    store <4 x i32> [[TMP9]], ptr [[TMP10]], align 16
+// CHECK-GFX1030-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1030-NEXT:    ret void
 //
 __device__ void test_image_bvh_intersect_ray_lh_hip(v4ui* out, ulong node, float tmax, v4f origin, v4h dir, v4h inv_dir, v4ui ext) {
   *out = __builtin_amdgcn_image_bvh_intersect_ray_lh(node, tmax, origin, dir, inv_dir, ext);
 }
 
+//.
+// CHECK-GFX1030: [[META3]] = !{i32 0, !"_Z34test_image_bvh_intersect_ray_h_hipPDv4_jjfDv4_fDv4_DF16_S2_S_"}
+// CHECK-GFX1030: [[META4]] = !{i32 1, !"_Z34test_image_bvh_intersect_ray_h_hipPDv4_jjfDv4_fDv4_DF16_S2_S_"}
+// CHECK-GFX1030: [[META5]] = !{i32 0, !"_Z35test_image_bvh_intersect_ray_lh_hipPDv4_jmfDv4_fDv4_DF16_S2_S_"}
+// CHECK-GFX1030: [[META6]] = !{i32 1, !"_Z35test_image_bvh_intersect_ray_lh_hipPDv4_jmfDv4_fDv4_DF16_S2_S_"}
+//.

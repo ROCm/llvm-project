@@ -20,6 +20,7 @@ __device__ void test_amdgcn_flat_load_monitor_b128_from_template(v4i* inptr, v4i
 // CHECK-LABEL: define dso_local void @_Z48test_amdgcn_flat_load_monitor_b128_from_templatePDv4_iS0_(
 // CHECK-SAME: ptr noundef [[INPTR:%.*]], ptr noundef [[OUT:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[INPTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[INPTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[INPTR_ADDR]] to ptr
@@ -27,22 +28,29 @@ __device__ void test_amdgcn_flat_load_monitor_b128_from_template(v4i* inptr, v4i
 // CHECK-NEXT:    store ptr [[INPTR]], ptr [[INPTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[OUT]], ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[INPTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[CALL:%.*]] = call noundef <4 x i32> @_Z39templated_amdgcn_flat_load_monitor_b128ILj5ELj0EEDv4_iPS0_(ptr noundef [[TMP0]]) #[[ATTR2:[0-9]+]]
+// CHECK-NEXT:    [[CALL:%.*]] = call noundef <4 x i32> @_Z39templated_amdgcn_flat_load_monitor_b128ILj5ELj0EEDv4_iPS0_(ptr noundef [[TMP0]]) #[[ATTR3:[0-9]+]]
 // CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <4 x i32> [[CALL]], ptr [[TMP1]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define linkonce_odr noundef <4 x i32> @_Z39templated_amdgcn_flat_load_monitor_b128ILj5ELj0EEDv4_iPS0_(
 // CHECK-SAME: ptr noundef [[INPTR:%.*]]) #[[ATTR0]] comdat {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[INPTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[INPTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[INPTR_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[INPTR]], ptr [[INPTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[INPTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = call <4 x i32> @llvm.amdgcn.flat.load.monitor.b128.v4i32(ptr [[TMP0]], i32 5, metadata [[META3:![0-9]+]])
+// CHECK-NEXT:    [[TMP1:%.*]] = call <4 x i32> @llvm.amdgcn.flat.load.monitor.b128.v4i32(ptr [[TMP0]], i32 5, metadata [[META6:![0-9]+]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x i32> [[TMP1]]
 //
 //.
-// CHECK: [[META3]] = !{!""}
+// CHECK: [[META3]] = !{i32 0, !"_Z48test_amdgcn_flat_load_monitor_b128_from_templatePDv4_iS0_"}
+// CHECK: [[META4]] = !{i32 1, !"_Z48test_amdgcn_flat_load_monitor_b128_from_templatePDv4_iS0_"}
+// CHECK: [[META5]] = !{i32 0, !"_Z39templated_amdgcn_flat_load_monitor_b128ILj5ELj0EEDv4_iPS0_"}
+// CHECK: [[META6]] = !{!""}
+// CHECK: [[META7]] = !{i32 1, !"_Z39templated_amdgcn_flat_load_monitor_b128ILj5ELj0EEDv4_iPS0_"}
 //.

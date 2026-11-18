@@ -28,12 +28,20 @@
 
 // DEFAULT-LABEL: @test_fma_f16(
 // DEFAULT-NEXT:  entry:
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[TMP0:%.*]] = tail call contract noundef half @llvm.fma.f16(half [[X:%.*]], half [[Y:%.*]], half [[Z:%.*]])
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret half [[TMP0]]
 //
 // FINITEONLY-LABEL: @test_fma_f16(
 // FINITEONLY-NEXT:  entry:
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) half @llvm.fma.f16(half nofpclass(nan inf) [[X:%.*]], half nofpclass(nan inf) [[Y:%.*]], half nofpclass(nan inf) [[Z:%.*]])
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    ret half [[TMP0]]
 //
 extern "C" __device__ _Float16 test_fma_f16(_Float16 x, _Float16 y,
@@ -43,12 +51,20 @@ extern "C" __device__ _Float16 test_fma_f16(_Float16 x, _Float16 y,
 
 // DEFAULT-LABEL: @test_pow_f16(
 // DEFAULT-NEXT:  entry:
-// DEFAULT-NEXT:    [[CALL_I:%.*]] = tail call contract noundef half @__ocml_pown_f16(half noundef [[X:%.*]], i32 noundef [[Y:%.*]]) #[[ATTR7:[0-9]+]]
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    [[CALL_I:%.*]] = tail call contract noundef half @__ocml_pown_f16(half noundef [[X:%.*]], i32 noundef [[Y:%.*]]) #[[ATTR9:[0-9]+]]
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret half [[CALL_I]]
 //
 // FINITEONLY-LABEL: @test_pow_f16(
 // FINITEONLY-NEXT:  entry:
-// FINITEONLY-NEXT:    [[CALL_I:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) half @__ocml_pown_f16(half noundef nofpclass(nan inf) [[X:%.*]], i32 noundef [[Y:%.*]]) #[[ATTR7:[0-9]+]]
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    [[CALL_I:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) half @__ocml_pown_f16(half noundef nofpclass(nan inf) [[X:%.*]], i32 noundef [[Y:%.*]]) #[[ATTR9:[0-9]+]]
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    ret half [[CALL_I]]
 //
 extern "C" __device__ _Float16 test_pow_f16(_Float16 x, int y) {
@@ -57,12 +73,24 @@ extern "C" __device__ _Float16 test_pow_f16(_Float16 x, int y) {
 
 // DEFAULT-LABEL: @test_fabs_f32(
 // DEFAULT-NEXT:  entry:
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[TMP0:%.*]] = tail call contract noundef float @llvm.fabs.f32(float [[X:%.*]])
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret float [[TMP0]]
 //
 // FINITEONLY-LABEL: @test_fabs_f32(
 // FINITEONLY-NEXT:  entry:
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) float @llvm.fabs.f32(float nofpclass(nan inf) [[X:%.*]])
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    ret float [[TMP0]]
 //
 extern "C" __device__ float test_fabs_f32(float x) {
@@ -71,13 +99,25 @@ extern "C" __device__ float test_fabs_f32(float x) {
 
 // DEFAULT-LABEL: @test_sin_f32(
 // DEFAULT-NEXT:  entry:
-// DEFAULT-NEXT:    [[CALL_I1:%.*]] = tail call contract noundef float @__ocml_sin_f32(float noundef [[X:%.*]]) #[[ATTR8:[0-9]+]]
-// DEFAULT-NEXT:    ret float [[CALL_I1]]
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    [[CALL_I_I:%.*]] = tail call contract noundef float @__ocml_sin_f32(float noundef [[X:%.*]]) #[[ATTR10:[0-9]+]]
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    ret float [[CALL_I_I]]
 //
 // FINITEONLY-LABEL: @test_sin_f32(
 // FINITEONLY-NEXT:  entry:
-// FINITEONLY-NEXT:    [[CALL_I1:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) float @__ocml_sin_f32(float noundef nofpclass(nan inf) [[X:%.*]]) #[[ATTR8:[0-9]+]]
-// FINITEONLY-NEXT:    ret float [[CALL_I1]]
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    [[CALL_I_I:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) float @__ocml_sin_f32(float noundef nofpclass(nan inf) [[X:%.*]]) #[[ATTR10:[0-9]+]]
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    ret float [[CALL_I_I]]
 //
 extern "C" __device__ float test_sin_f32(float x) {
   return sin(x);
@@ -85,13 +125,25 @@ extern "C" __device__ float test_sin_f32(float x) {
 
 // DEFAULT-LABEL: @test_cos_f32(
 // DEFAULT-NEXT:  entry:
-// DEFAULT-NEXT:    [[CALL_I1:%.*]] = tail call contract noundef float @__ocml_cos_f32(float noundef [[X:%.*]]) #[[ATTR8]]
-// DEFAULT-NEXT:    ret float [[CALL_I1]]
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    [[CALL_I_I:%.*]] = tail call contract noundef float @__ocml_cos_f32(float noundef [[X:%.*]]) #[[ATTR10]]
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    ret float [[CALL_I_I]]
 //
 // FINITEONLY-LABEL: @test_cos_f32(
 // FINITEONLY-NEXT:  entry:
-// FINITEONLY-NEXT:    [[CALL_I1:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) float @__ocml_cos_f32(float noundef nofpclass(nan inf) [[X:%.*]]) #[[ATTR8]]
-// FINITEONLY-NEXT:    ret float [[CALL_I1]]
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    [[CALL_I_I:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) float @__ocml_cos_f32(float noundef nofpclass(nan inf) [[X:%.*]]) #[[ATTR10]]
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    ret float [[CALL_I_I]]
 //
 extern "C" __device__ float test_cos_f32(float x) {
   return cos(x);
@@ -108,10 +160,14 @@ struct user_bfloat16 {
 namespace user_namespace {
 // DEFAULT-LABEL: @_ZN14user_namespace3fmaE13user_bfloat16S0_S0_(
 // DEFAULT-NEXT:  entry:
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // FINITEONLY-LABEL: @_ZN14user_namespace3fmaE13user_bfloat16S0_S0_(
 // FINITEONLY-NEXT:  entry:
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    ret void
 //
   __device__ user_bfloat16 fma(const user_bfloat16 a, const user_bfloat16 b, const user_bfloat16 c) {
@@ -120,30 +176,38 @@ namespace user_namespace {
 
 // DEFAULT-LABEL: @_ZN14user_namespace8test_fmaEv(
 // DEFAULT-NEXT:  entry:
+// DEFAULT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[A:%.*]] = alloca [[STRUCT_USER_BFLOAT16:%.*]], align 1, addrspace(5)
 // DEFAULT-NEXT:    [[B:%.*]] = alloca [[STRUCT_USER_BFLOAT16]], align 1, addrspace(5)
 // DEFAULT-NEXT:    [[A_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A]] to ptr
 // DEFAULT-NEXT:    [[B_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B]] to ptr
 // DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[A]])
-// DEFAULT-NEXT:    call void @_ZN13user_bfloat16C1Ef(ptr noundef nonnull align 1 dereferenceable(1) [[A_ASCAST]], float noundef 1.000000e+00) #[[ATTR8]]
+// DEFAULT-NEXT:    call void @_ZN13user_bfloat16C1Ef(ptr noundef nonnull align 1 dereferenceable(1) [[A_ASCAST]], float noundef 1.000000e+00) #[[ATTR10]]
 // DEFAULT-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[B]])
-// DEFAULT-NEXT:    call void @_ZN13user_bfloat16C1Ef(ptr noundef nonnull align 1 dereferenceable(1) [[B_ASCAST]], float noundef 2.000000e+00) #[[ATTR8]]
+// DEFAULT-NEXT:    call void @_ZN13user_bfloat16C1Ef(ptr noundef nonnull align 1 dereferenceable(1) [[B_ASCAST]], float noundef 2.000000e+00) #[[ATTR10]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META34]], i32 poison, i1 true)
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META35]], i32 poison, i1 true)
 // DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[B]])
 // DEFAULT-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[A]])
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // FINITEONLY-LABEL: @_ZN14user_namespace8test_fmaEv(
 // FINITEONLY-NEXT:  entry:
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    [[A:%.*]] = alloca [[STRUCT_USER_BFLOAT16:%.*]], align 1, addrspace(5)
 // FINITEONLY-NEXT:    [[B:%.*]] = alloca [[STRUCT_USER_BFLOAT16]], align 1, addrspace(5)
 // FINITEONLY-NEXT:    [[A_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A]] to ptr
 // FINITEONLY-NEXT:    [[B_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B]] to ptr
 // FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[A]])
-// FINITEONLY-NEXT:    call void @_ZN13user_bfloat16C1Ef(ptr noundef nonnull align 1 dereferenceable(1) [[A_ASCAST]], float noundef nofpclass(nan inf) 1.000000e+00) #[[ATTR8]]
+// FINITEONLY-NEXT:    call void @_ZN13user_bfloat16C1Ef(ptr noundef nonnull align 1 dereferenceable(1) [[A_ASCAST]], float noundef nofpclass(nan inf) 1.000000e+00) #[[ATTR10]]
 // FINITEONLY-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[B]])
-// FINITEONLY-NEXT:    call void @_ZN13user_bfloat16C1Ef(ptr noundef nonnull align 1 dereferenceable(1) [[B_ASCAST]], float noundef nofpclass(nan inf) 2.000000e+00) #[[ATTR8]]
+// FINITEONLY-NEXT:    call void @_ZN13user_bfloat16C1Ef(ptr noundef nonnull align 1 dereferenceable(1) [[B_ASCAST]], float noundef nofpclass(nan inf) 2.000000e+00) #[[ATTR10]]
+// FINITEONLY-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META34]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META35]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[B]])
 // FINITEONLY-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[A]])
+// FINITEONLY-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    ret void
 //
   __global__ void test_fma() {
@@ -154,32 +218,67 @@ namespace user_namespace {
 
 // CORRECT-DIV-SQRT-LABEL: @test_sqrt_f32(
 // CORRECT-DIV-SQRT-NEXT:  entry:
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
 // CORRECT-DIV-SQRT-NEXT:    [[TMP0:%.*]] = tail call contract noundef float @llvm.sqrt.f32(float [[X:%.*]])
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
 // CORRECT-DIV-SQRT-NEXT:    ret float [[TMP0]]
 //
 // FINITEONLY-LABEL: @test_sqrt_f32(
 // FINITEONLY-NEXT:  entry:
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) float @llvm.sqrt.f32(float nofpclass(nan inf) [[X:%.*]])
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    ret float [[TMP0]]
 //
 // NO-CORRECT-DIV-SQRT-LABEL: @test_sqrt_f32(
 // NO-CORRECT-DIV-SQRT-NEXT:  entry:
-// NO-CORRECT-DIV-SQRT-NEXT:    [[TMP0:%.*]] = tail call contract noundef float @llvm.sqrt.f32(float [[X:%.*]]), !fpmath [[META8:![0-9]+]]
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    [[TMP0:%.*]] = tail call contract noundef float @llvm.sqrt.f32(float [[X:%.*]]), !fpmath [[META41:![0-9]+]]
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
 // NO-CORRECT-DIV-SQRT-NEXT:    ret float [[TMP0]]
 //
 extern "C" __device__ float test_sqrt_f32(float x) {
   return sqrt(x);
 }
 
-// DEFAULT-LABEL: @test_sqrt_f64(
-// DEFAULT-NEXT:  entry:
-// DEFAULT-NEXT:    [[TMP0:%.*]] = tail call contract noundef double @llvm.sqrt.f64(double [[X:%.*]])
-// DEFAULT-NEXT:    ret double [[TMP0]]
+// CORRECT-DIV-SQRT-LABEL: @test_sqrt_f64(
+// CORRECT-DIV-SQRT-NEXT:  entry:
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
+// CORRECT-DIV-SQRT-NEXT:    [[TMP0:%.*]] = tail call contract noundef double @llvm.sqrt.f64(double [[X:%.*]])
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
+// CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
+// CORRECT-DIV-SQRT-NEXT:    ret double [[TMP0]]
 //
 // FINITEONLY-LABEL: @test_sqrt_f64(
 // FINITEONLY-NEXT:  entry:
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    [[TMP0:%.*]] = tail call nnan ninf contract noundef nofpclass(nan inf) double @llvm.sqrt.f64(double nofpclass(nan inf) [[X:%.*]])
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
+// FINITEONLY-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
 // FINITEONLY-NEXT:    ret double [[TMP0]]
+//
+// NO-CORRECT-DIV-SQRT-LABEL: @test_sqrt_f64(
+// NO-CORRECT-DIV-SQRT-NEXT:  entry:
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    [[TMP0:%.*]] = tail call contract noundef double @llvm.sqrt.f64(double [[X:%.*]])
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META48:![0-9]+]], i32 poison, i1 true)
+// NO-CORRECT-DIV-SQRT-NEXT:    ret double [[TMP0]]
 //
 extern "C" __device__ double test_sqrt_f64(double x) {
   return sqrt(x);

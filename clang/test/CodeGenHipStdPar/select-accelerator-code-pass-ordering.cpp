@@ -7,8 +7,10 @@
 // RUN: %if cir-enabled %{ %clang_cc1 -fclangir -triple amdgpu-amd-amdhsa -mllvm -amdgpu-enable-hipstdpar -flto -emit-llvm-bc -fcuda-is-device -fdebug-pass-manager  %s -o /dev/null 2>&1 | FileCheck --check-prefix=HIPSTDPAR-PRE %s %}
 // HIPSTDPAR-PRE: Running pass: EntryExitInstrumenterPass
 // HIPSTDPAR-PRE-NEXT: Running pass: EntryExitInstrumenterPass
+// HIPSTDPAR-PRE: Running pass: AMDGPUSQTTFunctionInstrumentPass
+// HIPSTDPAR-PRE: Running pass: AMDGPUSQTTFunctionInstrumentPass
 // HIPSTDPAR-PRE-NOT: Running pass: HipStdParAcceleratorCodeSelectionPass
-// HIPSTDPAR-PRE-NEXT: Running pass: AlwaysInlinerPass
+// HIPSTDPAR-PRE: Running pass: AlwaysInlinerPass
 
 // Ensure Pass HipStdParAcceleratorCodeSelectionPass is invoked in PostLink.
 // RUN: %clang_cc1 -triple amdgpu-amd-amdhsa -mllvm -amdgpu-enable-hipstdpar -fcuda-is-device -fdebug-pass-manager -emit-llvm \

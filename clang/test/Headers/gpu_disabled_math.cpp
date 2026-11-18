@@ -18,11 +18,13 @@ extern "C" double sin(double x);
 // AMDGPU-LABEL: define dso_local noundef double @_Z3food(
 // AMDGPU-SAME: double noundef [[X:%.*]]) #[[ATTR0:[0-9]+]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[X_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
 // AMDGPU-NEXT:    store double [[X]], ptr [[X_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load double, ptr [[X_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    [[TMP1:%.*]] = call double @llvm.sin.f64(double [[TMP0]])
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret double [[TMP1]]
 //
 // NVPTX-LABEL: define dso_local noundef double @_Z3food(
@@ -37,3 +39,7 @@ extern "C" double sin(double x);
 double foo(double x) {
   return sin(x);
 }
+//.
+// AMDGPU: [[META2]] = !{i32 0, !"_Z3food"}
+// AMDGPU: [[META3]] = !{i32 1, !"_Z3food"}
+//.

@@ -9,8 +9,10 @@ typedef half   v8h   __attribute__((ext_vector_type(8)));
 
 // CHECK-GFX1251-LABEL: @test_amdgcn_wmma_f64_16x16x4_f64(
 // CHECK-GFX1251-NEXT:  entry:
+// CHECK-GFX1251-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1251-NEXT:    [[TMP0:%.*]] = tail call <8 x double> @llvm.amdgcn.wmma.f64.16x16x4.f64.v8f64.v2f64(i1 false, <2 x double> [[A:%.*]], i1 false, <2 x double> [[B:%.*]], i16 0, <8 x double> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1251-NEXT:    store <8 x double> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 64, !tbaa [[TBAA7:![0-9]+]]
+// CHECK-GFX1251-NEXT:    store <8 x double> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 64, !tbaa [[TBAA9:![0-9]+]]
+// CHECK-GFX1251-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1251-NEXT:    ret void
 //
 void test_amdgcn_wmma_f64_16x16x4_f64(global v8d* out, v2d a, v2d b, v8d c)

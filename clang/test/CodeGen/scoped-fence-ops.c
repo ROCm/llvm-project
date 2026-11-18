@@ -8,11 +8,21 @@
 // RUN: %clang_cc1 %s -emit-llvm -o - -triple=x86_64-unknown-linux-gnu -ffreestanding \
 // RUN:   -fvisibility=hidden | FileCheck --check-prefix=X86_64 %s
 
-// AMDGCN-LABEL: define hidden void @fe1a(
-// AMDGCN-SAME: ) #[[ATTR0:[0-9]+]] {
-// AMDGCN-NEXT:  [[ENTRY:.*:]]
-// AMDGCN-NEXT:    fence syncscope("workgroup") release
-// AMDGCN-NEXT:    ret void
+// AMDGCN_CL_DEF-LABEL: define hidden void @fe1a(
+// AMDGCN_CL_DEF-SAME: ) #[[ATTR0:[0-9]+]] {
+// AMDGCN_CL_DEF-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_DEF-NEXT:    fence syncscope("workgroup") release
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_DEF-NEXT:    ret void
+//
+// AMDGCN_CL_20-LABEL: define hidden void @fe1a(
+// AMDGCN_CL_20-SAME: ) #[[ATTR0:[0-9]+]] {
+// AMDGCN_CL_20-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_20-NEXT:    fence syncscope("workgroup") release
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_20-NEXT:    ret void
 //
 // SPIRV-LABEL: define hidden spir_func void @fe1a(
 // SPIRV-SAME: ) #[[ATTR0:[0-9]+]] {
@@ -33,6 +43,7 @@ void fe1a() {
 // AMDGCN_CL_DEF-LABEL: define hidden void @fe1b(
 // AMDGCN_CL_DEF-SAME: i32 noundef [[ORD:%.*]]) #[[ATTR0]] {
 // AMDGCN_CL_DEF-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // AMDGCN_CL_DEF-NEXT:    [[ORD_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGCN_CL_DEF-NEXT:    [[ORD_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[ORD_ADDR]] to ptr
 // AMDGCN_CL_DEF-NEXT:    store i32 [[ORD]], ptr [[ORD_ADDR_ASCAST]], align 4
@@ -45,6 +56,7 @@ void fe1a() {
 // AMDGCN_CL_DEF-NEXT:      i32 5, label %[[SEQCST:.*]]
 // AMDGCN_CL_DEF-NEXT:    ]
 // AMDGCN_CL_DEF:       [[ATOMIC_SCOPE_CONTINUE]]:
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // AMDGCN_CL_DEF-NEXT:    ret void
 // AMDGCN_CL_DEF:       [[ACQUIRE]]:
 // AMDGCN_CL_DEF-NEXT:    fence syncscope("workgroup") acquire
@@ -62,6 +74,7 @@ void fe1a() {
 // AMDGCN_CL_20-LABEL: define hidden void @fe1b(
 // AMDGCN_CL_20-SAME: i32 noundef [[ORD:%.*]]) #[[ATTR0]] {
 // AMDGCN_CL_20-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // AMDGCN_CL_20-NEXT:    [[ORD_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGCN_CL_20-NEXT:    store i32 [[ORD]], ptr addrspace(5) [[ORD_ADDR]], align 4
 // AMDGCN_CL_20-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[ORD_ADDR]], align 4
@@ -73,6 +86,7 @@ void fe1a() {
 // AMDGCN_CL_20-NEXT:      i32 5, label %[[SEQCST:.*]]
 // AMDGCN_CL_20-NEXT:    ]
 // AMDGCN_CL_20:       [[ATOMIC_SCOPE_CONTINUE]]:
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // AMDGCN_CL_20-NEXT:    ret void
 // AMDGCN_CL_20:       [[ACQUIRE]]:
 // AMDGCN_CL_20-NEXT:    fence syncscope("workgroup") acquire
@@ -150,6 +164,7 @@ void fe1b(int ord) {
 // AMDGCN_CL_DEF-LABEL: define hidden void @fe1c(
 // AMDGCN_CL_DEF-SAME: i32 noundef [[SCOPE:%.*]]) #[[ATTR0]] {
 // AMDGCN_CL_DEF-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // AMDGCN_CL_DEF-NEXT:    [[SCOPE_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGCN_CL_DEF-NEXT:    [[SCOPE_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SCOPE_ADDR]] to ptr
 // AMDGCN_CL_DEF-NEXT:    store i32 [[SCOPE]], ptr [[SCOPE_ADDR_ASCAST]], align 4
@@ -163,6 +178,7 @@ void fe1b(int ord) {
 // AMDGCN_CL_DEF-NEXT:      i32 4, label %[[SINGLE_SCOPE:.*]]
 // AMDGCN_CL_DEF-NEXT:    ]
 // AMDGCN_CL_DEF:       [[ATOMIC_SCOPE_CONTINUE]]:
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // AMDGCN_CL_DEF-NEXT:    ret void
 // AMDGCN_CL_DEF:       [[SYSTEM_SCOPE]]:
 // AMDGCN_CL_DEF-NEXT:    fence release
@@ -186,6 +202,7 @@ void fe1b(int ord) {
 // AMDGCN_CL_20-LABEL: define hidden void @fe1c(
 // AMDGCN_CL_20-SAME: i32 noundef [[SCOPE:%.*]]) #[[ATTR0]] {
 // AMDGCN_CL_20-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // AMDGCN_CL_20-NEXT:    [[SCOPE_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGCN_CL_20-NEXT:    store i32 [[SCOPE]], ptr addrspace(5) [[SCOPE_ADDR]], align 4
 // AMDGCN_CL_20-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[SCOPE_ADDR]], align 4
@@ -198,6 +215,7 @@ void fe1b(int ord) {
 // AMDGCN_CL_20-NEXT:      i32 4, label %[[SINGLE_SCOPE:.*]]
 // AMDGCN_CL_20-NEXT:    ]
 // AMDGCN_CL_20:       [[ATOMIC_SCOPE_CONTINUE]]:
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // AMDGCN_CL_20-NEXT:    ret void
 // AMDGCN_CL_20:       [[SYSTEM_SCOPE]]:
 // AMDGCN_CL_20-NEXT:    fence release
@@ -292,10 +310,19 @@ void fe1c(int scope) {
   __scoped_atomic_thread_fence(__ATOMIC_RELEASE, scope);
 }
 
-// AMDGCN-LABEL: define hidden void @fe2a(
-// AMDGCN-SAME: ) #[[ATTR0]] {
-// AMDGCN-NEXT:  [[ENTRY:.*:]]
-// AMDGCN-NEXT:    ret void
+// AMDGCN_CL_DEF-LABEL: define hidden void @fe2a(
+// AMDGCN_CL_DEF-SAME: ) #[[ATTR0]] {
+// AMDGCN_CL_DEF-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_DEF-NEXT:    ret void
+//
+// AMDGCN_CL_20-LABEL: define hidden void @fe2a(
+// AMDGCN_CL_20-SAME: ) #[[ATTR0]] {
+// AMDGCN_CL_20-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_20-NEXT:    ret void
 //
 // SPIRV-LABEL: define hidden spir_func void @fe2a(
 // SPIRV-SAME: ) #[[ATTR0]] {
@@ -311,11 +338,21 @@ void fe2a() {
   __scoped_atomic_thread_fence(999, __MEMORY_SCOPE_SYSTEM);
 }
 
-// AMDGCN-LABEL: define hidden void @fe2b(
-// AMDGCN-SAME: ) #[[ATTR0]] {
-// AMDGCN-NEXT:  [[ENTRY:.*:]]
-// AMDGCN-NEXT:    fence release
-// AMDGCN-NEXT:    ret void
+// AMDGCN_CL_DEF-LABEL: define hidden void @fe2b(
+// AMDGCN_CL_DEF-SAME: ) #[[ATTR0]] {
+// AMDGCN_CL_DEF-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_DEF-NEXT:    fence release
+// AMDGCN_CL_DEF-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_DEF-NEXT:    ret void
+//
+// AMDGCN_CL_20-LABEL: define hidden void @fe2b(
+// AMDGCN_CL_20-SAME: ) #[[ATTR0]] {
+// AMDGCN_CL_20-NEXT:  [[ENTRY:.*:]]
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_20-NEXT:    fence release
+// AMDGCN_CL_20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// AMDGCN_CL_20-NEXT:    ret void
 //
 // SPIRV-LABEL: define hidden spir_func void @fe2b(
 // SPIRV-SAME: ) #[[ATTR0]] {
@@ -332,3 +369,28 @@ void fe2a() {
 void fe2b() {
   __scoped_atomic_thread_fence(__ATOMIC_RELEASE, 999);
 }
+//.
+// AMDGCN_CL_DEF: [[META2]] = !{i32 0, !"fe1a"}
+// AMDGCN_CL_DEF: [[META3]] = !{i32 1, !"fe1a"}
+// AMDGCN_CL_DEF: [[META4]] = !{i32 0, !"fe1b"}
+// AMDGCN_CL_DEF: [[META5]] = !{i32 1, !"fe1b"}
+// AMDGCN_CL_DEF: [[META6]] = !{i32 0, !"fe1c"}
+// AMDGCN_CL_DEF: [[META7]] = !{i32 1, !"fe1c"}
+// AMDGCN_CL_DEF: [[META8]] = !{i32 0, !"fe2a"}
+// AMDGCN_CL_DEF: [[META9]] = !{i32 1, !"fe2a"}
+// AMDGCN_CL_DEF: [[META10]] = !{i32 0, !"fe2b"}
+// AMDGCN_CL_DEF: [[META11]] = !{i32 1, !"fe2b"}
+//.
+// AMDGCN_CL_20: [[META3]] = !{i32 0, !"fe1a"}
+// AMDGCN_CL_20: [[META4]] = !{i32 1, !"fe1a"}
+// AMDGCN_CL_20: [[META5]] = !{i32 0, !"fe1b"}
+// AMDGCN_CL_20: [[META6]] = !{i32 1, !"fe1b"}
+// AMDGCN_CL_20: [[META7]] = !{i32 0, !"fe1c"}
+// AMDGCN_CL_20: [[META8]] = !{i32 1, !"fe1c"}
+// AMDGCN_CL_20: [[META9]] = !{i32 0, !"fe2a"}
+// AMDGCN_CL_20: [[META10]] = !{i32 1, !"fe2a"}
+// AMDGCN_CL_20: [[META11]] = !{i32 0, !"fe2b"}
+// AMDGCN_CL_20: [[META12]] = !{i32 1, !"fe2b"}
+//.
+//// NOTE: These prefixes are unused and the list is autogenerated. Do not add tests below this line:
+// AMDGCN: {{.*}}

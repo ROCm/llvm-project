@@ -69,6 +69,7 @@ int main()
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l16
 // CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(400) [[A:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[I:%.*]] = alloca i32, align 4, addrspace(5)
@@ -83,7 +84,7 @@ int main()
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META13:![0-9]+]], !align [[META14:![0-9]+]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META14:![0-9]+]], !align [[META15:![0-9]+]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    store i32 0, ptr [[I_ASCAST]], align 4
 // CHECK-NEXT:    store i32 0, ptr [[I_ASCAST]], align 4
@@ -116,12 +117,14 @@ int main()
 // CHECK-NEXT:    store i32 [[TMP11]], ptr [[ARRAYIDX]], align 4
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l21
 // CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(400) [[A:%.*]], i64 noundef [[DOTCAPTURE_EXPR_:%.*]], i64 noundef [[DOTCAPTURE_EXPR_1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTCAPTURE_EXPR__ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTCAPTURE_EXPR__ADDR2:%.*]] = alloca i64, align 8, addrspace(5)
@@ -142,7 +145,7 @@ int main()
 // CHECK-NEXT:    store i64 [[DOTCAPTURE_EXPR_]], ptr [[DOTCAPTURE_EXPR__ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[DOTCAPTURE_EXPR_1]], ptr [[DOTCAPTURE_EXPR__ADDR2_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    store i32 0, ptr [[I_ASCAST]], align 4
 // CHECK-NEXT:    store i32 0, ptr [[I_ASCAST]], align 4
@@ -186,14 +189,16 @@ int main()
 // CHECK-NEXT:    [[TMP17:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP18:%.*]] = add i32 [[TMP16]], [[TMP17]]
 // CHECK-NEXT:    store i32 [[TMP18]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP18:![0-9]+]]
 // CHECK:       for.end:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l26
 // CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(400) [[A:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]], i64 noundef [[DOTCAPTURE_EXPR_:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTCAPTURE_EXPR__ADDR:%.*]] = alloca i64, align 8, addrspace(5)
@@ -214,8 +219,8 @@ int main()
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[DOTCAPTURE_EXPR_]], ptr [[DOTCAPTURE_EXPR__ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
@@ -260,14 +265,16 @@ int main()
 // CHECK-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP19:%.*]] = add i32 [[TMP17]], [[TMP18]]
 // CHECK-NEXT:    store i32 [[TMP19]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP17:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP22:![0-9]+]]
 // CHECK:       for.end:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l31
 // CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(400) [[A:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]], i64 noundef [[DOTCAPTURE_EXPR_:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTCAPTURE_EXPR__ADDR:%.*]] = alloca i64, align 8, addrspace(5)
@@ -288,8 +295,8 @@ int main()
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[DOTCAPTURE_EXPR_]], ptr [[DOTCAPTURE_EXPR__ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
@@ -334,14 +341,16 @@ int main()
 // CHECK-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP19:%.*]] = add i32 [[TMP17]], [[TMP18]]
 // CHECK-NEXT:    store i32 [[TMP19]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP18:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP25:![0-9]+]]
 // CHECK:       for.end:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l36
 // CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(400) [[A:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -359,8 +368,8 @@ int main()
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
@@ -396,12 +405,14 @@ int main()
 // CHECK-NEXT:    store i32 [[TMP13]], ptr [[ARRAYIDX2]], align 4
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l41
 // CHECK-SAME: (i64 noundef [[TE:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[A:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TE_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -422,8 +433,8 @@ int main()
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
@@ -468,14 +479,16 @@ int main()
 // CHECK-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP19:%.*]] = add i32 [[TMP17]], [[TMP18]]
 // CHECK-NEXT:    store i32 [[TMP19]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP19:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP30:![0-9]+]]
 // CHECK:       for.end:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l48
 // CHECK-SAME: (i64 noundef [[TL:%.*]], i64 noundef [[TE:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[A:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TL_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[TE_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -499,8 +512,8 @@ int main()
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
 // CHECK-NEXT:    store i32 0, ptr [[K_ASCAST]], align 4
@@ -545,14 +558,16 @@ int main()
 // CHECK-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP19:%.*]] = add i32 [[TMP17]], [[TMP18]]
 // CHECK-NEXT:    store i32 [[TMP19]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP20:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP33:![0-9]+]]
 // CHECK:       for.end:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l54
 // CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(400) [[C:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR3:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[C_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -565,11 +580,11 @@ int main()
 // CHECK-NEXT:    store ptr [[C]], ptr [[C_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[C_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[C_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    [[TMP2:%.*]] = call i32 @__kmpc_target_init(ptr addrspacecast (ptr addrspace(1) @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l54_kernel_environment to ptr), ptr [[DYN_PTR]])
 // CHECK-NEXT:    [[EXEC_USER_CODE:%.*]] = icmp eq i32 [[TMP2]], -1
-// CHECK-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[WORKER_EXIT:%.*]]
+// CHECK-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[UNIFIEDRETURNBLOCK:%.*]]
 // CHECK:       user_code.entry:
 // CHECK-NEXT:    [[TMP3:%.*]] = call i32 @__kmpc_global_thread_num(ptr addrspacecast (ptr addrspace(1) @[[GLOB1:[0-9]+]] to ptr))
 // CHECK-NEXT:    store i32 0, ptr [[DOTZERO_ADDR_ASCAST]], align 4
@@ -577,14 +592,16 @@ int main()
 // CHECK-NEXT:    [[TMP4:%.*]] = addrspacecast ptr addrspace(5) [[DOTTHREADID_TEMP_]] to ptr
 // CHECK-NEXT:    call void @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l54_omp_outlined(ptr [[TMP4]], ptr [[DOTZERO_ADDR_ASCAST]], ptr [[TMP0]], ptr [[TMP1]]) #[[ATTR1:[0-9]+]]
 // CHECK-NEXT:    call void @__kmpc_target_deinit()
-// CHECK-NEXT:    ret void
-// CHECK:       worker.exit:
+// CHECK-NEXT:    br label [[UNIFIEDRETURNBLOCK]]
+// CHECK:       UnifiedReturnBlock:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l54_omp_outlined
 // CHECK-SAME: (ptr noalias noundef [[DOTGLOBAL_TID_:%.*]], ptr noalias noundef [[DOTBOUND_TID_:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[C:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]]) #[[ATTR4:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[DOTGLOBAL_TID__ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTBOUND_TID__ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[C_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -611,8 +628,8 @@ int main()
 // CHECK-NEXT:    store ptr [[DOTBOUND_TID_]], ptr [[DOTBOUND_TID__ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[C]], ptr [[C_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[C_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[C_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    store i32 0, ptr [[DOTOMP_LB_ASCAST]], align 4
 // CHECK-NEXT:    store i32 99, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-NEXT:    store i32 1, ptr [[DOTOMP_STRIDE_ASCAST]], align 4
@@ -664,12 +681,14 @@ int main()
 // CHECK-NEXT:    br label [[OMP_LOOP_EXIT:%.*]]
 // CHECK:       omp.loop.exit:
 // CHECK-NEXT:    call void @__kmpc_distribute_static_fini(ptr addrspacecast (ptr addrspace(1) @[[GLOB2]] to ptr), i32 [[TMP3]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l62
 // CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(400) [[C:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR3]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[C_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -682,11 +701,11 @@ int main()
 // CHECK-NEXT:    store ptr [[C]], ptr [[C_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[C_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[C_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    [[TMP2:%.*]] = call i32 @__kmpc_target_init(ptr addrspacecast (ptr addrspace(1) @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l62_kernel_environment to ptr), ptr [[DYN_PTR]])
 // CHECK-NEXT:    [[EXEC_USER_CODE:%.*]] = icmp eq i32 [[TMP2]], -1
-// CHECK-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[WORKER_EXIT:%.*]]
+// CHECK-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[UNIFIEDRETURNBLOCK:%.*]]
 // CHECK:       user_code.entry:
 // CHECK-NEXT:    [[TMP3:%.*]] = call i32 @__kmpc_global_thread_num(ptr addrspacecast (ptr addrspace(1) @[[GLOB1]] to ptr))
 // CHECK-NEXT:    store i32 0, ptr [[DOTZERO_ADDR_ASCAST]], align 4
@@ -694,14 +713,16 @@ int main()
 // CHECK-NEXT:    [[TMP4:%.*]] = addrspacecast ptr addrspace(5) [[DOTTHREADID_TEMP_]] to ptr
 // CHECK-NEXT:    call void @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l62_omp_outlined(ptr [[TMP4]], ptr [[DOTZERO_ADDR_ASCAST]], ptr [[TMP0]], ptr [[TMP1]]) #[[ATTR1]]
 // CHECK-NEXT:    call void @__kmpc_target_deinit()
-// CHECK-NEXT:    ret void
-// CHECK:       worker.exit:
+// CHECK-NEXT:    br label [[UNIFIEDRETURNBLOCK]]
+// CHECK:       UnifiedReturnBlock:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l62_omp_outlined
 // CHECK-SAME: (ptr noalias noundef [[DOTGLOBAL_TID_:%.*]], ptr noalias noundef [[DOTBOUND_TID_:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[C:%.*]], ptr noundef nonnull align 4 dereferenceable(400) [[B:%.*]]) #[[ATTR4]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[DOTGLOBAL_TID__ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTBOUND_TID__ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[C_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -728,8 +749,8 @@ int main()
 // CHECK-NEXT:    store ptr [[DOTBOUND_TID_]], ptr [[DOTBOUND_TID__ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[C]], ptr [[C_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[C_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META13]], !align [[META14]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[C_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[B_ADDR_ASCAST]], align 8, !nonnull [[META14]], !align [[META15]]
 // CHECK-NEXT:    store i32 0, ptr [[DOTOMP_LB_ASCAST]], align 4
 // CHECK-NEXT:    store i32 99, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-NEXT:    store i32 1, ptr [[DOTOMP_STRIDE_ASCAST]], align 4
@@ -781,5 +802,6 @@ int main()
 // CHECK-NEXT:    br label [[OMP_LOOP_EXIT:%.*]]
 // CHECK:       omp.loop.exit:
 // CHECK-NEXT:    call void @__kmpc_distribute_static_fini(ptr addrspacecast (ptr addrspace(1) @[[GLOB2]] to ptr), i32 [[TMP3]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //

@@ -34,46 +34,50 @@ int main(void) {
 // CHECK-USM-LABEL: define weak_odr protected amdgpu_kernel void @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l25(
 // CHECK-USM-SAME: ptr noundef nonnull align 4 dereferenceable(4) [[GI:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-USM-NEXT:  entry:
+// CHECK-USM-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-USM-NEXT:    [[GI_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-USM-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-USM-NEXT:    [[GI_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[GI_ADDR]] to ptr
 // CHECK-USM-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-USM-NEXT:    store ptr [[GI]], ptr [[GI_ADDR_ASCAST]], align 8
 // CHECK-USM-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-USM-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[GI_ADDR_ASCAST]], align 8, !nonnull [[META6:![0-9]+]], !align [[META7:![0-9]+]]
+// CHECK-USM-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[GI_ADDR_ASCAST]], align 8, !nonnull [[META7:![0-9]+]], !align [[META8:![0-9]+]]
 // CHECK-USM-NEXT:    [[TMP1:%.*]] = call i32 @__kmpc_target_init(ptr addrspacecast (ptr addrspace(1) @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l25_kernel_environment to ptr), ptr [[DYN_PTR]])
 // CHECK-USM-NEXT:    [[EXEC_USER_CODE:%.*]] = icmp eq i32 [[TMP1]], -1
-// CHECK-USM-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[WORKER_EXIT:%.*]]
+// CHECK-USM-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[UNIFIEDRETURNBLOCK:%.*]]
 // CHECK-USM:       user_code.entry:
 // CHECK-USM-NEXT:    store i32 1, ptr [[TMP0]], align 4
 // CHECK-USM-NEXT:    [[TMP2:%.*]] = load ptr, ptr @pGI_decl_tgt_ref_ptr, align 8
 // CHECK-USM-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[TMP2]], align 8
 // CHECK-USM-NEXT:    store i32 2, ptr [[TMP3]], align 4
 // CHECK-USM-NEXT:    call void @__kmpc_target_deinit()
-// CHECK-USM-NEXT:    ret void
-// CHECK-USM:       worker.exit:
+// CHECK-USM-NEXT:    br label [[UNIFIEDRETURNBLOCK]]
+// CHECK-USM:       UnifiedReturnBlock:
+// CHECK-USM-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-USM-NEXT:    ret void
 //
 //
 // CHECK-DEFAULT-LABEL: define weak_odr protected amdgpu_kernel void @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l25(
 // CHECK-DEFAULT-SAME: ptr noundef nonnull align 4 dereferenceable(4) [[GI:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-DEFAULT-NEXT:  entry:
+// CHECK-DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-DEFAULT-NEXT:    [[GI_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-DEFAULT-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-DEFAULT-NEXT:    [[GI_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[GI_ADDR]] to ptr
 // CHECK-DEFAULT-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-DEFAULT-NEXT:    store ptr [[GI]], ptr [[GI_ADDR_ASCAST]], align 8
 // CHECK-DEFAULT-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
-// CHECK-DEFAULT-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[GI_ADDR_ASCAST]], align 8, !nonnull [[META6:![0-9]+]], !align [[META7:![0-9]+]]
+// CHECK-DEFAULT-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[GI_ADDR_ASCAST]], align 8, !nonnull [[META7:![0-9]+]], !align [[META8:![0-9]+]]
 // CHECK-DEFAULT-NEXT:    [[TMP1:%.*]] = call i32 @__kmpc_target_init(ptr addrspacecast (ptr addrspace(1) @{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l25_kernel_environment to ptr), ptr [[DYN_PTR]])
 // CHECK-DEFAULT-NEXT:    [[EXEC_USER_CODE:%.*]] = icmp eq i32 [[TMP1]], -1
-// CHECK-DEFAULT-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[WORKER_EXIT:%.*]]
+// CHECK-DEFAULT-NEXT:    br i1 [[EXEC_USER_CODE]], label [[USER_CODE_ENTRY:%.*]], label [[UNIFIEDRETURNBLOCK:%.*]]
 // CHECK-DEFAULT:       user_code.entry:
 // CHECK-DEFAULT-NEXT:    store i32 1, ptr [[TMP0]], align 4
 // CHECK-DEFAULT-NEXT:    [[TMP2:%.*]] = load ptr, ptr addrspacecast (ptr addrspace(1) @pGI to ptr), align 8
 // CHECK-DEFAULT-NEXT:    store i32 2, ptr [[TMP2]], align 4
 // CHECK-DEFAULT-NEXT:    call void @__kmpc_target_deinit()
-// CHECK-DEFAULT-NEXT:    ret void
-// CHECK-DEFAULT:       worker.exit:
+// CHECK-DEFAULT-NEXT:    br label [[UNIFIEDRETURNBLOCK]]
+// CHECK-DEFAULT:       UnifiedReturnBlock:
+// CHECK-DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-DEFAULT-NEXT:    ret void
 //

@@ -8,7 +8,9 @@ typedef int    v4i   __attribute__((ext_vector_type(4)));
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_cluster_load_async_to_lds_b8(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]], i32 noundef [[MASK:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.cluster.load.async.to.lds.b8(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0, i32 [[MASK]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_cluster_load_async_to_lds_b8(global char* gaddr, local char* laddr, int mask)
@@ -19,7 +21,9 @@ void test_amdgcn_cluster_load_async_to_lds_b8(global char* gaddr, local char* la
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_cluster_load_async_to_lds_b32(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]], i32 noundef [[MASK:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.cluster.load.async.to.lds.b32(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0, i32 [[MASK]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_cluster_load_async_to_lds_b32(global int* gaddr, local int* laddr, int mask)
@@ -30,7 +34,9 @@ void test_amdgcn_cluster_load_async_to_lds_b32(global int* gaddr, local int* lad
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_cluster_load_async_to_lds_b64(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]], i32 noundef [[MASK:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.cluster.load.async.to.lds.b64(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0, i32 [[MASK]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_cluster_load_async_to_lds_b64(global v2i* gaddr, local v2i* laddr, int mask)
@@ -41,7 +47,9 @@ void test_amdgcn_cluster_load_async_to_lds_b64(global v2i* gaddr, local v2i* lad
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_cluster_load_async_to_lds_b128(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]], i32 noundef [[MASK:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.cluster.load.async.to.lds.b128(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0, i32 [[MASK]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_cluster_load_async_to_lds_b128(global v4i* gaddr, local v4i* laddr, int mask)
@@ -52,7 +60,9 @@ void test_amdgcn_cluster_load_async_to_lds_b128(global v4i* gaddr, local v4i* la
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_global_load_async_to_lds_b8(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.global.load.async.to.lds.b8(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_global_load_async_to_lds_b8( global char* gaddr, local char* laddr)
@@ -63,7 +73,9 @@ void test_amdgcn_global_load_async_to_lds_b8( global char* gaddr, local char* la
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_global_load_async_to_lds_b32(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.global.load.async.to.lds.b32(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_global_load_async_to_lds_b32(global int* gaddr, local int* laddr)
@@ -74,7 +86,9 @@ void test_amdgcn_global_load_async_to_lds_b32(global int* gaddr, local int* ladd
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_global_load_async_to_lds_b64(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.global.load.async.to.lds.b64(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_global_load_async_to_lds_b64(global v2i* gaddr, local v2i* laddr)
@@ -85,7 +99,9 @@ void test_amdgcn_global_load_async_to_lds_b64(global v2i* gaddr, local v2i* ladd
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_global_load_async_to_lds_b128(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.global.load.async.to.lds.b128(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_global_load_async_to_lds_b128( global v4i* gaddr, local v4i* laddr)
@@ -96,7 +112,9 @@ void test_amdgcn_global_load_async_to_lds_b128( global v4i* gaddr, local v4i* la
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_global_store_async_from_lds_b8(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef readonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.global.store.async.from.lds.b8(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_global_store_async_from_lds_b8(global char* gaddr, local char* laddr)
@@ -107,7 +125,9 @@ void test_amdgcn_global_store_async_from_lds_b8(global char* gaddr, local char* 
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_global_store_async_from_lds_b32(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef readonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.global.store.async.from.lds.b32(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_global_store_async_from_lds_b32(global int* gaddr, local int* laddr)
@@ -118,7 +138,9 @@ void test_amdgcn_global_store_async_from_lds_b32(global int* gaddr, local int* l
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_global_store_async_from_lds_b64(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef readonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.global.store.async.from.lds.b64(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_global_store_async_from_lds_b64(global v2i* gaddr, local v2i* laddr)
@@ -129,7 +151,9 @@ void test_amdgcn_global_store_async_from_lds_b64(global v2i* gaddr, local v2i* l
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_global_store_async_from_lds_b128(
 // CHECK-GFX1250-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef readonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.global.store.async.from.lds.b128(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_global_store_async_from_lds_b128(global v4i* gaddr, local v4i* laddr)
@@ -140,7 +164,9 @@ void test_amdgcn_global_store_async_from_lds_b128(global v4i* gaddr, local v4i* 
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_ds_atomic_async_barrier_arrive_b64(
 // CHECK-GFX1250-SAME: ptr addrspace(3) noundef [[ADDR:%.*]]) local_unnamed_addr #[[ATTR2:[0-9]+]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.ds.atomic.async.barrier.arrive.b64(ptr addrspace(3) [[ADDR]])
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_ds_atomic_async_barrier_arrive_b64(local long* addr)
@@ -149,10 +175,12 @@ void test_amdgcn_ds_atomic_async_barrier_arrive_b64(local long* addr)
 }
 
 // CHECK-GFX1250-LABEL: define dso_local void @test_amdgcn_ds_atomic_barrier_arrive_rtn_b64(
-// CHECK-GFX1250-SAME: ptr addrspace(3) nofree noundef captures(none) [[ADDR:%.*]], i64 noundef [[DATA:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[OUT:%.*]]) local_unnamed_addr #[[ATTR4:[0-9]+]] {
+// CHECK-GFX1250-SAME: ptr addrspace(3) nofree noundef captures(none) [[ADDR:%.*]], i64 noundef [[DATA:%.*]], ptr nofree noundef writeonly captures(none) initializes((0, 8)) [[OUT:%.*]]) local_unnamed_addr #[[ATTR2]] {
 // CHECK-GFX1250-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call i64 @llvm.amdgcn.ds.atomic.barrier.arrive.rtn.b64(ptr addrspace(3) [[ADDR]], i64 [[DATA]])
-// CHECK-GFX1250-NEXT:    store i64 [[TMP0]], ptr [[OUT]], align 8, !tbaa [[LONG_TBAA8:![0-9]+]]
+// CHECK-GFX1250-NEXT:    store i64 [[TMP0]], ptr [[OUT]], align 8, !tbaa [[LONG_TBAA35:![0-9]+]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_ds_atomic_barrier_arrive_rtn_b64(local long* addr, long data, long *out)
@@ -162,6 +190,34 @@ void test_amdgcn_ds_atomic_barrier_arrive_rtn_b64(local long* addr, long data, l
 //.
 // CHECK-GFX1250: [[META6:![0-9]+]] = !{!"omnipotent char", [[META7:![0-9]+]], i64 0}
 // CHECK-GFX1250: [[META7]] = !{!"Simple C/C++ TBAA"}
-// CHECK-GFX1250: [[LONG_TBAA8]] = !{[[META9:![0-9]+]], [[META9]], i64 0}
-// CHECK-GFX1250: [[META9]] = !{!"long", [[META6]], i64 0}
+// CHECK-GFX1250: [[META8]] = !{i32 0, !"test_amdgcn_cluster_load_async_to_lds_b8"}
+// CHECK-GFX1250: [[META9]] = !{i32 1, !"test_amdgcn_cluster_load_async_to_lds_b8"}
+// CHECK-GFX1250: [[META10]] = !{i32 0, !"test_amdgcn_cluster_load_async_to_lds_b32"}
+// CHECK-GFX1250: [[META11]] = !{i32 1, !"test_amdgcn_cluster_load_async_to_lds_b32"}
+// CHECK-GFX1250: [[META12]] = !{i32 0, !"test_amdgcn_cluster_load_async_to_lds_b64"}
+// CHECK-GFX1250: [[META13]] = !{i32 1, !"test_amdgcn_cluster_load_async_to_lds_b64"}
+// CHECK-GFX1250: [[META14]] = !{i32 0, !"test_amdgcn_cluster_load_async_to_lds_b128"}
+// CHECK-GFX1250: [[META15]] = !{i32 1, !"test_amdgcn_cluster_load_async_to_lds_b128"}
+// CHECK-GFX1250: [[META16]] = !{i32 0, !"test_amdgcn_global_load_async_to_lds_b8"}
+// CHECK-GFX1250: [[META17]] = !{i32 1, !"test_amdgcn_global_load_async_to_lds_b8"}
+// CHECK-GFX1250: [[META18]] = !{i32 0, !"test_amdgcn_global_load_async_to_lds_b32"}
+// CHECK-GFX1250: [[META19]] = !{i32 1, !"test_amdgcn_global_load_async_to_lds_b32"}
+// CHECK-GFX1250: [[META20]] = !{i32 0, !"test_amdgcn_global_load_async_to_lds_b64"}
+// CHECK-GFX1250: [[META21]] = !{i32 1, !"test_amdgcn_global_load_async_to_lds_b64"}
+// CHECK-GFX1250: [[META22]] = !{i32 0, !"test_amdgcn_global_load_async_to_lds_b128"}
+// CHECK-GFX1250: [[META23]] = !{i32 1, !"test_amdgcn_global_load_async_to_lds_b128"}
+// CHECK-GFX1250: [[META24]] = !{i32 0, !"test_amdgcn_global_store_async_from_lds_b8"}
+// CHECK-GFX1250: [[META25]] = !{i32 1, !"test_amdgcn_global_store_async_from_lds_b8"}
+// CHECK-GFX1250: [[META26]] = !{i32 0, !"test_amdgcn_global_store_async_from_lds_b32"}
+// CHECK-GFX1250: [[META27]] = !{i32 1, !"test_amdgcn_global_store_async_from_lds_b32"}
+// CHECK-GFX1250: [[META28]] = !{i32 0, !"test_amdgcn_global_store_async_from_lds_b64"}
+// CHECK-GFX1250: [[META29]] = !{i32 1, !"test_amdgcn_global_store_async_from_lds_b64"}
+// CHECK-GFX1250: [[META30]] = !{i32 0, !"test_amdgcn_global_store_async_from_lds_b128"}
+// CHECK-GFX1250: [[META31]] = !{i32 1, !"test_amdgcn_global_store_async_from_lds_b128"}
+// CHECK-GFX1250: [[META32]] = !{i32 0, !"test_amdgcn_ds_atomic_async_barrier_arrive_b64"}
+// CHECK-GFX1250: [[META33]] = !{i32 1, !"test_amdgcn_ds_atomic_async_barrier_arrive_b64"}
+// CHECK-GFX1250: [[META34]] = !{i32 0, !"test_amdgcn_ds_atomic_barrier_arrive_rtn_b64"}
+// CHECK-GFX1250: [[LONG_TBAA35]] = !{[[META36:![0-9]+]], [[META36]], i64 0}
+// CHECK-GFX1250: [[META36]] = !{!"long", [[META6]], i64 0}
+// CHECK-GFX1250: [[META37]] = !{i32 1, !"test_amdgcn_ds_atomic_barrier_arrive_rtn_b64"}
 //.

@@ -14,7 +14,9 @@ void consumeBuffer(__amdgpu_buffer_rsrc_t);
 // CHECK-LABEL: define dso_local ptr addrspace(8) @getBuffer(
 // CHECK-SAME: ptr addrspace(5) noundef [[P:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[CALL:%.*]] = tail call ptr addrspace(8) @getBufferImpl(ptr addrspace(5) noundef [[P]]) #[[ATTR2:[0-9]+]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[CALL:%.*]] = tail call ptr addrspace(8) @getBufferImpl(ptr addrspace(5) noundef [[P]]) #[[ATTR3:[0-9]+]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret ptr addrspace(8) [[CALL]]
 //
 __amdgpu_buffer_rsrc_t getBuffer(void *p) {
@@ -24,13 +26,15 @@ __amdgpu_buffer_rsrc_t getBuffer(void *p) {
 // CHECK-LABEL: define dso_local void @consumeBufferPtr(
 // CHECK-SAME: ptr addrspace(5) nofree noundef readonly captures(address) [[P:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TOBOOL_NOT:%.*]] = icmp eq ptr addrspace(5) [[P]], addrspacecast (ptr null to ptr addrspace(5))
 // CHECK-NEXT:    br i1 [[TOBOOL_NOT]], label %[[IF_END:.*]], label %[[IF_THEN:.*]]
 // CHECK:       [[IF_THEN]]:
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr addrspace(8), ptr addrspace(5) [[P]], align 16, !tbaa [[__AMDGPU_BUFFER_RSRC_T_TBAA7:![0-9]+]]
-// CHECK-NEXT:    tail call void @consumeBuffer(ptr addrspace(8) [[TMP0]]) #[[ATTR2]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr addrspace(8), ptr addrspace(5) [[P]], align 16, !tbaa [[__AMDGPU_BUFFER_RSRC_T_TBAA11:![0-9]+]]
+// CHECK-NEXT:    tail call void @consumeBuffer(ptr addrspace(8) [[TMP0]]) #[[ATTR3]]
 // CHECK-NEXT:    br label %[[IF_END]]
 // CHECK:       [[IF_END]]:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void consumeBufferPtr(__amdgpu_buffer_rsrc_t *p) {
@@ -41,17 +45,24 @@ void consumeBufferPtr(__amdgpu_buffer_rsrc_t *p) {
 // CHECK-LABEL: define dso_local void @test(
 // CHECK-SAME: ptr addrspace(5) nofree noundef readonly captures(address) [[A:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[A]], align 16, !tbaa [[INT_TBAA9:![0-9]+]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[A]], align 16, !tbaa [[INT_TBAA15:![0-9]+]]
 // CHECK-NEXT:    [[TOBOOL_NOT:%.*]] = icmp eq i32 [[TMP0]], 0
+// CHECK-NEXT:    br i1 [[TOBOOL_NOT]], label %[[IF_END:.*]], label %[[IF_THEN:.*]]
+// CHECK:       [[IF_THEN]]:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TOBOOL_NOT_I:%.*]] = icmp eq ptr addrspace(5) [[A]], addrspacecast (ptr null to ptr addrspace(5))
-// CHECK-NEXT:    [[OR_COND:%.*]] = select i1 [[TOBOOL_NOT]], i1 true, i1 [[TOBOOL_NOT_I]]
-// CHECK-NEXT:    br i1 [[OR_COND]], label %[[IF_END:.*]], label %[[IF_THEN_I:.*]]
+// CHECK-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[CONSUMEBUFFERPTR_EXIT:.*]], label %[[IF_THEN_I:.*]]
 // CHECK:       [[IF_THEN_I]]:
 // CHECK-NEXT:    [[R:%.*]] = getelementptr inbounds nuw i8, ptr addrspace(5) [[A]], i32 16
-// CHECK-NEXT:    [[TMP1:%.*]] = load ptr addrspace(8), ptr addrspace(5) [[R]], align 16, !tbaa [[__AMDGPU_BUFFER_RSRC_T_TBAA7]]
-// CHECK-NEXT:    tail call void @consumeBuffer(ptr addrspace(8) [[TMP1]]) #[[ATTR2]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr addrspace(8), ptr addrspace(5) [[R]], align 16, !tbaa [[__AMDGPU_BUFFER_RSRC_T_TBAA11]]
+// CHECK-NEXT:    tail call void @consumeBuffer(ptr addrspace(8) [[TMP1]]) #[[ATTR3]]
+// CHECK-NEXT:    br label %[[CONSUMEBUFFERPTR_EXIT]]
+// CHECK:       [[CONSUMEBUFFERPTR_EXIT]]:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13]], i32 poison, i1 true)
 // CHECK-NEXT:    br label %[[IF_END]]
 // CHECK:       [[IF_END]]:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test(AA *a) {
@@ -62,16 +73,24 @@ void test(AA *a) {
 // CHECK-LABEL: define dso_local %struct.AA_ty @bar(
 // CHECK-SAME: ptr addrspace(5) noundef [[P:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[CALL:%.*]] = tail call [[STRUCT_AA_TY:%.*]] @[[GETAA:[a-zA-Z0-9_$\"\\.-]*[a-zA-Z_$\"\\.-][a-zA-Z0-9_$\"\\.-]*]](ptr addrspace(5) noundef [[P]]) #[[ATTR2]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[CALL:%.*]] = tail call [[STRUCT_AA_TY:%.*]] @[[GETAA:[a-zA-Z0-9_$\"\\.-]*[a-zA-Z_$\"\\.-][a-zA-Z0-9_$\"\\.-]*]](ptr addrspace(5) noundef [[P]]) #[[ATTR3]]
 // CHECK-NEXT:    [[TMP0:%.*]] = extractvalue [[STRUCT_AA_TY]] [[CALL]], 0
-// CHECK-NEXT:    [[CALL_I:%.*]] = tail call ptr addrspace(8) @getBufferImpl(ptr addrspace(5) noundef [[P]]) #[[ATTR2]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8]], i32 poison, i1 true)
+// CHECK-NEXT:    [[CALL_I:%.*]] = tail call ptr addrspace(8) @getBufferImpl(ptr addrspace(5) noundef [[P]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TOBOOL_NOT_I:%.*]] = icmp eq i32 [[TMP0]], 0
-// CHECK-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[TEST_EXIT:.*]], label %[[IF_THEN_I_I:.*]]
-// CHECK:       [[IF_THEN_I_I]]:
-// CHECK-NEXT:    tail call void @consumeBuffer(ptr addrspace(8) [[CALL_I]]) #[[ATTR2]]
+// CHECK-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[TEST_EXIT:.*]], label %[[IF_THEN_I:.*]]
+// CHECK:       [[IF_THEN_I]]:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @consumeBuffer(ptr addrspace(8) [[CALL_I]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13]], i32 poison, i1 true)
 // CHECK-NEXT:    br label %[[TEST_EXIT]]
 // CHECK:       [[TEST_EXIT]]:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17]], i32 poison, i1 true)
 // CHECK-NEXT:    [[DOTFCA_1_INSERT:%.*]] = insertvalue [[STRUCT_AA_TY]] [[CALL]], ptr addrspace(8) [[CALL_I]], 1
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret [[STRUCT_AA_TY]] [[DOTFCA_1_INSERT]]
 //
 AA bar(void *p) {
@@ -81,11 +100,19 @@ AA bar(void *p) {
   return a;
 }
 //.
-// CHECK: [[META4:![0-9]+]] = !{!"int", [[META5:![0-9]+]], i64 0}
-// CHECK: [[META5]] = !{!"omnipotent char", [[META6:![0-9]+]], i64 0}
-// CHECK: [[META6]] = !{!"Simple C/C++ TBAA"}
-// CHECK: [[__AMDGPU_BUFFER_RSRC_T_TBAA7]] = !{[[META8:![0-9]+]], [[META8]], i64 0}
-// CHECK: [[META8]] = !{!"__amdgpu_buffer_rsrc_t", [[META5]], i64 0}
-// CHECK: [[INT_TBAA9]] = !{[[META10:![0-9]+]], [[META4]], i64 0}
-// CHECK: [[META10]] = !{!"AA_ty", [[META4]], i64 0, [[META8]], i64 16}
+// CHECK: [[META5:![0-9]+]] = !{!"int", [[META6:![0-9]+]], i64 0}
+// CHECK: [[META6]] = !{!"omnipotent char", [[META7:![0-9]+]], i64 0}
+// CHECK: [[META7]] = !{!"Simple C/C++ TBAA"}
+// CHECK: [[META8]] = !{i32 0, !"getBuffer"}
+// CHECK: [[META9]] = !{i32 1, !"getBuffer"}
+// CHECK: [[META10]] = !{i32 0, !"consumeBufferPtr"}
+// CHECK: [[__AMDGPU_BUFFER_RSRC_T_TBAA11]] = !{[[META12:![0-9]+]], [[META12]], i64 0}
+// CHECK: [[META12]] = !{!"__amdgpu_buffer_rsrc_t", [[META6]], i64 0}
+// CHECK: [[META13]] = !{i32 1, !"consumeBufferPtr"}
+// CHECK: [[META14]] = !{i32 0, !"test"}
+// CHECK: [[INT_TBAA15]] = !{[[META16:![0-9]+]], [[META5]], i64 0}
+// CHECK: [[META16]] = !{!"AA_ty", [[META5]], i64 0, [[META12]], i64 16}
+// CHECK: [[META17]] = !{i32 1, !"test"}
+// CHECK: [[META18]] = !{i32 0, !"bar"}
+// CHECK: [[META19]] = !{i32 1, !"bar"}
 //.

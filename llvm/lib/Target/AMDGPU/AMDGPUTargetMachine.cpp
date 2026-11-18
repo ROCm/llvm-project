@@ -527,6 +527,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPURemoveIncompatibleFunctionsLegacyPass(*PR);
   initializeAMDGPULowerModuleLDSLegacyPass(*PR);
   initializeAMDGPULowerBufferFatPointersPass(*PR);
+  initializeAMDGPUSQTTLowerLegacyPass(*PR);
   initializeAMDGPULowerIntrinsicsLegacyPass(*PR);
   initializeAMDGPUReserveWWMRegsLegacyPass(*PR);
   initializeAMDGPURewriteAGPRCopyMFMALegacyPass(*PR);
@@ -846,6 +847,16 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
           return;
 
         FPM.addPass(InferAddressSpacesPass());
+      });
+
+  // Insert the SQTT function entry/exit events before the inliner. This has
+  // to run before any pass that restructures the CFG, so it is at the very
+  // start of the pipeline.
+  PB.registerPipelineStartEPCallback(
+      [this](ModulePassManager &PM, OptimizationLevel Level) {
+        if (getTargetTriple().isAMDGCN())
+          PM.addPass(createModuleToFunctionPassAdaptor(
+              AMDGPUSQTTFunctionInstrumentPass()));
       });
 
   PB.registerPipelineEarlySimplificationEPCallback(
@@ -1510,6 +1521,7 @@ void AMDGPUPassConfig::addCodeGenPrepare() {
     // passes can run on the more optimized control flow this pass creates in
     // many cases.
     addPass(createAMDGPULowerBufferFatPointersPass());
+    addPass(createAMDGPUSQTTLowerLegacyPass());
     addPass(createAMDGPULowerIntrinsicsLegacyPass());
   }
 
@@ -2302,6 +2314,7 @@ void AMDGPUCodeGenPassBuilder::addCodeGenPrepare(PassManagerWrapper &PMW) {
   flushFPMsToMPM(PMW);
   requireCGSCCOrder(PMW);
 
+  addModulePass(AMDGPUSQTTLowerPass(getTM()), PMW);
   addModulePass(AMDGPULowerIntrinsicsPass(getTM()), PMW);
 
   // LowerSwitch pass may introduce unreachable blocks that can cause unexpected

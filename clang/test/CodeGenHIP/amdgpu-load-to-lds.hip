@@ -12,6 +12,7 @@ typedef unsigned int u32;
 // CHECK-LABEL: define dso_local void @_Z20test_load_to_lds_u32PjS_(
 // CHECK-SAME: ptr noundef [[SRC:%.*]], ptr noundef [[DST:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DST_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SRC_ADDR]] to ptr
@@ -22,6 +23,7 @@ typedef unsigned int u32;
 // CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[DST_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr [[TMP1]] to ptr addrspace(3)
 // CHECK-NEXT:    call void @llvm.amdgcn.load.to.lds.p0(ptr [[TMP0]], ptr addrspace(3) [[TMP2]], i32 4, i32 0, i32 0)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_load_to_lds_u32(u32* src, __shared__ u32 *dst) {
@@ -31,6 +33,7 @@ __device__ void test_load_to_lds_u32(u32* src, __shared__ u32 *dst) {
 // CHECK-LABEL: define dso_local void @_Z30test_load_to_lds_u32_flat_destPjS_(
 // CHECK-SAME: ptr noundef [[SRC:%.*]], ptr noundef [[DST:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DST_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SRC_ADDR]] to ptr
@@ -41,6 +44,7 @@ __device__ void test_load_to_lds_u32(u32* src, __shared__ u32 *dst) {
 // CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[DST_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr [[TMP1]] to ptr addrspace(3)
 // CHECK-NEXT:    call void @llvm.amdgcn.load.to.lds.p0(ptr [[TMP0]], ptr addrspace(3) [[TMP2]], i32 4, i32 0, i32 0)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_load_to_lds_u32_flat_dest(u32* src, u32 *dst) {
@@ -50,6 +54,7 @@ __device__ void test_load_to_lds_u32_flat_dest(u32* src, u32 *dst) {
 // CHECK-LABEL: define dso_local void @_Z20test_load_to_lds_128PvS_(
 // CHECK-SAME: ptr noundef [[SRC:%.*]], ptr noundef [[DST:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DST_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SRC_ADDR]] to ptr
@@ -60,8 +65,17 @@ __device__ void test_load_to_lds_u32_flat_dest(u32* src, u32 *dst) {
 // CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[DST_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr [[TMP1]] to ptr addrspace(3)
 // CHECK-NEXT:    call void @llvm.amdgcn.load.to.lds.p0(ptr [[TMP0]], ptr addrspace(3) [[TMP2]], i32 16, i32 0, i32 0)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_load_to_lds_128(void* src, __shared__ void *dst) {
   __builtin_amdgcn_load_to_lds(src, dst, /*size=*/16, /*offset=*/0, /*aux=*/0);
 }
+//.
+// CHECK: [[META3]] = !{i32 0, !"_Z20test_load_to_lds_u32PjS_"}
+// CHECK: [[META4]] = !{i32 1, !"_Z20test_load_to_lds_u32PjS_"}
+// CHECK: [[META5]] = !{i32 0, !"_Z30test_load_to_lds_u32_flat_destPjS_"}
+// CHECK: [[META6]] = !{i32 1, !"_Z30test_load_to_lds_u32_flat_destPjS_"}
+// CHECK: [[META7]] = !{i32 0, !"_Z20test_load_to_lds_128PvS_"}
+// CHECK: [[META8]] = !{i32 1, !"_Z20test_load_to_lds_128PvS_"}
+//.

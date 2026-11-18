@@ -15,7 +15,9 @@ __device__ void extern_func();
 // OPTNONE-LABEL: define {{[^@]+}}@_Z4funcv
 // OPTNONE-SAME: () #[[ATTR0:[0-9]+]] {
 // OPTNONE-NEXT:  entry:
-// OPTNONE-NEXT:    call void @_Z11extern_funcv() #[[ATTR3:[0-9]+]]
+// OPTNONE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// OPTNONE-NEXT:    call void @_Z11extern_funcv() #[[ATTR4:[0-9]+]]
+// OPTNONE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // OPTNONE-NEXT:    ret void
 //
 __device__ void func() {
@@ -26,7 +28,9 @@ __device__ void func() {
 // OPTNONE-LABEL: define {{[^@]+}}@_Z6kernelv
 // OPTNONE-SAME: () #[[ATTR2:[0-9]+]] {
 // OPTNONE-NEXT:  entry:
-// OPTNONE-NEXT:    call void @_Z11extern_funcv() #[[ATTR3]]
+// OPTNONE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
+// OPTNONE-NEXT:    call void @_Z11extern_funcv() #[[ATTR4]]
+// OPTNONE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // OPTNONE-NEXT:    ret void
 //
 __global__ void kernel() {
@@ -36,8 +40,13 @@ __global__ void kernel() {
 // OPTNONE: attributes #[[ATTR0]] = { convergent mustprogress noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" "uniform-work-group-size" }
 // OPTNONE: attributes #[[ATTR1:[0-9]+]] = { convergent nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" "uniform-work-group-size" }
 // OPTNONE: attributes #[[ATTR2]] = { convergent mustprogress noinline norecurse nounwind optnone "amdgpu-flat-work-group-size"="1,1024" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "uniform-work-group-size" }
-// OPTNONE: attributes #[[ATTR3]] = { convergent nounwind "uniform-work-group-size" }
+// OPTNONE: attributes #[[ATTR3:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
+// OPTNONE: attributes #[[ATTR4]] = { convergent nounwind "uniform-work-group-size" }
 //.
 // OPTNONE: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // OPTNONE: [[META1:![0-9]+]] = !{i32 1, !"amdgpu_printf_kind", !"hostcall"}
+// OPTNONE: [[META2]] = !{i32 0, !"_Z4funcv"}
+// OPTNONE: [[META3]] = !{i32 1, !"_Z4funcv"}
+// OPTNONE: [[META4]] = !{i32 0, !"_Z6kernelv"}
+// OPTNONE: [[META5]] = !{i32 1, !"_Z6kernelv"}
 //.

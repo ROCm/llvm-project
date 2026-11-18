@@ -21,6 +21,7 @@ void write_to_aligned_array(int *a, int N) {
 // CHECK-AMD-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_write_to_aligned_array_l14
 // CHECK-AMD-SAME: (i64 noundef [[N:%.*]], ptr noundef [[APTR:%.*]], ptr noalias noundef [[DYN_PTR:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-AMD-NEXT:  entry:
+// CHECK-AMD-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-AMD-NEXT:    [[N_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-AMD-NEXT:    [[APTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-AMD-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -92,7 +93,8 @@ void write_to_aligned_array(int *a, int N) {
 // CHECK-AMD-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-AMD-NEXT:    [[TMP20:%.*]] = add i32 [[TMP18]], [[TMP19]]
 // CHECK-AMD-NEXT:    store i32 [[TMP20]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-AMD-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP5:![0-9]+]]
+// CHECK-AMD-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP6:![0-9]+]]
 // CHECK-AMD:       for.end:
+// CHECK-AMD-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-AMD-NEXT:    ret void
 //

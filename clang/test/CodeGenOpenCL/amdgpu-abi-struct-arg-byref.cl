@@ -117,30 +117,35 @@ kernel void KernelLargeTwoMember(struct LargeStructTwoMember u) {
 // AMDGCN-LABEL: define dso_local %struct.Mat4X4 @foo(
 // AMDGCN-SAME: [9 x i32] [[IN_COERCE:%.*]]) #[[ATTR0:[0-9]+]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[RETVAL:%.*]] = alloca [[STRUCT_MAT4X4:%.*]], align 4, addrspace(5)
 // AMDGCN-NEXT:    [[IN:%.*]] = alloca [[STRUCT_MAT3X3:%.*]], align 4, addrspace(5)
 // AMDGCN-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_MAT3X3]], ptr addrspace(5) [[IN]], i32 0, i32 0
 // AMDGCN-NEXT:    store [9 x i32] [[IN_COERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 4
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load [[STRUCT_MAT4X4]], ptr addrspace(5) [[RETVAL]], align 4
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret [[STRUCT_MAT4X4]] [[TMP0]]
 //
 //
 // AMDGCN-LABEL: define dso_local amdgpu_kernel void @ker(
-// AMDGCN-SAME: ptr addrspace(1) noundef align 4 [[IN:%.*]], ptr addrspace(1) noundef align 4 [[OUT:%.*]]) #[[ATTR1:[0-9]+]] !kernel_arg_addr_space [[META3:![0-9]+]] !kernel_arg_access_qual [[META4:![0-9]+]] !kernel_arg_type [[META5:![0-9]+]] !kernel_arg_base_type [[META5]] !kernel_arg_type_qual [[META6:![0-9]+]] {
+// AMDGCN-SAME: ptr addrspace(1) noundef align 4 [[IN:%.*]], ptr addrspace(1) noundef align 4 [[OUT:%.*]]) #[[ATTR1:[0-9]+]] !kernel_arg_addr_space [[META5:![0-9]+]] !kernel_arg_access_qual [[META6:![0-9]+]] !kernel_arg_type [[META7:![0-9]+]] !kernel_arg_base_type [[META7]] !kernel_arg_type_qual [[META8:![0-9]+]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[IN_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    store ptr addrspace(1) [[IN]], ptr addrspace(5) [[IN_ADDR]], align 8
 // AMDGCN-NEXT:    store ptr addrspace(1) [[OUT]], ptr addrspace(5) [[OUT_ADDR]], align 8
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[IN_ADDR]], align 8
 // AMDGCN-NEXT:    [[TMP1:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
-// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_ker(ptr addrspace(1) noundef align 4 [[TMP0]], ptr addrspace(1) noundef align 4 [[TMP1]]) #[[ATTR3:[0-9]+]]
+// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_ker(ptr addrspace(1) noundef align 4 [[TMP0]], ptr addrspace(1) noundef align 4 [[TMP1]]) #[[ATTR4:[0-9]+]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @__clang_ocl_kern_imp_ker(
-// AMDGCN-SAME: ptr addrspace(1) noundef align 4 [[IN:%.*]], ptr addrspace(1) noundef align 4 [[OUT:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META3]] !kernel_arg_access_qual [[META4]] !kernel_arg_type [[META5]] !kernel_arg_base_type [[META5]] !kernel_arg_type_qual [[META6]] {
+// AMDGCN-SAME: ptr addrspace(1) noundef align 4 [[IN:%.*]], ptr addrspace(1) noundef align 4 [[OUT:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META5]] !kernel_arg_access_qual [[META6]] !kernel_arg_type [[META7]] !kernel_arg_base_type [[META7]] !kernel_arg_type_qual [[META8]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[IN_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    [[TMP:%.*]] = alloca [[STRUCT_MAT4X4:%.*]], align 4, addrspace(5)
@@ -152,38 +157,44 @@ kernel void KernelLargeTwoMember(struct LargeStructTwoMember u) {
 // AMDGCN-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds [[STRUCT_MAT3X3:%.*]], ptr addrspace(1) [[TMP1]], i64 1
 // AMDGCN-NEXT:    [[TMP2:%.*]] = getelementptr inbounds nuw [[STRUCT_MAT3X3]], ptr addrspace(1) [[ARRAYIDX1]], i32 0, i32 0
 // AMDGCN-NEXT:    [[TMP3:%.*]] = load [9 x i32], ptr addrspace(1) [[TMP2]], align 4
-// AMDGCN-NEXT:    [[CALL:%.*]] = call [[STRUCT_MAT4X4]] @[[FOO:[a-zA-Z0-9_$\"\\.-]*[a-zA-Z_$\"\\.-][a-zA-Z0-9_$\"\\.-]*]]([9 x i32] [[TMP3]]) #[[ATTR3]]
+// AMDGCN-NEXT:    [[CALL:%.*]] = call [[STRUCT_MAT4X4]] @[[FOO:[a-zA-Z0-9_$\"\\.-]*[a-zA-Z_$\"\\.-][a-zA-Z0-9_$\"\\.-]*]]([9 x i32] [[TMP3]]) #[[ATTR4]]
 // AMDGCN-NEXT:    [[TMP4:%.*]] = getelementptr inbounds nuw [[STRUCT_MAT4X4]], ptr addrspace(5) [[TMP]], i32 0, i32 0
 // AMDGCN-NEXT:    [[TMP5:%.*]] = extractvalue [[STRUCT_MAT4X4]] [[CALL]], 0
 // AMDGCN-NEXT:    store [16 x i32] [[TMP5]], ptr addrspace(5) [[TMP4]], align 4
 // AMDGCN-NEXT:    call void @llvm.memcpy.p1.p5.i64(ptr addrspace(1) align 4 [[ARRAYIDX]], ptr addrspace(5) align 4 [[TMP]], i64 64, i1 false)
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @foo_large(
 // AMDGCN-SAME: ptr addrspace(5) dead_on_unwind noalias writable sret([[STRUCT_MAT64X64:%.*]]) align 4 [[AGG_RESULT:%.*]], ptr addrspace(5) noundef byref([[STRUCT_MAT32X32:%.*]]) align 4 [[TMP0:%.*]]) #[[ATTR0]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[IN:%.*]] = alloca [[STRUCT_MAT32X32]], align 4, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p5.i64(ptr addrspace(5) align 4 [[IN]], ptr addrspace(5) align 4 [[TMP0]], i64 4096, i1 false)
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local amdgpu_kernel void @ker_large(
-// AMDGCN-SAME: ptr addrspace(1) noundef align 4 [[IN:%.*]], ptr addrspace(1) noundef align 4 [[OUT:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META3]] !kernel_arg_access_qual [[META4]] !kernel_arg_type [[META7:![0-9]+]] !kernel_arg_base_type [[META7]] !kernel_arg_type_qual [[META6]] {
+// AMDGCN-SAME: ptr addrspace(1) noundef align 4 [[IN:%.*]], ptr addrspace(1) noundef align 4 [[OUT:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META5]] !kernel_arg_access_qual [[META6]] !kernel_arg_type [[META15:![0-9]+]] !kernel_arg_base_type [[META15]] !kernel_arg_type_qual [[META8]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[IN_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    store ptr addrspace(1) [[IN]], ptr addrspace(5) [[IN_ADDR]], align 8
 // AMDGCN-NEXT:    store ptr addrspace(1) [[OUT]], ptr addrspace(5) [[OUT_ADDR]], align 8
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[IN_ADDR]], align 8
 // AMDGCN-NEXT:    [[TMP1:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
-// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_ker_large(ptr addrspace(1) noundef align 4 [[TMP0]], ptr addrspace(1) noundef align 4 [[TMP1]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_ker_large(ptr addrspace(1) noundef align 4 [[TMP0]], ptr addrspace(1) noundef align 4 [[TMP1]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @__clang_ocl_kern_imp_ker_large(
-// AMDGCN-SAME: ptr addrspace(1) noundef align 4 [[IN:%.*]], ptr addrspace(1) noundef align 4 [[OUT:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META3]] !kernel_arg_access_qual [[META4]] !kernel_arg_type [[META7]] !kernel_arg_base_type [[META7]] !kernel_arg_type_qual [[META6]] {
+// AMDGCN-SAME: ptr addrspace(1) noundef align 4 [[IN:%.*]], ptr addrspace(1) noundef align 4 [[OUT:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META5]] !kernel_arg_access_qual [[META6]] !kernel_arg_type [[META15]] !kernel_arg_base_type [[META15]] !kernel_arg_type_qual [[META8]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[IN_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    [[TMP:%.*]] = alloca [[STRUCT_MAT64X64:%.*]], align 4, addrspace(5)
@@ -195,14 +206,16 @@ kernel void KernelLargeTwoMember(struct LargeStructTwoMember u) {
 // AMDGCN-NEXT:    [[TMP1:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[IN_ADDR]], align 8
 // AMDGCN-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds [[STRUCT_MAT32X32]], ptr addrspace(1) [[TMP1]], i64 1
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p1.i64(ptr addrspace(5) align 4 [[BYVAL_TEMP]], ptr addrspace(1) align 4 [[ARRAYIDX1]], i64 4096, i1 false)
-// AMDGCN-NEXT:    call void @foo_large(ptr addrspace(5) dead_on_unwind writable sret([[STRUCT_MAT64X64]]) align 4 [[TMP]], ptr addrspace(5) noundef byref([[STRUCT_MAT32X32]]) align 4 [[BYVAL_TEMP]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @foo_large(ptr addrspace(5) dead_on_unwind writable sret([[STRUCT_MAT64X64]]) align 4 [[TMP]], ptr addrspace(5) noundef byref([[STRUCT_MAT32X32]]) align 4 [[BYVAL_TEMP]]) #[[ATTR4]]
 // AMDGCN-NEXT:    call void @llvm.memcpy.p1.p5.i64(ptr addrspace(1) align 4 [[ARRAYIDX]], ptr addrspace(5) align 4 [[TMP]], i64 16384, i1 false)
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @FuncOneMember(
 // AMDGCN-SAME: <2 x i32> [[U_COERCE:%.*]]) #[[ATTR0]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_STRUCTONEMEMBER:%.*]], align 8, addrspace(5)
 // AMDGCN-NEXT:    [[DOTCOMPOUNDLITERAL:%.*]] = alloca <2 x i32>, align 8, addrspace(5)
 // AMDGCN-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTONEMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
@@ -211,12 +224,14 @@ kernel void KernelLargeTwoMember(struct LargeStructTwoMember u) {
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load <2 x i32>, ptr addrspace(5) [[DOTCOMPOUNDLITERAL]], align 8
 // AMDGCN-NEXT:    [[X:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTONEMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
 // AMDGCN-NEXT:    store <2 x i32> [[TMP0]], ptr addrspace(5) [[X]], align 8
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @FuncOneLargeMember(
 // AMDGCN-SAME: ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR0]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_LARGESTRUCTONEMEMBER]], align 8, addrspace(5)
 // AMDGCN-NEXT:    [[DOTCOMPOUNDLITERAL:%.*]] = alloca <2 x i32>, align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p5.i64(ptr addrspace(5) align 8 [[U]], ptr addrspace(5) align 8 [[TMP0]], i64 800, i1 false)
@@ -225,109 +240,131 @@ kernel void KernelLargeTwoMember(struct LargeStructTwoMember u) {
 // AMDGCN-NEXT:    [[X:%.*]] = getelementptr inbounds nuw [[STRUCT_LARGESTRUCTONEMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
 // AMDGCN-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [100 x <2 x i32>], ptr addrspace(5) [[X]], i64 0, i64 0
 // AMDGCN-NEXT:    store <2 x i32> [[TMP1]], ptr addrspace(5) [[ARRAYIDX]], align 8
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @test_indirect_arg_globl(
 // AMDGCN-SAME: ) #[[ATTR0]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[BYVAL_TEMP:%.*]] = alloca [[STRUCT_LARGESTRUCTONEMEMBER:%.*]], align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p1.i64(ptr addrspace(5) align 8 [[BYVAL_TEMP]], ptr addrspace(1) align 8 @g_s, i64 800, i1 false)
-// AMDGCN-NEXT:    call void @FuncOneLargeMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[BYVAL_TEMP]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @FuncOneLargeMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[BYVAL_TEMP]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local amdgpu_kernel void @test_indirect_arg_local(
-// AMDGCN-SAME: ) #[[ATTR1]] !kernel_arg_addr_space [[META8:![0-9]+]] !kernel_arg_access_qual [[META8]] !kernel_arg_type [[META8]] !kernel_arg_base_type [[META8]] !kernel_arg_type_qual [[META8]] {
+// AMDGCN-SAME: ) #[[ATTR1]] !kernel_arg_addr_space [[META26:![0-9]+]] !kernel_arg_access_qual [[META26]] !kernel_arg_type [[META26]] !kernel_arg_base_type [[META26]] !kernel_arg_type_qual [[META26]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
-// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_test_indirect_arg_local() #[[ATTR3]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
+// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_test_indirect_arg_local() #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @__clang_ocl_kern_imp_test_indirect_arg_local(
-// AMDGCN-SAME: ) #[[ATTR1]] !kernel_arg_addr_space [[META8]] !kernel_arg_access_qual [[META8]] !kernel_arg_type [[META8]] !kernel_arg_base_type [[META8]] !kernel_arg_type_qual [[META8]] {
+// AMDGCN-SAME: ) #[[ATTR1]] !kernel_arg_addr_space [[META26]] !kernel_arg_access_qual [[META26]] !kernel_arg_type [[META26]] !kernel_arg_base_type [[META26]] !kernel_arg_type_qual [[META26]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[BYVAL_TEMP:%.*]] = alloca [[STRUCT_LARGESTRUCTONEMEMBER:%.*]], align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p3.i64(ptr addrspace(5) align 8 [[BYVAL_TEMP]], ptr addrspace(3) align 8 @test_indirect_arg_local.l_s, i64 800, i1 false)
-// AMDGCN-NEXT:    call void @FuncOneLargeMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[BYVAL_TEMP]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @FuncOneLargeMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[BYVAL_TEMP]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @test_indirect_arg_private(
 // AMDGCN-SAME: ) #[[ATTR0]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[P_S:%.*]] = alloca [[STRUCT_LARGESTRUCTONEMEMBER:%.*]], align 8, addrspace(5)
-// AMDGCN-NEXT:    call void @FuncOneLargeMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[P_S]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @FuncOneLargeMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[P_S]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local amdgpu_kernel void @KernelOneMember(
-// AMDGCN-SAME: <2 x i32> [[U_COERCE:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META9:![0-9]+]] !kernel_arg_access_qual [[META10:![0-9]+]] !kernel_arg_type [[META11:![0-9]+]] !kernel_arg_base_type [[META11]] !kernel_arg_type_qual [[META12:![0-9]+]] {
+// AMDGCN-SAME: <2 x i32> [[U_COERCE:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META33:![0-9]+]] !kernel_arg_access_qual [[META34:![0-9]+]] !kernel_arg_type [[META35:![0-9]+]] !kernel_arg_base_type [[META35]] !kernel_arg_type_qual [[META36:![0-9]+]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_STRUCTONEMEMBER:%.*]], align 8, addrspace(5)
 // AMDGCN-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTONEMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
 // AMDGCN-NEXT:    store <2 x i32> [[U_COERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 8
 // AMDGCN-NEXT:    [[COERCE_DIVE1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTONEMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load <2 x i32>, ptr addrspace(5) [[COERCE_DIVE1]], align 8
-// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelOneMember(<2 x i32> [[TMP0]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelOneMember(<2 x i32> [[TMP0]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @__clang_ocl_kern_imp_KernelOneMember(
-// AMDGCN-SAME: <2 x i32> [[U_COERCE:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META9]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META11]] !kernel_arg_base_type [[META11]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: <2 x i32> [[U_COERCE:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META33]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META35]] !kernel_arg_base_type [[META35]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_STRUCTONEMEMBER:%.*]], align 8, addrspace(5)
 // AMDGCN-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTONEMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
 // AMDGCN-NEXT:    store <2 x i32> [[U_COERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 8
 // AMDGCN-NEXT:    [[COERCE_DIVE1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTONEMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load <2 x i32>, ptr addrspace(5) [[COERCE_DIVE1]], align 8
-// AMDGCN-NEXT:    call void @FuncOneMember(<2 x i32> [[TMP0]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @FuncOneMember(<2 x i32> [[TMP0]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local amdgpu_kernel void @KernelOneMemberSpir(
-// AMDGCN-SAME: ptr addrspace(1) noundef align 8 [[U:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META13:![0-9]+]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META14:![0-9]+]] !kernel_arg_base_type [[META14]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: ptr addrspace(1) noundef align 8 [[U:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META41:![0-9]+]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META42:![0-9]+]] !kernel_arg_base_type [[META42]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    store ptr addrspace(1) [[U]], ptr addrspace(5) [[U_ADDR]], align 8
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[U_ADDR]], align 8
-// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelOneMemberSpir(ptr addrspace(1) noundef align 8 [[TMP0]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelOneMemberSpir(ptr addrspace(1) noundef align 8 [[TMP0]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @__clang_ocl_kern_imp_KernelOneMemberSpir(
-// AMDGCN-SAME: ptr addrspace(1) noundef align 8 [[U:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META13]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META14]] !kernel_arg_base_type [[META14]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: ptr addrspace(1) noundef align 8 [[U:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META41]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META42]] !kernel_arg_base_type [[META42]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // AMDGCN-NEXT:    store ptr addrspace(1) [[U]], ptr addrspace(5) [[U_ADDR]], align 8
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[U_ADDR]], align 8
 // AMDGCN-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTONEMEMBER:%.*]], ptr addrspace(1) [[TMP0]], i32 0, i32 0
 // AMDGCN-NEXT:    [[TMP1:%.*]] = load <2 x i32>, ptr addrspace(1) [[COERCE_DIVE]], align 8
-// AMDGCN-NEXT:    call void @FuncOneMember(<2 x i32> [[TMP1]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @FuncOneMember(<2 x i32> [[TMP1]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local amdgpu_kernel void @KernelLargeOneMember(
-// AMDGCN-SAME: ptr addrspace(4) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META9]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META15:![0-9]+]] !kernel_arg_base_type [[META15]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: ptr addrspace(4) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META33]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META47:![0-9]+]] !kernel_arg_base_type [[META47]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META48:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_LARGESTRUCTONEMEMBER]], align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 8 [[U]], ptr addrspace(4) align 8 [[TMP0]], i64 800, i1 false)
-// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelLargeOneMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[U]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelLargeOneMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[U]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META49:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @__clang_ocl_kern_imp_KernelLargeOneMember(
-// AMDGCN-SAME: ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META9]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META15]] !kernel_arg_base_type [[META15]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META33]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META47]] !kernel_arg_base_type [[META47]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META50:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_LARGESTRUCTONEMEMBER]], align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p5.i64(ptr addrspace(5) align 8 [[U]], ptr addrspace(5) align 8 [[TMP0]], i64 800, i1 false)
-// AMDGCN-NEXT:    call void @FuncOneLargeMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[U]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @FuncOneLargeMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTONEMEMBER]]) align 8 [[U]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META51:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @FuncTwoMember(
 // AMDGCN-SAME: <2 x i32> [[U_COERCE0:%.*]], <2 x i32> [[U_COERCE1:%.*]]) #[[ATTR0]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META52:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_STRUCTTWOMEMBER:%.*]], align 8, addrspace(5)
 // AMDGCN-NEXT:    [[DOTCOMPOUNDLITERAL:%.*]] = alloca <2 x i32>, align 8, addrspace(5)
 // AMDGCN-NEXT:    [[TMP0:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTWOMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
@@ -338,12 +375,14 @@ kernel void KernelLargeTwoMember(struct LargeStructTwoMember u) {
 // AMDGCN-NEXT:    [[TMP2:%.*]] = load <2 x i32>, ptr addrspace(5) [[DOTCOMPOUNDLITERAL]], align 8
 // AMDGCN-NEXT:    [[Y:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTWOMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 1
 // AMDGCN-NEXT:    store <2 x i32> [[TMP2]], ptr addrspace(5) [[Y]], align 8
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META53:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @FuncLargeTwoMember(
 // AMDGCN-SAME: ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR0]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META54:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_LARGESTRUCTTWOMEMBER]], align 8, addrspace(5)
 // AMDGCN-NEXT:    [[DOTCOMPOUNDLITERAL:%.*]] = alloca <2 x i32>, align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p5.i64(ptr addrspace(5) align 8 [[U]], ptr addrspace(5) align 8 [[TMP0]], i64 480, i1 false)
@@ -352,25 +391,29 @@ kernel void KernelLargeTwoMember(struct LargeStructTwoMember u) {
 // AMDGCN-NEXT:    [[Y:%.*]] = getelementptr inbounds nuw [[STRUCT_LARGESTRUCTTWOMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 1
 // AMDGCN-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [20 x <2 x i32>], ptr addrspace(5) [[Y]], i64 0, i64 0
 // AMDGCN-NEXT:    store <2 x i32> [[TMP1]], ptr addrspace(5) [[ARRAYIDX]], align 8
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META55:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local amdgpu_kernel void @KernelTwoMember(
-// AMDGCN-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTTWOMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META9]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META16:![0-9]+]] !kernel_arg_base_type [[META16]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTTWOMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META33]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META56:![0-9]+]] !kernel_arg_base_type [[META56]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META57:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_STRUCTTWOMEMBER]], align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 8 [[U]], ptr addrspace(4) align 8 [[TMP0]], i64 16, i1 false)
 // AMDGCN-NEXT:    [[TMP1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTWOMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
 // AMDGCN-NEXT:    [[TMP2:%.*]] = load <2 x i32>, ptr addrspace(5) [[TMP1]], align 8
 // AMDGCN-NEXT:    [[TMP3:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTWOMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 1
 // AMDGCN-NEXT:    [[TMP4:%.*]] = load <2 x i32>, ptr addrspace(5) [[TMP3]], align 8
-// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelTwoMember(<2 x i32> [[TMP2]], <2 x i32> [[TMP4]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelTwoMember(<2 x i32> [[TMP2]], <2 x i32> [[TMP4]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META58:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @__clang_ocl_kern_imp_KernelTwoMember(
-// AMDGCN-SAME: <2 x i32> [[U_COERCE0:%.*]], <2 x i32> [[U_COERCE1:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META9]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META16]] !kernel_arg_base_type [[META16]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: <2 x i32> [[U_COERCE0:%.*]], <2 x i32> [[U_COERCE1:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META33]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META56]] !kernel_arg_base_type [[META56]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META59:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_STRUCTTWOMEMBER:%.*]], align 8, addrspace(5)
 // AMDGCN-NEXT:    [[TMP0:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTWOMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 0
 // AMDGCN-NEXT:    store <2 x i32> [[U_COERCE0]], ptr addrspace(5) [[TMP0]], align 8
@@ -380,41 +423,94 @@ kernel void KernelLargeTwoMember(struct LargeStructTwoMember u) {
 // AMDGCN-NEXT:    [[TMP3:%.*]] = load <2 x i32>, ptr addrspace(5) [[TMP2]], align 8
 // AMDGCN-NEXT:    [[TMP4:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTWOMEMBER]], ptr addrspace(5) [[U]], i32 0, i32 1
 // AMDGCN-NEXT:    [[TMP5:%.*]] = load <2 x i32>, ptr addrspace(5) [[TMP4]], align 8
-// AMDGCN-NEXT:    call void @FuncTwoMember(<2 x i32> [[TMP3]], <2 x i32> [[TMP5]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @FuncTwoMember(<2 x i32> [[TMP3]], <2 x i32> [[TMP5]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META60:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local amdgpu_kernel void @KernelLargeTwoMember(
-// AMDGCN-SAME: ptr addrspace(4) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META9]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META17:![0-9]+]] !kernel_arg_base_type [[META17]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: ptr addrspace(4) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META33]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META61:![0-9]+]] !kernel_arg_base_type [[META61]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META62:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_LARGESTRUCTTWOMEMBER]], align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 8 [[U]], ptr addrspace(4) align 8 [[TMP0]], i64 480, i1 false)
-// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelLargeTwoMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER]]) align 8 [[U]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @__clang_ocl_kern_imp_KernelLargeTwoMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER]]) align 8 [[U]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META63:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @__clang_ocl_kern_imp_KernelLargeTwoMember(
-// AMDGCN-SAME: ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META9]] !kernel_arg_access_qual [[META10]] !kernel_arg_type [[META17]] !kernel_arg_base_type [[META17]] !kernel_arg_type_qual [[META12]] {
+// AMDGCN-SAME: ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !kernel_arg_addr_space [[META33]] !kernel_arg_access_qual [[META34]] !kernel_arg_type [[META61]] !kernel_arg_base_type [[META61]] !kernel_arg_type_qual [[META36]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META64:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[U:%.*]] = alloca [[STRUCT_LARGESTRUCTTWOMEMBER]], align 8, addrspace(5)
 // AMDGCN-NEXT:    call void @llvm.memcpy.p5.p5.i64(ptr addrspace(5) align 8 [[U]], ptr addrspace(5) align 8 [[TMP0]], i64 480, i1 false)
-// AMDGCN-NEXT:    call void @FuncLargeTwoMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER]]) align 8 [[U]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @FuncLargeTwoMember(ptr addrspace(5) noundef byref([[STRUCT_LARGESTRUCTTWOMEMBER]]) align 8 [[U]]) #[[ATTR4]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META65:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //.
-// AMDGCN: [[META3]] = !{i32 1, i32 1}
-// AMDGCN: [[META4]] = !{!"none", !"none"}
-// AMDGCN: [[META5]] = !{!"Mat3X3*", !"Mat4X4*"}
-// AMDGCN: [[META6]] = !{!"", !""}
-// AMDGCN: [[META7]] = !{!"Mat32X32*", !"Mat64X64*"}
-// AMDGCN: [[META8]] = !{}
-// AMDGCN: [[META9]] = !{i32 0}
-// AMDGCN: [[META10]] = !{!"none"}
-// AMDGCN: [[META11]] = !{!"struct StructOneMember"}
-// AMDGCN: [[META12]] = !{!""}
-// AMDGCN: [[META13]] = !{i32 1}
-// AMDGCN: [[META14]] = !{!"struct StructOneMember*"}
-// AMDGCN: [[META15]] = !{!"struct LargeStructOneMember"}
-// AMDGCN: [[META16]] = !{!"struct StructTwoMember"}
-// AMDGCN: [[META17]] = !{!"struct LargeStructTwoMember"}
+// AMDGCN: [[META3]] = !{i32 0, !"foo"}
+// AMDGCN: [[META4]] = !{i32 1, !"foo"}
+// AMDGCN: [[META5]] = !{i32 1, i32 1}
+// AMDGCN: [[META6]] = !{!"none", !"none"}
+// AMDGCN: [[META7]] = !{!"Mat3X3*", !"Mat4X4*"}
+// AMDGCN: [[META8]] = !{!"", !""}
+// AMDGCN: [[META9]] = !{i32 0, !"ker"}
+// AMDGCN: [[META10]] = !{i32 1, !"ker"}
+// AMDGCN: [[META11]] = !{i32 0, !"__clang_ocl_kern_imp_ker"}
+// AMDGCN: [[META12]] = !{i32 1, !"__clang_ocl_kern_imp_ker"}
+// AMDGCN: [[META13]] = !{i32 0, !"foo_large"}
+// AMDGCN: [[META14]] = !{i32 1, !"foo_large"}
+// AMDGCN: [[META15]] = !{!"Mat32X32*", !"Mat64X64*"}
+// AMDGCN: [[META16]] = !{i32 0, !"ker_large"}
+// AMDGCN: [[META17]] = !{i32 1, !"ker_large"}
+// AMDGCN: [[META18]] = !{i32 0, !"__clang_ocl_kern_imp_ker_large"}
+// AMDGCN: [[META19]] = !{i32 1, !"__clang_ocl_kern_imp_ker_large"}
+// AMDGCN: [[META20]] = !{i32 0, !"FuncOneMember"}
+// AMDGCN: [[META21]] = !{i32 1, !"FuncOneMember"}
+// AMDGCN: [[META22]] = !{i32 0, !"FuncOneLargeMember"}
+// AMDGCN: [[META23]] = !{i32 1, !"FuncOneLargeMember"}
+// AMDGCN: [[META24]] = !{i32 0, !"test_indirect_arg_globl"}
+// AMDGCN: [[META25]] = !{i32 1, !"test_indirect_arg_globl"}
+// AMDGCN: [[META26]] = !{}
+// AMDGCN: [[META27]] = !{i32 0, !"test_indirect_arg_local"}
+// AMDGCN: [[META28]] = !{i32 1, !"test_indirect_arg_local"}
+// AMDGCN: [[META29]] = !{i32 0, !"__clang_ocl_kern_imp_test_indirect_arg_local"}
+// AMDGCN: [[META30]] = !{i32 1, !"__clang_ocl_kern_imp_test_indirect_arg_local"}
+// AMDGCN: [[META31]] = !{i32 0, !"test_indirect_arg_private"}
+// AMDGCN: [[META32]] = !{i32 1, !"test_indirect_arg_private"}
+// AMDGCN: [[META33]] = !{i32 0}
+// AMDGCN: [[META34]] = !{!"none"}
+// AMDGCN: [[META35]] = !{!"struct StructOneMember"}
+// AMDGCN: [[META36]] = !{!""}
+// AMDGCN: [[META37]] = !{i32 0, !"KernelOneMember"}
+// AMDGCN: [[META38]] = !{i32 1, !"KernelOneMember"}
+// AMDGCN: [[META39]] = !{i32 0, !"__clang_ocl_kern_imp_KernelOneMember"}
+// AMDGCN: [[META40]] = !{i32 1, !"__clang_ocl_kern_imp_KernelOneMember"}
+// AMDGCN: [[META41]] = !{i32 1}
+// AMDGCN: [[META42]] = !{!"struct StructOneMember*"}
+// AMDGCN: [[META43]] = !{i32 0, !"KernelOneMemberSpir"}
+// AMDGCN: [[META44]] = !{i32 1, !"KernelOneMemberSpir"}
+// AMDGCN: [[META45]] = !{i32 0, !"__clang_ocl_kern_imp_KernelOneMemberSpir"}
+// AMDGCN: [[META46]] = !{i32 1, !"__clang_ocl_kern_imp_KernelOneMemberSpir"}
+// AMDGCN: [[META47]] = !{!"struct LargeStructOneMember"}
+// AMDGCN: [[META48]] = !{i32 0, !"KernelLargeOneMember"}
+// AMDGCN: [[META49]] = !{i32 1, !"KernelLargeOneMember"}
+// AMDGCN: [[META50]] = !{i32 0, !"__clang_ocl_kern_imp_KernelLargeOneMember"}
+// AMDGCN: [[META51]] = !{i32 1, !"__clang_ocl_kern_imp_KernelLargeOneMember"}
+// AMDGCN: [[META52]] = !{i32 0, !"FuncTwoMember"}
+// AMDGCN: [[META53]] = !{i32 1, !"FuncTwoMember"}
+// AMDGCN: [[META54]] = !{i32 0, !"FuncLargeTwoMember"}
+// AMDGCN: [[META55]] = !{i32 1, !"FuncLargeTwoMember"}
+// AMDGCN: [[META56]] = !{!"struct StructTwoMember"}
+// AMDGCN: [[META57]] = !{i32 0, !"KernelTwoMember"}
+// AMDGCN: [[META58]] = !{i32 1, !"KernelTwoMember"}
+// AMDGCN: [[META59]] = !{i32 0, !"__clang_ocl_kern_imp_KernelTwoMember"}
+// AMDGCN: [[META60]] = !{i32 1, !"__clang_ocl_kern_imp_KernelTwoMember"}
+// AMDGCN: [[META61]] = !{!"struct LargeStructTwoMember"}
+// AMDGCN: [[META62]] = !{i32 0, !"KernelLargeTwoMember"}
+// AMDGCN: [[META63]] = !{i32 1, !"KernelLargeTwoMember"}
+// AMDGCN: [[META64]] = !{i32 0, !"__clang_ocl_kern_imp_KernelLargeTwoMember"}
+// AMDGCN: [[META65]] = !{i32 1, !"__clang_ocl_kern_imp_KernelLargeTwoMember"}
 //.

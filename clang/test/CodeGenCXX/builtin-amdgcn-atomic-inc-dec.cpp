@@ -26,6 +26,7 @@
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z29test_non_volatile_parameter32Pj(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // GCN-NEXT:    [[RES:%.*]] = alloca i32, align 4, addrspace(5)
 // GCN-NEXT:    [[PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[PTR_ADDR]] to ptr
@@ -41,6 +42,7 @@
 // GCN-NEXT:    [[TMP6:%.*]] = load i32, ptr [[TMP5]], align 4
 // GCN-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr [[TMP4]], i32 [[TMP6]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP7]], ptr [[RES_ASCAST]], align 4
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z29test_non_volatile_parameter32Pj(
@@ -53,12 +55,12 @@
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) [[TMP0]], i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5:![0-9]+]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) [[TMP0]], i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4:![0-9]+]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP3]], ptr addrspace(4) [[RES_ASCAST]], align 4
 // AMDGCNSPIRV-NEXT:    [[TMP4:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP6:%.*]] = load i32, ptr addrspace(4) [[TMP5]], align 4
-// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) [[TMP4]], i32 [[TMP6]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) [[TMP4]], i32 [[TMP6]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP7]], ptr addrspace(4) [[RES_ASCAST]], align 4
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -89,6 +91,7 @@ __attribute__((device)) void test_non_volatile_parameter32(__UINT32_TYPE__ *ptr)
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z29test_non_volatile_parameter64Pm(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // GCN-NEXT:    [[RES:%.*]] = alloca i64, align 8, addrspace(5)
 // GCN-NEXT:    [[PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[PTR_ADDR]] to ptr
@@ -104,6 +107,7 @@ __attribute__((device)) void test_non_volatile_parameter32(__UINT32_TYPE__ *ptr)
 // GCN-NEXT:    [[TMP6:%.*]] = load i64, ptr [[TMP5]], align 8
 // GCN-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr [[TMP4]], i64 [[TMP6]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP7]], ptr [[RES_ASCAST]], align 8
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z29test_non_volatile_parameter64Py(
@@ -116,12 +120,12 @@ __attribute__((device)) void test_non_volatile_parameter32(__UINT32_TYPE__ *ptr)
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspace(4) [[TMP1]], align 8
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) [[TMP0]], i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) [[TMP0]], i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP3]], ptr addrspace(4) [[RES_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP4:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP6:%.*]] = load i64, ptr addrspace(4) [[TMP5]], align 8
-// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) [[TMP4]], i64 [[TMP6]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) [[TMP4]], i64 [[TMP6]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP7]], ptr addrspace(4) [[RES_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -152,6 +156,7 @@ __attribute__((device)) void test_non_volatile_parameter64(__UINT64_TYPE__ *ptr)
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z25test_volatile_parameter32PVj(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // GCN-NEXT:    [[RES:%.*]] = alloca i32, align 4, addrspace(5)
 // GCN-NEXT:    [[PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[PTR_ADDR]] to ptr
@@ -167,6 +172,7 @@ __attribute__((device)) void test_non_volatile_parameter64(__UINT64_TYPE__ *ptr)
 // GCN-NEXT:    [[TMP6:%.*]] = load volatile i32, ptr [[TMP5]], align 4
 // GCN-NEXT:    [[TMP7:%.*]] = atomicrmw volatile udec_wrap ptr [[TMP4]], i32 [[TMP6]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP7]], ptr [[RES_ASCAST]], align 4
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z25test_volatile_parameter32PVj(
@@ -179,12 +185,12 @@ __attribute__((device)) void test_non_volatile_parameter64(__UINT64_TYPE__ *ptr)
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load volatile i32, ptr addrspace(4) [[TMP1]], align 4
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw volatile uinc_wrap ptr addrspace(4) [[TMP0]], i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw volatile uinc_wrap ptr addrspace(4) [[TMP0]], i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP3]], ptr addrspace(4) [[RES_ASCAST]], align 4
 // AMDGCNSPIRV-NEXT:    [[TMP4:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP6:%.*]] = load volatile i32, ptr addrspace(4) [[TMP5]], align 4
-// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw volatile udec_wrap ptr addrspace(4) [[TMP4]], i32 [[TMP6]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw volatile udec_wrap ptr addrspace(4) [[TMP4]], i32 [[TMP6]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP7]], ptr addrspace(4) [[RES_ASCAST]], align 4
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -215,6 +221,7 @@ __attribute__((device)) void test_volatile_parameter32(volatile __UINT32_TYPE__ 
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z25test_volatile_parameter64PVm(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // GCN-NEXT:    [[RES:%.*]] = alloca i64, align 8, addrspace(5)
 // GCN-NEXT:    [[PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[PTR_ADDR]] to ptr
@@ -230,6 +237,7 @@ __attribute__((device)) void test_volatile_parameter32(volatile __UINT32_TYPE__ 
 // GCN-NEXT:    [[TMP6:%.*]] = load volatile i64, ptr [[TMP5]], align 8
 // GCN-NEXT:    [[TMP7:%.*]] = atomicrmw volatile udec_wrap ptr [[TMP4]], i64 [[TMP6]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP7]], ptr [[RES_ASCAST]], align 8
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z25test_volatile_parameter64PVy(
@@ -242,12 +250,12 @@ __attribute__((device)) void test_volatile_parameter32(volatile __UINT32_TYPE__ 
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load volatile i64, ptr addrspace(4) [[TMP1]], align 8
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw volatile uinc_wrap ptr addrspace(4) [[TMP0]], i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw volatile uinc_wrap ptr addrspace(4) [[TMP0]], i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP3]], ptr addrspace(4) [[RES_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP4:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = load ptr addrspace(4), ptr addrspace(4) [[PTR_ADDR_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP6:%.*]] = load volatile i64, ptr addrspace(4) [[TMP5]], align 8
-// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw volatile udec_wrap ptr addrspace(4) [[TMP4]], i64 [[TMP6]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw volatile udec_wrap ptr addrspace(4) [[TMP4]], i64 [[TMP6]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP7]], ptr addrspace(4) [[RES_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -269,21 +277,23 @@ __attribute__((device)) void test_volatile_parameter64(volatile __UINT64_TYPE__ 
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z13test_shared32v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr), align 4
 // GCN-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr), i32 [[TMP0]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP1]], ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr), align 4
 // GCN-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr), align 4
 // GCN-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP3]], ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr), align 4
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z13test_shared32v(
 // AMDGCNSPIRV-NEXT:  entry:
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr addrspace(4)), i32 [[TMP0]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr addrspace(4)), i32 [[TMP0]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP1]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP3]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -306,21 +316,23 @@ __attribute__((device)) void test_shared32() {
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z13test_shared64v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr), align 8
 // GCN-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr), i64 [[TMP0]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP1]], ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr), align 8
 // GCN-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr), align 8
 // GCN-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP3]], ptr addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr), align 8
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z13test_shared64v(
 // AMDGCNSPIRV-NEXT:  entry:
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr addrspace(4)), i64 [[TMP0]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr addrspace(4)), i64 [[TMP0]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP1]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP3]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ13test_shared64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -344,21 +356,23 @@ __attribute__((device)) __UINT32_TYPE__ global_val32;
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z13test_global32v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspacecast (ptr addrspace(1) @global_val32 to ptr), align 4
 // GCN-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspacecast (ptr addrspace(1) @global_val32 to ptr), i32 [[TMP0]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP1]], ptr addrspacecast (ptr addrspace(1) @global_val32 to ptr), align 4
 // GCN-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspacecast (ptr addrspace(1) @global_val32 to ptr), align 4
 // GCN-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(1) @global_val32 to ptr), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP3]], ptr addrspacecast (ptr addrspace(1) @global_val32 to ptr), align 4
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z13test_global32v(
 // AMDGCNSPIRV-NEXT:  entry:
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val32 to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val32 to ptr addrspace(4)), i32 [[TMP0]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val32 to ptr addrspace(4)), i32 [[TMP0]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP1]], ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val32 to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val32 to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val32 to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val32 to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP3]], ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val32 to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -380,21 +394,23 @@ __attribute__((device)) __UINT64_TYPE__ global_val64;
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z13test_global64v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspacecast (ptr addrspace(1) @global_val64 to ptr), align 8
 // GCN-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspacecast (ptr addrspace(1) @global_val64 to ptr), i64 [[TMP0]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP1]], ptr addrspacecast (ptr addrspace(1) @global_val64 to ptr), align 8
 // GCN-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspacecast (ptr addrspace(1) @global_val64 to ptr), align 8
 // GCN-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(1) @global_val64 to ptr), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP3]], ptr addrspacecast (ptr addrspace(1) @global_val64 to ptr), align 8
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z13test_global64v(
 // AMDGCNSPIRV-NEXT:  entry:
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val64 to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val64 to ptr addrspace(4)), i64 [[TMP0]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val64 to ptr addrspace(4)), i64 [[TMP0]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP1]], ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val64 to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val64 to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val64 to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val64 to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP3]], ptr addrspace(4) addrspacecast (ptr addrspace(1) @global_val64 to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -418,6 +434,7 @@ __attribute__((constant)) __UINT32_TYPE__ cval32;
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z15test_constant32v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[LOCAL_VAL:%.*]] = alloca i32, align 4, addrspace(5)
 // GCN-NEXT:    [[LOCAL_VAL_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[LOCAL_VAL]] to ptr
 // GCN-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspacecast (ptr addrspace(4) @cval32 to ptr), align 4
@@ -426,6 +443,7 @@ __attribute__((constant)) __UINT32_TYPE__ cval32;
 // GCN-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspacecast (ptr addrspace(4) @cval32 to ptr), align 4
 // GCN-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(4) @cval32 to ptr), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP3]], ptr [[LOCAL_VAL_ASCAST]], align 4
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z15test_constant32v(
@@ -433,10 +451,10 @@ __attribute__((constant)) __UINT32_TYPE__ cval32;
 // AMDGCNSPIRV-NEXT:    [[LOCAL_VAL:%.*]] = alloca i32, align 4
 // AMDGCNSPIRV-NEXT:    [[LOCAL_VAL_ASCAST:%.*]] = addrspacecast ptr [[LOCAL_VAL]] to ptr addrspace(4)
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval32 to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval32 to ptr addrspace(4)), i32 [[TMP0]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval32 to ptr addrspace(4)), i32 [[TMP0]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP1]], ptr addrspace(4) [[LOCAL_VAL_ASCAST]], align 4
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval32 to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval32 to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval32 to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP3]], ptr addrspace(4) [[LOCAL_VAL_ASCAST]], align 4
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -462,6 +480,7 @@ __attribute__((constant)) __UINT64_TYPE__ cval64;
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z15test_constant64v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[LOCAL_VAL:%.*]] = alloca i64, align 8, addrspace(5)
 // GCN-NEXT:    [[LOCAL_VAL_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[LOCAL_VAL]] to ptr
 // GCN-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspacecast (ptr addrspace(4) @cval64 to ptr), align 8
@@ -470,6 +489,7 @@ __attribute__((constant)) __UINT64_TYPE__ cval64;
 // GCN-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspacecast (ptr addrspace(4) @cval64 to ptr), align 8
 // GCN-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(4) @cval64 to ptr), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP3]], ptr [[LOCAL_VAL_ASCAST]], align 8
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z15test_constant64v(
@@ -477,10 +497,10 @@ __attribute__((constant)) __UINT64_TYPE__ cval64;
 // AMDGCNSPIRV-NEXT:    [[LOCAL_VAL:%.*]] = alloca i64, align 8
 // AMDGCNSPIRV-NEXT:    [[LOCAL_VAL_ASCAST:%.*]] = addrspacecast ptr [[LOCAL_VAL]] to ptr addrspace(4)
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval64 to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval64 to ptr addrspace(4)), i64 [[TMP0]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval64 to ptr addrspace(4)), i64 [[TMP0]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP1]], ptr addrspace(4) [[LOCAL_VAL_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval64 to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval64 to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(1) @cval64 to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP3]], ptr addrspace(4) [[LOCAL_VAL_ASCAST]], align 8
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -515,6 +535,7 @@ __attribute__((device)) void test_constant64() {
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z12test_order32v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr), align 4
 // GCN-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr), i32 [[TMP0]] syncscope("workgroup") monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP1]], ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr), align 4
@@ -533,27 +554,28 @@ __attribute__((device)) void test_constant64() {
 // GCN-NEXT:    [[TMP10:%.*]] = load i32, ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr), align 4
 // GCN-NEXT:    [[TMP11:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr), i32 [[TMP10]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP11]], ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr), align 4
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z12test_order32v(
 // AMDGCNSPIRV-NEXT:  entry:
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP0]] syncscope("workgroup") monotonic, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP0]] syncscope("workgroup") monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP1]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") acquire, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") acquire, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP3]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP4:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP4]] syncscope("workgroup") acquire, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP4]] syncscope("workgroup") acquire, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP5]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP6:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP6]] syncscope("workgroup") release, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP6]] syncscope("workgroup") release, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP7]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP8:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP9:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP8]] syncscope("workgroup") acq_rel, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP9:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP8]] syncscope("workgroup") acq_rel, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP9]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP10:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP11:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP10]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP11:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), i32 [[TMP10]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP11]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -596,6 +618,7 @@ __attribute__((device)) void test_order32() {
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z12test_order64v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr), align 8
 // GCN-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr), i64 [[TMP0]] syncscope("workgroup") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP1]], ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr), align 8
@@ -614,27 +637,28 @@ __attribute__((device)) void test_order32() {
 // GCN-NEXT:    [[TMP10:%.*]] = load i64, ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr), align 8
 // GCN-NEXT:    [[TMP11:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr), i64 [[TMP10]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP11]], ptr addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr), align 8
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z12test_order64v(
 // AMDGCNSPIRV-NEXT:  entry:
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP0]] syncscope("workgroup") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP0]] syncscope("workgroup") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP1]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") acquire, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") acquire, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP3]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP4:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP4]] syncscope("workgroup") acquire, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP4]] syncscope("workgroup") acquire, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP5]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP6:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP6]] syncscope("workgroup") release, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP6]] syncscope("workgroup") release, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP7]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP8:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP9:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP8]] syncscope("workgroup") acq_rel, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP9:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP8]] syncscope("workgroup") acq_rel, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP9]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP10:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP11:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP10]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP11:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), i64 [[TMP10]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP11]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_order64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -671,6 +695,7 @@ __attribute__((device)) void test_order64() {
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z12test_scope32v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr), align 4
 // GCN-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr), i32 [[TMP0]] seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP1]], ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr), align 4
@@ -683,21 +708,22 @@ __attribute__((device)) void test_order64() {
 // GCN-NEXT:    [[TMP6:%.*]] = load i32, ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr), align 4
 // GCN-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr), i32 [[TMP6]] syncscope("wavefront") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i32 [[TMP7]], ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr), align 4
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z12test_scope32v(
 // AMDGCNSPIRV-NEXT:  entry:
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), i32 [[TMP0]] seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), i32 [[TMP0]] seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP1]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), i32 [[TMP2]] syncscope("workgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP3]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP4:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), i32 [[TMP4]] syncscope("device") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), i32 [[TMP4]] syncscope("device") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP5]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    [[TMP6:%.*]] = load i32, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), align 4
-// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), i32 [[TMP6]] syncscope("subgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), i32 [[TMP6]] syncscope("subgroup") seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i32 [[TMP7]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope32vE3val to ptr addrspace(4)), align 4
 // AMDGCNSPIRV-NEXT:    ret void
 //
@@ -730,6 +756,7 @@ __attribute__((device)) void test_scope32() {
 // CHECK-NEXT:    ret void
 // GCN-LABEL: @_Z12test_scope64v(
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr), align 8
 // GCN-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr), i64 [[TMP0]] seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP1]], ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr), align 8
@@ -742,21 +769,22 @@ __attribute__((device)) void test_scope32() {
 // GCN-NEXT:    [[TMP6:%.*]] = load i64, ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr), align 8
 // GCN-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr), i64 [[TMP6]] syncscope("wavefront") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // GCN-NEXT:    store i64 [[TMP7]], ptr addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr), align 8
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: @_Z12test_scope64v(
 // AMDGCNSPIRV-NEXT:  entry:
 // AMDGCNSPIRV-NEXT:    [[TMP0:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), i64 [[TMP0]] seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP1:%.*]] = atomicrmw uinc_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), i64 [[TMP0]] seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP1]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP2:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP3:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), i64 [[TMP2]] syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP3]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP4:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), i64 [[TMP4]] syncscope("device") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP5:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), i64 [[TMP4]] syncscope("device") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP5]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    [[TMP6:%.*]] = load i64, ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), align 8
-// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), i64 [[TMP6]] syncscope("subgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META5]]
+// AMDGCNSPIRV-NEXT:    [[TMP7:%.*]] = atomicrmw udec_wrap ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), i64 [[TMP6]] syncscope("subgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // AMDGCNSPIRV-NEXT:    store i64 [[TMP7]], ptr addrspace(4) addrspacecast (ptr addrspace(3) @_ZZ12test_scope64vE3val to ptr addrspace(4)), align 8
 // AMDGCNSPIRV-NEXT:    ret void
 //

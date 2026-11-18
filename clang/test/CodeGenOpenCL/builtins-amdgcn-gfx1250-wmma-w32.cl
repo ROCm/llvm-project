@@ -17,8 +17,10 @@ typedef int    v2i   __attribute__((ext_vector_type(2)));
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x4_f32(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x4.f32.v8f32.v2f32(<2 x float> [[A:%.*]], <2 x float> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7:![0-9]+]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9:![0-9]+]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x4_f32(global v8f* out, v2f a, v2f b, v8f c)
@@ -28,8 +30,10 @@ void test_amdgcn_wmma_f32_16x16x4_f32(global v8f* out, v2f a, v2f b, v8f c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x32_bf16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x32.bf16.v8f32.v16bf16(<16 x bfloat> [[A:%.*]], <16 x bfloat> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 true, i1 false)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x32_bf16(global v8f* out, v16bf16 a, v16bf16 b, v8f c)
@@ -39,8 +43,10 @@ void test_amdgcn_wmma_f32_16x16x32_bf16(global v8f* out, v16bf16 a, v16bf16 b, v
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_bf16_16x16x32_bf16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x bfloat> @llvm.amdgcn.wmma.bf16.16x16x32.bf16.v8bf16.v16bf16(<16 x bfloat> [[A:%.*]], <16 x bfloat> [[B:%.*]], i16 0, <8 x bfloat> [[C:%.*]], i1 false, i1 false)
-// CHECK-GFX1250-NEXT:    store <8 x bfloat> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x bfloat> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_bf16_16x16x32_bf16(global v8bf16* out, v16bf16 a, v16bf16 b, v8bf16 c)
@@ -50,8 +56,10 @@ void test_amdgcn_wmma_bf16_16x16x32_bf16(global v8bf16* out, v16bf16 a, v16bf16 
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_bf16f32_16x16x32_bf16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x bfloat> @llvm.amdgcn.wmma.bf16f32.16x16x32.bf16.v8bf16.v16bf16.v8f32(<16 x bfloat> [[A:%.*]], <16 x bfloat> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x bfloat> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x bfloat> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_bf16f32_16x16x32_bf16(global v8bf16* out, v16bf16 a, v16bf16 b, v8f c)
@@ -61,8 +69,10 @@ void test_amdgcn_wmma_bf16f32_16x16x32_bf16(global v8bf16* out, v16bf16 a, v16bf
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x64_fp8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x64.fp8.fp8.v8f32.v8i32(<8 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 true, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x64_fp8_fp8(global v8f* out, v8i a, v8i b, v8f c)
@@ -72,8 +82,10 @@ void test_amdgcn_wmma_f32_16x16x64_fp8_fp8(global v8f* out, v8i a, v8i b, v8f c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x64_fp8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x64.fp8.bf8.v8f32.v8i32(<8 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x64_fp8_bf8(global v8f* out, v8i a, v8i b, v8f c)
@@ -83,8 +95,10 @@ void test_amdgcn_wmma_f32_16x16x64_fp8_bf8(global v8f* out, v8i a, v8i b, v8f c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x64_bf8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x64.bf8.fp8.v8f32.v8i32(<8 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x64_bf8_fp8(global v8f* out, v8i a, v8i b, v8f c)
@@ -94,8 +108,10 @@ void test_amdgcn_wmma_f32_16x16x64_bf8_fp8(global v8f* out, v8i a, v8i b, v8f c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x64_bf8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x64.bf8.bf8.v8f32.v8i32(<8 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x64_bf8_bf8(global v8f* out, v8i a, v8i b, v8f c)
@@ -105,8 +121,10 @@ void test_amdgcn_wmma_f32_16x16x64_bf8_bf8(global v8f* out, v8i a, v8i b, v8f c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x64_fp8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x64.fp8.fp8.v8f16.v8i32(<8 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x64_fp8_fp8(global v8h* out, v8i a, v8i b, v8h c)
@@ -116,8 +134,10 @@ void test_amdgcn_wmma_f16_16x16x64_fp8_fp8(global v8h* out, v8i a, v8i b, v8h c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x64_fp8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x64.fp8.bf8.v8f16.v8i32(<8 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x64_fp8_bf8(global v8h* out, v8i a, v8i b, v8h c)
@@ -127,8 +147,10 @@ void test_amdgcn_wmma_f16_16x16x64_fp8_bf8(global v8h* out, v8i a, v8i b, v8h c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x64_bf8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x64.bf8.fp8.v8f16.v8i32(<8 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x64_bf8_fp8(global v8h* out, v8i a, v8i b, v8h c)
@@ -138,8 +160,10 @@ void test_amdgcn_wmma_f16_16x16x64_bf8_fp8(global v8h* out, v8i a, v8i b, v8h c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x64_bf8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x64.bf8.bf8.v8f16.v8i32(<8 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x64_bf8_bf8(global v8h* out, v8i a, v8i b, v8h c)
@@ -149,8 +173,10 @@ void test_amdgcn_wmma_f16_16x16x64_bf8_bf8(global v8h* out, v8i a, v8i b, v8h c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_i32_16x16x64_iu8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.wmma.i32.16x16x64.iu8.v8i32.v8i32(i1 false, <8 x i32> [[A:%.*]], i1 false, <8 x i32> [[B:%.*]], <8 x i32> [[C:%.*]], i1 false, i1 true, i1 false)
-// CHECK-GFX1250-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_i32_16x16x64_iu8(global v8i* out, v8i a, v8i b, v8i c)
@@ -160,8 +186,10 @@ void test_amdgcn_wmma_i32_16x16x64_iu8(global v8i* out, v8i a, v8i b, v8i c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_i32_16x16x64_iu8_clamp(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.wmma.i32.16x16x64.iu8.v8i32.v8i32(i1 false, <8 x i32> [[A:%.*]], i1 false, <8 x i32> [[B:%.*]], <8 x i32> [[C:%.*]], i1 false, i1 true, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_i32_16x16x64_iu8_clamp(global v8i* out, v8i a, v8i b, v8i c)
@@ -171,9 +199,11 @@ void test_amdgcn_wmma_i32_16x16x64_iu8_clamp(global v8i* out, v8i a, v8i b, v8i 
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x128_f8f6f4(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = shufflevector <16 x i32> [[B:%.*]], <16 x i32> poison, <12 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10, i32 11>
 // CHECK-GFX1250-NEXT:    [[TMP1:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x128.f8f6f4.v8f32.v16i32.v12i32(i32 1, <16 x i32> [[A:%.*]], i32 2, <12 x i32> [[TMP0]], i16 0, <8 x float> [[C:%.*]])
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP1]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP1]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x128_f8f6f4(global v8f* out, v16i a, v16i b, v8f c)
@@ -183,9 +213,11 @@ void test_amdgcn_wmma_f32_16x16x128_f8f6f4(global v8f* out, v16i a, v16i b, v8f 
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_scale_f32_16x16x128_f8f6f4(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = shufflevector <16 x i32> [[B:%.*]], <16 x i32> poison, <12 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10, i32 11>
 // CHECK-GFX1250-NEXT:    [[TMP1:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.scale.f32.16x16x128.f8f6f4.v8f32.v16i32.v12i32(i32 1, <16 x i32> [[A:%.*]], i32 2, <12 x i32> [[TMP0]], i16 0, <8 x float> [[C:%.*]], i32 1, i32 2, i32 [[SCALE_SRC0:%.*]], i32 2, i32 1, i32 [[SCALE_SRC1:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP1]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP1]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_scale_f32_16x16x128_f8f6f4(global v8f* out, v16i a, v16i b, v8f c, int scale_src0, int scale_src1)
@@ -195,9 +227,11 @@ void test_amdgcn_wmma_scale_f32_16x16x128_f8f6f4(global v8f* out, v16i a, v16i b
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_scale16_f32_16x16x128_f8f6f4(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = shufflevector <16 x i32> [[B:%.*]], <16 x i32> poison, <12 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10, i32 11>
 // CHECK-GFX1250-NEXT:    [[TMP1:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.scale16.f32.16x16x128.f8f6f4.v8f32.v16i32.v12i32(i32 1, <16 x i32> [[A:%.*]], i32 2, <12 x i32> [[TMP0]], i16 0, <8 x float> [[C:%.*]], i32 1, i32 2, i64 [[SCALE_SRC0:%.*]], i32 2, i32 1, i64 [[SCALE_SRC1:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP1]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP1]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_scale16_f32_16x16x128_f8f6f4(global v8f* out, v16i a, v16i b, v8f c, long scale_src0, long scale_src1)
@@ -207,8 +241,10 @@ void test_amdgcn_wmma_scale16_f32_16x16x128_f8f6f4(global v8f* out, v16i a, v16i
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x32_f16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x32.f16.v8f32.v16f16(<16 x half> [[A:%.*]], <16 x half> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x32_f16(global v8f* out, v16h a, v16h b, v8f c)
@@ -218,8 +254,10 @@ void test_amdgcn_wmma_f32_16x16x32_f16(global v8f* out, v16h a, v16h b, v8f c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x32_f16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x32.f16.v8f16.v16f16(<16 x half> [[A:%.*]], <16 x half> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x32_f16(global v8h* out, v16h a, v16h b, v8h c)
@@ -229,8 +267,10 @@ void test_amdgcn_wmma_f16_16x16x32_f16(global v8h* out, v16h a, v16h b, v8h c)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x128_fp8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x128.fp8.fp8.v8f16.v16i32(<16 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META48:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x128_fp8_fp8(global v8h* out, v16i a, v16i b, v8h c)
@@ -240,8 +280,10 @@ void test_amdgcn_wmma_f16_16x16x128_fp8_fp8(global v8h* out, v16i a, v16i b, v8h
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x128_fp8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META49:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x128.fp8.bf8.v8f16.v16i32(<16 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META50:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x128_fp8_bf8(global v8h* out, v16i a, v16i b, v8h c)
@@ -251,8 +293,10 @@ void test_amdgcn_wmma_f16_16x16x128_fp8_bf8(global v8h* out, v16i a, v16i b, v8h
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x128_bf8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META51:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x128.bf8.fp8.v8f16.v16i32(<16 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META52:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x128_bf8_fp8(global v8h* out, v16i a, v16i b, v8h c)
@@ -262,8 +306,10 @@ void test_amdgcn_wmma_f16_16x16x128_bf8_fp8(global v8h* out, v16i a, v16i b, v8h
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f16_16x16x128_bf8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META53:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x128.bf8.bf8.v8f16.v16i32(<16 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], i16 0, <8 x half> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META54:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x128_bf8_bf8(global v8h* out, v16i a, v16i b, v8h c)
@@ -273,8 +319,10 @@ void test_amdgcn_wmma_f16_16x16x128_bf8_bf8(global v8h* out, v16i a, v16i b, v8h
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x128_fp8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META55:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x128.fp8.fp8.v8f32.v16i32(<16 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 true, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META56:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x128_fp8_fp8(global v8f* out, v16i a, v16i b, v8f c)
@@ -284,8 +332,10 @@ void test_amdgcn_wmma_f32_16x16x128_fp8_fp8(global v8f* out, v16i a, v16i b, v8f
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x128_fp8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META57:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x128.fp8.bf8.v8f32.v16i32(<16 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META58:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x128_fp8_bf8(global v8f* out, v16i a, v16i b, v8f c)
@@ -295,8 +345,10 @@ void test_amdgcn_wmma_f32_16x16x128_fp8_bf8(global v8f* out, v16i a, v16i b, v8f
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x128_bf8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META59:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x128.bf8.fp8.v8f32.v16i32(<16 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META60:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x128_bf8_fp8(global v8f* out, v16i a, v16i b, v8f c)
@@ -306,8 +358,10 @@ void test_amdgcn_wmma_f32_16x16x128_bf8_fp8(global v8f* out, v16i a, v16i b, v8f
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_16x16x128_bf8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META61:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x128.bf8.bf8.v8f32.v16i32(<16 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], i16 0, <8 x float> [[C:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META62:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x128_bf8_bf8(global v8f* out, v16i a, v16i b, v8f c)
@@ -317,8 +371,10 @@ void test_amdgcn_wmma_f32_16x16x128_bf8_bf8(global v8f* out, v16i a, v16i b, v8f
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_f32_wmma_f32_32x16x128_f4(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META63:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <16 x float> @llvm.amdgcn.wmma.f32.32x16x128.f4.v16f32.v16i32.v8i32(<16 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <16 x float> [[C:%.*]])
-// CHECK-GFX1250-NEXT:    store <16 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 64, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <16 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 64, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META64:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_wmma_f32_32x16x128_f4(global v16f* out, v16i a, v8i b, v16f c)
@@ -328,8 +384,10 @@ void test_amdgcn_wmma_f32_wmma_f32_32x16x128_f4(global v16f* out, v16i a, v8i b,
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_scale_f32_32x16x128_f4(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META65:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <16 x float> @llvm.amdgcn.wmma.scale.f32.32x16x128.f4.v16f32.v16i32.v8i32(<16 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <16 x float> [[C:%.*]], i32 1, i32 2, i32 [[SCALE_SRC0:%.*]], i32 2, i32 1, i32 [[SCALE_SRC1:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <16 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 64, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <16 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 64, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META66:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_scale_f32_32x16x128_f4(global v16f* out, v16i a, v8i b, v16f c, int scale_src0, int scale_src1)
@@ -339,8 +397,10 @@ void test_amdgcn_wmma_scale_f32_32x16x128_f4(global v16f* out, v16i a, v8i b, v1
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_wmma_scale16_f32_32x16x128_f4(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META67:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <16 x float> @llvm.amdgcn.wmma.scale16.f32.32x16x128.f4.v16f32.v16i32.v8i32(<16 x i32> [[A:%.*]], <8 x i32> [[B:%.*]], i16 0, <16 x float> [[C:%.*]], i32 1, i32 2, i64 [[SCALE_SRC0:%.*]], i32 2, i32 1, i64 [[SCALE_SRC1:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <16 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 64, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <16 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 64, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META68:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_wmma_scale16_f32_32x16x128_f4(global v16f* out, v16i a, v8i b, v16f c, long scale_src0, long scale_src1)
@@ -350,8 +410,10 @@ void test_amdgcn_wmma_scale16_f32_32x16x128_f4(global v16f* out, v16i a, v8i b, 
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f32_16x16x64_bf16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META69:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.swmmac.f32.16x16x64.bf16.v8f32.v16bf16.v32bf16.i32(i1 false, <16 x bfloat> [[A:%.*]], i1 false, <32 x bfloat> [[B:%.*]], <8 x float> [[C:%.*]], i32 [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META70:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x64_bf16(global v8f* out, v16bf16 a, v32bf16 b, v8f c, int index)
@@ -361,8 +423,10 @@ void test_amdgcn_swmmac_f32_16x16x64_bf16(global v8f* out, v16bf16 a, v32bf16 b,
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_bf16_16x16x64_bf16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META71:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x bfloat> @llvm.amdgcn.swmmac.bf16.16x16x64.bf16.v8bf16.v16bf16.v32bf16.i32(i1 false, <16 x bfloat> [[A:%.*]], i1 false, <32 x bfloat> [[B:%.*]], <8 x bfloat> [[C:%.*]], i32 [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x bfloat> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x bfloat> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META72:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_bf16_16x16x64_bf16(global v8bf16* out, v16bf16 a, v32bf16 b, v8bf16 c, int index)
@@ -372,8 +436,10 @@ void test_amdgcn_swmmac_bf16_16x16x64_bf16(global v8bf16* out, v16bf16 a, v32bf1
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_bf16f32_16x16x64_bf16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META73:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.swmmac.bf16f32.16x16x64.bf16.v8f32.v16bf16.v32bf16.i32(i1 false, <16 x bfloat> [[A:%.*]], i1 false, <32 x bfloat> [[B:%.*]], <8 x float> [[C:%.*]], i32 [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META74:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_bf16f32_16x16x64_bf16(global v8f* out, v16bf16 a, v32bf16 b, v8f c, int index)
@@ -383,8 +449,10 @@ void test_amdgcn_swmmac_bf16f32_16x16x64_bf16(global v8f* out, v16bf16 a, v32bf1
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f32_16x16x128_fp8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META75:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.swmmac.f32.16x16x128.fp8.fp8.v8f32.v8i32.v16i32.v2i32(<8 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], <8 x float> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META76:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x128_fp8_fp8(global v8f* out, v8i a, v16i b, v8f c, v2i index)
@@ -394,8 +462,10 @@ void test_amdgcn_swmmac_f32_16x16x128_fp8_fp8(global v8f* out, v8i a, v16i b, v8
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f32_16x16x128_fp8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META77:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.swmmac.f32.16x16x128.fp8.bf8.v8f32.v8i32.v16i32.v2i32(<8 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], <8 x float> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META78:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x128_fp8_bf8(global v8f* out, v8i a, v16i b, v8f c, v2i index)
@@ -405,8 +475,10 @@ void test_amdgcn_swmmac_f32_16x16x128_fp8_bf8(global v8f* out, v8i a, v16i b, v8
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f32_16x16x128_bf8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META79:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.swmmac.f32.16x16x128.bf8.fp8.v8f32.v8i32.v16i32.v2i32(<8 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], <8 x float> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META80:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x128_bf8_fp8(global v8f* out, v8i a, v16i b, v8f c, v2i index)
@@ -416,8 +488,10 @@ void test_amdgcn_swmmac_f32_16x16x128_bf8_fp8(global v8f* out, v8i a, v16i b, v8
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f32_16x16x128_bf8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META81:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.swmmac.f32.16x16x128.bf8.bf8.v8f32.v8i32.v16i32.v2i32(<8 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], <8 x float> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META82:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x128_bf8_bf8(global v8f* out, v8i a, v16i b, v8f c, v2i index)
@@ -427,8 +501,10 @@ void test_amdgcn_swmmac_f32_16x16x128_bf8_bf8(global v8f* out, v8i a, v16i b, v8
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f16_16x16x128_fp8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META83:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.swmmac.f16.16x16x128.fp8.fp8.v8f16.v8i32.v16i32.v2i32(<8 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], <8 x half> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META84:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f16_16x16x128_fp8_fp8(global v8h* out, v8i a, v16i b, v8h c, v2i index)
@@ -438,8 +514,10 @@ void test_amdgcn_swmmac_f16_16x16x128_fp8_fp8(global v8h* out, v8i a, v16i b, v8
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f16_16x16x128_fp8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META85:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.swmmac.f16.16x16x128.fp8.bf8.v8f16.v8i32.v16i32.v2i32(<8 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], <8 x half> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META86:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f16_16x16x128_fp8_bf8(global v8h* out, v8i a, v16i b, v8h c, v2i index)
@@ -449,8 +527,10 @@ void test_amdgcn_swmmac_f16_16x16x128_fp8_bf8(global v8h* out, v8i a, v16i b, v8
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f16_16x16x128_bf8_fp8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META87:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.swmmac.f16.16x16x128.bf8.fp8.v8f16.v8i32.v16i32.v2i32(<8 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], <8 x half> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META88:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f16_16x16x128_bf8_fp8(global v8h* out, v8i a, v16i b, v8h c, v2i index)
@@ -460,8 +540,10 @@ void test_amdgcn_swmmac_f16_16x16x128_bf8_fp8(global v8h* out, v8i a, v16i b, v8
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f16_16x16x128_bf8_bf8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META89:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.swmmac.f16.16x16x128.bf8.bf8.v8f16.v8i32.v16i32.v2i32(<8 x i32> [[A:%.*]], <16 x i32> [[B:%.*]], <8 x half> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META90:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f16_16x16x128_bf8_bf8(global v8h* out, v8i a, v16i b, v8h c, v2i index)
@@ -471,8 +553,10 @@ void test_amdgcn_swmmac_f16_16x16x128_bf8_bf8(global v8h* out, v8i a, v16i b, v8
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_i32_16x16x128_iu8(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META91:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.swmmac.i32.16x16x128.iu8.v8i32.v8i32.v16i32.v2i32(i1 false, <8 x i32> [[A:%.*]], i1 false, <16 x i32> [[B:%.*]], <8 x i32> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true, i1 false)
-// CHECK-GFX1250-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META92:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_i32_16x16x128_iu8(global v8i* out, v8i a, v16i b, v8i c, v2i index)
@@ -482,8 +566,10 @@ void test_amdgcn_swmmac_i32_16x16x128_iu8(global v8i* out, v8i a, v16i b, v8i c,
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_i32_16x16x128_iu8_clamp(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META93:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.swmmac.i32.16x16x128.iu8.v8i32.v8i32.v16i32.v2i32(i1 false, <8 x i32> [[A:%.*]], i1 false, <16 x i32> [[B:%.*]], <8 x i32> [[C:%.*]], <2 x i32> [[INDEX:%.*]], i1 false, i1 true, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META94:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_i32_16x16x128_iu8_clamp(global v8i* out, v8i a, v16i b, v8i c, v2i index)
@@ -493,8 +579,10 @@ void test_amdgcn_swmmac_i32_16x16x128_iu8_clamp(global v8i* out, v8i a, v16i b, 
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f32_16x16x64_f16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META95:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.swmmac.f32.16x16x64.f16.v8f32.v16f16.v32f16.i32(i1 false, <16 x half> [[A:%.*]], i1 false, <32 x half> [[B:%.*]], <8 x float> [[C:%.*]], i32 [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 32, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META96:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x64_f16(global v8f* out, v16h a, v32h b, v8f c, int index)
@@ -504,8 +592,10 @@ void test_amdgcn_swmmac_f32_16x16x64_f16(global v8f* out, v16h a, v32h b, v8f c,
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_swmmac_f16_16x16x64_f16(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META97:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.swmmac.f16.16x16x64.f16.v8f16.v16f16.v32f16.i32(i1 false, <16 x half> [[A:%.*]], i1 false, <32 x half> [[B:%.*]], <8 x half> [[C:%.*]], i32 [[INDEX:%.*]], i1 false, i1 true)
-// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA7]]
+// CHECK-GFX1250-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT:%.*]], align 16, !tbaa [[TBAA9]]
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META98:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f16_16x16x64_f16(global v8h* out, v16h a, v32h b, v8h c, int index)

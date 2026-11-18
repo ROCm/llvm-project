@@ -15,6 +15,7 @@ typedef float v8f __attribute__((ext_vector_type(8)));
 // CHECK-LABEL: define dso_local void @_Z30test_wmma_f16_16x16x64_fp8_fp8PDv8_DF16_Dv8_iS1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <8 x i32> noundef [[A:%.*]], <8 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
@@ -33,6 +34,7 @@ typedef float v8f __attribute__((ext_vector_type(8)));
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x64.fp8.fp8.v8f16.v8i32(<8 x i32> [[TMP0]], <8 x i32> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x64_fp8_fp8(v8h *out, v8i a, v8i b, v8h c) {
@@ -42,6 +44,7 @@ __device__ void test_wmma_f16_16x16x64_fp8_fp8(v8h *out, v8i a, v8i b, v8h c) {
 // CHECK-LABEL: define dso_local void @_Z30test_wmma_f16_16x16x64_fp8_bf8PDv8_DF16_Dv8_iS1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <8 x i32> noundef [[A:%.*]], <8 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
@@ -60,6 +63,7 @@ __device__ void test_wmma_f16_16x16x64_fp8_fp8(v8h *out, v8i a, v8i b, v8h c) {
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x64.fp8.bf8.v8f16.v8i32(<8 x i32> [[TMP0]], <8 x i32> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x64_fp8_bf8(v8h *out, v8i a, v8i b, v8h c) {
@@ -69,6 +73,7 @@ __device__ void test_wmma_f16_16x16x64_fp8_bf8(v8h *out, v8i a, v8i b, v8h c) {
 // CHECK-LABEL: define dso_local void @_Z30test_wmma_f16_16x16x64_bf8_fp8PDv8_DF16_Dv8_iS1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <8 x i32> noundef [[A:%.*]], <8 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
@@ -87,6 +92,7 @@ __device__ void test_wmma_f16_16x16x64_fp8_bf8(v8h *out, v8i a, v8i b, v8h c) {
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x64.bf8.fp8.v8f16.v8i32(<8 x i32> [[TMP0]], <8 x i32> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x64_bf8_fp8(v8h *out, v8i a, v8i b, v8h c) {
@@ -96,6 +102,7 @@ __device__ void test_wmma_f16_16x16x64_bf8_fp8(v8h *out, v8i a, v8i b, v8h c) {
 // CHECK-LABEL: define dso_local void @_Z30test_wmma_f16_16x16x64_bf8_bf8PDv8_DF16_Dv8_iS1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <8 x i32> noundef [[A:%.*]], <8 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
@@ -114,6 +121,7 @@ __device__ void test_wmma_f16_16x16x64_bf8_fp8(v8h *out, v8i a, v8i b, v8h c) {
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x64.bf8.bf8.v8f16.v8i32(<8 x i32> [[TMP0]], <8 x i32> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x64_bf8_bf8(v8h *out, v8i a, v8i b, v8h c) {
@@ -123,6 +131,7 @@ __device__ void test_wmma_f16_16x16x64_bf8_bf8(v8h *out, v8i a, v8i b, v8h c) {
 // CHECK-LABEL: define dso_local void @_Z31test_wmma_f16_16x16x128_fp8_fp8PDv8_DF16_Dv16_iS1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <16 x i32> noundef [[A:%.*]], <16 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
@@ -141,6 +150,7 @@ __device__ void test_wmma_f16_16x16x64_bf8_bf8(v8h *out, v8i a, v8i b, v8h c) {
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x128.fp8.fp8.v8f16.v16i32(<16 x i32> [[TMP0]], <16 x i32> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x128_fp8_fp8(v8h *out, v16i a, v16i b, v8h c) {
@@ -150,6 +160,7 @@ __device__ void test_wmma_f16_16x16x128_fp8_fp8(v8h *out, v16i a, v16i b, v8h c)
 // CHECK-LABEL: define dso_local void @_Z31test_wmma_f16_16x16x128_fp8_bf8PDv8_DF16_Dv16_iS1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <16 x i32> noundef [[A:%.*]], <16 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
@@ -168,6 +179,7 @@ __device__ void test_wmma_f16_16x16x128_fp8_fp8(v8h *out, v16i a, v16i b, v8h c)
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x128.fp8.bf8.v8f16.v16i32(<16 x i32> [[TMP0]], <16 x i32> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x128_fp8_bf8(v8h *out, v16i a, v16i b, v8h c) {
@@ -177,6 +189,7 @@ __device__ void test_wmma_f16_16x16x128_fp8_bf8(v8h *out, v16i a, v16i b, v8h c)
 // CHECK-LABEL: define dso_local void @_Z31test_wmma_f16_16x16x128_bf8_fp8PDv8_DF16_Dv16_iS1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <16 x i32> noundef [[A:%.*]], <16 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
@@ -195,6 +208,7 @@ __device__ void test_wmma_f16_16x16x128_fp8_bf8(v8h *out, v16i a, v16i b, v8h c)
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x128.bf8.fp8.v8f16.v16i32(<16 x i32> [[TMP0]], <16 x i32> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x128_bf8_fp8(v8h *out, v16i a, v16i b, v8h c) {
@@ -204,6 +218,7 @@ __device__ void test_wmma_f16_16x16x128_bf8_fp8(v8h *out, v16i a, v16i b, v8h c)
 // CHECK-LABEL: define dso_local void @_Z31test_wmma_f16_16x16x128_bf8_bf8PDv8_DF16_Dv16_iS1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <16 x i32> noundef [[A:%.*]], <16 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
@@ -222,6 +237,7 @@ __device__ void test_wmma_f16_16x16x128_bf8_fp8(v8h *out, v16i a, v16i b, v8h c)
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x128.bf8.bf8.v8f16.v16i32(<16 x i32> [[TMP0]], <16 x i32> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x128_bf8_bf8(v8h *out, v16i a, v16i b, v8h c) {
@@ -231,6 +247,7 @@ __device__ void test_wmma_f16_16x16x128_bf8_bf8(v8h *out, v16i a, v16i b, v8h c)
 // CHECK-LABEL: define dso_local void @_Z26test_wmma_f32_16x16x32_f16PDv8_fDv16_DF16_S1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <16 x half> noundef [[A:%.*]], <16 x half> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <16 x half>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x half>, align 32, addrspace(5)
@@ -249,6 +266,7 @@ __device__ void test_wmma_f16_16x16x128_bf8_bf8(v8h *out, v16i a, v16i b, v8h c)
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x float> @llvm.amdgcn.wmma.f32.16x16x32.f16.v8f32.v16f16(<16 x half> [[TMP0]], <16 x half> [[TMP1]], i16 0, <8 x float> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x float> [[TMP3]], ptr [[TMP4]], align 32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f32_16x16x32_f16(v8f *out, v16h a, v16h b, v8f c) {
@@ -258,6 +276,7 @@ __device__ void test_wmma_f32_16x16x32_f16(v8f *out, v16h a, v16h b, v8f c) {
 // CHECK-LABEL: define dso_local void @_Z26test_wmma_f16_16x16x32_f16PDv8_DF16_Dv16_DF16_S1_S_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <16 x half> noundef [[A:%.*]], <16 x half> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <16 x half>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x half>, align 32, addrspace(5)
@@ -276,6 +295,7 @@ __device__ void test_wmma_f32_16x16x32_f16(v8f *out, v16h a, v16h b, v8f c) {
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x32.f16.v8f16.v16f16(<16 x half> [[TMP0]], <16 x half> [[TMP1]], i16 0, <8 x half> [[TMP2]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_wmma_f16_16x16x32_f16(v8h *out, v16h a, v16h b, v8h c) {
@@ -285,6 +305,7 @@ __device__ void test_wmma_f16_16x16x32_f16(v8h *out, v16h a, v16h b, v8h c) {
 // CHECK-LABEL: define dso_local void @_Z33test_swmmac_f16_16x16x128_fp8_fp8PDv8_DF16_Dv8_iDv16_iS_Dv2_i(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <8 x i32> noundef [[A:%.*]], <16 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]], <2 x i32> noundef [[INDEX:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
@@ -307,6 +328,7 @@ __device__ void test_wmma_f16_16x16x32_f16(v8h *out, v16h a, v16h b, v8h c) {
 // CHECK-NEXT:    [[TMP4:%.*]] = call contract <8 x half> @llvm.amdgcn.swmmac.f16.16x16x128.fp8.fp8.v8f16.v8i32.v16i32.v2i32(<8 x i32> [[TMP0]], <16 x i32> [[TMP1]], <8 x half> [[TMP2]], <2 x i32> [[TMP3]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP4]], ptr [[TMP5]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_swmmac_f16_16x16x128_fp8_fp8(v8h *out, v8i a, v16i b, v8h c, v2i index) {
@@ -316,6 +338,7 @@ __device__ void test_swmmac_f16_16x16x128_fp8_fp8(v8h *out, v8i a, v16i b, v8h c
 // CHECK-LABEL: define dso_local void @_Z33test_swmmac_f16_16x16x128_fp8_bf8PDv8_DF16_Dv8_iDv16_iS_Dv2_i(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <8 x i32> noundef [[A:%.*]], <16 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]], <2 x i32> noundef [[INDEX:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
@@ -338,6 +361,7 @@ __device__ void test_swmmac_f16_16x16x128_fp8_fp8(v8h *out, v8i a, v16i b, v8h c
 // CHECK-NEXT:    [[TMP4:%.*]] = call contract <8 x half> @llvm.amdgcn.swmmac.f16.16x16x128.fp8.bf8.v8f16.v8i32.v16i32.v2i32(<8 x i32> [[TMP0]], <16 x i32> [[TMP1]], <8 x half> [[TMP2]], <2 x i32> [[TMP3]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP4]], ptr [[TMP5]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_swmmac_f16_16x16x128_fp8_bf8(v8h *out, v8i a, v16i b, v8h c, v2i index) {
@@ -347,6 +371,7 @@ __device__ void test_swmmac_f16_16x16x128_fp8_bf8(v8h *out, v8i a, v16i b, v8h c
 // CHECK-LABEL: define dso_local void @_Z33test_swmmac_f16_16x16x128_bf8_fp8PDv8_DF16_Dv8_iDv16_iS_Dv2_i(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <8 x i32> noundef [[A:%.*]], <16 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]], <2 x i32> noundef [[INDEX:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
@@ -369,6 +394,7 @@ __device__ void test_swmmac_f16_16x16x128_fp8_bf8(v8h *out, v8i a, v16i b, v8h c
 // CHECK-NEXT:    [[TMP4:%.*]] = call contract <8 x half> @llvm.amdgcn.swmmac.f16.16x16x128.bf8.fp8.v8f16.v8i32.v16i32.v2i32(<8 x i32> [[TMP0]], <16 x i32> [[TMP1]], <8 x half> [[TMP2]], <2 x i32> [[TMP3]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP4]], ptr [[TMP5]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_swmmac_f16_16x16x128_bf8_fp8(v8h *out, v8i a, v16i b, v8h c, v2i index) {
@@ -378,6 +404,7 @@ __device__ void test_swmmac_f16_16x16x128_bf8_fp8(v8h *out, v8i a, v16i b, v8h c
 // CHECK-LABEL: define dso_local void @_Z33test_swmmac_f16_16x16x128_bf8_bf8PDv8_DF16_Dv8_iDv16_iS_Dv2_i(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <8 x i32> noundef [[A:%.*]], <16 x i32> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]], <2 x i32> noundef [[INDEX:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <16 x i32>, align 64, addrspace(5)
@@ -400,6 +427,7 @@ __device__ void test_swmmac_f16_16x16x128_bf8_fp8(v8h *out, v8i a, v16i b, v8h c
 // CHECK-NEXT:    [[TMP4:%.*]] = call contract <8 x half> @llvm.amdgcn.swmmac.f16.16x16x128.bf8.bf8.v8f16.v8i32.v16i32.v2i32(<8 x i32> [[TMP0]], <16 x i32> [[TMP1]], <8 x half> [[TMP2]], <2 x i32> [[TMP3]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP4]], ptr [[TMP5]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_swmmac_f16_16x16x128_bf8_bf8(v8h *out, v8i a, v16i b, v8h c, v2i index) {
@@ -409,6 +437,7 @@ __device__ void test_swmmac_f16_16x16x128_bf8_bf8(v8h *out, v8i a, v16i b, v8h c
 // CHECK-LABEL: define dso_local void @_Z28test_swmmac_f32_16x16x64_f16PDv8_fDv16_DF16_Dv32_DF16_S_i(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <16 x half> noundef [[A:%.*]], <32 x half> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <16 x half>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <32 x half>, align 64, addrspace(5)
@@ -431,6 +460,7 @@ __device__ void test_swmmac_f16_16x16x128_bf8_bf8(v8h *out, v8i a, v16i b, v8h c
 // CHECK-NEXT:    [[TMP4:%.*]] = call contract <8 x float> @llvm.amdgcn.swmmac.f32.16x16x64.f16.v8f32.v16f16.v32f16.i32(i1 false, <16 x half> [[TMP0]], i1 false, <32 x half> [[TMP1]], <8 x float> [[TMP2]], i32 [[TMP3]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x float> [[TMP4]], ptr [[TMP5]], align 32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_swmmac_f32_16x16x64_f16(v8f *out, v16h a, v32h b, v8f c, int index) {
@@ -440,6 +470,7 @@ __device__ void test_swmmac_f32_16x16x64_f16(v8f *out, v16h a, v32h b, v8f c, in
 // CHECK-LABEL: define dso_local void @_Z28test_swmmac_f16_16x16x64_f16PDv8_DF16_Dv16_DF16_Dv32_DF16_S_i(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <16 x half> noundef [[A:%.*]], <32 x half> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <16 x half>, align 32, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca <32 x half>, align 64, addrspace(5)
@@ -462,8 +493,43 @@ __device__ void test_swmmac_f32_16x16x64_f16(v8f *out, v16h a, v32h b, v8f c, in
 // CHECK-NEXT:    [[TMP4:%.*]] = call contract <8 x half> @llvm.amdgcn.swmmac.f16.16x16x64.f16.v8f16.v16f16.v32f16.i32(i1 false, <16 x half> [[TMP0]], i1 false, <32 x half> [[TMP1]], <8 x half> [[TMP2]], i32 [[TMP3]], i1 false, i1 true)
 // CHECK-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <8 x half> [[TMP4]], ptr [[TMP5]], align 16
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_swmmac_f16_16x16x64_f16(v8h *out, v16h a, v32h b, v8h c, int index) {
   *out = __builtin_amdgcn_swmmac_f16_16x16x64_f16(0, a, 0, b, c, index, false, true);
 }
+//.
+// CHECK: [[META3]] = !{i32 0, !"_Z30test_wmma_f16_16x16x64_fp8_fp8PDv8_DF16_Dv8_iS1_S_"}
+// CHECK: [[META4]] = !{i32 1, !"_Z30test_wmma_f16_16x16x64_fp8_fp8PDv8_DF16_Dv8_iS1_S_"}
+// CHECK: [[META5]] = !{i32 0, !"_Z30test_wmma_f16_16x16x64_fp8_bf8PDv8_DF16_Dv8_iS1_S_"}
+// CHECK: [[META6]] = !{i32 1, !"_Z30test_wmma_f16_16x16x64_fp8_bf8PDv8_DF16_Dv8_iS1_S_"}
+// CHECK: [[META7]] = !{i32 0, !"_Z30test_wmma_f16_16x16x64_bf8_fp8PDv8_DF16_Dv8_iS1_S_"}
+// CHECK: [[META8]] = !{i32 1, !"_Z30test_wmma_f16_16x16x64_bf8_fp8PDv8_DF16_Dv8_iS1_S_"}
+// CHECK: [[META9]] = !{i32 0, !"_Z30test_wmma_f16_16x16x64_bf8_bf8PDv8_DF16_Dv8_iS1_S_"}
+// CHECK: [[META10]] = !{i32 1, !"_Z30test_wmma_f16_16x16x64_bf8_bf8PDv8_DF16_Dv8_iS1_S_"}
+// CHECK: [[META11]] = !{i32 0, !"_Z31test_wmma_f16_16x16x128_fp8_fp8PDv8_DF16_Dv16_iS1_S_"}
+// CHECK: [[META12]] = !{i32 1, !"_Z31test_wmma_f16_16x16x128_fp8_fp8PDv8_DF16_Dv16_iS1_S_"}
+// CHECK: [[META13]] = !{i32 0, !"_Z31test_wmma_f16_16x16x128_fp8_bf8PDv8_DF16_Dv16_iS1_S_"}
+// CHECK: [[META14]] = !{i32 1, !"_Z31test_wmma_f16_16x16x128_fp8_bf8PDv8_DF16_Dv16_iS1_S_"}
+// CHECK: [[META15]] = !{i32 0, !"_Z31test_wmma_f16_16x16x128_bf8_fp8PDv8_DF16_Dv16_iS1_S_"}
+// CHECK: [[META16]] = !{i32 1, !"_Z31test_wmma_f16_16x16x128_bf8_fp8PDv8_DF16_Dv16_iS1_S_"}
+// CHECK: [[META17]] = !{i32 0, !"_Z31test_wmma_f16_16x16x128_bf8_bf8PDv8_DF16_Dv16_iS1_S_"}
+// CHECK: [[META18]] = !{i32 1, !"_Z31test_wmma_f16_16x16x128_bf8_bf8PDv8_DF16_Dv16_iS1_S_"}
+// CHECK: [[META19]] = !{i32 0, !"_Z26test_wmma_f32_16x16x32_f16PDv8_fDv16_DF16_S1_S_"}
+// CHECK: [[META20]] = !{i32 1, !"_Z26test_wmma_f32_16x16x32_f16PDv8_fDv16_DF16_S1_S_"}
+// CHECK: [[META21]] = !{i32 0, !"_Z26test_wmma_f16_16x16x32_f16PDv8_DF16_Dv16_DF16_S1_S_"}
+// CHECK: [[META22]] = !{i32 1, !"_Z26test_wmma_f16_16x16x32_f16PDv8_DF16_Dv16_DF16_S1_S_"}
+// CHECK: [[META23]] = !{i32 0, !"_Z33test_swmmac_f16_16x16x128_fp8_fp8PDv8_DF16_Dv8_iDv16_iS_Dv2_i"}
+// CHECK: [[META24]] = !{i32 1, !"_Z33test_swmmac_f16_16x16x128_fp8_fp8PDv8_DF16_Dv8_iDv16_iS_Dv2_i"}
+// CHECK: [[META25]] = !{i32 0, !"_Z33test_swmmac_f16_16x16x128_fp8_bf8PDv8_DF16_Dv8_iDv16_iS_Dv2_i"}
+// CHECK: [[META26]] = !{i32 1, !"_Z33test_swmmac_f16_16x16x128_fp8_bf8PDv8_DF16_Dv8_iDv16_iS_Dv2_i"}
+// CHECK: [[META27]] = !{i32 0, !"_Z33test_swmmac_f16_16x16x128_bf8_fp8PDv8_DF16_Dv8_iDv16_iS_Dv2_i"}
+// CHECK: [[META28]] = !{i32 1, !"_Z33test_swmmac_f16_16x16x128_bf8_fp8PDv8_DF16_Dv8_iDv16_iS_Dv2_i"}
+// CHECK: [[META29]] = !{i32 0, !"_Z33test_swmmac_f16_16x16x128_bf8_bf8PDv8_DF16_Dv8_iDv16_iS_Dv2_i"}
+// CHECK: [[META30]] = !{i32 1, !"_Z33test_swmmac_f16_16x16x128_bf8_bf8PDv8_DF16_Dv8_iDv16_iS_Dv2_i"}
+// CHECK: [[META31]] = !{i32 0, !"_Z28test_swmmac_f32_16x16x64_f16PDv8_fDv16_DF16_Dv32_DF16_S_i"}
+// CHECK: [[META32]] = !{i32 1, !"_Z28test_swmmac_f32_16x16x64_f16PDv8_fDv16_DF16_Dv32_DF16_S_i"}
+// CHECK: [[META33]] = !{i32 0, !"_Z28test_swmmac_f16_16x16x64_f16PDv8_DF16_Dv16_DF16_Dv32_DF16_S_i"}
+// CHECK: [[META34]] = !{i32 1, !"_Z28test_swmmac_f16_16x16x64_f16PDv8_DF16_Dv16_DF16_Dv32_DF16_S_i"}
+//.

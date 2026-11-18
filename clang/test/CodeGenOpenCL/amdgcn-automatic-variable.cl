@@ -5,19 +5,23 @@
 // CL12-LABEL: define dso_local void @func1(
 // CL12-SAME: ptr addrspace(5) noundef [[X:%.*]]) #[[ATTR0:[0-9]+]] {
 // CL12-NEXT:  [[ENTRY:.*:]]
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    [[X_ADDR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // CL12-NEXT:    store ptr addrspace(5) [[X]], ptr addrspace(5) [[X_ADDR]], align 4
 // CL12-NEXT:    [[TMP0:%.*]] = load ptr addrspace(5), ptr addrspace(5) [[X_ADDR]], align 4
 // CL12-NEXT:    store i32 1, ptr addrspace(5) [[TMP0]], align 4
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    ret void
 //
 // CL20-LABEL: define dso_local void @func1(
 // CL20-SAME: ptr noundef [[X:%.*]]) #[[ATTR0:[0-9]+]] {
 // CL20-NEXT:  [[ENTRY:.*:]]
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    [[X_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CL20-NEXT:    store ptr [[X]], ptr addrspace(5) [[X_ADDR]], align 8
 // CL20-NEXT:    [[TMP0:%.*]] = load ptr, ptr addrspace(5) [[X_ADDR]], align 8
 // CL20-NEXT:    store i32 1, ptr [[TMP0]], align 4
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    ret void
 //
 void func1(int *x) {
@@ -27,6 +31,7 @@ void func1(int *x) {
 // CL12-LABEL: define dso_local void @func2(
 // CL12-SAME: ) #[[ATTR0]] {
 // CL12-NEXT:  [[ENTRY:.*:]]
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    [[LV1:%.*]] = alloca i32, align 4, addrspace(5)
 // CL12-NEXT:    [[LV2:%.*]] = alloca i32, align 4, addrspace(5)
 // CL12-NEXT:    [[LA:%.*]] = alloca [100 x i32], align 4, addrspace(5)
@@ -40,14 +45,16 @@ void func1(int *x) {
 // CL12-NEXT:    store ptr addrspace(5) [[LV1]], ptr addrspace(5) [[LP1]], align 4
 // CL12-NEXT:    [[ARRAYDECAY:%.*]] = getelementptr inbounds [100 x i32], ptr addrspace(5) [[LA]], i64 0, i64 0
 // CL12-NEXT:    store ptr addrspace(5) [[ARRAYDECAY]], ptr addrspace(5) [[LP2]], align 4
-// CL12-NEXT:    call void @func1(ptr addrspace(5) noundef [[LV1]]) #[[ATTR2:[0-9]+]]
+// CL12-NEXT:    call void @func1(ptr addrspace(5) noundef [[LV1]]) #[[ATTR3:[0-9]+]]
 // CL12-NEXT:    store i32 4, ptr addrspace(5) [[LVC]], align 4
 // CL12-NEXT:    store i32 4, ptr addrspace(5) [[LV1]], align 4
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    ret void
 //
 // CL20-LABEL: define dso_local void @func2(
 // CL20-SAME: ) #[[ATTR0]] {
 // CL20-NEXT:  [[ENTRY:.*:]]
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    [[LV1:%.*]] = alloca i32, align 4, addrspace(5)
 // CL20-NEXT:    [[LV2:%.*]] = alloca i32, align 4, addrspace(5)
 // CL20-NEXT:    [[LA:%.*]] = alloca [100 x i32], align 4, addrspace(5)
@@ -64,9 +71,10 @@ void func1(int *x) {
 // CL20-NEXT:    [[ARRAYDECAY_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[ARRAYDECAY]] to ptr
 // CL20-NEXT:    store ptr [[ARRAYDECAY_ASCAST]], ptr addrspace(5) [[LP2]], align 8
 // CL20-NEXT:    [[LV1_ASCAST1:%.*]] = addrspacecast ptr addrspace(5) [[LV1]] to ptr
-// CL20-NEXT:    call void @func1(ptr noundef [[LV1_ASCAST1]]) #[[ATTR2:[0-9]+]]
+// CL20-NEXT:    call void @func1(ptr noundef [[LV1_ASCAST1]]) #[[ATTR3:[0-9]+]]
 // CL20-NEXT:    store i32 4, ptr addrspace(5) [[LVC]], align 4
 // CL20-NEXT:    store i32 4, ptr addrspace(5) [[LV1]], align 4
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    ret void
 //
 void func2(void) {
@@ -90,15 +98,19 @@ void func2(void) {
 // CL12-LABEL: define dso_local void @func3(
 // CL12-SAME: ) #[[ATTR0]] {
 // CL12-NEXT:  [[ENTRY:.*:]]
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    [[A:%.*]] = alloca [16 x [1 x float]], align 4, addrspace(5)
 // CL12-NEXT:    call void @llvm.memset.p5.i64(ptr addrspace(5) align 4 [[A]], i8 0, i64 64, i1 false)
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    ret void
 //
 // CL20-LABEL: define dso_local void @func3(
 // CL20-SAME: ) #[[ATTR0]] {
 // CL20-NEXT:  [[ENTRY:.*:]]
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    [[A:%.*]] = alloca [16 x [1 x float]], align 4, addrspace(5)
 // CL20-NEXT:    call void @llvm.memset.p5.i64(ptr addrspace(5) align 4 [[A]], i8 0, i64 64, i1 false)
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    ret void
 //
 void func3(void) {
@@ -108,23 +120,27 @@ void func3(void) {
 // CL12-LABEL: define dso_local void @wrong_store_type_private_pointer_alloca(
 // CL12-SAME: ) #[[ATTR0]] {
 // CL12-NEXT:  [[ENTRY:.*:]]
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    [[VAR:%.*]] = alloca i64, align 8, addrspace(5)
 // CL12-NEXT:    [[ALLOCA_ADDR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // CL12-NEXT:    store i64 5, ptr addrspace(5) [[VAR]], align 8
 // CL12-NEXT:    store ptr addrspace(5) [[VAR]], ptr addrspace(5) [[ALLOCA_ADDR]], align 4
 // CL12-NEXT:    [[TMP0:%.*]] = load ptr addrspace(5), ptr addrspace(5) [[ALLOCA_ADDR]], align 4
 // CL12-NEXT:    store i64 8, ptr addrspace(5) [[TMP0]], align 8
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    ret void
 //
 // CL20-LABEL: define dso_local void @wrong_store_type_private_pointer_alloca(
 // CL20-SAME: ) #[[ATTR0]] {
 // CL20-NEXT:  [[ENTRY:.*:]]
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    [[VAR:%.*]] = alloca i64, align 8, addrspace(5)
 // CL20-NEXT:    [[ALLOCA_ADDR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // CL20-NEXT:    store i64 5, ptr addrspace(5) [[VAR]], align 8
 // CL20-NEXT:    store ptr addrspace(5) [[VAR]], ptr addrspace(5) [[ALLOCA_ADDR]], align 4
 // CL20-NEXT:    [[TMP0:%.*]] = load ptr addrspace(5), ptr addrspace(5) [[ALLOCA_ADDR]], align 4
 // CL20-NEXT:    store i64 8, ptr addrspace(5) [[TMP0]], align 8
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    ret void
 //
 void wrong_store_type_private_pointer_alloca() {
@@ -139,17 +155,20 @@ void wrong_store_type_private_pointer_alloca() {
 // CL12-LABEL: define dso_local void @wrong_store_type_private_pointer_as_generic_alloca(
 // CL12-SAME: ) #[[ATTR0]] {
 // CL12-NEXT:  [[ENTRY:.*:]]
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    [[VAR:%.*]] = alloca i64, align 8, addrspace(5)
 // CL12-NEXT:    [[ALLOCA_ADDR_AS_GENERIC:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // CL12-NEXT:    store i64 5, ptr addrspace(5) [[VAR]], align 8
 // CL12-NEXT:    store ptr addrspace(5) [[VAR]], ptr addrspace(5) [[ALLOCA_ADDR_AS_GENERIC]], align 4
 // CL12-NEXT:    [[TMP0:%.*]] = load ptr addrspace(5), ptr addrspace(5) [[ALLOCA_ADDR_AS_GENERIC]], align 4
 // CL12-NEXT:    store i64 9, ptr addrspace(5) [[TMP0]], align 8
+// CL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CL12-NEXT:    ret void
 //
 // CL20-LABEL: define dso_local void @wrong_store_type_private_pointer_as_generic_alloca(
 // CL20-SAME: ) #[[ATTR0]] {
 // CL20-NEXT:  [[ENTRY:.*:]]
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    [[VAR:%.*]] = alloca i64, align 8, addrspace(5)
 // CL20-NEXT:    [[ALLOCA_ADDR_AS_GENERIC:%.*]] = alloca ptr, align 8, addrspace(5)
 // CL20-NEXT:    store i64 5, ptr addrspace(5) [[VAR]], align 8
@@ -157,6 +176,7 @@ void wrong_store_type_private_pointer_alloca() {
 // CL20-NEXT:    store ptr [[VAR_ASCAST]], ptr addrspace(5) [[ALLOCA_ADDR_AS_GENERIC]], align 8
 // CL20-NEXT:    [[TMP0:%.*]] = load ptr, ptr addrspace(5) [[ALLOCA_ADDR_AS_GENERIC]], align 8
 // CL20-NEXT:    store i64 9, ptr [[TMP0]], align 8
+// CL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CL20-NEXT:    ret void
 //
 void wrong_store_type_private_pointer_as_generic_alloca() {
@@ -167,3 +187,26 @@ void wrong_store_type_private_pointer_as_generic_alloca() {
   long *alloca_addr_as_generic = &var;
   *alloca_addr_as_generic = 9;
 }
+//.
+// CL12: [[META3]] = !{i32 0, !"func1"}
+// CL12: [[META4]] = !{i32 1, !"func1"}
+// CL12: [[META5]] = !{i32 0, !"func2"}
+// CL12: [[META6]] = !{i32 1, !"func2"}
+// CL12: [[META7]] = !{i32 0, !"func3"}
+// CL12: [[META8]] = !{i32 1, !"func3"}
+// CL12: [[META9]] = !{i32 0, !"wrong_store_type_private_pointer_alloca"}
+// CL12: [[META10]] = !{i32 1, !"wrong_store_type_private_pointer_alloca"}
+// CL12: [[META11]] = !{i32 0, !"wrong_store_type_private_pointer_as_generic_alloca"}
+// CL12: [[META12]] = !{i32 1, !"wrong_store_type_private_pointer_as_generic_alloca"}
+//.
+// CL20: [[META3]] = !{i32 0, !"func1"}
+// CL20: [[META4]] = !{i32 1, !"func1"}
+// CL20: [[META5]] = !{i32 0, !"func2"}
+// CL20: [[META6]] = !{i32 1, !"func2"}
+// CL20: [[META7]] = !{i32 0, !"func3"}
+// CL20: [[META8]] = !{i32 1, !"func3"}
+// CL20: [[META9]] = !{i32 0, !"wrong_store_type_private_pointer_alloca"}
+// CL20: [[META10]] = !{i32 1, !"wrong_store_type_private_pointer_alloca"}
+// CL20: [[META11]] = !{i32 0, !"wrong_store_type_private_pointer_as_generic_alloca"}
+// CL20: [[META12]] = !{i32 1, !"wrong_store_type_private_pointer_as_generic_alloca"}
+//.

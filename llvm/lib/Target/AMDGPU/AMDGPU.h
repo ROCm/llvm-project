@@ -117,6 +117,7 @@ ModulePass *
 createAMDGPULowerModuleLDSLegacyPass(const AMDGPUTargetMachine *TM = nullptr);
 ModulePass *createAMDGPULowerBufferFatPointersPass();
 ModulePass *createAMDGPULowerIntrinsicsLegacyPass();
+ModulePass *createAMDGPUSQTTLowerLegacyPass();
 FunctionPass *createSIModeRegisterPass();
 FunctionPass *createAMDGPUPreloadKernArgPrologLegacyPass();
 ModulePass *createAMDGPUPreloadKernelArgumentsLegacyPass(const TargetMachine *);
@@ -213,6 +214,21 @@ void initializeAMDGPULowerIntrinsicsLegacyPass(PassRegistry &);
 struct AMDGPULowerIntrinsicsPass
     : OptionalPassInfoMixin<AMDGPULowerIntrinsicsPass> {
   AMDGPULowerIntrinsicsPass(const AMDGPUTargetMachine &TM) : TM(TM) {}
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+
+private:
+  const AMDGPUTargetMachine &TM;
+};
+
+struct AMDGPUSQTTFunctionInstrumentPass
+    : RequiredPassInfoMixin<AMDGPUSQTTFunctionInstrumentPass> {
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+};
+
+void initializeAMDGPUSQTTLowerLegacyPass(PassRegistry &);
+
+struct AMDGPUSQTTLowerPass : OptionalPassInfoMixin<AMDGPUSQTTLowerPass> {
+  AMDGPUSQTTLowerPass(const AMDGPUTargetMachine &TM) : TM(TM) {}
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
 
 private:

@@ -11,6 +11,7 @@ __device__ double global_double;
 // CHECK-LABEL: define dso_local void @_Z33test_global_atomic_fadd_f32_validPff(
 // CHECK-SAME: ptr noundef [[PTR:%.*]], float noundef [[VAL:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca float, align 4, addrspace(5)
@@ -22,11 +23,12 @@ __device__ double global_double;
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr [[TMP0]] to ptr addrspace(1)
 // CHECK-NEXT:    [[TMP2:%.*]] = load float, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    [[TMP3:%.*]] = atomicrmw fadd ptr addrspace(1) [[TMP1]], float [[TMP2]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META3:![0-9]+]], !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP3:%.*]] = atomicrmw fadd ptr addrspace(1) [[TMP1]], float [[TMP2]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META4:![0-9]+]], !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store float [[TMP3]], ptr [[RESULT_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP4:%.*]] = load float, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    [[TMP5:%.*]] = atomicrmw fadd ptr addrspace(1) @global_float, float [[TMP4]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META3]], !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP5:%.*]] = atomicrmw fadd ptr addrspace(1) @global_float, float [[TMP4]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store float [[TMP5]], ptr [[RESULT_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z33test_global_atomic_fadd_f32_validPff(
@@ -66,6 +68,7 @@ __device__ void test_global_atomic_fadd_f32_valid(float *ptr, float val) {
 // CHECK-LABEL: define dso_local void @_Z33test_global_atomic_fadd_f64_validPdd(
 // CHECK-SAME: ptr noundef [[PTR:%.*]], double noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca double, align 8, addrspace(5)
@@ -77,11 +80,12 @@ __device__ void test_global_atomic_fadd_f32_valid(float *ptr, float val) {
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr [[TMP0]] to ptr addrspace(1)
 // CHECK-NEXT:    [[TMP2:%.*]] = load double, ptr [[VAL_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP3:%.*]] = atomicrmw fadd ptr addrspace(1) [[TMP1]], double [[TMP2]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP3:%.*]] = atomicrmw fadd ptr addrspace(1) [[TMP1]], double [[TMP2]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store double [[TMP3]], ptr [[RESULT_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP4:%.*]] = load double, ptr [[VAL_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP5:%.*]] = atomicrmw fadd ptr addrspace(1) @global_double, double [[TMP4]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP5:%.*]] = atomicrmw fadd ptr addrspace(1) @global_double, double [[TMP4]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store double [[TMP5]], ptr [[RESULT_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z33test_global_atomic_fadd_f64_validPdd(
@@ -118,7 +122,11 @@ __device__ void test_global_atomic_fadd_f64_valid(double *ptr, double val) {
   }
 }
 //.
-// CHECK: [[META3]] = !{}
+// CHECK: [[META3]] = !{i32 0, !"_Z33test_global_atomic_fadd_f32_validPff"}
+// CHECK: [[META4]] = !{}
+// CHECK: [[META5]] = !{i32 1, !"_Z33test_global_atomic_fadd_f32_validPff"}
+// CHECK: [[META6]] = !{i32 0, !"_Z33test_global_atomic_fadd_f64_validPdd"}
+// CHECK: [[META7]] = !{i32 1, !"_Z33test_global_atomic_fadd_f64_validPdd"}
 //.
 // SPIRV: [[META4]] = !{!"has.atomic-fadd-rtn-insts"}
 // SPIRV: [[META5]] = !{}

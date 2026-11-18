@@ -22,7 +22,9 @@ extern const std::nothrow_t nothrow;
 // AMDGPU-LABEL: define hidden noundef ptr @_Z17new_stuff_nothrowv
 // AMDGPU-SAME: () #[[ATTR0:[0-9]+]] {
 // AMDGPU-NEXT:  entry:
-// AMDGPU-NEXT:    [[CALL:%.*]] = call noalias noundef ptr @_ZnwmRKSt9nothrow_t(i64 noundef 4, ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR4:[0-9]+]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    [[CALL:%.*]] = call noalias noundef ptr @_ZnwmRKSt9nothrow_t(i64 noundef 4, ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR5:[0-9]+]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret ptr [[CALL]]
 //
 int* new_stuff_nothrow() {
@@ -50,13 +52,17 @@ int* new_stuff_nothrow() {
 // AMDGPU-CXX03-LABEL: define hidden noundef ptr @_Z23new_array_stuff_nothrowv
 // AMDGPU-CXX03-SAME: () #[[ATTR0]] {
 // AMDGPU-CXX03-NEXT:  entry:
-// AMDGPU-CXX03-NEXT:    [[CALL:%.*]] = call noalias noundef ptr @_ZnamRKSt9nothrow_t(i64 noundef 136, ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR4]]
+// AMDGPU-CXX03-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-CXX03-NEXT:    [[CALL:%.*]] = call noalias noundef ptr @_ZnamRKSt9nothrow_t(i64 noundef 136, ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR5]]
+// AMDGPU-CXX03-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX03-NEXT:    ret ptr [[CALL]]
 //
 // AMDGPU-CXX11-LABEL: define hidden noundef ptr @_Z23new_array_stuff_nothrowv
 // AMDGPU-CXX11-SAME: () #[[ATTR0]] {
 // AMDGPU-CXX11-NEXT:  entry:
-// AMDGPU-CXX11-NEXT:    [[CALL:%.*]] = call noalias noundef ptr @_ZnamRKSt9nothrow_t(i64 noundef 136, ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR7:[0-9]+]]
+// AMDGPU-CXX11-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-CXX11-NEXT:    [[CALL:%.*]] = call noalias noundef ptr @_ZnamRKSt9nothrow_t(i64 noundef 136, ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR8:[0-9]+]]
+// AMDGPU-CXX11-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX11-NEXT:    ret ptr [[CALL]]
 //
 int* new_array_stuff_nothrow() {
@@ -93,21 +99,25 @@ int* new_array_stuff_nothrow() {
 // AMDGPU-CXX03-LABEL: define hidden void @_Z20delete_stuff_nothrowPi
 // AMDGPU-CXX03-SAME: (ptr noundef [[PTR:%.*]]) #[[ATTR0]] {
 // AMDGPU-CXX03-NEXT:  entry:
+// AMDGPU-CXX03-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX03-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGPU-CXX03-NEXT:    [[PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[PTR_ADDR]] to ptr
 // AMDGPU-CXX03-NEXT:    store ptr [[PTR]], ptr [[PTR_ADDR_ASCAST]], align 8
 // AMDGPU-CXX03-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
-// AMDGPU-CXX03-NEXT:    call void @_ZdlPvRKSt9nothrow_t(ptr noundef [[TMP0]], ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR6:[0-9]+]]
+// AMDGPU-CXX03-NEXT:    call void @_ZdlPvRKSt9nothrow_t(ptr noundef [[TMP0]], ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR7:[0-9]+]]
+// AMDGPU-CXX03-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX03-NEXT:    ret void
 //
 // AMDGPU-CXX11-LABEL: define hidden void @_Z20delete_stuff_nothrowPi
 // AMDGPU-CXX11-SAME: (ptr noundef [[PTR:%.*]]) #[[ATTR0]] {
 // AMDGPU-CXX11-NEXT:  entry:
+// AMDGPU-CXX11-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX11-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGPU-CXX11-NEXT:    [[PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[PTR_ADDR]] to ptr
 // AMDGPU-CXX11-NEXT:    store ptr [[PTR]], ptr [[PTR_ADDR_ASCAST]], align 8
 // AMDGPU-CXX11-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
-// AMDGPU-CXX11-NEXT:    call void @_ZdlPvRKSt9nothrow_t(ptr noundef [[TMP0]], ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR8:[0-9]+]]
+// AMDGPU-CXX11-NEXT:    call void @_ZdlPvRKSt9nothrow_t(ptr noundef [[TMP0]], ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR9:[0-9]+]]
+// AMDGPU-CXX11-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX11-NEXT:    ret void
 //
 void delete_stuff_nothrow(int* ptr) {
@@ -144,21 +154,25 @@ void delete_stuff_nothrow(int* ptr) {
 // AMDGPU-CXX03-LABEL: define hidden void @_Z26delete_array_stuff_nothrowPi
 // AMDGPU-CXX03-SAME: (ptr noundef [[PTR:%.*]]) #[[ATTR0]] {
 // AMDGPU-CXX03-NEXT:  entry:
+// AMDGPU-CXX03-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX03-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGPU-CXX03-NEXT:    [[PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[PTR_ADDR]] to ptr
 // AMDGPU-CXX03-NEXT:    store ptr [[PTR]], ptr [[PTR_ADDR_ASCAST]], align 8
 // AMDGPU-CXX03-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
-// AMDGPU-CXX03-NEXT:    call void @_ZdaPvRKSt9nothrow_t(ptr noundef [[TMP0]], ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR6]]
+// AMDGPU-CXX03-NEXT:    call void @_ZdaPvRKSt9nothrow_t(ptr noundef [[TMP0]], ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR7]]
+// AMDGPU-CXX03-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX03-NEXT:    ret void
 //
 // AMDGPU-CXX11-LABEL: define hidden void @_Z26delete_array_stuff_nothrowPi
 // AMDGPU-CXX11-SAME: (ptr noundef [[PTR:%.*]]) #[[ATTR0]] {
 // AMDGPU-CXX11-NEXT:  entry:
+// AMDGPU-CXX11-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX11-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGPU-CXX11-NEXT:    [[PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[PTR_ADDR]] to ptr
 // AMDGPU-CXX11-NEXT:    store ptr [[PTR]], ptr [[PTR_ADDR_ASCAST]], align 8
 // AMDGPU-CXX11-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
-// AMDGPU-CXX11-NEXT:    call void @_ZdaPvRKSt9nothrow_t(ptr noundef [[TMP0]], ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR8]]
+// AMDGPU-CXX11-NEXT:    call void @_ZdaPvRKSt9nothrow_t(ptr noundef [[TMP0]], ptr noundef nonnull align 1 dereferenceable(1) addrspacecast (ptr addrspace(1) @nothrow to ptr)) #[[ATTR9]]
+// AMDGPU-CXX11-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-CXX11-NEXT:    ret void
 //
 void delete_array_stuff_nothrow(int* ptr) {

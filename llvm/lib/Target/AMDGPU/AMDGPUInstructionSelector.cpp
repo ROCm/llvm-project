@@ -26,6 +26,7 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include <optional>
 
 #define DEBUG_TYPE "amdgpu-isel"
@@ -1753,6 +1754,23 @@ bool AMDGPUInstructionSelector::selectRelocConstant(MachineInstr &I) const {
   return true;
 }
 
+bool AMDGPUInstructionSelector::selectSQTTEvent(MachineInstr &I) const {
+  std::optional<ValueAndVReg> EventID =
+      getIConstantVRegValWithLookThrough(I.getOperand(2).getReg(), *MRI);
+  if (!EventID)
+    return false;
+
+  MachineBasicBlock &BB = *I.getParent();
+  const DebugLoc &DL = I.getDebugLoc();
+  int64_t Id = EventID->Value.getZExtValue();
+  // Experiment: the event is lowered to a comment. There is nothing to set up:
+  // no m0 write, no absolute id and no scheduling barriers.
+  BuildMI(BB, &I, DL, TII.get(AMDGPU::SQTT_EVENT_COMMENT)).addImm(Id);
+
+  I.eraseFromParent();
+  return true;
+}
+
 bool AMDGPUInstructionSelector::selectGroupStaticSize(MachineInstr &I) const {
   Triple::OSType OS = MF->getTarget().getTargetTriple().getOS();
 
@@ -2434,6 +2452,8 @@ bool AMDGPUInstructionSelector::selectG_INTRINSIC_W_SIDE_EFFECTS(
     return selectDSAppendConsume(I, false);
   case Intrinsic::amdgcn_init_whole_wave:
     return selectInitWholeWave(I);
+  case Intrinsic::amdgcn_sqtt_event:
+    return selectSQTTEvent(I);
   case Intrinsic::amdgcn_raw_buffer_load_lds:
   case Intrinsic::amdgcn_raw_buffer_load_async_lds:
   case Intrinsic::amdgcn_raw_ptr_buffer_load_lds:

@@ -9,11 +9,13 @@
 // GCN-LABEL: define dso_local void @_Z25test_memory_fence_successv(
 // GCN-SAME: ) #[[ATTR0:[0-9]+]] {
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    fence syncscope("workgroup") seq_cst
 // GCN-NEXT:    fence syncscope("agent") acquire
 // GCN-NEXT:    fence seq_cst
 // GCN-NEXT:    fence syncscope("agent") acq_rel
 // GCN-NEXT:    fence syncscope("workgroup") release
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @_Z25test_memory_fence_successv(
@@ -42,11 +44,13 @@ void test_memory_fence_success() {
 // GCN-LABEL: define dso_local void @_Z10test_localv(
 // GCN-SAME: ) #[[ATTR0]] {
 // GCN-NEXT:  entry:
-// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META2:![0-9]+]]
-// GCN-NEXT:    fence syncscope("agent") acquire, !mmra [[META2]]
-// GCN-NEXT:    fence seq_cst, !mmra [[META2]]
-// GCN-NEXT:    fence syncscope("agent") acq_rel, !mmra [[META2]]
-// GCN-NEXT:    fence syncscope("workgroup") release, !mmra [[META2]]
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
+// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META5:![0-9]+]]
+// GCN-NEXT:    fence syncscope("agent") acquire, !mmra [[META5]]
+// GCN-NEXT:    fence seq_cst, !mmra [[META5]]
+// GCN-NEXT:    fence syncscope("agent") acq_rel, !mmra [[META5]]
+// GCN-NEXT:    fence syncscope("workgroup") release, !mmra [[META5]]
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @_Z10test_localv(
@@ -74,11 +78,13 @@ void test_local() {
 // GCN-LABEL: define dso_local void @_Z11test_globalv(
 // GCN-SAME: ) #[[ATTR0]] {
 // GCN-NEXT:  entry:
-// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META3:![0-9]+]]
-// GCN-NEXT:    fence syncscope("agent") acquire, !mmra [[META3]]
-// GCN-NEXT:    fence seq_cst, !mmra [[META3]]
-// GCN-NEXT:    fence syncscope("agent") acq_rel, !mmra [[META3]]
-// GCN-NEXT:    fence syncscope("workgroup") release, !mmra [[META3]]
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
+// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META8:![0-9]+]]
+// GCN-NEXT:    fence syncscope("agent") acquire, !mmra [[META8]]
+// GCN-NEXT:    fence seq_cst, !mmra [[META8]]
+// GCN-NEXT:    fence syncscope("agent") acq_rel, !mmra [[META8]]
+// GCN-NEXT:    fence syncscope("workgroup") release, !mmra [[META8]]
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @_Z11test_globalv(
@@ -106,11 +112,13 @@ void test_global() {
 // GCN-LABEL: define dso_local void @_Z10test_imagev(
 // GCN-SAME: ) #[[ATTR0]] {
 // GCN-NEXT:  entry:
-// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META2]]
-// GCN-NEXT:    fence syncscope("agent") acquire, !mmra [[META2]]
-// GCN-NEXT:    fence seq_cst, !mmra [[META2]]
-// GCN-NEXT:    fence syncscope("agent") acq_rel, !mmra [[META2]]
-// GCN-NEXT:    fence syncscope("workgroup") release, !mmra [[META2]]
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META5]]
+// GCN-NEXT:    fence syncscope("agent") acquire, !mmra [[META5]]
+// GCN-NEXT:    fence seq_cst, !mmra [[META5]]
+// GCN-NEXT:    fence syncscope("agent") acq_rel, !mmra [[META5]]
+// GCN-NEXT:    fence syncscope("workgroup") release, !mmra [[META5]]
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @_Z10test_imagev(
@@ -138,8 +146,10 @@ void test_image() {
 // GCN-LABEL: define dso_local void @_Z10test_mixedv(
 // GCN-SAME: ) #[[ATTR0]] {
 // GCN-NEXT:  entry:
-// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META4:![0-9]+]]
-// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META4]]
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META13:![0-9]+]]
+// GCN-NEXT:    fence syncscope("workgroup") seq_cst, !mmra [[META13]]
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @_Z10test_mixedv(
@@ -157,7 +167,9 @@ void test_mixed() {
 // GCN-LABEL: define dso_local void @_Z12test_clusterv(
 // GCN-SAME: ) #[[ATTR0]] {
 // GCN-NEXT:  entry:
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    fence syncscope("cluster") seq_cst
+// GCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // GCN-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @_Z12test_clusterv(
@@ -170,9 +182,21 @@ void test_cluster() {
   __builtin_amdgcn_fence(__ATOMIC_SEQ_CST, "cluster");
 }
 //.
-// GCN: [[META2]] = !{!"amdgpu-synchronize-as", !"local"}
-// GCN: [[META3]] = !{!"amdgpu-synchronize-as", !"global"}
-// GCN: [[META4]] = !{[[META3]], [[META2]]}
+// GCN: [[META2]] = !{i32 0, !"_Z25test_memory_fence_successv"}
+// GCN: [[META3]] = !{i32 1, !"_Z25test_memory_fence_successv"}
+// GCN: [[META4]] = !{i32 0, !"_Z10test_localv"}
+// GCN: [[META5]] = !{!"amdgpu-synchronize-as", !"local"}
+// GCN: [[META6]] = !{i32 1, !"_Z10test_localv"}
+// GCN: [[META7]] = !{i32 0, !"_Z11test_globalv"}
+// GCN: [[META8]] = !{!"amdgpu-synchronize-as", !"global"}
+// GCN: [[META9]] = !{i32 1, !"_Z11test_globalv"}
+// GCN: [[META10]] = !{i32 0, !"_Z10test_imagev"}
+// GCN: [[META11]] = !{i32 1, !"_Z10test_imagev"}
+// GCN: [[META12]] = !{i32 0, !"_Z10test_mixedv"}
+// GCN: [[META13]] = !{[[META8]], [[META5]]}
+// GCN: [[META14]] = !{i32 1, !"_Z10test_mixedv"}
+// GCN: [[META15]] = !{i32 0, !"_Z12test_clusterv"}
+// GCN: [[META16]] = !{i32 1, !"_Z12test_clusterv"}
 //.
 // AMDGCNSPIRV: [[META2]] = !{!"amdgpu-synchronize-as", !"local"}
 // AMDGCNSPIRV: [[META3]] = !{!"amdgpu-synchronize-as", !"global"}

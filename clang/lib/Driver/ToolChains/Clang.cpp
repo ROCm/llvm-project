@@ -6766,6 +6766,12 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
+  // Experiment: -fsqtt-instrument is always on for AMDGPU (device) code.
+  if (Triple.isAMDGPU() ||
+      (Args.hasArg(options::OPT_fsqtt_instrument) && (!IsHIP || IsHIPDevice))) {
+    CmdArgs.push_back("-D__SQTT_INSTRUMENT__");
+    CmdArgs.push_back("-fsqtt-instrument");
+  }
   Args.AddLastArg(CmdArgs, options::OPT_finstrument_functions,
                   options::OPT_finstrument_functions_after_inlining,
                   options::OPT_finstrument_function_entry_bare);

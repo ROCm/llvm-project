@@ -61,6 +61,7 @@ __attribute__((overloadable))
 // OPENMP-LABEL: define weak hidden void @_Z20attribute_check_hackv
 // OPENMP-SAME: () #[[ATTR0:[0-9]+]] {
 // OPENMP-NEXT:  entry:
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // OPENMP-NEXT:    call void @llvm.trap()
 // OPENMP-NEXT:    unreachable
 //
@@ -71,21 +72,25 @@ void attribute_check_hack(void) {
 // OPENMP-LABEL: define internal float @_ZL18test_ockl_acos_f32f
 // OPENMP-SAME: (float [[SRC:%.*]]) #[[ATTR2:[0-9]+]] {
 // OPENMP-NEXT:  entry:
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // OPENMP-NEXT:    [[SRC_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // OPENMP-NEXT:    [[SRC_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SRC_ADDR]] to ptr
 // OPENMP-NEXT:    store float [[SRC]], ptr [[SRC_ADDR_ASCAST]], align 4
 // OPENMP-NEXT:    [[TMP0:%.*]] = load float, ptr [[SRC_ADDR_ASCAST]], align 4
-// OPENMP-NEXT:    [[CALL:%.*]] = call float @__ocml_acos_f32(float [[TMP0]]) #[[ATTR4:[0-9]+]]
+// OPENMP-NEXT:    [[CALL:%.*]] = call float @__ocml_acos_f32(float [[TMP0]]) #[[ATTR5:[0-9]+]]
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPENMP-NEXT:    ret float [[CALL]]
 //
 // HIP-LABEL: define internal float @_ZL18test_ockl_acos_f32f
 // HIP-SAME: (float [[SRC:%.*]]) #[[ATTR0:[0-9]+]] {
 // HIP-NEXT:  entry:
+// HIP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // HIP-NEXT:    [[SRC_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // HIP-NEXT:    [[SRC_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SRC_ADDR]] to ptr
 // HIP-NEXT:    store float [[SRC]], ptr [[SRC_ADDR_ASCAST]], align 4
 // HIP-NEXT:    [[TMP0:%.*]] = load float, ptr [[SRC_ADDR_ASCAST]], align 4
-// HIP-NEXT:    [[CALL:%.*]] = call float @__ocml_acos_f32(float [[TMP0]]) #[[ATTR2:[0-9]+]]
+// HIP-NEXT:    [[CALL:%.*]] = call float @__ocml_acos_f32(float [[TMP0]]) #[[ATTR3:[0-9]+]]
+// HIP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // HIP-NEXT:    ret float [[CALL]]
 //
 TEST_FUNC_ATTRS float test_ockl_acos_f32(float src) {
@@ -95,6 +100,7 @@ TEST_FUNC_ATTRS float test_ockl_acos_f32(float src) {
 // OPENMP-LABEL: define internal float @_ZL15test_ockl_fdot2Dv2_DF16_S_fbi
 // OPENMP-SAME: (<2 x half> [[A:%.*]], <2 x half> [[B:%.*]], float [[C:%.*]], i1 zeroext [[S:%.*]], i32 [[S_INT:%.*]]) #[[ATTR2]] {
 // OPENMP-NEXT:  entry:
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // OPENMP-NEXT:    [[A_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // OPENMP-NEXT:    [[B_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // OPENMP-NEXT:    [[C_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -120,23 +126,25 @@ TEST_FUNC_ATTRS float test_ockl_acos_f32(float src) {
 // OPENMP-NEXT:    [[TMP2:%.*]] = load float, ptr [[C_ADDR_ASCAST]], align 4
 // OPENMP-NEXT:    [[TMP3:%.*]] = load i8, ptr [[S_ADDR_ASCAST]], align 1
 // OPENMP-NEXT:    [[LOADEDV:%.*]] = icmp ne i8 [[TMP3]], 0
-// OPENMP-NEXT:    [[CALL:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i1 zeroext [[LOADEDV]]) #[[ATTR4]]
+// OPENMP-NEXT:    [[CALL:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i1 zeroext [[LOADEDV]]) #[[ATTR5]]
 // OPENMP-NEXT:    store float [[CALL]], ptr [[X_ASCAST]], align 4
 // OPENMP-NEXT:    [[TMP4:%.*]] = load <2 x half>, ptr [[A_ADDR_ASCAST]], align 4
 // OPENMP-NEXT:    [[TMP5:%.*]] = load <2 x half>, ptr [[B_ADDR_ASCAST]], align 4
 // OPENMP-NEXT:    [[TMP6:%.*]] = load float, ptr [[C_ADDR_ASCAST]], align 4
 // OPENMP-NEXT:    [[TMP7:%.*]] = load i32, ptr [[S_INT_ADDR_ASCAST]], align 4
 // OPENMP-NEXT:    [[TOBOOL:%.*]] = icmp ne i32 [[TMP7]], 0
-// OPENMP-NEXT:    [[CALL1:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP4]], <2 x half> [[TMP5]], float [[TMP6]], i1 zeroext [[TOBOOL]]) #[[ATTR4]]
+// OPENMP-NEXT:    [[CALL1:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP4]], <2 x half> [[TMP5]], float [[TMP6]], i1 zeroext [[TOBOOL]]) #[[ATTR5]]
 // OPENMP-NEXT:    store float [[CALL1]], ptr [[Y_ASCAST]], align 4
 // OPENMP-NEXT:    [[TMP8:%.*]] = load float, ptr [[X_ASCAST]], align 4
 // OPENMP-NEXT:    [[TMP9:%.*]] = load float, ptr [[Y_ASCAST]], align 4
 // OPENMP-NEXT:    [[ADD:%.*]] = fadd float [[TMP8]], [[TMP9]]
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // OPENMP-NEXT:    ret float [[ADD]]
 //
 // HIP-LABEL: define internal float @_ZL15test_ockl_fdot2Dv2_DF16_S_fbi
 // HIP-SAME: (<2 x half> [[A:%.*]], <2 x half> [[B:%.*]], float [[C:%.*]], i1 zeroext [[S:%.*]], i32 [[S_INT:%.*]]) #[[ATTR0]] {
 // HIP-NEXT:  entry:
+// HIP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // HIP-NEXT:    [[A_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // HIP-NEXT:    [[B_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // HIP-NEXT:    [[C_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -162,18 +170,19 @@ TEST_FUNC_ATTRS float test_ockl_acos_f32(float src) {
 // HIP-NEXT:    [[TMP2:%.*]] = load float, ptr [[C_ADDR_ASCAST]], align 4
 // HIP-NEXT:    [[TMP3:%.*]] = load i8, ptr [[S_ADDR_ASCAST]], align 1
 // HIP-NEXT:    [[LOADEDV:%.*]] = icmp ne i8 [[TMP3]], 0
-// HIP-NEXT:    [[CALL:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i1 zeroext [[LOADEDV]]) #[[ATTR2]]
+// HIP-NEXT:    [[CALL:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i1 zeroext [[LOADEDV]]) #[[ATTR3]]
 // HIP-NEXT:    store float [[CALL]], ptr [[X_ASCAST]], align 4
 // HIP-NEXT:    [[TMP4:%.*]] = load <2 x half>, ptr [[A_ADDR_ASCAST]], align 4
 // HIP-NEXT:    [[TMP5:%.*]] = load <2 x half>, ptr [[B_ADDR_ASCAST]], align 4
 // HIP-NEXT:    [[TMP6:%.*]] = load float, ptr [[C_ADDR_ASCAST]], align 4
 // HIP-NEXT:    [[TMP7:%.*]] = load i32, ptr [[S_INT_ADDR_ASCAST]], align 4
 // HIP-NEXT:    [[TOBOOL:%.*]] = icmp ne i32 [[TMP7]], 0
-// HIP-NEXT:    [[CALL1:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP4]], <2 x half> [[TMP5]], float [[TMP6]], i1 zeroext [[TOBOOL]]) #[[ATTR2]]
+// HIP-NEXT:    [[CALL1:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP4]], <2 x half> [[TMP5]], float [[TMP6]], i1 zeroext [[TOBOOL]]) #[[ATTR3]]
 // HIP-NEXT:    store float [[CALL1]], ptr [[Y_ASCAST]], align 4
 // HIP-NEXT:    [[TMP8:%.*]] = load float, ptr [[X_ASCAST]], align 4
 // HIP-NEXT:    [[TMP9:%.*]] = load float, ptr [[Y_ASCAST]], align 4
 // HIP-NEXT:    [[ADD:%.*]] = fadd float [[TMP8]], [[TMP9]]
+// HIP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // HIP-NEXT:    ret float [[ADD]]
 //
 TEST_FUNC_ATTRS float test_ockl_fdot2(__2f16 a, __2f16 b, float c, bool s, int s_int) {

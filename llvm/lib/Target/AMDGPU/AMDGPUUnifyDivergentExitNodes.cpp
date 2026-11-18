@@ -63,10 +63,6 @@ public:
   AMDGPUUnifyDivergentExitNodesImpl(const TargetTransformInfo *TTI)
       : TTI(TTI) {}
 
-  // We can preserve non-critical-edgeness when we unify function exit nodes
-  BasicBlock *unifyReturnBlockSet(Function &F, DomTreeUpdater &DTU,
-                                  ArrayRef<BasicBlock *> ReturningBlocks,
-                                  StringRef Name);
   bool run(Function &F, DominatorTree *DT, const PostDominatorTree &PDT,
            const UniformityInfo &UA);
 };
@@ -115,9 +111,8 @@ void AMDGPUUnifyDivergentExitNodesLegacy::getAnalysisUsage(
   AU.addRequired<TargetTransformInfoWrapperPass>();
 }
 
-/// \returns true if \p BB is reachable through only uniform branches.
 /// XXX - Is there a more efficient way to find this?
-static bool isUniformlyReached(const UniformityInfo &UA, BasicBlock &BB) {
+bool llvm::isUniformlyReached(const UniformityInfo &UA, BasicBlock &BB) {
   SmallVector<BasicBlock *, 8> Stack(predecessors(&BB));
   SmallPtrSet<BasicBlock *, 8> Visited;
 
@@ -135,9 +130,11 @@ static bool isUniformlyReached(const UniformityInfo &UA, BasicBlock &BB) {
   return true;
 }
 
-BasicBlock *AMDGPUUnifyDivergentExitNodesImpl::unifyReturnBlockSet(
-    Function &F, DomTreeUpdater &DTU, ArrayRef<BasicBlock *> ReturningBlocks,
-    StringRef Name) {
+// We can preserve non-critical-edgeness when we unify function exit nodes
+BasicBlock *llvm::unifyReturnBlockSet(Function &F, DomTreeUpdater *DTU,
+                                      ArrayRef<BasicBlock *> ReturningBlocks,
+                                      StringRef Name,
+                                      const TargetTransformInfo &TTI) {
   // Otherwise, we need to insert a new basic block into the function, add a PHI
   // nodes (if the function returns values), and convert all of the return
   // instructions into unconditional branches.
@@ -170,14 +167,13 @@ BasicBlock *AMDGPUUnifyDivergentExitNodesImpl::unifyReturnBlockSet(
     Updates.emplace_back(DominatorTree::Insert, BB, NewRetBlock);
   }
 
-  if (RequireAndPreserveDomTree)
-    DTU.applyUpdates(Updates);
+  if (DTU)
+    DTU->applyUpdates(Updates);
   Updates.clear();
 
   for (BasicBlock *BB : ReturningBlocks) {
     // Cleanup possible branch to unconditional branch to the return.
-    simplifyCFG(BB, *TTI, RequireAndPreserveDomTree ? &DTU : nullptr,
-                SimplifyCFGOptions().bonusInstThreshold(2));
+    simplifyCFG(BB, TTI, DTU, SimplifyCFGOptions().bonusInstThreshold(2));
   }
 
   return NewRetBlock;
@@ -342,7 +338,8 @@ bool AMDGPUUnifyDivergentExitNodesImpl::run(Function &F, DominatorTree *DT,
   if (ReturningBlocks.size() == 1)
     return Changed; // Already has a single return block
 
-  unifyReturnBlockSet(F, DTU, ReturningBlocks, "UnifiedReturnBlock");
+  unifyReturnBlockSet(F, RequireAndPreserveDomTree ? &DTU : nullptr,
+                      ReturningBlocks, "UnifiedReturnBlock", *TTI);
   return true;
 }
 

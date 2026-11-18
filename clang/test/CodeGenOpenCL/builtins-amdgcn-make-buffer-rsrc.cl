@@ -6,14 +6,18 @@
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p0(
 // GFX601-SAME: ptr nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i32(ptr [[P]], i16 [[STRIDE]], i32 [[NUM]], i32 [[FLAGS]])
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p0(
 // GFX1250-SAME: ptr nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = sext i32 [[NUM]] to i45
 // GFX1250-NEXT:    [[TMP1:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i45(ptr [[P]], i16 [[STRIDE]], i45 [[TMP0]], i32 [[FLAGS]])
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP1]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p0(void *p, short stride, int num, int flags) {
@@ -23,14 +27,18 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p0(void *p, short stride, in
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p0_stride_constant(
 // GFX601-SAME: ptr nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i32(ptr [[P]], i16 4, i32 [[NUM]], i32 [[FLAGS]])
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p0_stride_constant(
 // GFX1250-SAME: ptr nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = sext i32 [[NUM]] to i45
 // GFX1250-NEXT:    [[TMP1:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i45(ptr [[P]], i16 4, i45 [[TMP0]], i32 [[FLAGS]])
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP1]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p0_stride_constant(void *p, int num, int flags) {
@@ -40,13 +48,17 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p0_stride_constant(void *p, 
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p0_num_constant(
 // GFX601-SAME: ptr nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i32(ptr [[P]], i16 [[STRIDE]], i32 1234, i32 [[FLAGS]])
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p0_num_constant(
 // GFX1250-SAME: ptr nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i45(ptr [[P]], i16 [[STRIDE]], i45 1234, i32 [[FLAGS]])
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p0_num_constant(void *p, short stride, int flags) {
@@ -56,14 +68,18 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p0_num_constant(void *p, sho
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p0_flags_constant(
 // GFX601-SAME: ptr nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i32(ptr [[P]], i16 [[STRIDE]], i32 [[NUM]], i32 5678)
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p0_flags_constant(
 // GFX1250-SAME: ptr nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = sext i32 [[NUM]] to i45
 // GFX1250-NEXT:    [[TMP1:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i45(ptr [[P]], i16 [[STRIDE]], i45 [[TMP0]], i32 5678)
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP1]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p0_flags_constant(void *p, short stride, int num) {
@@ -73,14 +89,18 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p0_flags_constant(void *p, s
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p1(
 // GFX601-SAME: ptr addrspace(1) nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) [[P]], i16 [[STRIDE]], i32 [[NUM]], i32 [[FLAGS]])
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p1(
 // GFX1250-SAME: ptr addrspace(1) nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = sext i32 [[NUM]] to i45
 // GFX1250-NEXT:    [[TMP1:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i45(ptr addrspace(1) [[P]], i16 [[STRIDE]], i45 [[TMP0]], i32 [[FLAGS]])
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP1]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p1(global void *p, short stride, int num, int flags) {
@@ -90,14 +110,18 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p1(global void *p, short str
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p1_stride_constant(
 // GFX601-SAME: ptr addrspace(1) nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) [[P]], i16 4, i32 [[NUM]], i32 [[FLAGS]])
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p1_stride_constant(
 // GFX1250-SAME: ptr addrspace(1) nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = sext i32 [[NUM]] to i45
 // GFX1250-NEXT:    [[TMP1:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i45(ptr addrspace(1) [[P]], i16 4, i45 [[TMP0]], i32 [[FLAGS]])
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP1]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p1_stride_constant(global void *p, int num, int flags) {
@@ -107,13 +131,17 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p1_stride_constant(global vo
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p1_num_constant(
 // GFX601-SAME: ptr addrspace(1) nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) [[P]], i16 [[STRIDE]], i32 1234, i32 [[FLAGS]])
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p1_num_constant(
 // GFX1250-SAME: ptr addrspace(1) nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i45(ptr addrspace(1) [[P]], i16 [[STRIDE]], i45 1234, i32 [[FLAGS]])
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p1_num_constant(global void *p, short stride, int flags) {
@@ -123,14 +151,18 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p1_num_constant(global void 
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p1_flags_constant(
 // GFX601-SAME: ptr addrspace(1) nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) [[P]], i16 [[STRIDE]], i32 [[NUM]], i32 5678)
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_rsrc_p1_flags_constant(
 // GFX1250-SAME: ptr addrspace(1) nofree noundef readnone captures(ret: address, provenance) [[P:%.*]], i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = sext i32 [[NUM]] to i45
 // GFX1250-NEXT:    [[TMP1:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i45(ptr addrspace(1) [[P]], i16 [[STRIDE]], i45 [[TMP0]], i32 5678)
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP1]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p1_flags_constant(global void *p, short stride, int num) {
@@ -140,14 +172,18 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_rsrc_p1_flags_constant(global voi
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_p0_nullptr(
 // GFX601-SAME: i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i32(ptr null, i16 [[STRIDE]], i32 [[NUM]], i32 [[FLAGS]])
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_p0_nullptr(
 // GFX1250-SAME: i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = sext i32 [[NUM]] to i45
 // GFX1250-NEXT:    [[TMP1:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p0.i45(ptr null, i16 [[STRIDE]], i45 [[TMP0]], i32 [[FLAGS]])
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP1]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_p0_nullptr(short stride, int num, int flags) {
@@ -157,16 +193,63 @@ __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_p0_nullptr(short stride, int num,
 // GFX601-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_p1_nullptr(
 // GFX601-SAME: i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX601-NEXT:  [[ENTRY:.*:]]
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    [[TMP0:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i32(ptr addrspace(1) null, i16 [[STRIDE]], i32 [[NUM]], i32 [[FLAGS]])
+// GFX601-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // GFX601-NEXT:    ret ptr addrspace(8) [[TMP0]]
 //
 // GFX1250-LABEL: define dso_local noundef ptr addrspace(8) @test_amdgcn_make_buffer_p1_nullptr(
 // GFX1250-SAME: i16 noundef signext [[STRIDE:%.*]], i32 noundef [[NUM:%.*]], i32 noundef [[FLAGS:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1250-NEXT:  [[ENTRY:.*:]]
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    [[TMP0:%.*]] = sext i32 [[NUM]] to i45
 // GFX1250-NEXT:    [[TMP1:%.*]] = tail call ptr addrspace(8) @llvm.amdgcn.make.buffer.rsrc.p8.p1.i45(ptr addrspace(1) null, i16 [[STRIDE]], i45 [[TMP0]], i32 [[FLAGS]])
+// GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // GFX1250-NEXT:    ret ptr addrspace(8) [[TMP1]]
 //
 __amdgpu_buffer_rsrc_t test_amdgcn_make_buffer_p1_nullptr(short stride, int num, int flags) {
   return __builtin_amdgcn_make_buffer_rsrc((global void *)0LL, stride, num, flags);
 }
+//.
+// GFX601: [[META8]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p0"}
+// GFX601: [[META9]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p0"}
+// GFX601: [[META10]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p0_stride_constant"}
+// GFX601: [[META11]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p0_stride_constant"}
+// GFX601: [[META12]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p0_num_constant"}
+// GFX601: [[META13]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p0_num_constant"}
+// GFX601: [[META14]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p0_flags_constant"}
+// GFX601: [[META15]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p0_flags_constant"}
+// GFX601: [[META16]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p1"}
+// GFX601: [[META17]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p1"}
+// GFX601: [[META18]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p1_stride_constant"}
+// GFX601: [[META19]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p1_stride_constant"}
+// GFX601: [[META20]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p1_num_constant"}
+// GFX601: [[META21]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p1_num_constant"}
+// GFX601: [[META22]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p1_flags_constant"}
+// GFX601: [[META23]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p1_flags_constant"}
+// GFX601: [[META24]] = !{i32 0, !"test_amdgcn_make_buffer_p0_nullptr"}
+// GFX601: [[META25]] = !{i32 1, !"test_amdgcn_make_buffer_p0_nullptr"}
+// GFX601: [[META26]] = !{i32 0, !"test_amdgcn_make_buffer_p1_nullptr"}
+// GFX601: [[META27]] = !{i32 1, !"test_amdgcn_make_buffer_p1_nullptr"}
+//.
+// GFX1250: [[META8]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p0"}
+// GFX1250: [[META9]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p0"}
+// GFX1250: [[META10]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p0_stride_constant"}
+// GFX1250: [[META11]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p0_stride_constant"}
+// GFX1250: [[META12]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p0_num_constant"}
+// GFX1250: [[META13]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p0_num_constant"}
+// GFX1250: [[META14]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p0_flags_constant"}
+// GFX1250: [[META15]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p0_flags_constant"}
+// GFX1250: [[META16]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p1"}
+// GFX1250: [[META17]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p1"}
+// GFX1250: [[META18]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p1_stride_constant"}
+// GFX1250: [[META19]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p1_stride_constant"}
+// GFX1250: [[META20]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p1_num_constant"}
+// GFX1250: [[META21]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p1_num_constant"}
+// GFX1250: [[META22]] = !{i32 0, !"test_amdgcn_make_buffer_rsrc_p1_flags_constant"}
+// GFX1250: [[META23]] = !{i32 1, !"test_amdgcn_make_buffer_rsrc_p1_flags_constant"}
+// GFX1250: [[META24]] = !{i32 0, !"test_amdgcn_make_buffer_p0_nullptr"}
+// GFX1250: [[META25]] = !{i32 1, !"test_amdgcn_make_buffer_p0_nullptr"}
+// GFX1250: [[META26]] = !{i32 0, !"test_amdgcn_make_buffer_p1_nullptr"}
+// GFX1250: [[META27]] = !{i32 1, !"test_amdgcn_make_buffer_p1_nullptr"}
+//.

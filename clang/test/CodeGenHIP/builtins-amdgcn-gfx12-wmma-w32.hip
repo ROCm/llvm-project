@@ -10,6 +10,7 @@ typedef _Float16 v8h   __attribute__((ext_vector_type(8)));
 // CHECK-GFX1200-LABEL: define dso_local void @_Z47test_amdgcn_wmma_f32_16x16x16_f16_w32_gfx12_hipPDv8_fDv8_DF16_S1_S_(
 // CHECK-GFX1200-SAME: ptr noundef [[OUT:%.*]], <8 x half> noundef [[A:%.*]], <8 x half> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-GFX1200-NEXT:    [[A_ADDR:%.*]] = alloca <8 x half>, align 16, addrspace(5)
 // CHECK-GFX1200-NEXT:    [[B_ADDR:%.*]] = alloca <8 x half>, align 16, addrspace(5)
@@ -28,6 +29,7 @@ typedef _Float16 v8h   __attribute__((ext_vector_type(8)));
 // CHECK-GFX1200-NEXT:    [[TMP3:%.*]] = call contract <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.f16.v8f32.v8f16(<8 x half> [[TMP0]], <8 x half> [[TMP1]], <8 x float> [[TMP2]])
 // CHECK-GFX1200-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-GFX1200-NEXT:    store <8 x float> [[TMP3]], ptr [[TMP4]], align 32
+// CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 __device__ void test_amdgcn_wmma_f32_16x16x16_f16_w32_gfx12_hip(v8f* out, v8h a, v8h b, v8f c) {
@@ -37,6 +39,7 @@ __device__ void test_amdgcn_wmma_f32_16x16x16_f16_w32_gfx12_hip(v8f* out, v8h a,
 // CHECK-GFX1200-LABEL: define dso_local void @_Z47test_amdgcn_wmma_f16_16x16x16_f16_w32_gfx12_hipPDv8_DF16_S_S_S_(
 // CHECK-GFX1200-SAME: ptr noundef [[OUT:%.*]], <8 x half> noundef [[A:%.*]], <8 x half> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-GFX1200-NEXT:    [[A_ADDR:%.*]] = alloca <8 x half>, align 16, addrspace(5)
 // CHECK-GFX1200-NEXT:    [[B_ADDR:%.*]] = alloca <8 x half>, align 16, addrspace(5)
@@ -55,8 +58,15 @@ __device__ void test_amdgcn_wmma_f32_16x16x16_f16_w32_gfx12_hip(v8f* out, v8h a,
 // CHECK-GFX1200-NEXT:    [[TMP3:%.*]] = call contract <8 x half> @llvm.amdgcn.wmma.f16.16x16x16.f16.v8f16.v8f16(<8 x half> [[TMP0]], <8 x half> [[TMP1]], <8 x half> [[TMP2]], i1 false)
 // CHECK-GFX1200-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-GFX1200-NEXT:    store <8 x half> [[TMP3]], ptr [[TMP4]], align 16
+// CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 __device__ void test_amdgcn_wmma_f16_16x16x16_f16_w32_gfx12_hip(v8h* out, v8h a, v8h b, v8h c) {
   *out = __builtin_amdgcn_wmma_f16_16x16x16_f16_w32_gfx12(a, b, c);
 }
+//.
+// CHECK-GFX1200: [[META3]] = !{i32 0, !"_Z47test_amdgcn_wmma_f32_16x16x16_f16_w32_gfx12_hipPDv8_fDv8_DF16_S1_S_"}
+// CHECK-GFX1200: [[META4]] = !{i32 1, !"_Z47test_amdgcn_wmma_f32_16x16x16_f16_w32_gfx12_hipPDv8_fDv8_DF16_S1_S_"}
+// CHECK-GFX1200: [[META5]] = !{i32 0, !"_Z47test_amdgcn_wmma_f16_16x16x16_f16_w32_gfx12_hipPDv8_DF16_S_S_S_"}
+// CHECK-GFX1200: [[META6]] = !{i32 1, !"_Z47test_amdgcn_wmma_f16_16x16x16_f16_w32_gfx12_hipPDv8_DF16_S_S_S_"}
+//.

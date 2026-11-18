@@ -8,7 +8,9 @@ typedef __bf16 v4y   __attribute__((ext_vector_type(4)));
 
 // CHECK-GFX1200-LABEL: @test_amdgcn_global_load_tr_b64_i32(
 // CHECK-GFX1200-NEXT:  entry:
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.global.load.tr.b64.i32(ptr addrspace(1) [[INPTR:%.*]])
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret i32 [[TMP0]]
 //
 int test_amdgcn_global_load_tr_b64_i32(global int* inptr)
@@ -18,7 +20,9 @@ int test_amdgcn_global_load_tr_b64_i32(global int* inptr)
 
 // CHECK-GFX1200-LABEL: @test_amdgcn_global_load_tr_b128_v4i16(
 // CHECK-GFX1200-NEXT:  entry:
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x i16> @llvm.amdgcn.global.load.tr.b128.v4i16(ptr addrspace(1) [[INPTR:%.*]])
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret <4 x i16> [[TMP0]]
 //
 v4s test_amdgcn_global_load_tr_b128_v4i16(global v4s* inptr)
@@ -28,7 +32,9 @@ v4s test_amdgcn_global_load_tr_b128_v4i16(global v4s* inptr)
 
 // CHECK-GFX1200-LABEL: @test_amdgcn_global_load_tr_b128_v4f16(
 // CHECK-GFX1200-NEXT:  entry:
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x half> @llvm.amdgcn.global.load.tr.b128.v4f16(ptr addrspace(1) [[INPTR:%.*]])
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret <4 x half> [[TMP0]]
 //
 v4h test_amdgcn_global_load_tr_b128_v4f16(global v4h* inptr)
@@ -38,7 +44,9 @@ v4h test_amdgcn_global_load_tr_b128_v4f16(global v4h* inptr)
 
 // CHECK-GFX1200-LABEL: @test_amdgcn_global_load_tr_b128_v4bf16(
 // CHECK-GFX1200-NEXT:  entry:
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x bfloat> @llvm.amdgcn.global.load.tr.b128.v4bf16(ptr addrspace(1) [[INPTR:%.*]])
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret <4 x bfloat> [[TMP0]]
 //
 v4y test_amdgcn_global_load_tr_b128_v4bf16(global v4y* inptr)

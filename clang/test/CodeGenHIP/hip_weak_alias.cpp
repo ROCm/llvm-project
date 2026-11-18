@@ -49,6 +49,8 @@ extern int __attribute__((alias("__HostVar"))) HostVar_;
 // DEVICE-LABEL: define dso_local i32 @__One(
 // DEVICE-SAME: ) #[[ATTR0:[0-9]+]] {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 1
 //
 __device__ int __One(void) { return 1; }
@@ -63,6 +65,8 @@ __device__ int One_(void) __attribute__((alias("__One")));
 // DEVICE-LABEL: define dso_local i32 @__Two(
 // DEVICE-SAME: ) #[[ATTR0]] {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 2
 //
 __host__ __device__ int __Two(void) { return 2; }
@@ -78,6 +82,8 @@ __host__ __device__ int Two_(void) __attribute__((alias("__Two")));
 // DEVICE-LABEL: define linkonce_odr noundef i32 @_Z7__Threev(
 // DEVICE-SAME: ) #[[ATTR0]] comdat {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 5
 //
 __host__ __device__ constexpr int __Three(void) { return 5; }
@@ -93,6 +99,8 @@ __host__ __device__ int Three_(void) __attribute__((alias("_Z7__Threev")));
 // DEVICE-LABEL: define dso_local noundef i32 @_Z6__Fourv(
 // DEVICE-SAME: ) #[[ATTR0]] {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret i32 2
 //
 __host__ __device__ int __Four(void) { return 2; }
@@ -108,11 +116,13 @@ __host__ __device__ int __Four(void) { return 2; }
 // DEVICE-LABEL: define dso_local noundef float @_Z6__Fourf(
 // DEVICE-SAME: float noundef [[F:%.*]]) #[[ATTR0]] {
 // DEVICE-NEXT:  [[ENTRY:.*:]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    [[F_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // DEVICE-NEXT:    [[F_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[F_ADDR]] to ptr
 // DEVICE-NEXT:    store float [[F]], ptr [[F_ADDR_ASCAST]], align 4
 // DEVICE-NEXT:    [[TMP0:%.*]] = load float, ptr [[F_ADDR_ASCAST]], align 4
 // DEVICE-NEXT:    [[MUL:%.*]] = fmul contract float 2.000000e+00, [[TMP0]]
+// DEVICE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // DEVICE-NEXT:    ret float [[MUL]]
 //
 __host__ __device__ float __Four(float f) { return 2.0f * f; }
@@ -122,10 +132,21 @@ __host__ __device__ float Four(float f) __attribute__((weak, alias("_Z6__Fourf")
 // HOST: attributes #[[ATTR0]] = { mustprogress noinline nounwind optnone "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-features"="+cx8,+mmx,+sse,+sse2,+x87" "uniform-work-group-size" }
 //.
 // DEVICE: attributes #[[ATTR0]] = { convergent mustprogress noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" "uniform-work-group-size" }
+// DEVICE: attributes #[[ATTR1:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // HOST: [[META0:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
 //.
 // DEVICE: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // DEVICE: [[META1:![0-9]+]] = !{i32 1, !"amdgpu_printf_kind", !"hostcall"}
 // DEVICE: [[META2:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// DEVICE: [[META3]] = !{i32 0, !"__One"}
+// DEVICE: [[META4]] = !{i32 1, !"__One"}
+// DEVICE: [[META5]] = !{i32 0, !"__Two"}
+// DEVICE: [[META6]] = !{i32 1, !"__Two"}
+// DEVICE: [[META7]] = !{i32 0, !"_Z7__Threev"}
+// DEVICE: [[META8]] = !{i32 1, !"_Z7__Threev"}
+// DEVICE: [[META9]] = !{i32 0, !"_Z6__Fourv"}
+// DEVICE: [[META10]] = !{i32 1, !"_Z6__Fourv"}
+// DEVICE: [[META11]] = !{i32 0, !"_Z6__Fourf"}
+// DEVICE: [[META12]] = !{i32 1, !"_Z6__Fourf"}
 //.

@@ -15,14 +15,16 @@ __device__ __constant__ int FileVarDeviceConstant;
 // CHECK-LABEL: define dso_local void @_Z7kernel1i(
 // CHECK-SAME: i32 noundef [[ARG:%.*]]) #[[ATTR0:[0-9]+]] !dbg [[DBG13:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true), !dbg [[DBG24:![0-9]+]]
 // CHECK-NEXT:    [[ARG_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[FUNCVAR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[ARG_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[ARG_ADDR]] to ptr
 // CHECK-NEXT:    [[FUNCVAR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[FUNCVAR]] to ptr
 // CHECK-NEXT:    store i32 [[ARG]], ptr [[ARG_ADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[ARG_ADDR]], [[META17:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META23:![0-9]+]])
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[FUNCVAR]], [[META18:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META24:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG25:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[ARG_ADDR]], [[META17:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META25:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[FUNCVAR]], [[META18:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META26:![0-9]+]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true), !dbg [[DBG28:![0-9]+]]
+// CHECK-NEXT:    ret void, !dbg [[DBG28]]
 //
 __device__ void kernel1(int Arg) {
 
@@ -44,14 +46,17 @@ __device__ void kernel1(int Arg) {
 // CHECK: [[META9]] = !DIGlobalVariableExpression(var: [[META10:![0-9]+]], expr: !DIExpression(DIOpArg(0, ptr addrspace(4)), DIOpDeref(i32)))
 // CHECK: [[META10]] = distinct !DIGlobalVariable(name: "FileVarDeviceConstant", scope: [[META2]], file: [[META7]], line: 13, type: [[META8]], isLocal: false, isDefinition: true, memorySpace: DW_MSPACE_LLVM_constant)
 // CHECK: [[META11:![0-9]+]] = !DIGlobalVariableExpression(var: [[META12:![0-9]+]], expr: !DIExpression(DIOpArg(0, ptr addrspace(3)), DIOpDeref(i32)))
-// CHECK: [[META12]] = distinct !DIGlobalVariable(name: "FuncVarShared", scope: [[DBG13]], file: [[META7]], line: 29, type: [[META8]], isLocal: true, isDefinition: true, memorySpace: DW_MSPACE_LLVM_group)
-// CHECK: [[DBG13]] = distinct !DISubprogram(name: "kernel1", linkageName: "_Z7kernel1i", scope: [[META7]], file: [[META7]], line: 27, type: [[META14:![0-9]+]], scopeLine: 27, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META2]], retainedNodes: [[META16:![0-9]+]])
+// CHECK: [[META12]] = distinct !DIGlobalVariable(name: "FuncVarShared", scope: [[DBG13]], file: [[META7]], line: 31, type: [[META8]], isLocal: true, isDefinition: true, memorySpace: DW_MSPACE_LLVM_group)
+// CHECK: [[DBG13]] = distinct !DISubprogram(name: "kernel1", linkageName: "_Z7kernel1i", scope: [[META7]], file: [[META7]], line: 29, type: [[META14:![0-9]+]], scopeLine: 29, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META2]], retainedNodes: [[META16:![0-9]+]])
 // CHECK: [[META14]] = !DISubroutineType(types: [[META15:![0-9]+]])
 // CHECK: [[META15]] = !{null, [[META8]]}
 // CHECK: [[META16]] = !{[[META17]], [[META11]], [[META18]]}
-// CHECK: [[META17]] = !DILocalVariable(name: "Arg", arg: 1, scope: [[DBG13]], file: [[META7]], line: 27, type: [[META8]])
-// CHECK: [[META18]] = !DILocalVariable(name: "FuncVar", scope: [[DBG13]], file: [[META7]], line: 31, type: [[META8]])
-// CHECK: [[META23]] = !DILocation(line: 27, column: 29, scope: [[DBG13]])
-// CHECK: [[META24]] = !DILocation(line: 31, column: 7, scope: [[DBG13]])
-// CHECK: [[DBG25]] = !DILocation(line: 32, column: 1, scope: [[DBG13]])
+// CHECK: [[META17]] = !DILocalVariable(name: "Arg", arg: 1, scope: [[DBG13]], file: [[META7]], line: 29, type: [[META8]])
+// CHECK: [[META18]] = !DILocalVariable(name: "FuncVar", scope: [[DBG13]], file: [[META7]], line: 33, type: [[META8]])
+// CHECK: [[META23]] = !{i32 0, !"_Z7kernel1i"}
+// CHECK: [[DBG24]] = !DILocation(line: 29, scope: [[DBG13]])
+// CHECK: [[META25]] = !DILocation(line: 29, column: 29, scope: [[DBG13]])
+// CHECK: [[META26]] = !DILocation(line: 33, column: 7, scope: [[DBG13]])
+// CHECK: [[META27]] = !{i32 1, !"_Z7kernel1i"}
+// CHECK: [[DBG28]] = !DILocation(line: 34, column: 1, scope: [[DBG13]])
 //.

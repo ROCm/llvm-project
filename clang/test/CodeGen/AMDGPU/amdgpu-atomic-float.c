@@ -7,13 +7,17 @@
 // SAFE-LABEL: define dso_local float @test_float_post_inc(
 // SAFE-SAME: ) #[[ATTR0:[0-9]+]] {
 // SAFE-NEXT:  [[ENTRY:.*:]]
-// SAFE-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_float_post_inc.n to ptr), float 1.000000e+00 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META2:![0-9]+]], !amdgpu.no.remote.memory [[META2]]
+// SAFE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// SAFE-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_float_post_inc.n to ptr), float 1.000000e+00 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META3:![0-9]+]], !amdgpu.no.remote.memory [[META3]]
+// SAFE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // SAFE-NEXT:    ret float [[TMP0]]
 //
 // UNSAFE-LABEL: define dso_local float @test_float_post_inc(
 // UNSAFE-SAME: ) #[[ATTR0:[0-9]+]] {
 // UNSAFE-NEXT:  [[ENTRY:.*:]]
-// UNSAFE-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_float_post_inc.n to ptr), float 1.000000e+00 seq_cst, align 4, !atomic.ignore.denormal.mode [[META2:![0-9]+]], !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// UNSAFE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// UNSAFE-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_float_post_inc.n to ptr), float 1.000000e+00 seq_cst, align 4, !atomic.ignore.denormal.mode [[META3:![0-9]+]], !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// UNSAFE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-NEXT:    ret float [[TMP0]]
 //
 // SAFE-SPIRV-LABEL: define spir_func float @test_float_post_inc(
@@ -37,7 +41,9 @@ float test_float_post_inc()
 // CHECK-LABEL: define dso_local float @test_float_post_dc(
 // CHECK-SAME: ) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test_float_post_dc.n to ptr), float 1.000000e+00 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META2:![0-9]+]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test_float_post_dc.n to ptr), float 1.000000e+00 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META3:![0-9]+]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP0]]
 //
 // CHECK-SPIRV-LABEL: define spir_func float @test_float_post_dc(
@@ -55,8 +61,10 @@ float test_float_post_dc()
 // CHECK-LABEL: define dso_local float @test_float_pre_dc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test_float_pre_dc.n to ptr), float 1.000000e+00 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test_float_pre_dc.n to ptr), float 1.000000e+00 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
 // CHECK-NEXT:    [[TMP1:%.*]] = fsub float [[TMP0]], 1.000000e+00
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP1]]
 //
 // CHECK-SPIRV-LABEL: define spir_func float @test_float_pre_dc(
@@ -75,15 +83,19 @@ float test_float_pre_dc()
 // SAFE-LABEL: define dso_local float @test_float_pre_inc(
 // SAFE-SAME: ) #[[ATTR0]] {
 // SAFE-NEXT:  [[ENTRY:.*:]]
-// SAFE-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_float_pre_inc.n to ptr), float 1.000000e+00 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// SAFE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
+// SAFE-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_float_pre_inc.n to ptr), float 1.000000e+00 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
 // SAFE-NEXT:    [[TMP1:%.*]] = fadd float [[TMP0]], 1.000000e+00
+// SAFE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // SAFE-NEXT:    ret float [[TMP1]]
 //
 // UNSAFE-LABEL: define dso_local float @test_float_pre_inc(
 // UNSAFE-SAME: ) #[[ATTR0]] {
 // UNSAFE-NEXT:  [[ENTRY:.*:]]
-// UNSAFE-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_float_pre_inc.n to ptr), float 1.000000e+00 seq_cst, align 4, !atomic.ignore.denormal.mode [[META2]], !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// UNSAFE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
+// UNSAFE-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_float_pre_inc.n to ptr), float 1.000000e+00 seq_cst, align 4, !atomic.ignore.denormal.mode [[META3]], !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
 // UNSAFE-NEXT:    [[TMP1:%.*]] = fadd float [[TMP0]], 1.000000e+00
+// UNSAFE-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-NEXT:    ret float [[TMP1]]
 //
 // SAFE-SPIRV-LABEL: define spir_func float @test_float_pre_inc(
@@ -109,7 +121,9 @@ float test_float_pre_inc()
 // CHECK-LABEL: define dso_local double @test_double_post_inc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_double_post_inc.n to ptr), double 1.000000e+00 seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_double_post_inc.n to ptr), double 1.000000e+00 seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[TMP0]]
 //
 // CHECK-SPIRV-LABEL: define spir_func double @test_double_post_inc(
@@ -127,7 +141,9 @@ double test_double_post_inc()
 // CHECK-LABEL: define dso_local double @test_double_post_dc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test_double_post_dc.n to ptr), double 1.000000e+00 seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test_double_post_dc.n to ptr), double 1.000000e+00 seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[TMP0]]
 //
 // CHECK-SPIRV-LABEL: define spir_func double @test_double_post_dc(
@@ -145,8 +161,10 @@ double test_double_post_dc()
 // CHECK-LABEL: define dso_local double @test_double_pre_dc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test_double_pre_dc.n to ptr), double 1.000000e+00 seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test_double_pre_dc.n to ptr), double 1.000000e+00 seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
 // CHECK-NEXT:    [[TMP1:%.*]] = fsub double [[TMP0]], 1.000000e+00
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[TMP1]]
 //
 // CHECK-SPIRV-LABEL: define spir_func double @test_double_pre_dc(
@@ -165,8 +183,10 @@ double test_double_pre_dc()
 // CHECK-LABEL: define dso_local double @test_double_pre_inc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_double_pre_inc.n to ptr), double 1.000000e+00 seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test_double_pre_inc.n to ptr), double 1.000000e+00 seq_cst, align 8, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
 // CHECK-NEXT:    [[TMP1:%.*]] = fadd double [[TMP0]], 1.000000e+00
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[TMP1]]
 //
 // CHECK-SPIRV-LABEL: define spir_func double @test_double_pre_inc(
@@ -185,7 +205,9 @@ double test_double_pre_inc()
 // CHECK-LABEL: define dso_local half @test__Float16_post_inc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test__Float16_post_inc.n to ptr), half 1.000000e+00 seq_cst, align 2, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test__Float16_post_inc.n to ptr), half 1.000000e+00 seq_cst, align 2, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret half [[TMP0]]
 //
 // CHECK-SPIRV-LABEL: define spir_func half @test__Float16_post_inc(
@@ -203,7 +225,9 @@ _Float16 test__Float16_post_inc()
 // CHECK-LABEL: define dso_local half @test__Float16_post_dc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test__Float16_post_dc.n to ptr), half 1.000000e+00 seq_cst, align 2, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test__Float16_post_dc.n to ptr), half 1.000000e+00 seq_cst, align 2, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret half [[TMP0]]
 //
 // CHECK-SPIRV-LABEL: define spir_func half @test__Float16_post_dc(
@@ -221,8 +245,10 @@ _Float16 test__Float16_post_dc()
 // CHECK-LABEL: define dso_local half @test__Float16_pre_dc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test__Float16_pre_dc.n to ptr), half 1.000000e+00 seq_cst, align 2, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fsub ptr addrspacecast (ptr addrspace(1) @test__Float16_pre_dc.n to ptr), half 1.000000e+00 seq_cst, align 2, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
 // CHECK-NEXT:    [[TMP1:%.*]] = fsub half [[TMP0]], 1.000000e+00
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret half [[TMP1]]
 //
 // CHECK-SPIRV-LABEL: define spir_func half @test__Float16_pre_dc(
@@ -241,8 +267,10 @@ _Float16 test__Float16_pre_dc()
 // CHECK-LABEL: define dso_local half @test__Float16_pre_inc(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test__Float16_pre_inc.n to ptr), half 1.000000e+00 seq_cst, align 2, !amdgpu.no.fine.grained.memory [[META2]], !amdgpu.no.remote.memory [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @test__Float16_pre_inc.n to ptr), half 1.000000e+00 seq_cst, align 2, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
 // CHECK-NEXT:    [[TMP1:%.*]] = fadd half [[TMP0]], 1.000000e+00
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret half [[TMP1]]
 //
 // CHECK-SPIRV-LABEL: define spir_func half @test__Float16_pre_inc(
@@ -258,9 +286,57 @@ _Float16 test__Float16_pre_inc()
     return ++n;
 }
 //.
-// SAFE: [[META2]] = !{}
+// SAFE: [[META2]] = !{i32 0, !"test_float_post_inc"}
+// SAFE: [[META3]] = !{}
+// SAFE: [[META4]] = !{i32 1, !"test_float_post_inc"}
+// SAFE: [[META5]] = !{i32 0, !"test_float_post_dc"}
+// SAFE: [[META6]] = !{i32 1, !"test_float_post_dc"}
+// SAFE: [[META7]] = !{i32 0, !"test_float_pre_dc"}
+// SAFE: [[META8]] = !{i32 1, !"test_float_pre_dc"}
+// SAFE: [[META9]] = !{i32 0, !"test_float_pre_inc"}
+// SAFE: [[META10]] = !{i32 1, !"test_float_pre_inc"}
+// SAFE: [[META11]] = !{i32 0, !"test_double_post_inc"}
+// SAFE: [[META12]] = !{i32 1, !"test_double_post_inc"}
+// SAFE: [[META13]] = !{i32 0, !"test_double_post_dc"}
+// SAFE: [[META14]] = !{i32 1, !"test_double_post_dc"}
+// SAFE: [[META15]] = !{i32 0, !"test_double_pre_dc"}
+// SAFE: [[META16]] = !{i32 1, !"test_double_pre_dc"}
+// SAFE: [[META17]] = !{i32 0, !"test_double_pre_inc"}
+// SAFE: [[META18]] = !{i32 1, !"test_double_pre_inc"}
+// SAFE: [[META19]] = !{i32 0, !"test__Float16_post_inc"}
+// SAFE: [[META20]] = !{i32 1, !"test__Float16_post_inc"}
+// SAFE: [[META21]] = !{i32 0, !"test__Float16_post_dc"}
+// SAFE: [[META22]] = !{i32 1, !"test__Float16_post_dc"}
+// SAFE: [[META23]] = !{i32 0, !"test__Float16_pre_dc"}
+// SAFE: [[META24]] = !{i32 1, !"test__Float16_pre_dc"}
+// SAFE: [[META25]] = !{i32 0, !"test__Float16_pre_inc"}
+// SAFE: [[META26]] = !{i32 1, !"test__Float16_pre_inc"}
 //.
-// UNSAFE: [[META2]] = !{}
+// UNSAFE: [[META2]] = !{i32 0, !"test_float_post_inc"}
+// UNSAFE: [[META3]] = !{}
+// UNSAFE: [[META4]] = !{i32 1, !"test_float_post_inc"}
+// UNSAFE: [[META5]] = !{i32 0, !"test_float_post_dc"}
+// UNSAFE: [[META6]] = !{i32 1, !"test_float_post_dc"}
+// UNSAFE: [[META7]] = !{i32 0, !"test_float_pre_dc"}
+// UNSAFE: [[META8]] = !{i32 1, !"test_float_pre_dc"}
+// UNSAFE: [[META9]] = !{i32 0, !"test_float_pre_inc"}
+// UNSAFE: [[META10]] = !{i32 1, !"test_float_pre_inc"}
+// UNSAFE: [[META11]] = !{i32 0, !"test_double_post_inc"}
+// UNSAFE: [[META12]] = !{i32 1, !"test_double_post_inc"}
+// UNSAFE: [[META13]] = !{i32 0, !"test_double_post_dc"}
+// UNSAFE: [[META14]] = !{i32 1, !"test_double_post_dc"}
+// UNSAFE: [[META15]] = !{i32 0, !"test_double_pre_dc"}
+// UNSAFE: [[META16]] = !{i32 1, !"test_double_pre_dc"}
+// UNSAFE: [[META17]] = !{i32 0, !"test_double_pre_inc"}
+// UNSAFE: [[META18]] = !{i32 1, !"test_double_pre_inc"}
+// UNSAFE: [[META19]] = !{i32 0, !"test__Float16_post_inc"}
+// UNSAFE: [[META20]] = !{i32 1, !"test__Float16_post_inc"}
+// UNSAFE: [[META21]] = !{i32 0, !"test__Float16_post_dc"}
+// UNSAFE: [[META22]] = !{i32 1, !"test__Float16_post_dc"}
+// UNSAFE: [[META23]] = !{i32 0, !"test__Float16_pre_dc"}
+// UNSAFE: [[META24]] = !{i32 1, !"test__Float16_pre_dc"}
+// UNSAFE: [[META25]] = !{i32 0, !"test__Float16_pre_inc"}
+// UNSAFE: [[META26]] = !{i32 1, !"test__Float16_pre_inc"}
 //.
 // SAFE-SPIRV: [[META2]] = !{}
 //.

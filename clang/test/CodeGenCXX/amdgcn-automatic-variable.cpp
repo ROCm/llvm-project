@@ -3,11 +3,13 @@
 
 // CHECK-LABEL: @_Z5func1Pi(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[X:%.*]], ptr [[X_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[X_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i32 1, ptr [[TMP0]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func1(int *x) {
@@ -16,6 +18,7 @@ void func1(int *x) {
 
 // CHECK-LABEL: @_Z5func2v(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[LV1:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[LV2:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[LA:%.*]] = alloca [100 x i32], align 4, addrspace(5)
@@ -35,9 +38,10 @@ void func1(int *x) {
 // CHECK-NEXT:    store ptr [[LV1_ASCAST]], ptr [[LP1_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYDECAY:%.*]] = getelementptr inbounds [100 x i32], ptr [[LA_ASCAST]], i64 0, i64 0
 // CHECK-NEXT:    store ptr [[ARRAYDECAY]], ptr [[LP2_ASCAST]], align 8
-// CHECK-NEXT:    call void @_Z5func1Pi(ptr noundef [[LV1_ASCAST]])
+// CHECK-NEXT:    call void @_Z5func1Pi(ptr noundef [[LV1_ASCAST]]) #[[ATTR3:[0-9]+]]
 // CHECK-NEXT:    store i32 4, ptr [[LVC_ASCAST]], align 4
 // CHECK-NEXT:    store i32 4, ptr [[LV1_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func2(void) {
@@ -72,10 +76,12 @@ public:
 
 // CHECK-LABEL: @_Z5func3v(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A:%.*]] = alloca [[CLASS_A:%.*]], align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A]] to ptr
-// CHECK-NEXT:    call void @_ZN1AC1Ev(ptr noundef nonnull align 4 dereferenceable(4) [[A_ASCAST]])
-// CHECK-NEXT:    call void @_ZN1AD1Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[A_ASCAST]])
+// CHECK-NEXT:    call void @_ZN1AC1Ev(ptr noundef nonnull align 4 dereferenceable(4) [[A_ASCAST]]) #[[ATTR3]]
+// CHECK-NEXT:    call void @_ZN1AD1Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[A_ASCAST]]) #[[ATTR4:[0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func3() {
@@ -84,10 +90,12 @@ void func3() {
 
 // CHECK-LABEL: @_Z5func4i(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
 // CHECK-NEXT:    store i32 [[X:%.*]], ptr [[X_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    call void @_Z5func1Pi(ptr noundef [[X_ADDR_ASCAST]])
+// CHECK-NEXT:    call void @_Z5func1Pi(ptr noundef [[X_ADDR_ASCAST]]) #[[ATTR3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func4(int x) {
@@ -96,8 +104,10 @@ void func4(int x) {
 
 // CHECK-LABEL: @_Z5func5v(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[X_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X]] to ptr
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func5() {
@@ -107,8 +117,10 @@ void func5() {
 
 // CHECK-LABEL: @_Z5func6v(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[X_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X]] to ptr
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func6() {
@@ -119,11 +131,13 @@ void func6() {
 extern void use(int *);
 // CHECK-LABEL: @_Z5func7v(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[X_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X]] to ptr
 // CHECK-NEXT:    br label [[LATER:%.*]]
 // CHECK:       later:
-// CHECK-NEXT:    call void @_Z3usePi(ptr noundef [[X_ASCAST]])
+// CHECK-NEXT:    call void @_Z3usePi(ptr noundef [[X_ASCAST]]) #[[ATTR3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func7() {
@@ -137,6 +151,7 @@ later:
 
 // CHECK-LABEL: @_Z34explicit_private_address_space_ptrv(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[VAR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[ALLOCA_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[ALLOCA_ADDR_AS_PRIVATE:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
@@ -148,6 +163,7 @@ later:
 // CHECK-NEXT:    store ptr addrspace(5) [[VAR_ASCAST_ASCAST]], ptr [[ALLOCA_ADDR_AS_PRIVATE_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr addrspace(5), ptr [[ALLOCA_ADDR_AS_PRIVATE_ASCAST]], align 4
 // CHECK-NEXT:    store i64 8, ptr addrspace(5) [[TMP0]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void explicit_private_address_space_ptr() {

@@ -49,98 +49,106 @@ __gpu_kernel void foo() {
 // AMDGPU-LABEL: define protected amdgpu_kernel void @foo(
 // AMDGPU-SAME: ) #[[ATTR0:[0-9]+]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_num_blocks_x() #[[ATTR8:[0-9]+]]
-// AMDGPU-NEXT:    [[CALL1:%.*]] = call i32 @__gpu_num_blocks_y() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_num_blocks_z() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL3:%.*]] = call i32 @__gpu_num_blocks(i32 noundef 0) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_block_id_x() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL5:%.*]] = call i32 @__gpu_block_id_y() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL6:%.*]] = call i32 @__gpu_block_id_z() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL7:%.*]] = call i32 @__gpu_block_id(i32 noundef 0) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL8:%.*]] = call i32 @__gpu_num_threads_x() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL9:%.*]] = call i32 @__gpu_num_threads_y() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL10:%.*]] = call i32 @__gpu_num_threads_z() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL11:%.*]] = call i32 @__gpu_num_threads(i32 noundef 0) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL12:%.*]] = call i32 @__gpu_thread_id_x() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL13:%.*]] = call i32 @__gpu_thread_id_y() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL14:%.*]] = call i32 @__gpu_thread_id_z() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL15:%.*]] = call i32 @__gpu_thread_id(i32 noundef 0) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL16:%.*]] = call i32 @__gpu_num_lanes() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL17:%.*]] = call i32 @__gpu_lane_id() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL18:%.*]] = call i64 @__gpu_lane_mask() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL19:%.*]] = call i32 @__gpu_read_first_lane_u32(i64 noundef -1, i32 noundef -1) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL20:%.*]] = call i64 @__gpu_read_first_lane_u64(i64 noundef -1, i64 noundef -1) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL21:%.*]] = call i64 @__gpu_ballot(i64 noundef -1, i1 noundef zeroext true) #[[ATTR8]]
-// AMDGPU-NEXT:    call void @__gpu_sync_threads() #[[ATTR8]]
-// AMDGPU-NEXT:    call void @__gpu_sync_lane(i64 noundef -1) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL22:%.*]] = call i32 @__gpu_shuffle_idx_u32(i64 noundef -1, i32 noundef -1, i32 noundef -1, i32 noundef 0) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL23:%.*]] = call i64 @__gpu_first_lane_id(i64 noundef -1) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL24:%.*]] = call zeroext i1 @__gpu_is_first_in_lane(i64 noundef -1) #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL25:%.*]] = call i32 @__gpu_prefix_scan_add_u32(i64 noundef -1, i32 noundef 1) #[[ATTR8]]
-// AMDGPU-NEXT:    call void @__gpu_exit() #[[ATTR9:[0-9]+]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_num_blocks_x() #[[ATTR9:[0-9]+]]
+// AMDGPU-NEXT:    [[CALL1:%.*]] = call i32 @__gpu_num_blocks_y() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_num_blocks_z() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL3:%.*]] = call i32 @__gpu_num_blocks(i32 noundef 0) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_block_id_x() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL5:%.*]] = call i32 @__gpu_block_id_y() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL6:%.*]] = call i32 @__gpu_block_id_z() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL7:%.*]] = call i32 @__gpu_block_id(i32 noundef 0) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL8:%.*]] = call i32 @__gpu_num_threads_x() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL9:%.*]] = call i32 @__gpu_num_threads_y() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL10:%.*]] = call i32 @__gpu_num_threads_z() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL11:%.*]] = call i32 @__gpu_num_threads(i32 noundef 0) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL12:%.*]] = call i32 @__gpu_thread_id_x() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL13:%.*]] = call i32 @__gpu_thread_id_y() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL14:%.*]] = call i32 @__gpu_thread_id_z() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL15:%.*]] = call i32 @__gpu_thread_id(i32 noundef 0) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL16:%.*]] = call i32 @__gpu_num_lanes() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL17:%.*]] = call i32 @__gpu_lane_id() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL18:%.*]] = call i64 @__gpu_lane_mask() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL19:%.*]] = call i32 @__gpu_read_first_lane_u32(i64 noundef -1, i32 noundef -1) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL20:%.*]] = call i64 @__gpu_read_first_lane_u64(i64 noundef -1, i64 noundef -1) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL21:%.*]] = call i64 @__gpu_ballot(i64 noundef -1, i1 noundef zeroext true) #[[ATTR9]]
+// AMDGPU-NEXT:    call void @__gpu_sync_threads() #[[ATTR9]]
+// AMDGPU-NEXT:    call void @__gpu_sync_lane(i64 noundef -1) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL22:%.*]] = call i32 @__gpu_shuffle_idx_u32(i64 noundef -1, i32 noundef -1, i32 noundef -1, i32 noundef 0) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL23:%.*]] = call i64 @__gpu_first_lane_id(i64 noundef -1) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL24:%.*]] = call zeroext i1 @__gpu_is_first_in_lane(i64 noundef -1) #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL25:%.*]] = call i32 @__gpu_prefix_scan_add_u32(i64 noundef -1, i32 noundef 1) #[[ATTR9]]
+// AMDGPU-NEXT:    call void @__gpu_exit() #[[ATTR10:[0-9]+]]
 // AMDGPU-NEXT:    unreachable
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_blocks_x(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 12
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG2:![0-9]+]], !invariant.load [[META3:![0-9]+]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG4:![0-9]+]], !invariant.load [[META5:![0-9]+]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP3]], i64 0
-// AMDGPU-NEXT:    [[TMP5:%.*]] = load i32, ptr addrspace(4) [[TMP4]], align 4, !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP5:%.*]] = load i32, ptr addrspace(4) [[TMP4]], align 4, !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP6:%.*]] = call i32 @llvm.amdgcn.workgroup.id.x()
 // AMDGPU-NEXT:    [[TMP7:%.*]] = icmp ult i32 [[TMP6]], [[TMP5]]
 // AMDGPU-NEXT:    [[TMP8:%.*]] = select i1 [[TMP7]], i32 12, i32 18
 // AMDGPU-NEXT:    [[TMP9:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP3]], i32 [[TMP8]]
-// AMDGPU-NEXT:    [[TMP10:%.*]] = load i16, ptr addrspace(4) [[TMP9]], align 2, !range [[RNG4:![0-9]+]], !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP10:%.*]] = load i16, ptr addrspace(4) [[TMP9]], align 2, !range [[RNG6:![0-9]+]], !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP11:%.*]] = zext i16 [[TMP10]] to i32
 // AMDGPU-NEXT:    [[DIV:%.*]] = udiv i32 [[TMP2]], [[TMP11]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[DIV]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_blocks_y(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 16
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG2]], !invariant.load [[META3]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG4]], !invariant.load [[META5]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP3]], i64 4
-// AMDGPU-NEXT:    [[TMP5:%.*]] = load i32, ptr addrspace(4) [[TMP4]], align 4, !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP5:%.*]] = load i32, ptr addrspace(4) [[TMP4]], align 4, !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP6:%.*]] = call i32 @llvm.amdgcn.workgroup.id.y()
 // AMDGPU-NEXT:    [[TMP7:%.*]] = icmp ult i32 [[TMP6]], [[TMP5]]
 // AMDGPU-NEXT:    [[TMP8:%.*]] = select i1 [[TMP7]], i32 14, i32 20
 // AMDGPU-NEXT:    [[TMP9:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP3]], i32 [[TMP8]]
-// AMDGPU-NEXT:    [[TMP10:%.*]] = load i16, ptr addrspace(4) [[TMP9]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP10:%.*]] = load i16, ptr addrspace(4) [[TMP9]], align 2, !range [[RNG6]], !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP11:%.*]] = zext i16 [[TMP10]] to i32
 // AMDGPU-NEXT:    [[DIV:%.*]] = udiv i32 [[TMP2]], [[TMP11]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[DIV]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_blocks_z(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 20
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG2]], !invariant.load [[META3]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG4]], !invariant.load [[META5]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP3]], i64 8
-// AMDGPU-NEXT:    [[TMP5:%.*]] = load i32, ptr addrspace(4) [[TMP4]], align 4, !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP5:%.*]] = load i32, ptr addrspace(4) [[TMP4]], align 4, !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP6:%.*]] = call i32 @llvm.amdgcn.workgroup.id.z()
 // AMDGPU-NEXT:    [[TMP7:%.*]] = icmp ult i32 [[TMP6]], [[TMP5]]
 // AMDGPU-NEXT:    [[TMP8:%.*]] = select i1 [[TMP7]], i32 16, i32 22
 // AMDGPU-NEXT:    [[TMP9:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP3]], i32 [[TMP8]]
-// AMDGPU-NEXT:    [[TMP10:%.*]] = load i16, ptr addrspace(4) [[TMP9]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP10:%.*]] = load i16, ptr addrspace(4) [[TMP9]], align 2, !range [[RNG6]], !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP11:%.*]] = zext i16 [[TMP10]] to i32
 // AMDGPU-NEXT:    [[DIV:%.*]] = udiv i32 [[TMP2]], [[TMP11]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[DIV]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_blocks(
 // AMDGPU-SAME: i32 noundef [[__DIM:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[RETVAL:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__DIM_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__DIM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__DIM_ADDR]] to ptr
@@ -152,15 +160,15 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:      i32 2, label %[[SW_BB3:.*]]
 // AMDGPU-NEXT:    ]
 // AMDGPU:       [[SW_BB]]:
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_num_blocks_x() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_num_blocks_x() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN:.*]]
 // AMDGPU:       [[SW_BB1]]:
-// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_num_blocks_y() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_num_blocks_y() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL2]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[SW_BB3]]:
-// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_num_blocks_z() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_num_blocks_z() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL4]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[SW_DEFAULT]]:
@@ -168,33 +176,41 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[RETURN]]:
 // AMDGPU-NEXT:    [[TMP1:%.*]] = load i32, ptr addrspace(5) [[RETVAL]], align 4
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP1]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_block_id_x(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workgroup.id.x()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP0]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_block_id_y(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workgroup.id.y()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP0]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_block_id_z(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workgroup.id.z()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP0]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_block_id(
 // AMDGPU-SAME: i32 noundef [[__DIM:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[RETVAL:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__DIM_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__DIM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__DIM_ADDR]] to ptr
@@ -206,15 +222,15 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:      i32 2, label %[[SW_BB3:.*]]
 // AMDGPU-NEXT:    ]
 // AMDGPU:       [[SW_BB]]:
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_block_id_x() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_block_id_x() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN:.*]]
 // AMDGPU:       [[SW_BB1]]:
-// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_block_id_y() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_block_id_y() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL2]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[SW_BB3]]:
-// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_block_id_z() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_block_id_z() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL4]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[SW_DEFAULT]]:
@@ -222,57 +238,65 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[RETURN]]:
 // AMDGPU-NEXT:    [[TMP1:%.*]] = load i32, ptr addrspace(5) [[RETVAL]], align 4
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP1]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_threads_x(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i64 0
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.workgroup.id.x()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = icmp ult i32 [[TMP3]], [[TMP2]]
 // AMDGPU-NEXT:    [[TMP5:%.*]] = select i1 [[TMP4]], i32 12, i32 18
 // AMDGPU-NEXT:    [[TMP6:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP0]], i32 [[TMP5]]
-// AMDGPU-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG6]], !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP8:%.*]] = zext i16 [[TMP7]] to i32
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP8]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_threads_y(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i64 4
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.workgroup.id.y()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = icmp ult i32 [[TMP3]], [[TMP2]]
 // AMDGPU-NEXT:    [[TMP5:%.*]] = select i1 [[TMP4]], i32 14, i32 20
 // AMDGPU-NEXT:    [[TMP6:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP0]], i32 [[TMP5]]
-// AMDGPU-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG6]], !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP8:%.*]] = zext i16 [[TMP7]] to i32
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP8]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_threads_z(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i64 8
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.workgroup.id.z()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = icmp ult i32 [[TMP3]], [[TMP2]]
 // AMDGPU-NEXT:    [[TMP5:%.*]] = select i1 [[TMP4]], i32 16, i32 22
 // AMDGPU-NEXT:    [[TMP6:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP0]], i32 [[TMP5]]
-// AMDGPU-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
+// AMDGPU-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG6]], !invariant.load [[META5]], !noundef [[META5]]
 // AMDGPU-NEXT:    [[TMP8:%.*]] = zext i16 [[TMP7]] to i32
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP8]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_threads(
 // AMDGPU-SAME: i32 noundef [[__DIM:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[RETVAL:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__DIM_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__DIM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__DIM_ADDR]] to ptr
@@ -284,15 +308,15 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:      i32 2, label %[[SW_BB3:.*]]
 // AMDGPU-NEXT:    ]
 // AMDGPU:       [[SW_BB]]:
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_num_threads_x() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_num_threads_x() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN:.*]]
 // AMDGPU:       [[SW_BB1]]:
-// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_num_threads_y() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_num_threads_y() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL2]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[SW_BB3]]:
-// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_num_threads_z() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_num_threads_z() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL4]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[SW_DEFAULT]]:
@@ -300,33 +324,41 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[RETURN]]:
 // AMDGPU-NEXT:    [[TMP1:%.*]] = load i32, ptr addrspace(5) [[RETVAL]], align 4
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP1]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_thread_id_x(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workitem.id.x()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP0]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_thread_id_y(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workitem.id.y()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP0]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_thread_id_z(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workitem.id.z()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP0]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_thread_id(
 // AMDGPU-SAME: i32 noundef [[__DIM:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[RETVAL:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__DIM_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__DIM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__DIM_ADDR]] to ptr
@@ -338,15 +370,15 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:      i32 2, label %[[SW_BB3:.*]]
 // AMDGPU-NEXT:    ]
 // AMDGPU:       [[SW_BB]]:
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_thread_id_x() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_thread_id_x() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN:.*]]
 // AMDGPU:       [[SW_BB1]]:
-// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_thread_id_y() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL2:%.*]] = call i32 @__gpu_thread_id_y() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL2]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[SW_BB3]]:
-// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_thread_id_z() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_thread_id_z() #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL4]], ptr addrspace(5) [[RETVAL]], align 4
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[SW_DEFAULT]]:
@@ -354,34 +386,42 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    br label %[[RETURN]]
 // AMDGPU:       [[RETURN]]:
 // AMDGPU-NEXT:    [[TMP1:%.*]] = load i32, ptr addrspace(5) [[RETVAL]], align 4
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP1]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_num_lanes(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.wavefrontsize()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP0]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_lane_id(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0)
 // AMDGPU-NEXT:    [[TMP1:%.*]] = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 [[TMP0]])
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP1]]
 //
 //
 // AMDGPU-LABEL: define internal i64 @__gpu_lane_mask(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call i64 @llvm.amdgcn.ballot.i64(i1 true)
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i64 [[TMP0]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_read_first_lane_u32(
 // AMDGPU-SAME: i64 noundef [[__LANE_MASK:%.*]], i32 noundef [[__X:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__X_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__LANE_MASK_ADDR]] to ptr
@@ -390,12 +430,14 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    store i32 [[__X]], ptr [[__X_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load i32, ptr [[__X_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP1:%.*]] = call i32 @llvm.amdgcn.readfirstlane.i32(i32 [[TMP0]])
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP1]]
 //
 //
 // AMDGPU-LABEL: define internal i64 @__gpu_read_first_lane_u64(
 // AMDGPU-SAME: i64 noundef [[__LANE_MASK:%.*]], i64 noundef [[__X:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__X_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__HI:%.*]] = alloca i32, align 4, addrspace(5)
@@ -416,21 +458,23 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    store i32 [[CONV1]], ptr [[__LO_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP2:%.*]] = load i64, ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    [[TMP3:%.*]] = load i32, ptr [[__HI_ASCAST]], align 4
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_read_first_lane_u32(i64 noundef [[TMP2]], i32 noundef [[TMP3]]) #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_read_first_lane_u32(i64 noundef [[TMP2]], i32 noundef [[TMP3]]) #[[ATTR9]]
 // AMDGPU-NEXT:    [[CONV2:%.*]] = zext i32 [[CALL]] to i64
 // AMDGPU-NEXT:    [[SHL:%.*]] = shl i64 [[CONV2]], 32
 // AMDGPU-NEXT:    [[TMP4:%.*]] = load i64, ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    [[TMP5:%.*]] = load i32, ptr [[__LO_ASCAST]], align 4
-// AMDGPU-NEXT:    [[CALL3:%.*]] = call i32 @__gpu_read_first_lane_u32(i64 noundef [[TMP4]], i32 noundef [[TMP5]]) #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL3:%.*]] = call i32 @__gpu_read_first_lane_u32(i64 noundef [[TMP4]], i32 noundef [[TMP5]]) #[[ATTR9]]
 // AMDGPU-NEXT:    [[CONV4:%.*]] = zext i32 [[CALL3]] to i64
 // AMDGPU-NEXT:    [[AND5:%.*]] = and i64 [[CONV4]], 4294967295
 // AMDGPU-NEXT:    [[OR:%.*]] = or i64 [[SHL]], [[AND5]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i64 [[OR]]
 //
 //
 // AMDGPU-LABEL: define internal i64 @__gpu_ballot(
 // AMDGPU-SAME: i64 noundef [[__LANE_MASK:%.*]], i1 noundef zeroext [[__X:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META48:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__X_ADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__LANE_MASK_ADDR]] to ptr
@@ -443,31 +487,37 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    [[LOADEDV:%.*]] = icmp ne i8 [[TMP1]], 0
 // AMDGPU-NEXT:    [[TMP2:%.*]] = call i64 @llvm.amdgcn.ballot.i64(i1 [[LOADEDV]])
 // AMDGPU-NEXT:    [[AND:%.*]] = and i64 [[TMP0]], [[TMP2]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META49:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i64 [[AND]]
 //
 //
 // AMDGPU-LABEL: define internal void @__gpu_sync_threads(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META50:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    fence syncscope("workgroup") release
 // AMDGPU-NEXT:    call void @llvm.amdgcn.s.barrier()
 // AMDGPU-NEXT:    fence syncscope("workgroup") acquire
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META51:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 //
 // AMDGPU-LABEL: define internal void @__gpu_sync_lane(
 // AMDGPU-SAME: i64 noundef [[__LANE_MASK:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META52:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__LANE_MASK_ADDR]] to ptr
 // AMDGPU-NEXT:    store i64 [[__LANE_MASK]], ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    call void @llvm.amdgcn.wave.barrier()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META53:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_shuffle_idx_u32(
 // AMDGPU-SAME: i64 noundef [[__LANE_MASK:%.*]], i32 noundef [[__IDX:%.*]], i32 noundef [[__X:%.*]], i32 noundef [[__WIDTH:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META54:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__IDX_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__X_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -483,7 +533,7 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    store i32 [[__X]], ptr [[__X_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    store i32 [[__WIDTH]], ptr [[__WIDTH_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load i32, ptr [[__IDX_ADDR_ASCAST]], align 4
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_lane_id() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_lane_id() #[[ATTR9]]
 // AMDGPU-NEXT:    [[TMP1:%.*]] = load i32, ptr [[__WIDTH_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[SUB:%.*]] = sub i32 [[TMP1]], 1
 // AMDGPU-NEXT:    [[NOT:%.*]] = xor i32 [[SUB]], -1
@@ -494,12 +544,14 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    [[SHL:%.*]] = shl i32 [[TMP2]], 2
 // AMDGPU-NEXT:    [[TMP3:%.*]] = load i32, ptr [[__X_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP4:%.*]] = call i32 @llvm.amdgcn.ds.bpermute(i32 [[SHL]], i32 [[TMP3]])
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META55:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP4]]
 //
 //
 // AMDGPU-LABEL: define internal i64 @__gpu_first_lane_id(
 // AMDGPU-SAME: i64 noundef [[__LANE_MASK:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META56:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__LANE_MASK_ADDR]] to ptr
 // AMDGPU-NEXT:    store i64 [[__LANE_MASK]], ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
@@ -511,26 +563,30 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    [[CAST:%.*]] = trunc i64 [[FFS]] to i32
 // AMDGPU-NEXT:    [[SUB:%.*]] = sub nsw i32 [[CAST]], 1
 // AMDGPU-NEXT:    [[CONV:%.*]] = sext i32 [[SUB]] to i64
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META57:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i64 [[CONV]]
 //
 //
 // AMDGPU-LABEL: define internal zeroext i1 @__gpu_is_first_in_lane(
 // AMDGPU-SAME: i64 noundef [[__LANE_MASK:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META58:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[__LANE_MASK_ADDR]] to ptr
 // AMDGPU-NEXT:    store i64 [[__LANE_MASK]], ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_lane_id() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_lane_id() #[[ATTR9]]
 // AMDGPU-NEXT:    [[CONV:%.*]] = zext i32 [[CALL]] to i64
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load i64, ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
-// AMDGPU-NEXT:    [[CALL1:%.*]] = call i64 @__gpu_first_lane_id(i64 noundef [[TMP0]]) #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL1:%.*]] = call i64 @__gpu_first_lane_id(i64 noundef [[TMP0]]) #[[ATTR9]]
 // AMDGPU-NEXT:    [[CMP:%.*]] = icmp eq i64 [[CONV]], [[CALL1]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META59:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i1 [[CMP]]
 //
 //
 // AMDGPU-LABEL: define internal i32 @__gpu_prefix_scan_add_u32(
 // AMDGPU-SAME: i64 noundef [[__LANE_MASK:%.*]], i32 noundef [[__X:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META60:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[__LANE_MASK_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[__X_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // AMDGPU-NEXT:    [[__BELOW:%.*]] = alloca i64, align 8, addrspace(5)
@@ -548,7 +604,7 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    store i64 [[__LANE_MASK]], ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    store i32 [[__X]], ptr [[__X_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load i64, ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
-// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_lane_id() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL:%.*]] = call i32 @__gpu_lane_id() #[[ATTR9]]
 // AMDGPU-NEXT:    [[SH_PROM:%.*]] = zext i32 [[CALL]] to i64
 // AMDGPU-NEXT:    [[SHL:%.*]] = shl i64 1, [[SH_PROM]]
 // AMDGPU-NEXT:    [[SUB:%.*]] = sub i64 [[SHL]], 1
@@ -558,7 +614,7 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    br label %[[FOR_COND:.*]]
 // AMDGPU:       [[FOR_COND]]:
 // AMDGPU-NEXT:    [[TMP1:%.*]] = load i32, ptr [[__STEP_ASCAST]], align 4
-// AMDGPU-NEXT:    [[CALL1:%.*]] = call i32 @__gpu_num_lanes() #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL1:%.*]] = call i32 @__gpu_num_lanes() #[[ATTR9]]
 // AMDGPU-NEXT:    [[CMP:%.*]] = icmp ult i32 [[TMP1]], [[CALL1]]
 // AMDGPU-NEXT:    br i1 [[CMP]], label %[[FOR_BODY:.*]], label %[[FOR_END16:.*]]
 // AMDGPU:       [[FOR_BODY]]:
@@ -572,8 +628,8 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    [[TMP4:%.*]] = load i64, ptr [[__LANE_MASK_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    [[TMP5:%.*]] = load i32, ptr [[__SRC_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP6:%.*]] = load i32, ptr [[__X_ADDR_ASCAST]], align 4
-// AMDGPU-NEXT:    [[CALL3:%.*]] = call i32 @__gpu_num_lanes() #[[ATTR8]]
-// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_shuffle_idx_u32(i64 noundef [[TMP4]], i32 noundef [[TMP5]], i32 noundef [[TMP6]], i32 noundef [[CALL3]]) #[[ATTR8]]
+// AMDGPU-NEXT:    [[CALL3:%.*]] = call i32 @__gpu_num_lanes() #[[ATTR9]]
+// AMDGPU-NEXT:    [[CALL4:%.*]] = call i32 @__gpu_shuffle_idx_u32(i64 noundef [[TMP4]], i32 noundef [[TMP5]], i32 noundef [[TMP6]], i32 noundef [[CALL3]]) #[[ATTR9]]
 // AMDGPU-NEXT:    store i32 [[CALL4]], ptr [[__RESULT_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP7:%.*]] = load i32, ptr [[__X_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP8:%.*]] = load i64, ptr [[__BELOW_ASCAST]], align 8
@@ -614,23 +670,26 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:    [[TMP16:%.*]] = load i32, ptr [[__I_ASCAST]], align 4
 // AMDGPU-NEXT:    [[INC:%.*]] = add i32 [[TMP16]], 1
 // AMDGPU-NEXT:    store i32 [[INC]], ptr [[__I_ASCAST]], align 4
-// AMDGPU-NEXT:    br label %[[FOR_COND5]], !llvm.loop [[LOOP5:![0-9]+]]
+// AMDGPU-NEXT:    br label %[[FOR_COND5]], !llvm.loop [[LOOP61:![0-9]+]]
 // AMDGPU:       [[FOR_END]]:
 // AMDGPU-NEXT:    br label %[[FOR_INC15:.*]]
 // AMDGPU:       [[FOR_INC15]]:
 // AMDGPU-NEXT:    [[TMP17:%.*]] = load i32, ptr [[__STEP_ASCAST]], align 4
 // AMDGPU-NEXT:    [[MUL:%.*]] = mul i32 [[TMP17]], 2
 // AMDGPU-NEXT:    store i32 [[MUL]], ptr [[__STEP_ASCAST]], align 4
-// AMDGPU-NEXT:    br label %[[FOR_COND]], !llvm.loop [[LOOP7:![0-9]+]]
+// AMDGPU-NEXT:    br label %[[FOR_COND]], !llvm.loop [[LOOP63:![0-9]+]]
 // AMDGPU:       [[FOR_END16]]:
 // AMDGPU-NEXT:    [[TMP18:%.*]] = load i32, ptr [[__X_ADDR_ASCAST]], align 4
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META64:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 [[TMP18]]
 //
 //
 // AMDGPU-LABEL: define internal void @__gpu_exit(
 // AMDGPU-SAME: ) #[[ATTR1:[0-9]+]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META65:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    call void @llvm.amdgcn.endpgm()
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META66:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 //
@@ -1696,12 +1755,71 @@ __gpu_kernel void foo() {
 // SPIRV-NEXT:    unreachable
 //
 //.
-// AMDGPU: [[RNG2]] = !{i32 1, i32 0}
-// AMDGPU: [[META3]] = !{}
-// AMDGPU: [[RNG4]] = !{i16 1, i16 1025}
-// AMDGPU: [[LOOP5]] = distinct !{[[LOOP5]], [[META6:![0-9]+]]}
-// AMDGPU: [[META6]] = !{!"llvm.loop.mustprogress"}
-// AMDGPU: [[LOOP7]] = distinct !{[[LOOP7]], [[META6]]}
+// AMDGPU: [[META2]] = !{i32 0, !"foo"}
+// AMDGPU: [[META3]] = !{i32 0, !"__gpu_num_blocks_x"}
+// AMDGPU: [[RNG4]] = !{i32 1, i32 0}
+// AMDGPU: [[META5]] = !{}
+// AMDGPU: [[RNG6]] = !{i16 1, i16 1025}
+// AMDGPU: [[META7]] = !{i32 1, !"__gpu_num_blocks_x"}
+// AMDGPU: [[META8]] = !{i32 0, !"__gpu_num_blocks_y"}
+// AMDGPU: [[META9]] = !{i32 1, !"__gpu_num_blocks_y"}
+// AMDGPU: [[META10]] = !{i32 0, !"__gpu_num_blocks_z"}
+// AMDGPU: [[META11]] = !{i32 1, !"__gpu_num_blocks_z"}
+// AMDGPU: [[META12]] = !{i32 0, !"__gpu_num_blocks"}
+// AMDGPU: [[META13]] = !{i32 1, !"__gpu_num_blocks"}
+// AMDGPU: [[META14]] = !{i32 0, !"__gpu_block_id_x"}
+// AMDGPU: [[META15]] = !{i32 1, !"__gpu_block_id_x"}
+// AMDGPU: [[META16]] = !{i32 0, !"__gpu_block_id_y"}
+// AMDGPU: [[META17]] = !{i32 1, !"__gpu_block_id_y"}
+// AMDGPU: [[META18]] = !{i32 0, !"__gpu_block_id_z"}
+// AMDGPU: [[META19]] = !{i32 1, !"__gpu_block_id_z"}
+// AMDGPU: [[META20]] = !{i32 0, !"__gpu_block_id"}
+// AMDGPU: [[META21]] = !{i32 1, !"__gpu_block_id"}
+// AMDGPU: [[META22]] = !{i32 0, !"__gpu_num_threads_x"}
+// AMDGPU: [[META23]] = !{i32 1, !"__gpu_num_threads_x"}
+// AMDGPU: [[META24]] = !{i32 0, !"__gpu_num_threads_y"}
+// AMDGPU: [[META25]] = !{i32 1, !"__gpu_num_threads_y"}
+// AMDGPU: [[META26]] = !{i32 0, !"__gpu_num_threads_z"}
+// AMDGPU: [[META27]] = !{i32 1, !"__gpu_num_threads_z"}
+// AMDGPU: [[META28]] = !{i32 0, !"__gpu_num_threads"}
+// AMDGPU: [[META29]] = !{i32 1, !"__gpu_num_threads"}
+// AMDGPU: [[META30]] = !{i32 0, !"__gpu_thread_id_x"}
+// AMDGPU: [[META31]] = !{i32 1, !"__gpu_thread_id_x"}
+// AMDGPU: [[META32]] = !{i32 0, !"__gpu_thread_id_y"}
+// AMDGPU: [[META33]] = !{i32 1, !"__gpu_thread_id_y"}
+// AMDGPU: [[META34]] = !{i32 0, !"__gpu_thread_id_z"}
+// AMDGPU: [[META35]] = !{i32 1, !"__gpu_thread_id_z"}
+// AMDGPU: [[META36]] = !{i32 0, !"__gpu_thread_id"}
+// AMDGPU: [[META37]] = !{i32 1, !"__gpu_thread_id"}
+// AMDGPU: [[META38]] = !{i32 0, !"__gpu_num_lanes"}
+// AMDGPU: [[META39]] = !{i32 1, !"__gpu_num_lanes"}
+// AMDGPU: [[META40]] = !{i32 0, !"__gpu_lane_id"}
+// AMDGPU: [[META41]] = !{i32 1, !"__gpu_lane_id"}
+// AMDGPU: [[META42]] = !{i32 0, !"__gpu_lane_mask"}
+// AMDGPU: [[META43]] = !{i32 1, !"__gpu_lane_mask"}
+// AMDGPU: [[META44]] = !{i32 0, !"__gpu_read_first_lane_u32"}
+// AMDGPU: [[META45]] = !{i32 1, !"__gpu_read_first_lane_u32"}
+// AMDGPU: [[META46]] = !{i32 0, !"__gpu_read_first_lane_u64"}
+// AMDGPU: [[META47]] = !{i32 1, !"__gpu_read_first_lane_u64"}
+// AMDGPU: [[META48]] = !{i32 0, !"__gpu_ballot"}
+// AMDGPU: [[META49]] = !{i32 1, !"__gpu_ballot"}
+// AMDGPU: [[META50]] = !{i32 0, !"__gpu_sync_threads"}
+// AMDGPU: [[META51]] = !{i32 1, !"__gpu_sync_threads"}
+// AMDGPU: [[META52]] = !{i32 0, !"__gpu_sync_lane"}
+// AMDGPU: [[META53]] = !{i32 1, !"__gpu_sync_lane"}
+// AMDGPU: [[META54]] = !{i32 0, !"__gpu_shuffle_idx_u32"}
+// AMDGPU: [[META55]] = !{i32 1, !"__gpu_shuffle_idx_u32"}
+// AMDGPU: [[META56]] = !{i32 0, !"__gpu_first_lane_id"}
+// AMDGPU: [[META57]] = !{i32 1, !"__gpu_first_lane_id"}
+// AMDGPU: [[META58]] = !{i32 0, !"__gpu_is_first_in_lane"}
+// AMDGPU: [[META59]] = !{i32 1, !"__gpu_is_first_in_lane"}
+// AMDGPU: [[META60]] = !{i32 0, !"__gpu_prefix_scan_add_u32"}
+// AMDGPU: [[LOOP61]] = distinct !{[[LOOP61]], [[META62:![0-9]+]]}
+// AMDGPU: [[META62]] = !{!"llvm.loop.mustprogress"}
+// AMDGPU: [[LOOP63]] = distinct !{[[LOOP63]], [[META62]]}
+// AMDGPU: [[META64]] = !{i32 1, !"__gpu_prefix_scan_add_u32"}
+// AMDGPU: [[META65]] = !{i32 0, !"__gpu_exit"}
+// AMDGPU: [[META66]] = !{i32 1, !"__gpu_exit"}
 //.
 // NVPTX: [[LOOP1]] = distinct !{[[LOOP1]], [[META2:![0-9]+]]}
 // NVPTX: [[META2]] = !{!"llvm.loop.mustprogress"}

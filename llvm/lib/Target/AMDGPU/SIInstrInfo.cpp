@@ -2526,12 +2526,12 @@ bool SIInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       Adjust += 4;
     }
 
-    if (OpLo.isGlobal())
+    if (OpLo.isGlobal() || OpLo.isSymbol())
       OpLo.setOffset(OpLo.getOffset() + Adjust + 4);
     Bundler.append(
         BuildMI(MF, DL, get(AMDGPU::S_ADD_U32), RegLo).addReg(RegLo).add(OpLo));
 
-    if (OpHi.isGlobal())
+    if (OpHi.isGlobal() || OpHi.isSymbol())
       OpHi.setOffset(OpHi.getOffset() + Adjust + 12);
     Bundler.append(BuildMI(MF, DL, get(AMDGPU::S_ADDC_U32), RegHi)
                        .addReg(RegHi)

@@ -10,8 +10,10 @@
 
 // CHECK-LABEL: @test_invocation(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    call void @llvm.amdgcn.asyncmark(i32 0)
 // CHECK-NEXT:    call void @llvm.amdgcn.wait.asyncmark(i16 0, i32 0)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_invocation() {
@@ -26,6 +28,7 @@ void test_invocation() {
 
 // CHECK-LABEL: @test_masks(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    call void @llvm.amdgcn.asyncmark(i32 1)
 // CHECK-NEXT:    call void @llvm.amdgcn.asyncmark(i32 2)
 // CHECK-NEXT:    call void @llvm.amdgcn.asyncmark(i32 9)
@@ -33,6 +36,7 @@ void test_invocation() {
 // CHECK-NEXT:    call void @llvm.amdgcn.asyncmark(i32 2047)
 // CHECK-NEXT:    call void @llvm.amdgcn.wait.asyncmark(i16 1, i32 1)
 // CHECK-NEXT:    call void @llvm.amdgcn.wait.asyncmark(i16 2, i32 9)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_masks() {

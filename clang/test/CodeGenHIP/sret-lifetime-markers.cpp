@@ -37,13 +37,15 @@ template void add_functor<4>(SuperScalar<4>*, int, SuperScalar<4>&);
 // AMDGCN-LABEL: define weak_odr void @_Z11add_functorILi4EEvP11SuperScalarIXT_EEiRS1_(
 // AMDGCN-SAME: ptr noundef [[DATA:%.*]], i32 noundef [[I:%.*]], ptr noundef nonnull align 8 dereferenceable(32) [[UPDATE:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] comdat {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[TMP:%.*]] = alloca [[STRUCT_SUPERSCALAR:%.*]], align 8, addrspace(5)
 // AMDGCN-NEXT:    [[IDXPROM:%.*]] = sext i32 [[I]] to i64
 // AMDGCN-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [32 x i8], ptr [[DATA]], i64 [[IDXPROM]]
 // AMDGCN-NEXT:    call void @llvm.lifetime.start.p5(ptr addrspace(5) [[TMP]])
 // AMDGCN-NEXT:    [[TMP_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[TMP]] to ptr
-// AMDGCN-NEXT:    call void @_Z16atomic_fetch_addILi4EE11SuperScalarIXT_EEPS1_RKS1_(ptr dead_on_unwind writable sret([[STRUCT_SUPERSCALAR]]) align 8 [[TMP_ASCAST]], ptr noundef [[ARRAYIDX]], ptr noundef nonnull align 8 dereferenceable(32) [[UPDATE]]) #[[ATTR3:[0-9]+]]
+// AMDGCN-NEXT:    call void @_Z16atomic_fetch_addILi4EE11SuperScalarIXT_EEPS1_RKS1_(ptr dead_on_unwind writable sret([[STRUCT_SUPERSCALAR]]) align 8 [[TMP_ASCAST]], ptr noundef [[ARRAYIDX]], ptr noundef nonnull align 8 dereferenceable(32) [[UPDATE]]) #[[ATTR4:[0-9]+]]
 // AMDGCN-NEXT:    call void @llvm.lifetime.end.p5(ptr addrspace(5) [[TMP]])
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
@@ -59,3 +61,7 @@ template void add_functor<4>(SuperScalar<4>*, int, SuperScalar<4>&);
 // SPIRV-NEXT:    call addrspace(4) void @llvm.lifetime.end.p0(ptr nonnull [[TMP]])
 // SPIRV-NEXT:    ret void
 //
+//.
+// AMDGCN: [[META7]] = !{i32 0, !"_Z11add_functorILi4EEvP11SuperScalarIXT_EEiRS1_"}
+// AMDGCN: [[META8]] = !{i32 1, !"_Z11add_functorILi4EEvP11SuperScalarIXT_EEiRS1_"}
+//.

@@ -6,6 +6,7 @@ struct X { int z[17]; };
 // CHECK-LABEL: define dso_local void @_Z3foocc(
 // CHECK-SAME: ptr addrspace(5) dead_on_unwind noalias writable sret([[STRUCT_X:%.*]]) align 4 [[AGG_RESULT:%.*]], i8 noundef signext [[X:%.*]], i8 noundef signext [[Y:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[Y_ADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
@@ -19,6 +20,7 @@ struct X { int z[17]; };
 // CHECK-NEXT:    [[TMP1:%.*]] = load i8, ptr [[Y_ADDR_ASCAST]], align 1
 // CHECK-NEXT:    [[ADD_PTR1:%.*]] = getelementptr inbounds i8, ptr [[AGG_RESULT_ASCAST]], i64 2
 // CHECK-NEXT:    store i8 [[TMP1]], ptr [[ADD_PTR1]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 X foo(char x, char y) {
@@ -29,3 +31,7 @@ X foo(char x, char y) {
 
     return r;
 }
+//.
+// CHECK: [[META2]] = !{i32 0, !"_Z3foocc"}
+// CHECK: [[META3]] = !{i32 1, !"_Z3foocc"}
+//.

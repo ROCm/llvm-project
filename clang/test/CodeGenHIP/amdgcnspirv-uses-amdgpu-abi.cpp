@@ -16,97 +16,113 @@ struct SingleElement { unsigned x; };
 struct ByRef { unsigned  x[17]; };
 
 // AMDGCNSPIRV-LABEL: define spir_kernel void @_Z2k0s(
-// AMDGCNSPIRV-SAME: i16 noundef [[TMP0:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0:[0-9]+]] !max_work_group_size [[META8:![0-9]+]] {
+// AMDGCNSPIRV-SAME: i16 noundef [[TMP0:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0:[0-9]+]] !max_work_group_size [[META9:![0-9]+]] {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local amdgpu_kernel void @_Z2k0s(
 // AMDGPU-SAME: i16 noundef [[TMP0:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __global__ void k0(short) { }
 
 // AMDGCNSPIRV-LABEL: define spir_kernel void @_Z2k1j(
-// AMDGCNSPIRV-SAME: i32 noundef [[TMP0:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META8]] {
+// AMDGCNSPIRV-SAME: i32 noundef [[TMP0:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META9]] {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local amdgpu_kernel void @_Z2k1j(
 // AMDGPU-SAME: i32 noundef [[TMP0:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __global__ void k1(unsigned) { }
 
 // AMDGCNSPIRV-LABEL: define spir_kernel void @_Z2k2d(
-// AMDGCNSPIRV-SAME: double noundef [[TMP0:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META8]] {
+// AMDGCNSPIRV-SAME: double noundef [[TMP0:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META9]] {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local amdgpu_kernel void @_Z2k2d(
 // AMDGPU-SAME: double noundef [[TMP0:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __global__ void k2(double) { }
 
 // AMDGCNSPIRV-LABEL: define spir_kernel void @_Z2k311Transparent(
-// AMDGCNSPIRV-SAME: i32 [[DOTCOERCE:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META8]] {
+// AMDGCNSPIRV-SAME: i32 [[DOTCOERCE:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META9]] {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local amdgpu_kernel void @_Z2k311Transparent(
 // AMDGPU-SAME: i32 [[DOTCOERCE:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __global__ void k3(Transparent) { }
 
 // AMDGCNSPIRV-LABEL: define spir_kernel void @_Z2k413SingleElement(
-// AMDGCNSPIRV-SAME: i32 [[DOTCOERCE:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META8]] {
+// AMDGCNSPIRV-SAME: i32 [[DOTCOERCE:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META9]] {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local amdgpu_kernel void @_Z2k413SingleElement(
 // AMDGPU-SAME: i32 [[DOTCOERCE:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __global__ void k4(SingleElement) { }
 
 // AMDGCNSPIRV-LABEL: define spir_kernel void @_Z2k55ByRef(
-// AMDGCNSPIRV-SAME: ptr addrspace(2) nofree noundef readnone byref([[STRUCT_BYREF:%.*]]) align 4 captures(none) [[TMP0:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META8]] {
+// AMDGCNSPIRV-SAME: ptr addrspace(2) nofree noundef readnone byref([[STRUCT_BYREF:%.*]]) align 4 captures(none) [[TMP0:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META9]] {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local amdgpu_kernel void @_Z2k55ByRef(
 // AMDGPU-SAME: ptr addrspace(4) nofree noundef readnone byref([[STRUCT_BYREF:%.*]]) align 4 captures(none) [[TMP0:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __global__ void k5(ByRef) { }
 
 // AMDGCNSPIRV-LABEL: define spir_kernel void @_Z2k6Dv1_jDv2_jDv3_jDv4_j(
-// AMDGCNSPIRV-SAME: <1 x i32> noundef [[TMP0:%.*]], <2 x i32> noundef [[TMP1:%.*]], <3 x i32> noundef [[TMP2:%.*]], <4 x i32> noundef [[TMP3:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META8]] {
+// AMDGCNSPIRV-SAME: <1 x i32> noundef [[TMP0:%.*]], <2 x i32> noundef [[TMP1:%.*]], <3 x i32> noundef [[TMP2:%.*]], <4 x i32> noundef [[TMP3:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META9]] {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local amdgpu_kernel void @_Z2k6Dv1_jDv2_jDv3_jDv4_j(
 // AMDGPU-SAME: <1 x i32> noundef [[TMP0:%.*]], <2 x i32> noundef [[TMP1:%.*]], <3 x i32> noundef [[TMP2:%.*]], <4 x i32> noundef [[TMP3:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __global__ void k6(V1, V2, V3, V4) { }
 
 // AMDGCNSPIRV-LABEL: define spir_kernel void @_Z2k7Pj(
-// AMDGCNSPIRV-SAME: ptr addrspace(1) nofree noundef readnone captures(none) [[DOTCOERCE:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META8]] {
+// AMDGCNSPIRV-SAME: ptr addrspace(1) nofree noundef readnone captures(none) [[DOTCOERCE:%.*]]) local_unnamed_addr addrspace(4) #[[ATTR0]] !max_work_group_size [[META9]] {
 // AMDGCNSPIRV-NEXT:  [[ENTRY:.*:]]
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local amdgpu_kernel void @_Z2k7Pj(
 // AMDGPU-SAME: ptr addrspace(1) nofree noundef readnone captures(none) [[DOTCOERCE:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __global__ void k7(unsigned*) { }
@@ -119,6 +135,8 @@ __global__ void k7(unsigned*) { }
 // AMDGPU-LABEL: define dso_local void @_Z2f0s(
 // AMDGPU-SAME: i16 noundef signext [[TMP0:%.*]]) local_unnamed_addr #[[ATTR1:[0-9]+]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ void f0(short) { }
@@ -131,6 +149,8 @@ __device__ void f0(short) { }
 // AMDGPU-LABEL: define dso_local void @_Z2f1j(
 // AMDGPU-SAME: i32 noundef [[TMP0:%.*]]) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ void f1(unsigned) { }
@@ -143,6 +163,8 @@ __device__ void f1(unsigned) { }
 // AMDGPU-LABEL: define dso_local void @_Z2f2d(
 // AMDGPU-SAME: double noundef [[TMP0:%.*]]) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ void f2(double) { }
@@ -155,6 +177,8 @@ __device__ void f2(double) { }
 // AMDGPU-LABEL: define dso_local void @_Z2f311Transparent(
 // AMDGPU-SAME: i32 [[DOTCOERCE:%.*]]) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ void f3(Transparent) { }
@@ -167,6 +191,8 @@ __device__ void f3(Transparent) { }
 // AMDGPU-LABEL: define dso_local void @_Z2f413SingleElement(
 // AMDGPU-SAME: i32 [[DOTCOERCE:%.*]]) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ void f4(SingleElement) { }
@@ -179,6 +205,8 @@ __device__ void f4(SingleElement) { }
 // AMDGPU-LABEL: define dso_local void @_Z2f55ByRef(
 // AMDGPU-SAME: ptr addrspace(5) nofree noundef readnone byref([[STRUCT_BYREF:%.*]]) align 4 captures(none) [[TMP0:%.*]]) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ void f5(ByRef) { }
@@ -191,6 +219,8 @@ __device__ void f5(ByRef) { }
 // AMDGPU-LABEL: define dso_local void @_Z2f6Dv1_jDv2_jDv3_jDv4_j(
 // AMDGPU-SAME: <1 x i32> noundef [[TMP0:%.*]], <2 x i32> noundef [[TMP1:%.*]], <3 x i32> noundef [[TMP2:%.*]], <4 x i32> noundef [[TMP3:%.*]]) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ void f6(V1, V2, V3, V4) { }
@@ -203,6 +233,8 @@ __device__ void f6(V1, V2, V3, V4) { }
 // AMDGPU-LABEL: define dso_local noundef signext i16 @_Z2f7v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i16 0
 //
 __device__ short f7() { return 0; }
@@ -215,6 +247,8 @@ __device__ short f7() { return 0; }
 // AMDGPU-LABEL: define dso_local noundef i32 @_Z2f8v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 0
 //
 __device__ unsigned f8() { return 0; }
@@ -227,6 +261,8 @@ __device__ unsigned f8() { return 0; }
 // AMDGPU-LABEL: define dso_local noundef double @_Z2f9v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret double 0.000000e+00
 //
 __device__ double f9() { return 0.; }
@@ -239,6 +275,8 @@ __device__ double f9() { return 0.; }
 // AMDGPU-LABEL: define dso_local noundef i32 @_Z3f10v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 0
 //
 __device__ Transparent f10() { return {}; }
@@ -251,6 +289,8 @@ __device__ Transparent f10() { return {}; }
 // AMDGPU-LABEL: define dso_local noundef i32 @_Z3f11v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret i32 0
 //
 __device__ SingleElement f11() { return {}; }
@@ -262,9 +302,11 @@ __device__ SingleElement f11() { return {}; }
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local void @_Z3f12v(
-// AMDGPU-SAME: ptr addrspace(5) dead_on_unwind noalias nofree writable writeonly sret([[STRUCT_BYREF:%.*]]) align 4 captures(none) initializes((0, 68)) [[AGG_RESULT:%.*]]) local_unnamed_addr #[[ATTR2:[0-9]+]] {
+// AMDGPU-SAME: ptr addrspace(5) dead_on_unwind noalias nofree writable writeonly sret([[STRUCT_BYREF:%.*]]) align 4 captures(none) initializes((0, 68)) [[AGG_RESULT:%.*]]) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META48:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    tail call void @llvm.memset.p5.i64(ptr addrspace(5) noundef align 4 dereferenceable(68) [[AGG_RESULT]], i8 0, i64 68, i1 false)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META49:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ ByRef f12() { return {}; }
@@ -277,6 +319,8 @@ __device__ ByRef f12() { return {}; }
 // AMDGPU-LABEL: define dso_local noundef <1 x i32> @_Z3f13v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META50:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META51:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret <1 x i32> zeroinitializer
 //
 __device__ V1 f13() { return {}; }
@@ -289,6 +333,8 @@ __device__ V1 f13() { return {}; }
 // AMDGPU-LABEL: define dso_local noundef <2 x i32> @_Z3f14v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META52:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META53:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret <2 x i32> zeroinitializer
 //
 __device__ V2 f14() { return {}; }
@@ -301,6 +347,8 @@ __device__ V2 f14() { return {}; }
 // AMDGPU-LABEL: define dso_local noundef <3 x i32> @_Z3f15v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META54:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META55:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret <3 x i32> zeroinitializer
 //
 __device__ V3 f15() { return {}; }
@@ -313,6 +361,8 @@ __device__ V3 f15() { return {}; }
 // AMDGPU-LABEL: define dso_local noundef <4 x i32> @_Z3f16v(
 // AMDGPU-SAME: ) local_unnamed_addr #[[ATTR1]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META56:![0-9]+]], i32 poison, i1 true)
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META57:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret <4 x i32> zeroinitializer
 //
 __device__ V4 f16() { return {}; }
@@ -375,8 +425,9 @@ extern "C" __device__ void variadic(int, ...);
 // AMDGCNSPIRV-NEXT:    ret void
 //
 // AMDGPU-LABEL: define dso_local void @_Z3f175ByRef(
-// AMDGPU-SAME: ptr addrspace(5) nofree noundef readonly byref([[STRUCT_BYREF:%.*]]) align 4 captures(none) [[TMP0:%.*]]) local_unnamed_addr #[[ATTR4:[0-9]+]] {
+// AMDGPU-SAME: ptr addrspace(5) nofree noundef readonly byref([[STRUCT_BYREF:%.*]]) align 4 captures(none) [[TMP0:%.*]]) local_unnamed_addr #[[ATTR3:[0-9]+]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META58:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[B_SROA_0_0_COPYLOAD:%.*]] = load i32, ptr addrspace(5) [[TMP0]], align 4
 // AMDGPU-NEXT:    [[B_SROA_2_0__SROA_IDX:%.*]] = getelementptr inbounds nuw i8, ptr addrspace(5) [[TMP0]], i32 4
 // AMDGPU-NEXT:    [[B_SROA_2_0_COPYLOAD:%.*]] = load i32, ptr addrspace(5) [[B_SROA_2_0__SROA_IDX]], align 4
@@ -428,9 +479,63 @@ extern "C" __device__ void variadic(int, ...);
 // AMDGPU-NEXT:    [[DOTFCA_0_15_INSERT:%.*]] = insertvalue [[STRUCT_BYREF]] [[DOTFCA_0_14_INSERT]], i32 [[B_SROA_16_0_COPYLOAD]], 0, 15
 // AMDGPU-NEXT:    [[DOTFCA_0_16_INSERT:%.*]] = insertvalue [[STRUCT_BYREF]] [[DOTFCA_0_15_INSERT]], i32 [[B_SROA_17_0_COPYLOAD]], 0, 16
 // AMDGPU-NEXT:    tail call void (i32, ...) @variadic(i32 noundef 1, [[STRUCT_BYREF]] [[DOTFCA_0_16_INSERT]]) #[[ATTR6:[0-9]+]]
+// AMDGPU-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META59:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 __device__ void f17(ByRef b) { variadic(1, b); }
 //.
-// AMDGCNSPIRV: [[META8]] = !{i32 1024, i32 1, i32 1}
+// AMDGCNSPIRV: [[META9]] = !{i32 1024, i32 1, i32 1}
+//.
+// AMDGPU: [[META8]] = !{i32 0, !"_Z2k0s"}
+// AMDGPU: [[META9]] = !{i32 1, !"_Z2k0s"}
+// AMDGPU: [[META10]] = !{i32 0, !"_Z2k1j"}
+// AMDGPU: [[META11]] = !{i32 1, !"_Z2k1j"}
+// AMDGPU: [[META12]] = !{i32 0, !"_Z2k2d"}
+// AMDGPU: [[META13]] = !{i32 1, !"_Z2k2d"}
+// AMDGPU: [[META14]] = !{i32 0, !"_Z2k311Transparent"}
+// AMDGPU: [[META15]] = !{i32 1, !"_Z2k311Transparent"}
+// AMDGPU: [[META16]] = !{i32 0, !"_Z2k413SingleElement"}
+// AMDGPU: [[META17]] = !{i32 1, !"_Z2k413SingleElement"}
+// AMDGPU: [[META18]] = !{i32 0, !"_Z2k55ByRef"}
+// AMDGPU: [[META19]] = !{i32 1, !"_Z2k55ByRef"}
+// AMDGPU: [[META20]] = !{i32 0, !"_Z2k6Dv1_jDv2_jDv3_jDv4_j"}
+// AMDGPU: [[META21]] = !{i32 1, !"_Z2k6Dv1_jDv2_jDv3_jDv4_j"}
+// AMDGPU: [[META22]] = !{i32 0, !"_Z2k7Pj"}
+// AMDGPU: [[META23]] = !{i32 1, !"_Z2k7Pj"}
+// AMDGPU: [[META24]] = !{i32 0, !"_Z2f0s"}
+// AMDGPU: [[META25]] = !{i32 1, !"_Z2f0s"}
+// AMDGPU: [[META26]] = !{i32 0, !"_Z2f1j"}
+// AMDGPU: [[META27]] = !{i32 1, !"_Z2f1j"}
+// AMDGPU: [[META28]] = !{i32 0, !"_Z2f2d"}
+// AMDGPU: [[META29]] = !{i32 1, !"_Z2f2d"}
+// AMDGPU: [[META30]] = !{i32 0, !"_Z2f311Transparent"}
+// AMDGPU: [[META31]] = !{i32 1, !"_Z2f311Transparent"}
+// AMDGPU: [[META32]] = !{i32 0, !"_Z2f413SingleElement"}
+// AMDGPU: [[META33]] = !{i32 1, !"_Z2f413SingleElement"}
+// AMDGPU: [[META34]] = !{i32 0, !"_Z2f55ByRef"}
+// AMDGPU: [[META35]] = !{i32 1, !"_Z2f55ByRef"}
+// AMDGPU: [[META36]] = !{i32 0, !"_Z2f6Dv1_jDv2_jDv3_jDv4_j"}
+// AMDGPU: [[META37]] = !{i32 1, !"_Z2f6Dv1_jDv2_jDv3_jDv4_j"}
+// AMDGPU: [[META38]] = !{i32 0, !"_Z2f7v"}
+// AMDGPU: [[META39]] = !{i32 1, !"_Z2f7v"}
+// AMDGPU: [[META40]] = !{i32 0, !"_Z2f8v"}
+// AMDGPU: [[META41]] = !{i32 1, !"_Z2f8v"}
+// AMDGPU: [[META42]] = !{i32 0, !"_Z2f9v"}
+// AMDGPU: [[META43]] = !{i32 1, !"_Z2f9v"}
+// AMDGPU: [[META44]] = !{i32 0, !"_Z3f10v"}
+// AMDGPU: [[META45]] = !{i32 1, !"_Z3f10v"}
+// AMDGPU: [[META46]] = !{i32 0, !"_Z3f11v"}
+// AMDGPU: [[META47]] = !{i32 1, !"_Z3f11v"}
+// AMDGPU: [[META48]] = !{i32 0, !"_Z3f12v"}
+// AMDGPU: [[META49]] = !{i32 1, !"_Z3f12v"}
+// AMDGPU: [[META50]] = !{i32 0, !"_Z3f13v"}
+// AMDGPU: [[META51]] = !{i32 1, !"_Z3f13v"}
+// AMDGPU: [[META52]] = !{i32 0, !"_Z3f14v"}
+// AMDGPU: [[META53]] = !{i32 1, !"_Z3f14v"}
+// AMDGPU: [[META54]] = !{i32 0, !"_Z3f15v"}
+// AMDGPU: [[META55]] = !{i32 1, !"_Z3f15v"}
+// AMDGPU: [[META56]] = !{i32 0, !"_Z3f16v"}
+// AMDGPU: [[META57]] = !{i32 1, !"_Z3f16v"}
+// AMDGPU: [[META58]] = !{i32 0, !"_Z3f175ByRef"}
+// AMDGPU: [[META59]] = !{i32 1, !"_Z3f175ByRef"}
 //.

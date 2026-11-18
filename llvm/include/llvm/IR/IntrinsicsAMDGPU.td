@@ -2444,6 +2444,12 @@ def int_amdgcn_s_ttracedata_imm :
   DefaultAttrsIntrinsic<[], [llvm_i16_ty],
                         [IntrNoMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>]>;
 
+def int_amdgcn_sqtt_event :
+  DefaultAttrsIntrinsic<[], [llvm_metadata_ty, llvm_i32_ty, llvm_i1_ty],
+                        [IntrNoMem, IntrHasSideEffects, IntrWillReturn,
+                         IntrNoCallback, IntrNoFree, IntrConvergent,
+                         ImmArg<ArgIndex<2>>]>;
+
 // This is IntrHasSideEffects so it can be used to read cycle counters.
 def int_amdgcn_s_getreg :
   ClangBuiltin<"__builtin_amdgcn_s_getreg">,

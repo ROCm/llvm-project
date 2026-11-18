@@ -24,17 +24,18 @@ B fail;
 // CHECK-LABEL: define dso_local noundef nonnull align 8 dereferenceable(8) ptr @_Z1fP1A(
 // CHECK-SAME: ptr noundef [[A:%.*]]) #[[ATTR0:[0-9]+]] personality ptr @__gxx_personality_v0 {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[EXN_SLOT:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[EHSELECTOR_SLOT:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__dynamic_cast(ptr [[TMP0]], ptr addrspace(1) @_ZTI1A, ptr addrspace(1) @_ZTI1B, i64 0) #[[ATTR3:[0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__dynamic_cast(ptr [[TMP0]], ptr addrspace(1) @_ZTI1A, ptr addrspace(1) @_ZTI1B, i64 0) #[[ATTR4:[0-9]+]]
 // CHECK-NEXT:    [[TMP2:%.*]] = icmp eq ptr [[TMP1]], null
 // CHECK-NEXT:    br i1 [[TMP2]], label [[DYNAMIC_CAST_BAD_CAST:%.*]], label [[DYNAMIC_CAST_END:%.*]]
 // CHECK:       dynamic_cast.bad_cast:
-// CHECK-NEXT:    invoke void @__cxa_bad_cast() #[[ATTR4:[0-9]+]]
+// CHECK-NEXT:    invoke void @__cxa_bad_cast() #[[ATTR5:[0-9]+]]
 // CHECK-NEXT:            to label [[INVOKE_CONT:%.*]] unwind label [[LPAD:%.*]]
 // CHECK:       invoke.cont:
 // CHECK-NEXT:    unreachable
@@ -50,10 +51,11 @@ B fail;
 // CHECK-NEXT:    br label [[CATCH:%.*]]
 // CHECK:       catch:
 // CHECK-NEXT:    [[EXN:%.*]] = load ptr, ptr addrspace(5) [[EXN_SLOT]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = call ptr @__cxa_begin_catch(ptr [[EXN]]) #[[ATTR3]]
+// CHECK-NEXT:    [[TMP6:%.*]] = call ptr @__cxa_begin_catch(ptr [[EXN]]) #[[ATTR4]]
 // CHECK-NEXT:    call void @__cxa_end_catch()
 // CHECK-NEXT:    br label [[TRY_CONT]]
 // CHECK:       try.cont:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret ptr addrspacecast (ptr addrspace(1) @fail to ptr)
 //
 // WITH-NONZERO-DEFAULT-AS-LABEL: define spir_func noundef align 8 dereferenceable(8) ptr addrspace(4) @_Z1fP1A(
@@ -104,8 +106,9 @@ const B& f(A *a) {
 // CHECK: attributes #[[ATTR0]] = { convergent mustprogress noinline optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // CHECK: attributes #[[ATTR1:[0-9]+]] = { nounwind willreturn memory(read) }
 // CHECK: attributes #[[ATTR2:[0-9]+]] = { convergent "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
-// CHECK: attributes #[[ATTR3]] = { nounwind }
-// CHECK: attributes #[[ATTR4]] = { noreturn }
+// CHECK: attributes #[[ATTR3:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
+// CHECK: attributes #[[ATTR4]] = { nounwind }
+// CHECK: attributes #[[ATTR5]] = { noreturn }
 //.
 // WITH-NONZERO-DEFAULT-AS: attributes #[[ATTR0]] = { mustprogress noinline optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // WITH-NONZERO-DEFAULT-AS: attributes #[[ATTR1:[0-9]+]] = { nounwind willreturn memory(read) }
@@ -115,6 +118,8 @@ const B& f(A *a) {
 //.
 // CHECK: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // CHECK: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// CHECK: [[META2]] = !{i32 0, !"_Z1fP1A"}
+// CHECK: [[META3]] = !{i32 1, !"_Z1fP1A"}
 //.
 // WITH-NONZERO-DEFAULT-AS: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // WITH-NONZERO-DEFAULT-AS: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}

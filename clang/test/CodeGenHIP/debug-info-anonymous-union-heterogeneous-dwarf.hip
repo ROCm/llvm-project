@@ -5,14 +5,16 @@
 #define __device__ __attribute__((device))
 
 // CHECK-LABEL: define dso_local void @_Z7kernel1v(
-// CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG7:![0-9]+]] {
+// CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG6:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true), !dbg [[DBG21:![0-9]+]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[UNION_ANON:%.*]], align 4, addrspace(5)
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META18:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[UNION_ANON]])), [[META21:![0-9]+]])
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META19:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[UNION_ANON]])), [[META21]])
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META20:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[UNION_ANON]])), [[META21]])
-// CHECK-NEXT:    ret void, !dbg [[DBG22:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META17:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[UNION_ANON]])), [[META22:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META18:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[UNION_ANON]])), [[META22]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META19:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[UNION_ANON]])), [[META22]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true), !dbg [[DBG24:![0-9]+]]
+// CHECK-NEXT:    ret void, !dbg [[DBG24]]
 //
 __device__ void kernel1() {
   union { int x; float f; };
@@ -20,21 +22,24 @@ __device__ void kernel1() {
 
 //.
 // CHECK: [[META0:![0-9]+]] = distinct !DICompileUnit(language: DW_LANG_HIP, file: [[META1:![0-9]+]], producer: "{{.*}}clang version {{.*}}", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, splitDebugInlining: false, nameTableKind: None)
-// CHECK: [[META1]] = !DIFile(filename: "{{.*}}/clang/test/CodeGenHIP/<stdin>", directory: "")
-// CHECK: [[DBG7]] = distinct !DISubprogram(name: "kernel1", linkageName: "_Z7kernel1v", scope: [[META8:![0-9]+]], file: [[META8]], line: 17, type: [[META9:![0-9]+]], scopeLine: 17, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META11:![0-9]+]])
-// CHECK: [[META8]] = !DIFile(filename: "{{.*}}/clang/test/CodeGenHIP/debug-info-anonymous-union-heterogeneous-dwarf.hip", directory: "")
-// CHECK: [[META9]] = !DISubroutineType(types: [[META10:![0-9]+]])
-// CHECK: [[META10]] = !{null}
-// CHECK: [[META11]] = !{[[META12:![0-9]+]], [[META18]], [[META19]], [[META20]]}
-// CHECK: [[META12]] = distinct !DICompositeType(tag: DW_TAG_union_type, scope: [[DBG7]], file: [[META8]], line: 18, size: 32, flags: DIFlagExportSymbols | DIFlagTypePassByValue, elements: [[META13:![0-9]+]])
-// CHECK: [[META13]] = !{[[META14:![0-9]+]], [[META16:![0-9]+]]}
-// CHECK: [[META14]] = !DIDerivedType(tag: DW_TAG_member, name: "x", scope: [[META12]], file: [[META8]], line: 18, baseType: [[META15:![0-9]+]], size: 32)
-// CHECK: [[META15]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
-// CHECK: [[META16]] = !DIDerivedType(tag: DW_TAG_member, name: "f", scope: [[META12]], file: [[META8]], line: 18, baseType: [[META17:![0-9]+]], size: 32)
-// CHECK: [[META17]] = !DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)
-// CHECK: [[META18]] = !DILocalVariable(name: "x", scope: [[DBG7]], type: [[META15]], flags: DIFlagArtificial)
-// CHECK: [[META19]] = !DILocalVariable(name: "f", scope: [[DBG7]], type: [[META17]], flags: DIFlagArtificial)
-// CHECK: [[META20]] = !DILocalVariable(scope: [[DBG7]], type: [[META12]], flags: DIFlagArtificial)
-// CHECK: [[META21]] = !DILocation(line: 0, scope: [[DBG7]])
-// CHECK: [[DBG22]] = !DILocation(line: 19, column: 1, scope: [[DBG7]])
+// CHECK: [[META1]] = !DIFile(filename: "{{.*}}<stdin>", directory: {{.*}})
+// CHECK: [[DBG6]] = distinct !DISubprogram(name: "kernel1", linkageName: "_Z7kernel1v", scope: [[META7:![0-9]+]], file: [[META7]], line: 19, type: [[META8:![0-9]+]], scopeLine: 19, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META10:![0-9]+]])
+// CHECK: [[META7]] = !DIFile(filename: "{{.*}}debug-info-anonymous-union-heterogeneous-dwarf.hip", directory: {{.*}})
+// CHECK: [[META8]] = !DISubroutineType(types: [[META9:![0-9]+]])
+// CHECK: [[META9]] = !{null}
+// CHECK: [[META10]] = !{[[META11:![0-9]+]], [[META17]], [[META18]], [[META19]]}
+// CHECK: [[META11]] = distinct !DICompositeType(tag: DW_TAG_union_type, scope: [[DBG6]], file: [[META7]], line: 20, size: 32, flags: DIFlagExportSymbols | DIFlagTypePassByValue, elements: [[META12:![0-9]+]])
+// CHECK: [[META12]] = !{[[META13:![0-9]+]], [[META15:![0-9]+]]}
+// CHECK: [[META13]] = !DIDerivedType(tag: DW_TAG_member, name: "x", scope: [[META11]], file: [[META7]], line: 20, baseType: [[META14:![0-9]+]], size: 32)
+// CHECK: [[META14]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
+// CHECK: [[META15]] = !DIDerivedType(tag: DW_TAG_member, name: "f", scope: [[META11]], file: [[META7]], line: 20, baseType: [[META16:![0-9]+]], size: 32)
+// CHECK: [[META16]] = !DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)
+// CHECK: [[META17]] = !DILocalVariable(name: "x", scope: [[DBG6]], type: [[META14]], flags: DIFlagArtificial)
+// CHECK: [[META18]] = !DILocalVariable(name: "f", scope: [[DBG6]], type: [[META16]], flags: DIFlagArtificial)
+// CHECK: [[META19]] = !DILocalVariable(scope: [[DBG6]], type: [[META11]], flags: DIFlagArtificial)
+// CHECK: [[META20]] = !{i32 0, !"_Z7kernel1v"}
+// CHECK: [[DBG21]] = !DILocation(line: 19, scope: [[DBG6]])
+// CHECK: [[META22]] = !DILocation(line: 0, scope: [[DBG6]])
+// CHECK: [[META23]] = !{i32 1, !"_Z7kernel1v"}
+// CHECK: [[DBG24]] = !DILocation(line: 21, column: 1, scope: [[DBG6]])
 //.

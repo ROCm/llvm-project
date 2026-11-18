@@ -8,7 +8,9 @@ typedef int    v4i   __attribute__((ext_vector_type(4)));
 // GFX1310-LABEL: define dso_local void @test_amdgcn_global_load_async_to_lds_b8(
 // GFX1310-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // GFX1310-NEXT:  [[ENTRY:.*:]]
+// GFX1310-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // GFX1310-NEXT:    tail call void @llvm.amdgcn.global.load.async.to.lds.b8(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// GFX1310-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // GFX1310-NEXT:    ret void
 //
 void test_amdgcn_global_load_async_to_lds_b8( global char* gaddr, local char* laddr)
@@ -19,7 +21,9 @@ void test_amdgcn_global_load_async_to_lds_b8( global char* gaddr, local char* la
 // GFX1310-LABEL: define dso_local void @test_amdgcn_global_load_async_to_lds_b32(
 // GFX1310-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1310-NEXT:  [[ENTRY:.*:]]
+// GFX1310-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // GFX1310-NEXT:    tail call void @llvm.amdgcn.global.load.async.to.lds.b32(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// GFX1310-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // GFX1310-NEXT:    ret void
 //
 void test_amdgcn_global_load_async_to_lds_b32(global int* gaddr, local int* laddr)
@@ -30,7 +34,9 @@ void test_amdgcn_global_load_async_to_lds_b32(global int* gaddr, local int* ladd
 // GFX1310-LABEL: define dso_local void @test_amdgcn_global_load_async_to_lds_b64(
 // GFX1310-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1310-NEXT:  [[ENTRY:.*:]]
+// GFX1310-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // GFX1310-NEXT:    tail call void @llvm.amdgcn.global.load.async.to.lds.b64(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// GFX1310-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // GFX1310-NEXT:    ret void
 //
 void test_amdgcn_global_load_async_to_lds_b64(global v2i* gaddr, local v2i* laddr)
@@ -41,10 +47,22 @@ void test_amdgcn_global_load_async_to_lds_b64(global v2i* gaddr, local v2i* ladd
 // GFX1310-LABEL: define dso_local void @test_amdgcn_global_load_async_to_lds_b128(
 // GFX1310-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[GADDR:%.*]], ptr addrspace(3) nofree noundef writeonly captures(none) [[LADDR:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // GFX1310-NEXT:  [[ENTRY:.*:]]
+// GFX1310-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // GFX1310-NEXT:    tail call void @llvm.amdgcn.global.load.async.to.lds.b128(ptr addrspace(1) [[GADDR]], ptr addrspace(3) [[LADDR]], i32 16, i32 0)
+// GFX1310-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // GFX1310-NEXT:    ret void
 //
 void test_amdgcn_global_load_async_to_lds_b128( global v4i* gaddr, local v4i* laddr)
 {
   __builtin_amdgcn_global_load_async_to_lds_b128(gaddr, laddr, 16, 0);
 }
+//.
+// GFX1310: [[META8]] = !{i32 0, !"test_amdgcn_global_load_async_to_lds_b8"}
+// GFX1310: [[META9]] = !{i32 1, !"test_amdgcn_global_load_async_to_lds_b8"}
+// GFX1310: [[META10]] = !{i32 0, !"test_amdgcn_global_load_async_to_lds_b32"}
+// GFX1310: [[META11]] = !{i32 1, !"test_amdgcn_global_load_async_to_lds_b32"}
+// GFX1310: [[META12]] = !{i32 0, !"test_amdgcn_global_load_async_to_lds_b64"}
+// GFX1310: [[META13]] = !{i32 1, !"test_amdgcn_global_load_async_to_lds_b64"}
+// GFX1310: [[META14]] = !{i32 0, !"test_amdgcn_global_load_async_to_lds_b128"}
+// GFX1310: [[META15]] = !{i32 1, !"test_amdgcn_global_load_async_to_lds_b128"}
+//.

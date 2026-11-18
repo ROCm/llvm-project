@@ -9,7 +9,11 @@
 
 // CHECK-LABEL: @test___fadd_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_add_rtn_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3:[0-9]+]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fadd_rd(float x, float y) {
@@ -18,7 +22,11 @@ extern "C" __device__ float test___fadd_rd(float x, float y) {
 
 // CHECK-LABEL: @test___fadd_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_add_rte_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fadd_rn(float x, float y) {
@@ -27,7 +35,11 @@ extern "C" __device__ float test___fadd_rn(float x, float y) {
 
 // CHECK-LABEL: @test___fadd_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_add_rtp_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fadd_ru(float x, float y) {
@@ -36,7 +48,11 @@ extern "C" __device__ float test___fadd_ru(float x, float y) {
 
 // CHECK-LABEL: @test___fadd_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_add_rtz_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fadd_rz(float x, float y) {
@@ -45,7 +61,11 @@ extern "C" __device__ float test___fadd_rz(float x, float y) {
 
 // CHECK-LABEL: @test__fmaf_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_fma_rtn_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]], float noundef [[Z:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test__fmaf_rd(float x, float y, float z) {
@@ -54,7 +74,11 @@ extern "C" __device__ float test__fmaf_rd(float x, float y, float z) {
 
 // CHECK-LABEL: @test__fmaf_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_fma_rte_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]], float noundef [[Z:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test__fmaf_rn(float x, float y, float z) {
@@ -63,7 +87,11 @@ extern "C" __device__ float test__fmaf_rn(float x, float y, float z) {
 
 // CHECK-LABEL: @test__fmaf_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_fma_rtp_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]], float noundef [[Z:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test__fmaf_ru(float x, float y, float z) {
@@ -72,7 +100,11 @@ extern "C" __device__ float test__fmaf_ru(float x, float y, float z) {
 
 // CHECK-LABEL: @test__fmaf_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_fma_rtz_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]], float noundef [[Z:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test__fmaf_rz(float x, float y, float z) {
@@ -81,7 +113,11 @@ extern "C" __device__ float test__fmaf_rz(float x, float y, float z) {
 
 // CHECK-LABEL: @test___fmul_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_mul_rtn_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fmul_rd(float x, float y) {
@@ -90,7 +126,11 @@ extern "C" __device__ float test___fmul_rd(float x, float y) {
 
 // CHECK-LABEL: @test___fmul_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_mul_rte_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fmul_rn(float x, float y) {
@@ -99,7 +139,11 @@ extern "C" __device__ float test___fmul_rn(float x, float y) {
 
 // CHECK-LABEL: @test___fmul_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META48:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META49:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_mul_rtp_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META50:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META51:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fmul_ru(float x, float y) {
@@ -108,7 +152,11 @@ extern "C" __device__ float test___fmul_ru(float x, float y) {
 
 // CHECK-LABEL: @test___fmul_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META52:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META53:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_mul_rtz_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META54:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META55:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fmul_rz(float x, float y) {
@@ -117,7 +165,11 @@ extern "C" __device__ float test___fmul_rz(float x, float y) {
 
 // CHECK-LABEL: @test___frcp_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META56:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META57:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_div_rtn_f32(float noundef 1.000000e+00, float noundef [[X:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META58:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META59:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___frcp_rd(float x) {
@@ -126,7 +178,11 @@ extern "C" __device__ float test___frcp_rd(float x) {
 
 // CHECK-LABEL: @test___frcp_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META60:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META61:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_div_rte_f32(float noundef 1.000000e+00, float noundef [[X:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META62:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META63:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___frcp_rn(float x) {
@@ -135,7 +191,11 @@ extern "C" __device__ float test___frcp_rn(float x) {
 
 // CHECK-LABEL: @test___frcp_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META64:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META65:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_div_rtp_f32(float noundef 1.000000e+00, float noundef [[X:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META66:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META67:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___frcp_ru(float x) {
@@ -144,7 +204,11 @@ extern "C" __device__ float test___frcp_ru(float x) {
 
 // CHECK-LABEL: @test___frcp_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META68:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META69:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_div_rtz_f32(float noundef 1.000000e+00, float noundef [[X:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META70:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META71:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___frcp_rz(float x) {
@@ -153,7 +217,11 @@ extern "C" __device__ float test___frcp_rz(float x) {
 
 // CHECK-LABEL: @test___fsqrt_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META72:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META73:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_sqrt_rtn_f32(float noundef [[X:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META74:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META75:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fsqrt_rd(float x) {
@@ -162,7 +230,11 @@ extern "C" __device__ float test___fsqrt_rd(float x) {
 
 // CHECK-LABEL: @test___fsqrt_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META76:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META77:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_sqrt_rte_f32(float noundef [[X:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META78:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META79:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fsqrt_rn(float x) {
@@ -171,7 +243,11 @@ extern "C" __device__ float test___fsqrt_rn(float x) {
 
 // CHECK-LABEL: @test___fsqrt_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META80:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META81:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_sqrt_rtp_f32(float noundef [[X:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META82:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META83:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fsqrt_ru(float x) {
@@ -180,7 +256,11 @@ extern "C" __device__ float test___fsqrt_ru(float x) {
 
 // CHECK-LABEL: @test___fsqrt_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META84:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META85:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_sqrt_rtz_f32(float noundef [[X:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META86:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META87:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fsqrt_rz(float x) {
@@ -189,7 +269,11 @@ extern "C" __device__ float test___fsqrt_rz(float x) {
 
 // CHECK-LABEL: @test___fsub_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META88:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META89:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_sub_rtn_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META90:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META91:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fsub_rd(float x, float y) {
@@ -198,7 +282,11 @@ extern "C" __device__ float test___fsub_rd(float x, float y) {
 
 // CHECK-LABEL: @test___fsub_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META92:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META93:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_sub_rte_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META94:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META95:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fsub_rn(float x, float y) {
@@ -207,7 +295,11 @@ extern "C" __device__ float test___fsub_rn(float x, float y) {
 
 // CHECK-LABEL: @test___fsub_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META96:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META97:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_sub_rtp_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META98:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META99:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fsub_ru(float x, float y) {
@@ -216,7 +308,11 @@ extern "C" __device__ float test___fsub_ru(float x, float y) {
 
 // CHECK-LABEL: @test___fsub_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META100:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META101:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_sub_rtz_f32(float noundef [[X:%.*]], float noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META102:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META103:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CALL_I]]
 //
 extern "C" __device__ float test___fsub_rz(float x, float y) {
@@ -225,7 +321,11 @@ extern "C" __device__ float test___fsub_rz(float x, float y) {
 
 // CHECK-LABEL: @test___dadd_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META104:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META105:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_add_rtn_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META106:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META107:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test___dadd_rd(double x, double y) {
@@ -234,7 +334,11 @@ extern "C" __device__ double test___dadd_rd(double x, double y) {
 
 // CHECK-LABEL: @test___dadd_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META108:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META109:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_add_rte_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META110:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META111:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test___dadd_rn(double x, double y) {
@@ -243,7 +347,11 @@ extern "C" __device__ double test___dadd_rn(double x, double y) {
 
 // CHECK-LABEL: @test___dadd_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META112:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META113:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_add_rtp_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META114:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META115:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test___dadd_ru(double x, double y) {
@@ -252,7 +360,11 @@ extern "C" __device__ double test___dadd_ru(double x, double y) {
 
 // CHECK-LABEL: @test___dadd_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META116:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META117:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_add_rtz_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META118:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META119:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test___dadd_rz(double x, double y) {
@@ -261,7 +373,11 @@ extern "C" __device__ double test___dadd_rz(double x, double y) {
 
 // CHECK-LABEL: @test___dmul_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META120:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META121:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_mul_rtn_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META122:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META123:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test___dmul_rd(double x, double y) {
@@ -270,7 +386,11 @@ extern "C" __device__ double test___dmul_rd(double x, double y) {
 
 // CHECK-LABEL: @test___dmul_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META124:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META125:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_mul_rte_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META126:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META127:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test___dmul_rn(double x, double y) {
@@ -279,7 +399,11 @@ extern "C" __device__ double test___dmul_rn(double x, double y) {
 
 // CHECK-LABEL: @test___dmul_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META128:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META129:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_mul_rtp_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META130:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META131:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test___dmul_ru(double x, double y) {
@@ -288,7 +412,11 @@ extern "C" __device__ double test___dmul_ru(double x, double y) {
 
 // CHECK-LABEL: @test___dmul_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META132:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META133:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_mul_rtz_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META134:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META135:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test___dmul_rz(double x, double y) {
@@ -297,9 +425,13 @@ extern "C" __device__ double test___dmul_rz(double x, double y) {
 
 // CHECK-LABEL: @test___drcp_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META136:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV:%.*]] = fpext contract float [[X:%.*]] to double
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META137:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_div_rtn_f64(double noundef 1.000000e+00, double noundef [[CONV]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META138:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV1:%.*]] = fptrunc contract double [[CALL_I]] to float
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META139:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CONV1]]
 //
 extern "C" __device__ float test___drcp_rd(float x) {
@@ -308,9 +440,13 @@ extern "C" __device__ float test___drcp_rd(float x) {
 
 // CHECK-LABEL: @test___drcp_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META140:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV:%.*]] = fpext contract float [[X:%.*]] to double
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META141:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_div_rte_f64(double noundef 1.000000e+00, double noundef [[CONV]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META142:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV1:%.*]] = fptrunc contract double [[CALL_I]] to float
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META143:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CONV1]]
 //
 extern "C" __device__ float test___drcp_rn(float x) {
@@ -319,9 +455,13 @@ extern "C" __device__ float test___drcp_rn(float x) {
 
 // CHECK-LABEL: @test___drcp_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META144:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV:%.*]] = fpext contract float [[X:%.*]] to double
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META145:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_div_rtp_f64(double noundef 1.000000e+00, double noundef [[CONV]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META146:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV1:%.*]] = fptrunc contract double [[CALL_I]] to float
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META147:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CONV1]]
 //
 extern "C" __device__ float test___drcp_ru(float x) {
@@ -330,9 +470,13 @@ extern "C" __device__ float test___drcp_ru(float x) {
 
 // CHECK-LABEL: @test___drcp_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META148:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV:%.*]] = fpext contract float [[X:%.*]] to double
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META149:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_div_rtz_f64(double noundef 1.000000e+00, double noundef [[CONV]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META150:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV1:%.*]] = fptrunc contract double [[CALL_I]] to float
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META151:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CONV1]]
 //
 extern "C" __device__ float test___drcp_rz(float x) {
@@ -341,9 +485,13 @@ extern "C" __device__ float test___drcp_rz(float x) {
 
 // CHECK-LABEL: @test___dsqrt_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META152:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV:%.*]] = fpext contract float [[X:%.*]] to double
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META153:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_sqrt_rtn_f64(double noundef [[CONV]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META154:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV1:%.*]] = fptrunc contract double [[CALL_I]] to float
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META155:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CONV1]]
 //
 extern "C" __device__ float test___dsqrt_rd(float x) {
@@ -352,9 +500,13 @@ extern "C" __device__ float test___dsqrt_rd(float x) {
 
 // CHECK-LABEL: @test___dsqrt_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META156:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV:%.*]] = fpext contract float [[X:%.*]] to double
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META157:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_sqrt_rte_f64(double noundef [[CONV]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META158:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV1:%.*]] = fptrunc contract double [[CALL_I]] to float
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META159:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CONV1]]
 //
 extern "C" __device__ float test___dsqrt_rn(float x) {
@@ -363,9 +515,13 @@ extern "C" __device__ float test___dsqrt_rn(float x) {
 
 // CHECK-LABEL: @test___dsqrt_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META160:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV:%.*]] = fpext contract float [[X:%.*]] to double
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META161:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_sqrt_rtp_f64(double noundef [[CONV]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META162:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV1:%.*]] = fptrunc contract double [[CALL_I]] to float
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META163:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CONV1]]
 //
 extern "C" __device__ float test___dsqrt_ru(float x) {
@@ -374,9 +530,13 @@ extern "C" __device__ float test___dsqrt_ru(float x) {
 
 // CHECK-LABEL: @test___dsqrt_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META164:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV:%.*]] = fpext contract float [[X:%.*]] to double
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META165:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_sqrt_rtz_f64(double noundef [[CONV]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META166:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CONV1:%.*]] = fptrunc contract double [[CALL_I]] to float
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META167:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[CONV1]]
 //
 extern "C" __device__ float test___dsqrt_rz(float x) {
@@ -385,7 +545,11 @@ extern "C" __device__ float test___dsqrt_rz(float x) {
 
 // CHECK-LABEL: @test__fma_rd(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META168:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META169:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_fma_rtn_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]], double noundef [[Z:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META170:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META171:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test__fma_rd(double x, double y, double z) {
@@ -394,7 +558,11 @@ extern "C" __device__ double test__fma_rd(double x, double y, double z) {
 
 // CHECK-LABEL: @test__fma_rn(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META172:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META173:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_fma_rte_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]], double noundef [[Z:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META174:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META175:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test__fma_rn(double x, double y, double z) {
@@ -403,7 +571,11 @@ extern "C" __device__ double test__fma_rn(double x, double y, double z) {
 
 // CHECK-LABEL: @test__fma_ru(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META176:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META177:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_fma_rtp_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]], double noundef [[Z:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META178:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META179:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test__fma_ru(double x, double y, double z) {
@@ -412,7 +584,11 @@ extern "C" __device__ double test__fma_ru(double x, double y, double z) {
 
 // CHECK-LABEL: @test__fma_rz(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META180:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META181:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_fma_rtz_f64(double noundef [[X:%.*]], double noundef [[Y:%.*]], double noundef [[Z:%.*]]) #[[ATTR3]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META182:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META183:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[CALL_I]]
 //
 extern "C" __device__ double test__fma_rz(double x, double y, double z) {

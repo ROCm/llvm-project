@@ -49,6 +49,7 @@
 ; GCN-O0-NEXT:        Dominator Tree Construction
 ; GCN-O0-NEXT:        Natural Loop Information
 ; GCN-O0-NEXT:        Scalar Evolution Analysis
+; GCN-O0-NEXT:    AMDGPU SQTT lower
 ; GCN-O0-NEXT:    AMDGPU lower intrinsics
 ; GCN-O0-NEXT:    FunctionPass Manager
 ; GCN-O0-NEXT:      Lazy Value Information Analysis
@@ -244,6 +245,7 @@
 ; GCN-O1-NEXT:        Dominator Tree Construction
 ; GCN-O1-NEXT:        Natural Loop Information
 ; GCN-O1-NEXT:        Scalar Evolution Analysis
+; GCN-O1-NEXT:    AMDGPU SQTT lower
 ; GCN-O1-NEXT:    AMDGPU lower intrinsics
 ; GCN-O1-NEXT:    FunctionPass Manager
 ; GCN-O1-NEXT:      Lazy Value Information Analysis
@@ -558,6 +560,7 @@
 ; GCN-O1-OPTS-NEXT:        Dominator Tree Construction
 ; GCN-O1-OPTS-NEXT:        Natural Loop Information
 ; GCN-O1-OPTS-NEXT:        Scalar Evolution Analysis
+; GCN-O1-OPTS-NEXT:    AMDGPU SQTT lower
 ; GCN-O1-OPTS-NEXT:    AMDGPU lower intrinsics
 ; GCN-O1-OPTS-NEXT:    FunctionPass Manager
 ; GCN-O1-OPTS-NEXT:      Lazy Value Information Analysis
@@ -883,6 +886,7 @@
 ; GCN-O2-NEXT:        Dominator Tree Construction
 ; GCN-O2-NEXT:        Natural Loop Information
 ; GCN-O2-NEXT:        Scalar Evolution Analysis
+; GCN-O2-NEXT:    AMDGPU SQTT lower
 ; GCN-O2-NEXT:    AMDGPU lower intrinsics
 ; GCN-O2-NEXT:    FunctionPass Manager
 ; GCN-O2-NEXT:      Lazy Value Information Analysis
@@ -1225,6 +1229,7 @@
 ; GCN-O3-NEXT:        Dominator Tree Construction
 ; GCN-O3-NEXT:        Natural Loop Information
 ; GCN-O3-NEXT:        Scalar Evolution Analysis
+; GCN-O3-NEXT:    AMDGPU SQTT lower
 ; GCN-O3-NEXT:    AMDGPU lower intrinsics
 ; GCN-O3-NEXT:    FunctionPass Manager
 ; GCN-O3-NEXT:      Lazy Value Information Analysis

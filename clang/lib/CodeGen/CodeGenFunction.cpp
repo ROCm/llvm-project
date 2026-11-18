@@ -1193,6 +1193,13 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
                        "__cyg_profile_func_enter_bare");
   }
 
+  // The SQTT entry and exit events are inserted by an AMDGPU pass that
+  // consumes this attribute.
+  // Experiment: -fsqtt-instrument is always on for AMDGPU (device) code.
+  if (CGM.getTriple().isAMDGPU() && CurFuncDecl &&
+      !CurFuncDecl->hasAttr<NoInstrumentFunctionAttr>())
+    CurFn->addFnAttr("amdgpu-sqtt-instrument");
+
   // Since emitting the mcount call here impacts optimizations such as function
   // inlining, we just add an attribute to insert a mcount call in backend.
   // The attribute "counting-function" is set to mcount function name which is

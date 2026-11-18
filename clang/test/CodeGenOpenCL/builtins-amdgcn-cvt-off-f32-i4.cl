@@ -4,10 +4,12 @@
 
 // CHECK-LABEL: @test_builtin_amdgcn_cvt_off_f32_i4_ui(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 [[N:%.*]], ptr addrspace(5) [[N_ADDR]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[N_ADDR]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = call float @llvm.amdgcn.cvt.off.f32.i4(i32 [[TMP0]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP1]]
 //
 float test_builtin_amdgcn_cvt_off_f32_i4_ui(unsigned n) {
@@ -16,10 +18,12 @@ float test_builtin_amdgcn_cvt_off_f32_i4_ui(unsigned n) {
 
 // CHECK-LABEL: @test_builtin_amdgcn_cvt_off_f32_i4_i(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 [[N:%.*]], ptr addrspace(5) [[N_ADDR]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(5) [[N_ADDR]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = call float @llvm.amdgcn.cvt.off.f32.i4(i32 [[TMP0]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP1]]
 //
 float test_builtin_amdgcn_cvt_off_f32_i4_i(int n) {

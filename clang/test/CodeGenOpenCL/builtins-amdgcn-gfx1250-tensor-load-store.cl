@@ -10,7 +10,9 @@ static v8u v8u_zeros = (v8u){0,0,0,0,0,0,0,0};
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_tensor_load_to_lds_d4(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.tensor.load.to.lds(<4 x i32> [[SG0:%.*]], <8 x i32> [[SG1:%.*]], <4 x i32> [[SG2:%.*]], <4 x i32> [[SG3:%.*]], <8 x i32> zeroinitializer, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_tensor_load_to_lds_d4(v4u sg0, v8u sg1, v4u sg2, v4u sg3)
@@ -20,7 +22,9 @@ void test_amdgcn_tensor_load_to_lds_d4(v4u sg0, v8u sg1, v4u sg2, v4u sg3)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_tensor_load_to_lds_d2(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.tensor.load.to.lds(<4 x i32> [[SG0:%.*]], <8 x i32> [[SG1:%.*]], <4 x i32> zeroinitializer, <4 x i32> zeroinitializer, <8 x i32> zeroinitializer, i32 27)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_tensor_load_to_lds_d2(v4u sg0, v8u sg1)
@@ -30,7 +34,9 @@ void test_amdgcn_tensor_load_to_lds_d2(v4u sg0, v8u sg1)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_tensor_store_from_lds_d4(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.tensor.store.from.lds(<4 x i32> [[SG0:%.*]], <8 x i32> [[SG1:%.*]], <4 x i32> [[SG2:%.*]], <4 x i32> [[SG3:%.*]], <8 x i32> zeroinitializer, i32 22)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_tensor_store_from_lds_d4(v4u sg0, v8u sg1, v4u sg2, v4u sg3)
@@ -40,7 +46,9 @@ void test_amdgcn_tensor_store_from_lds_d4(v4u sg0, v8u sg1, v4u sg2, v4u sg3)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_tensor_store_from_lds_d2(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.tensor.store.from.lds(<4 x i32> [[SG0:%.*]], <8 x i32> [[SG1:%.*]], <4 x i32> zeroinitializer, <4 x i32> zeroinitializer, <8 x i32> zeroinitializer, i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_tensor_store_from_lds_d2(v4u sg0, v8u sg1)
@@ -57,7 +65,9 @@ void test_amdgcn_tensor_store_from_lds_d2(v4u sg0, v8u sg1)
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_tensor_load_to_lds_d5(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.tensor.load.to.lds(<4 x i32> [[SG0:%.*]], <8 x i32> [[SG1:%.*]], <4 x i32> [[SG2:%.*]], <4 x i32> [[SG3:%.*]], <8 x i32> [[SG4:%.*]], i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_tensor_load_to_lds_d5(v4u sg0, v8u sg1, v4u sg2, v4u sg3, v8u sg4)
@@ -67,7 +77,9 @@ void test_amdgcn_tensor_load_to_lds_d5(v4u sg0, v8u sg1, v4u sg2, v4u sg3, v8u s
 
 // CHECK-GFX1250-LABEL: @test_amdgcn_tensor_store_from_lds_d5(
 // CHECK-GFX1250-NEXT:  entry:
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.tensor.store.from.lds(<4 x i32> [[SG0:%.*]], <8 x i32> [[SG1:%.*]], <4 x i32> [[SG2:%.*]], <4 x i32> [[SG3:%.*]], <8 x i32> [[SG4:%.*]], i32 0)
+// CHECK-GFX1250-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1250-NEXT:    ret void
 //
 void test_amdgcn_tensor_store_from_lds_d5(v4u sg0, v8u sg1, v4u sg2, v4u sg3, v8u sg4)

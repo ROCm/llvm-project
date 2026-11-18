@@ -5,13 +5,33 @@
 // CHECK-LABEL: define dso_local void @test_locals(
 // CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG5:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true), !dbg [[DBG11:![0-9]+]]
 // CHECK-NEXT:    [[IMG:%.*]] = alloca <8 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[IMG_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IMG]] to ptr
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[IMG]], [[META10:![0-9]+]], !DIExpression(DW_OP_constu, 1, DW_OP_swap, DW_OP_xderef), [[META13:![0-9]+]])
-// CHECK-NEXT:    [[TMP0:%.*]] = load <8 x i32>, ptr [[IMG_ASCAST]], align 32, !dbg [[DBG14:![0-9]+]]
-// CHECK-NEXT:    ret void, !dbg [[DBG15:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[IMG]], [[META12:![0-9]+]], !DIExpression(DW_OP_constu, 1, DW_OP_swap, DW_OP_xderef), [[META15:![0-9]+]])
+// CHECK-NEXT:    [[TMP0:%.*]] = load <8 x i32>, ptr [[IMG_ASCAST]], align 32, !dbg [[DBG16:![0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true), !dbg [[DBG18:![0-9]+]]
+// CHECK-NEXT:    ret void, !dbg [[DBG18]]
 //
 void test_locals(void) {
   __amdgpu_texture_t img;
   (void)img;
 }
+//.
+// CHECK: [[META0:![0-9]+]] = distinct !DICompileUnit(language: DW_LANG_C11, file: [[META1:![0-9]+]], producer: "{{.*}}clang version {{.*}}", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, splitDebugInlining: false, nameTableKind: None)
+// CHECK: [[META1]] = !DIFile(filename: "{{.*}}<stdin>", directory: {{.*}})
+// CHECK: [[DBG5]] = distinct !DISubprogram(name: "test_locals", scope: [[META6:![0-9]+]], file: [[META6]], line: 16, type: [[META7:![0-9]+]], scopeLine: 16, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META9:![0-9]+]])
+// CHECK: [[META6]] = !DIFile(filename: "{{.*}}amdgpu-image-rsrc-type-debug-info.c", directory: {{.*}})
+// CHECK: [[META7]] = !DISubroutineType(types: [[META8:![0-9]+]])
+// CHECK: [[META8]] = !{null}
+// CHECK: [[META9]] = !{}
+// CHECK: [[META10]] = !{i32 0, !"test_locals"}
+// CHECK: [[DBG11]] = !DILocation(line: 16, scope: [[DBG5]])
+// CHECK: [[META12]] = !DILocalVariable(name: "img", scope: [[DBG5]], file: [[META6]], line: 17, type: [[META13:![0-9]+]])
+// CHECK: [[META13]] = !DIDerivedType(tag: DW_TAG_typedef, name: "__amdgpu_texture_t", file: [[META1]], baseType: [[META14:![0-9]+]])
+// CHECK: [[META14]] = !DICompositeType(tag: DW_TAG_structure_type, name: "__amdgpu_texture_t", file: [[META1]], flags: DIFlagFwdDecl)
+// CHECK: [[META15]] = !DILocation(line: 17, column: 22, scope: [[DBG5]])
+// CHECK: [[DBG16]] = !DILocation(line: 18, column: 9, scope: [[DBG5]])
+// CHECK: [[META17]] = !{i32 1, !"test_locals"}
+// CHECK: [[DBG18]] = !DILocation(line: 19, column: 1, scope: [[DBG5]])
+//.

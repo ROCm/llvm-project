@@ -47,6 +47,7 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/IR/MDBuilder.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Support/ModRef.h"
@@ -12800,6 +12801,19 @@ SDValue SITargetLowering::LowerINTRINSIC_VOID(SDValue Op,
 
     unsigned Opc = Done->isZero() ? AMDGPU::EXP : AMDGPU::EXP_DONE;
     return SDValue(DAG.getMachineNode(Opc, DL, Op->getVTList(), Ops), 0);
+  }
+
+  case Intrinsic::amdgcn_sqtt_event: {
+    const ConstantSDNode *EventID = dyn_cast<ConstantSDNode>(Op.getOperand(3));
+    if (!EventID)
+      return SDValue();
+    // Experiment: the event is lowered to a comment. There is nothing to set
+    // up: no m0 write, no absolute id and no scheduling barriers.
+    SDValue EventIDTgt =
+        DAG.getTargetConstant(EventID->getZExtValue(), DL, MVT::i32);
+    return SDValue(DAG.getMachineNode(AMDGPU::SQTT_EVENT_COMMENT, DL,
+                                      MVT::Other, {EventIDTgt, Chain}),
+                   0);
   }
 
   case Intrinsic::amdgcn_struct_tbuffer_store:

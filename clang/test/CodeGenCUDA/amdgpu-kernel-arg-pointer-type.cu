@@ -18,6 +18,7 @@
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z7kernel1Pi(
 // CHECK-SAME: ptr addrspace(1) noundef [[X_COERCE:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
@@ -29,6 +30,7 @@
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
 // CHECK-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP1]], 1
 // CHECK-NEXT:    store i32 [[INC]], ptr [[ARRAYIDX]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_kernel void @_Z7kernel1Pi(
@@ -50,9 +52,11 @@
 // OPT-LABEL: define dso_local amdgpu_kernel void @_Z7kernel1Pi(
 // OPT-SAME: ptr addrspace(1) nofree noundef captures(none) [[X_COERCE:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(1) [[X_COERCE]], align 4
 // OPT-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP0]], 1
 // OPT-NEXT:    store i32 [[INC]], ptr addrspace(1) [[X_COERCE]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_kernel void @_Z7kernel1Pi(
@@ -86,16 +90,18 @@ __global__ void kernel1(int *x) {
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z7kernel2Ri(
 // CHECK-SAME: ptr addrspace(1) noundef nonnull align 4 dereferenceable(4) [[X_COERCE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
 // CHECK-NEXT:    store ptr addrspace(1) [[X_COERCE]], ptr addrspace(5) [[X]], align 8
 // CHECK-NEXT:    [[X1:%.*]] = load ptr, ptr addrspace(5) [[X]], align 8
 // CHECK-NEXT:    store ptr [[X1]], ptr [[X_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[X_ADDR_ASCAST]], align 8, !nonnull [[META3:![0-9]+]], !align [[META4:![0-9]+]]
+// CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[X_ADDR_ASCAST]], align 8, !nonnull [[META6:![0-9]+]], !align [[META7:![0-9]+]]
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[TMP0]], align 4
 // CHECK-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP1]], 1
 // CHECK-NEXT:    store i32 [[INC]], ptr [[TMP0]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_kernel void @_Z7kernel2Ri(
@@ -116,9 +122,11 @@ __global__ void kernel1(int *x) {
 // OPT-LABEL: define dso_local amdgpu_kernel void @_Z7kernel2Ri(
 // OPT-SAME: ptr addrspace(1) nofree noundef nonnull align 4 captures(none) dereferenceable(4) [[X_COERCE:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(1) [[X_COERCE]], align 4
 // OPT-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP0]], 1
 // OPT-NEXT:    store i32 [[INC]], ptr addrspace(1) [[X_COERCE]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_kernel void @_Z7kernel2Ri(
@@ -152,6 +160,7 @@ __global__ void kernel2(int &x) {
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z7kernel3PU3AS2iPU3AS1i(
 // CHECK-SAME: ptr addrspace(2) noundef [[X:%.*]], ptr addrspace(1) noundef [[Y:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca ptr addrspace(2), align 8, addrspace(5)
 // CHECK-NEXT:    [[Y_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
@@ -164,6 +173,7 @@ __global__ void kernel2(int &x) {
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr addrspace(1), ptr [[Y_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds i32, ptr addrspace(1) [[TMP2]], i64 0
 // CHECK-NEXT:    store i32 [[TMP1]], ptr addrspace(1) [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_kernel void @_Z7kernel3PU3AS2iPU3AS1i(
@@ -186,8 +196,10 @@ __global__ void kernel2(int &x) {
 // OPT-LABEL: define dso_local amdgpu_kernel void @_Z7kernel3PU3AS2iPU3AS1i(
 // OPT-SAME: ptr addrspace(2) nofree noundef readonly captures(none) [[X:%.*]], ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 4)) [[Y:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(2) [[X]], align 4
 // OPT-NEXT:    store i32 [[TMP0]], ptr addrspace(1) [[Y]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_kernel void @_Z7kernel3PU3AS2iPU3AS1i(
@@ -225,6 +237,7 @@ __global__ void kernel3(__attribute__((address_space(2))) int *x,
 // CHECK-LABEL: define dso_local void @_Z4funcPi(
 // CHECK-SAME: ptr noundef [[X:%.*]]) #[[ATTR1:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[X]], ptr [[X_ADDR_ASCAST]], align 8
@@ -233,6 +246,7 @@ __global__ void kernel3(__attribute__((address_space(2))) int *x,
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
 // CHECK-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP1]], 1
 // CHECK-NEXT:    store i32 [[INC]], ptr [[ARRAYIDX]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_func void @_Z4funcPi(
@@ -251,9 +265,11 @@ __global__ void kernel3(__attribute__((address_space(2))) int *x,
 // OPT-LABEL: define dso_local void @_Z4funcPi(
 // OPT-SAME: ptr nofree noundef captures(none) [[X:%.*]]) local_unnamed_addr #[[ATTR1:[0-9]+]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[X]], align 4
 // OPT-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP0]], 1
 // OPT-NEXT:    store i32 [[INC]], ptr [[X]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_func void @_Z4funcPi(
@@ -280,6 +296,7 @@ struct S {
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z7kernel41S(
 // CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_S:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[S:%.*]] = alloca [[STRUCT_S]], align 8, addrspace(5)
 // CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 8 [[S]], ptr addrspace(4) align 8 [[TMP0]], i64 16, i1 false)
 // CHECK-NEXT:    [[S_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[S]] to ptr
@@ -295,6 +312,7 @@ struct S {
 // CHECK-NEXT:    [[TMP4:%.*]] = load float, ptr [[ARRAYIDX1]], align 4
 // CHECK-NEXT:    [[ADD:%.*]] = fadd contract float [[TMP4]], 1.000000e+00
 // CHECK-NEXT:    store float [[ADD]], ptr [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_kernel void @_Z7kernel41S(
@@ -318,19 +336,21 @@ struct S {
 // CHECK-SPIRV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local amdgpu_kernel void @_Z7kernel41S(
-// OPT-SAME: ptr addrspace(4) nofree noundef readonly byref([[STRUCT_S:%.*]]) align 8 captures(none) [[TMP0:%.*]]) local_unnamed_addr #[[ATTR2:[0-9]+]] {
+// OPT-SAME: ptr addrspace(4) nofree noundef readonly byref([[STRUCT_S:%.*]]) align 8 captures(none) [[TMP0:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
-// OPT-NEXT:    [[S_SROA_0_0_COPYLOAD:%.*]] = load ptr, ptr addrspace(4) [[TMP0]], align 8, !amdgpu.noclobber [[META3:![0-9]+]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
+// OPT-NEXT:    [[S_SROA_0_0_COPYLOAD:%.*]] = load ptr, ptr addrspace(4) [[TMP0]], align 8, !amdgpu.noclobber [[META12:![0-9]+]]
 // OPT-NEXT:    [[TMP1:%.*]] = addrspacecast ptr [[S_SROA_0_0_COPYLOAD]] to ptr addrspace(1)
 // OPT-NEXT:    [[S_SROA_2_0__SROA_IDX:%.*]] = getelementptr inbounds nuw i8, ptr addrspace(4) [[TMP0]], i64 8
-// OPT-NEXT:    [[S_SROA_2_0_COPYLOAD:%.*]] = load ptr, ptr addrspace(4) [[S_SROA_2_0__SROA_IDX]], align 8, !amdgpu.noclobber [[META3]]
+// OPT-NEXT:    [[S_SROA_2_0_COPYLOAD:%.*]] = load ptr, ptr addrspace(4) [[S_SROA_2_0__SROA_IDX]], align 8, !amdgpu.noclobber [[META12]]
 // OPT-NEXT:    [[TMP2:%.*]] = addrspacecast ptr [[S_SROA_2_0_COPYLOAD]] to ptr addrspace(1)
-// OPT-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspace(1) [[TMP1]], align 4, !amdgpu.noclobber [[META3]]
+// OPT-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspace(1) [[TMP1]], align 4
 // OPT-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP3]], 1
 // OPT-NEXT:    store i32 [[INC]], ptr addrspace(1) [[TMP1]], align 4
 // OPT-NEXT:    [[TMP4:%.*]] = load float, ptr addrspace(1) [[TMP2]], align 4
 // OPT-NEXT:    [[ADD:%.*]] = fadd contract float [[TMP4]], 1.000000e+00
 // OPT-NEXT:    store float [[ADD]], ptr addrspace(1) [[TMP2]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_kernel void @_Z7kernel41S(
@@ -374,6 +394,7 @@ __global__ void kernel4(struct S s) {
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z7kernel5P1S(
 // CHECK-SAME: ptr addrspace(1) noundef [[S_COERCE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[S:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[S_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[S_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[S_ADDR]] to ptr
@@ -394,6 +415,7 @@ __global__ void kernel4(struct S s) {
 // CHECK-NEXT:    [[TMP5:%.*]] = load float, ptr [[ARRAYIDX2]], align 4
 // CHECK-NEXT:    [[ADD:%.*]] = fadd contract float [[TMP5]], 1.000000e+00
 // CHECK-NEXT:    store float [[ADD]], ptr [[ARRAYIDX2]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_kernel void @_Z7kernel5P1S(
@@ -422,8 +444,9 @@ __global__ void kernel4(struct S s) {
 // CHECK-SPIRV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local amdgpu_kernel void @_Z7kernel5P1S(
-// OPT-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[S_COERCE:%.*]]) local_unnamed_addr #[[ATTR2]] {
+// OPT-SAME: ptr addrspace(1) nofree noundef readonly captures(none) [[S_COERCE:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[TMP0:%.*]] = load ptr, ptr addrspace(1) [[S_COERCE]], align 8
 // OPT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[TMP0]], align 4
 // OPT-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP1]], 1
@@ -433,6 +456,7 @@ __global__ void kernel4(struct S s) {
 // OPT-NEXT:    [[TMP3:%.*]] = load float, ptr [[TMP2]], align 4
 // OPT-NEXT:    [[ADD:%.*]] = fadd contract float [[TMP3]], 1.000000e+00
 // OPT-NEXT:    store float [[ADD]], ptr [[TMP2]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_kernel void @_Z7kernel5P1S(
@@ -481,6 +505,7 @@ struct T {
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z7kernel61T(
 // CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_T:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[T:%.*]] = alloca [[STRUCT_T]], align 8, addrspace(5)
 // CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 8 [[T]], ptr addrspace(4) align 8 [[TMP0]], i64 16, i1 false)
 // CHECK-NEXT:    [[T_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[T]] to ptr
@@ -498,6 +523,7 @@ struct T {
 // CHECK-NEXT:    [[TMP4:%.*]] = load float, ptr [[ARRAYIDX4]], align 4
 // CHECK-NEXT:    [[ADD5:%.*]] = fadd contract float [[TMP4]], 2.000000e+00
 // CHECK-NEXT:    store float [[ADD5]], ptr [[ARRAYIDX4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_kernel void @_Z7kernel61T(
@@ -523,19 +549,21 @@ struct T {
 // CHECK-SPIRV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local amdgpu_kernel void @_Z7kernel61T(
-// OPT-SAME: ptr addrspace(4) nofree noundef readonly byref([[STRUCT_T:%.*]]) align 8 captures(none) [[TMP0:%.*]]) local_unnamed_addr #[[ATTR2]] {
+// OPT-SAME: ptr addrspace(4) nofree noundef readonly byref([[STRUCT_T:%.*]]) align 8 captures(none) [[TMP0:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
-// OPT-NEXT:    [[T_SROA_0_0_COPYLOAD:%.*]] = load ptr, ptr addrspace(4) [[TMP0]], align 8, !amdgpu.noclobber [[META3]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
+// OPT-NEXT:    [[T_SROA_0_0_COPYLOAD:%.*]] = load ptr, ptr addrspace(4) [[TMP0]], align 8, !amdgpu.noclobber [[META12]]
 // OPT-NEXT:    [[TMP1:%.*]] = addrspacecast ptr [[T_SROA_0_0_COPYLOAD]] to ptr addrspace(1)
 // OPT-NEXT:    [[T_SROA_2_0__SROA_IDX:%.*]] = getelementptr inbounds nuw i8, ptr addrspace(4) [[TMP0]], i64 8
-// OPT-NEXT:    [[T_SROA_2_0_COPYLOAD:%.*]] = load ptr, ptr addrspace(4) [[T_SROA_2_0__SROA_IDX]], align 8, !amdgpu.noclobber [[META3]]
+// OPT-NEXT:    [[T_SROA_2_0_COPYLOAD:%.*]] = load ptr, ptr addrspace(4) [[T_SROA_2_0__SROA_IDX]], align 8, !amdgpu.noclobber [[META12]]
 // OPT-NEXT:    [[TMP2:%.*]] = addrspacecast ptr [[T_SROA_2_0_COPYLOAD]] to ptr addrspace(1)
-// OPT-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(1) [[TMP1]], align 4, !amdgpu.noclobber [[META3]]
+// OPT-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(1) [[TMP1]], align 4
 // OPT-NEXT:    [[ADD:%.*]] = fadd contract float [[TMP3]], 1.000000e+00
 // OPT-NEXT:    store float [[ADD]], ptr addrspace(1) [[TMP1]], align 4
 // OPT-NEXT:    [[TMP4:%.*]] = load float, ptr addrspace(1) [[TMP2]], align 4
 // OPT-NEXT:    [[ADD5:%.*]] = fadd contract float [[TMP4]], 2.000000e+00
 // OPT-NEXT:    store float [[ADD5]], ptr addrspace(1) [[TMP2]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_kernel void @_Z7kernel61T(
@@ -579,6 +607,7 @@ __global__ void kernel6(struct T t) {
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z7kernel7Pi(
 // CHECK-SAME: ptr addrspace(1) noalias noundef [[X_COERCE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[X:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[X_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X_ADDR]] to ptr
@@ -590,6 +619,7 @@ __global__ void kernel6(struct T t) {
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
 // CHECK-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP1]], 1
 // CHECK-NEXT:    store i32 [[INC]], ptr [[ARRAYIDX]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_kernel void @_Z7kernel7Pi(
@@ -611,9 +641,11 @@ __global__ void kernel6(struct T t) {
 // OPT-LABEL: define dso_local amdgpu_kernel void @_Z7kernel7Pi(
 // OPT-SAME: ptr addrspace(1) noalias nofree noundef captures(none) [[X_COERCE:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(1) [[X_COERCE]], align 4
 // OPT-NEXT:    [[INC:%.*]] = add nsw i32 [[TMP0]], 1
 // OPT-NEXT:    store i32 [[INC]], ptr addrspace(1) [[X_COERCE]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_kernel void @_Z7kernel7Pi(
@@ -651,6 +683,7 @@ struct SS {
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z7kernel82SS(
 // CHECK-SAME: ptr addrspace(1) [[A_COERCE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A:%.*]] = alloca [[STRUCT_SS:%.*]], align 8, addrspace(5)
 // CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_SS]], ptr addrspace(5) [[A]], i32 0, i32 0
 // CHECK-NEXT:    store ptr addrspace(1) [[A_COERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 8
@@ -660,6 +693,7 @@ struct SS {
 // CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[TMP0]], align 4
 // CHECK-NEXT:    [[ADD:%.*]] = fadd contract float [[TMP1]], 3.000000e+00
 // CHECK-NEXT:    store float [[ADD]], ptr [[TMP0]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // CHECK-SPIRV-LABEL: define spir_kernel void @_Z7kernel82SS(
@@ -679,9 +713,11 @@ struct SS {
 // OPT-LABEL: define dso_local amdgpu_kernel void @_Z7kernel82SS(
 // OPT-SAME: ptr addrspace(1) nofree captures(none) [[A_COERCE:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[TMP0:%.*]] = load float, ptr addrspace(1) [[A_COERCE]], align 4
 // OPT-NEXT:    [[ADD:%.*]] = fadd contract float [[TMP0]], 3.000000e+00
 // OPT-NEXT:    store float [[ADD]], ptr addrspace(1) [[A_COERCE]], align 4
+// OPT-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // OPT-SPIRV-LABEL: define spir_kernel void @_Z7kernel82SS(
@@ -713,13 +749,49 @@ __global__ void kernel8(struct SS a) {
   *a.x += 3.f;
 }
 //.
-// CHECK: [[META3]] = !{}
-// CHECK: [[META4]] = !{i64 4}
+// CHECK: [[META3]] = !{i32 0, !"_Z7kernel1Pi"}
+// CHECK: [[META4]] = !{i32 1, !"_Z7kernel1Pi"}
+// CHECK: [[META5]] = !{i32 0, !"_Z7kernel2Ri"}
+// CHECK: [[META6]] = !{}
+// CHECK: [[META7]] = !{i64 4}
+// CHECK: [[META8]] = !{i32 1, !"_Z7kernel2Ri"}
+// CHECK: [[META9]] = !{i32 0, !"_Z7kernel3PU3AS2iPU3AS1i"}
+// CHECK: [[META10]] = !{i32 1, !"_Z7kernel3PU3AS2iPU3AS1i"}
+// CHECK: [[META11]] = !{i32 0, !"_Z4funcPi"}
+// CHECK: [[META12]] = !{i32 1, !"_Z4funcPi"}
+// CHECK: [[META13]] = !{i32 0, !"_Z7kernel41S"}
+// CHECK: [[META14]] = !{i32 1, !"_Z7kernel41S"}
+// CHECK: [[META15]] = !{i32 0, !"_Z7kernel5P1S"}
+// CHECK: [[META16]] = !{i32 1, !"_Z7kernel5P1S"}
+// CHECK: [[META17]] = !{i32 0, !"_Z7kernel61T"}
+// CHECK: [[META18]] = !{i32 1, !"_Z7kernel61T"}
+// CHECK: [[META19]] = !{i32 0, !"_Z7kernel7Pi"}
+// CHECK: [[META20]] = !{i32 1, !"_Z7kernel7Pi"}
+// CHECK: [[META21]] = !{i32 0, !"_Z7kernel82SS"}
+// CHECK: [[META22]] = !{i32 1, !"_Z7kernel82SS"}
 //.
 // CHECK-SPIRV: [[META4]] = !{i32 1024, i32 1, i32 1}
 // CHECK-SPIRV: [[META5]] = !{i64 4}
 //.
-// OPT: [[META3]] = !{}
+// OPT: [[META3]] = !{i32 0, !"_Z7kernel1Pi"}
+// OPT: [[META4]] = !{i32 1, !"_Z7kernel1Pi"}
+// OPT: [[META5]] = !{i32 0, !"_Z7kernel2Ri"}
+// OPT: [[META6]] = !{i32 1, !"_Z7kernel2Ri"}
+// OPT: [[META7]] = !{i32 0, !"_Z7kernel3PU3AS2iPU3AS1i"}
+// OPT: [[META8]] = !{i32 1, !"_Z7kernel3PU3AS2iPU3AS1i"}
+// OPT: [[META9]] = !{i32 0, !"_Z4funcPi"}
+// OPT: [[META10]] = !{i32 1, !"_Z4funcPi"}
+// OPT: [[META11]] = !{i32 0, !"_Z7kernel41S"}
+// OPT: [[META12]] = !{}
+// OPT: [[META13]] = !{i32 1, !"_Z7kernel41S"}
+// OPT: [[META14]] = !{i32 0, !"_Z7kernel5P1S"}
+// OPT: [[META15]] = !{i32 1, !"_Z7kernel5P1S"}
+// OPT: [[META16]] = !{i32 0, !"_Z7kernel61T"}
+// OPT: [[META17]] = !{i32 1, !"_Z7kernel61T"}
+// OPT: [[META18]] = !{i32 0, !"_Z7kernel7Pi"}
+// OPT: [[META19]] = !{i32 1, !"_Z7kernel7Pi"}
+// OPT: [[META20]] = !{i32 0, !"_Z7kernel82SS"}
+// OPT: [[META21]] = !{i32 1, !"_Z7kernel82SS"}
 //.
 // OPT-SPIRV: [[META4]] = !{i32 1024, i32 1, i32 1}
 //.

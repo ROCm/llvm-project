@@ -8,61 +8,71 @@
 // LLVM-LABEL: define dso_local i32 @foo(
 // LLVM-SAME: ) #[[ATTR0:[0-9]+]] {
 // LLVM-NEXT:  [[ENTRY:.*:]]
+// LLVM-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META1:![0-9]+]], i32 poison, i1 true)
 // LLVM-NEXT:    [[TMP0:%.*]] = load i32, ptr addrspace(4) @__oclc_ABI_version, align 4
 // LLVM-NEXT:    [[TMP1:%.*]] = icmp sge i32 [[TMP0]], 500
 // LLVM-NEXT:    [[TMP2:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // LLVM-NEXT:    [[TMP3:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP2]], i64 0
-// LLVM-NEXT:    [[TMP4:%.*]] = load i32, ptr addrspace(4) [[TMP3]], align 4, !invariant.load [[META1:![0-9]+]], !noundef [[META1]]
+// LLVM-NEXT:    [[TMP4:%.*]] = load i32, ptr addrspace(4) [[TMP3]], align 4, !invariant.load [[META2:![0-9]+]], !noundef [[META2]]
 // LLVM-NEXT:    [[TMP5:%.*]] = call i32 @llvm.amdgcn.workgroup.id.x()
 // LLVM-NEXT:    [[TMP6:%.*]] = icmp ult i32 [[TMP5]], [[TMP4]]
 // LLVM-NEXT:    [[TMP7:%.*]] = select i1 [[TMP6]], i32 12, i32 18
 // LLVM-NEXT:    [[TMP8:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP2]], i32 [[TMP7]]
-// LLVM-NEXT:    [[TMP9:%.*]] = load i16, ptr addrspace(4) [[TMP8]], align 2, !range [[RNG2:![0-9]+]], !invariant.load [[META1]], !noundef [[META1]]
+// LLVM-NEXT:    [[TMP9:%.*]] = load i16, ptr addrspace(4) [[TMP8]], align 2, !range [[RNG3:![0-9]+]], !invariant.load [[META2]], !noundef [[META2]]
 // LLVM-NEXT:    [[TMP10:%.*]] = zext i16 [[TMP9]] to i32
 // LLVM-NEXT:    [[TMP11:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // LLVM-NEXT:    [[TMP12:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP11]], i64 4
-// LLVM-NEXT:    [[TMP13:%.*]] = load i16, ptr addrspace(4) [[TMP12]], align 2, !range [[RNG2]], !invariant.load [[META1]], !noundef [[META1]]
+// LLVM-NEXT:    [[TMP13:%.*]] = load i16, ptr addrspace(4) [[TMP12]], align 2, !range [[RNG3]], !invariant.load [[META2]], !noundef [[META2]]
 // LLVM-NEXT:    [[TMP14:%.*]] = zext i16 [[TMP13]] to i32
 // LLVM-NEXT:    [[TMP15:%.*]] = call i32 @llvm.amdgcn.workgroup.id.x()
 // LLVM-NEXT:    [[TMP16:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP11]], i64 12
-// LLVM-NEXT:    [[TMP17:%.*]] = load i32, ptr addrspace(4) [[TMP16]], align 4, !range [[RNG3:![0-9]+]], !invariant.load [[META1]]
+// LLVM-NEXT:    [[TMP17:%.*]] = load i32, ptr addrspace(4) [[TMP16]], align 4, !range [[RNG4:![0-9]+]], !invariant.load [[META2]]
 // LLVM-NEXT:    [[TMP18:%.*]] = mul i32 [[TMP15]], [[TMP14]]
 // LLVM-NEXT:    [[TMP19:%.*]] = sub i32 [[TMP17]], [[TMP18]]
 // LLVM-NEXT:    [[TMP20:%.*]] = icmp ult i32 [[TMP19]], [[TMP14]]
 // LLVM-NEXT:    [[TMP21:%.*]] = select i1 [[TMP20]], i32 [[TMP19]], i32 [[TMP14]]
 // LLVM-NEXT:    [[TMP22:%.*]] = select i1 [[TMP1]], i32 [[TMP10]], i32 [[TMP21]]
+// LLVM-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // LLVM-NEXT:    ret i32 [[TMP22]]
 //
 // LLVMENV-LABEL: define dso_local i32 @foo(
 // LLVMENV-SAME: ) #[[ATTR0:[0-9]+]] {
 // LLVMENV-NEXT:  [[ENTRY:.*:]]
+// LLVMENV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META1:![0-9]+]], i32 poison, i1 true)
 // LLVMENV-NEXT:    [[TMP0:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // LLVMENV-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i64 0
-// LLVMENV-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !invariant.load [[META1:![0-9]+]], !noundef [[META1]]
+// LLVMENV-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !invariant.load [[META2:![0-9]+]], !noundef [[META2]]
 // LLVMENV-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.workgroup.id.x()
 // LLVMENV-NEXT:    [[TMP4:%.*]] = icmp ult i32 [[TMP3]], [[TMP2]]
 // LLVMENV-NEXT:    [[TMP5:%.*]] = select i1 [[TMP4]], i32 12, i32 18
 // LLVMENV-NEXT:    [[TMP6:%.*]] = getelementptr inbounds i8, ptr addrspace(4) [[TMP0]], i32 [[TMP5]]
-// LLVMENV-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG2:![0-9]+]], !invariant.load [[META1]], !noundef [[META1]]
+// LLVMENV-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG3:![0-9]+]], !invariant.load [[META2]], !noundef [[META2]]
 // LLVMENV-NEXT:    [[TMP8:%.*]] = zext i16 [[TMP7]] to i32
+// LLVMENV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // LLVMENV-NEXT:    ret i32 [[TMP8]]
 //
 int foo() { return __builtin_amdgcn_workgroup_size_x(); }
 //.
 // LLVM: attributes #[[ATTR0]] = { convergent noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // LLVM: attributes #[[ATTR1:[0-9]+]] = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+// LLVM: attributes #[[ATTR2:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // LLVMENV: attributes #[[ATTR0]] = { convergent noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // LLVMENV: attributes #[[ATTR1:[0-9]+]] = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+// LLVMENV: attributes #[[ATTR2:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // LLVM: [[META0:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
-// LLVM: [[META1]] = !{}
-// LLVM: [[RNG2]] = !{i16 1, i16 1025}
-// LLVM: [[RNG3]] = !{i32 1, i32 0}
+// LLVM: [[META1]] = !{i32 0, !"foo"}
+// LLVM: [[META2]] = !{}
+// LLVM: [[RNG3]] = !{i16 1, i16 1025}
+// LLVM: [[RNG4]] = !{i32 1, i32 0}
+// LLVM: [[META5]] = !{i32 1, !"foo"}
 //.
 // LLVMENV: [[META0:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
-// LLVMENV: [[META1]] = !{}
-// LLVMENV: [[RNG2]] = !{i16 1, i16 1025}
+// LLVMENV: [[META1]] = !{i32 0, !"foo"}
+// LLVMENV: [[META2]] = !{}
+// LLVMENV: [[RNG3]] = !{i16 1, i16 1025}
+// LLVMENV: [[META4]] = !{i32 1, !"foo"}
 //.
 //// NOTE: These prefixes are unused and the list is autogenerated. Do not add tests below this line:
 // CHECK: {{.*}}

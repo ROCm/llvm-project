@@ -8,6 +8,7 @@
 // CHECK-LABEL: define dso_local void @_Z21test_atomic_fetch_addPi(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTATOMICTMP:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca i32, align 4, addrspace(5)
@@ -16,9 +17,10 @@
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i32 1, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw add ptr [[TMP0]], i32 [[TMP1]] seq_cst, align 4, !mmra [[META2:![0-9]+]], !amdgpu.no.fine.grained.memory [[META3:![0-9]+]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw add ptr [[TMP0]], i32 [[TMP1]] seq_cst, align 4, !mmra [[META3:![0-9]+]], !amdgpu.no.fine.grained.memory [[META4:![0-9]+]], !amdgpu.no.remote.memory [[META4]]
 // CHECK-NEXT:    store i32 [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // CHECK-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_atomic_fetch_add(int *p) {
@@ -28,6 +30,7 @@ void test_atomic_fetch_add(int *p) {
 // CHECK-LABEL: define dso_local void @_Z17test_atomic_storePi(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTATOMICTMP:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
@@ -35,7 +38,8 @@ void test_atomic_fetch_add(int *p) {
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i32 42, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// CHECK-NEXT:    store atomic i32 [[TMP1]], ptr [[TMP0]] release, align 4, !mmra [[META2]]
+// CHECK-NEXT:    store atomic i32 [[TMP1]], ptr [[TMP0]] release, align 4, !mmra [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_atomic_store(int *p) {
@@ -45,14 +49,16 @@ void test_atomic_store(int *p) {
 // CHECK-LABEL: define dso_local void @_Z16test_atomic_loadPi(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = load atomic i32, ptr [[TMP0]] acquire, align 4, !mmra [[META2]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load atomic i32, ptr [[TMP0]] acquire, align 4, !mmra [[META3]]
 // CHECK-NEXT:    store i32 [[TMP1]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // CHECK-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_atomic_load(int *p) {
@@ -62,6 +68,7 @@ void test_atomic_load(int *p) {
 // CHECK-LABEL: define dso_local void @_Z19test_atomic_cmpxchgPi(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[EXPECTED:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTATOMICTMP:%.*]] = alloca i32, align 4, addrspace(5)
@@ -74,7 +81,7 @@ void test_atomic_load(int *p) {
 // CHECK-NEXT:    store i32 1, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[EXPECTED_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// CHECK-NEXT:    [[TMP3:%.*]] = cmpxchg ptr [[TMP0]], i32 [[TMP1]], i32 [[TMP2]] seq_cst acquire, align 4, !mmra [[META2]]
+// CHECK-NEXT:    [[TMP3:%.*]] = cmpxchg ptr [[TMP0]], i32 [[TMP1]], i32 [[TMP2]] seq_cst acquire, align 4, !mmra [[META3]]
 // CHECK-NEXT:    [[TMP4:%.*]] = extractvalue { i32, i1 } [[TMP3]], 0
 // CHECK-NEXT:    [[TMP5:%.*]] = extractvalue { i32, i1 } [[TMP3]], 1
 // CHECK-NEXT:    br i1 [[TMP5]], label [[CMPXCHG_CONTINUE:%.*]], label [[CMPXCHG_STORE_EXPECTED:%.*]]
@@ -86,6 +93,7 @@ void test_atomic_load(int *p) {
 // CHECK-NEXT:    store i8 [[STOREDV]], ptr addrspace(5) [[CMPXCHG_BOOL]], align 1
 // CHECK-NEXT:    [[TMP6:%.*]] = load i8, ptr addrspace(5) [[CMPXCHG_BOOL]], align 1
 // CHECK-NEXT:    [[LOADEDV:%.*]] = icmp ne i8 [[TMP6]], 0
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_atomic_cmpxchg(int *p) {
@@ -96,7 +104,9 @@ void test_atomic_cmpxchg(int *p) {
 // CHECK-LABEL: define dso_local void @_Z24test_atomic_thread_fencev(
 // CHECK-SAME: ) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    fence seq_cst, !mmra [[META2]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    fence seq_cst, !mmra [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_atomic_thread_fence() {
@@ -107,6 +117,7 @@ void test_atomic_thread_fence() {
 // CHECK-LABEL: define dso_local void @_Z12test_no_attrPi(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTATOMICTMP:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca i32, align 4, addrspace(5)
@@ -115,15 +126,28 @@ void test_atomic_thread_fence() {
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i32 1, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw add ptr [[TMP0]], i32 [[TMP1]] seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw add ptr [[TMP0]], i32 [[TMP1]] seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
 // CHECK-NEXT:    store i32 [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // CHECK-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_no_attr(int *p) {
   __atomic_fetch_add(p, 1, __ATOMIC_SEQ_CST);
 }
 //.
-// CHECK: [[META2]] = !{!"amdgcn-av", !"none"}
-// CHECK: [[META3]] = !{}
+// CHECK: [[META2]] = !{i32 0, !"_Z21test_atomic_fetch_addPi"}
+// CHECK: [[META3]] = !{!"amdgcn-av", !"none"}
+// CHECK: [[META4]] = !{}
+// CHECK: [[META5]] = !{i32 1, !"_Z21test_atomic_fetch_addPi"}
+// CHECK: [[META6]] = !{i32 0, !"_Z17test_atomic_storePi"}
+// CHECK: [[META7]] = !{i32 1, !"_Z17test_atomic_storePi"}
+// CHECK: [[META8]] = !{i32 0, !"_Z16test_atomic_loadPi"}
+// CHECK: [[META9]] = !{i32 1, !"_Z16test_atomic_loadPi"}
+// CHECK: [[META10]] = !{i32 0, !"_Z19test_atomic_cmpxchgPi"}
+// CHECK: [[META11]] = !{i32 1, !"_Z19test_atomic_cmpxchgPi"}
+// CHECK: [[META12]] = !{i32 0, !"_Z24test_atomic_thread_fencev"}
+// CHECK: [[META13]] = !{i32 1, !"_Z24test_atomic_thread_fencev"}
+// CHECK: [[META14]] = !{i32 0, !"_Z12test_no_attrPi"}
+// CHECK: [[META15]] = !{i32 1, !"_Z12test_no_attrPi"}
 //.

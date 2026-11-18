@@ -9,7 +9,9 @@ typedef half v4f16 __attribute__((ext_vector_type(4)));
 
 // CHECK-LABEL: @test_raw_buffer_load_format_v4f32(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.raw.ptr.buffer.load.format.v4f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0, i32 0)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP0]]
 //
 v4f32 test_raw_buffer_load_format_v4f32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -18,7 +20,9 @@ v4f32 test_raw_buffer_load_format_v4f32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_raw_buffer_load_format_v4f16(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x half> @llvm.amdgcn.raw.ptr.buffer.load.format.v4f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0, i32 0)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP0]]
 //
 v4f16 test_raw_buffer_load_format_v4f16(__amdgpu_buffer_rsrc_t rsrc) {
@@ -27,7 +31,9 @@ v4f16 test_raw_buffer_load_format_v4f16(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_raw_buffer_load_format_v4f32_non_const_offset(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.raw.ptr.buffer.load.format.v4f32(ptr addrspace(8) [[RSRC:%.*]], i32 [[OFFSET:%.*]], i32 0, i32 0)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP0]]
 //
 v4f32 test_raw_buffer_load_format_v4f32_non_const_offset(__amdgpu_buffer_rsrc_t rsrc, int offset) {
@@ -36,7 +42,9 @@ v4f32 test_raw_buffer_load_format_v4f32_non_const_offset(__amdgpu_buffer_rsrc_t 
 
 // CHECK-LABEL: @test_raw_buffer_load_format_v4f32_non_const_soffset(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.raw.ptr.buffer.load.format.v4f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 [[SOFFSET:%.*]], i32 0)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP0]]
 //
 v4f32 test_raw_buffer_load_format_v4f32_non_const_soffset(__amdgpu_buffer_rsrc_t rsrc, int soffset) {

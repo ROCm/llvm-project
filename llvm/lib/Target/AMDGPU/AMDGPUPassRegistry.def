@@ -22,6 +22,7 @@ MODULE_PASS("amdgpu-asm-printer-end", AMDGPUAsmPrinterEndPass())
 MODULE_PASS("amdgpu-export-kernel-runtime-handles", AMDGPUExportKernelRuntimeHandlesPass())
 MODULE_PASS("amdgpu-lower-buffer-fat-pointers",
             AMDGPULowerBufferFatPointersPass(*this))
+MODULE_PASS("amdgpu-sqtt-lower", AMDGPUSQTTLowerPass(*this))
 MODULE_PASS("amdgpu-lower-intrinsics", AMDGPULowerIntrinsicsPass(*this))
 MODULE_PASS("amdgpu-lower-ctor-dtor", AMDGPUCtorDtorLoweringPass())
 MODULE_PASS("amdgpu-lower-module-lds", AMDGPULowerModuleLDSPass(*this))
@@ -73,6 +74,8 @@ FUNCTION_PASS("amdgpu-promote-kernel-arguments",
               AMDGPUPromoteKernelArgumentsPass())
 FUNCTION_PASS("amdgpu-rewrite-undef-for-phi", AMDGPURewriteUndefForPHIPass())
 FUNCTION_PASS("amdgpu-simplifylib", AMDGPUSimplifyLibCallsPass())
+FUNCTION_PASS("amdgpu-sqtt-function-instrument",
+              AMDGPUSQTTFunctionInstrumentPass())
 FUNCTION_PASS("amdgpu-unify-divergent-exit-nodes",
               AMDGPUUnifyDivergentExitNodesPass())
 FUNCTION_PASS("amdgpu-usenative", AMDGPUUseNativeCallsPass())

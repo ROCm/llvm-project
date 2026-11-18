@@ -12,6 +12,7 @@ typedef short v2s __attribute__((ext_vector_type(2)));
 // CHECK-LABEL: define dso_local void @_Z34test_cvt_scalef32_pk32_fp6_f16_hipPDv6_jDv32_DF16_f(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <32 x half> noundef [[A:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <32 x half>, align 64, addrspace(5)
 // CHECK-NEXT:    [[SCALE_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -26,6 +27,7 @@ typedef short v2s __attribute__((ext_vector_type(2)));
 // CHECK-NEXT:    [[TMP2:%.*]] = call <6 x i32> @llvm.amdgcn.cvt.scalef32.pk32.fp6.f16(<32 x half> [[TMP0]], float [[TMP1]])
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <6 x i32> [[TMP2]], ptr [[TMP3]], align 32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk32_fp6_f16_hip(v6ui* out, v32h a, float scale) {
@@ -35,6 +37,7 @@ __device__ void test_cvt_scalef32_pk32_fp6_f16_hip(v6ui* out, v32h a, float scal
 // CHECK-LABEL: define dso_local void @_Z34test_cvt_scalef32_pk32_bf6_f16_hipPDv6_jDv32_DF16_f(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <32 x half> noundef [[A:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <32 x half>, align 64, addrspace(5)
 // CHECK-NEXT:    [[SCALE_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -49,6 +52,7 @@ __device__ void test_cvt_scalef32_pk32_fp6_f16_hip(v6ui* out, v32h a, float scal
 // CHECK-NEXT:    [[TMP2:%.*]] = call <6 x i32> @llvm.amdgcn.cvt.scalef32.pk32.bf6.f16(<32 x half> [[TMP0]], float [[TMP1]])
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <6 x i32> [[TMP2]], ptr [[TMP3]], align 32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk32_bf6_f16_hip(v6ui* out, v32h a, float scale) {
@@ -58,6 +62,7 @@ __device__ void test_cvt_scalef32_pk32_bf6_f16_hip(v6ui* out, v32h a, float scal
 // CHECK-LABEL: define dso_local void @_Z29test_cvt_scalef32_f16_fp8_hipPDv2_DF16_S_if(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <2 x half> noundef [[SRC:%.*]], i32 noundef [[SRC32:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // CHECK-NEXT:    [[SRC32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -76,6 +81,7 @@ __device__ void test_cvt_scalef32_pk32_bf6_f16_hip(v6ui* out, v32h a, float scal
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <2 x half> @llvm.amdgcn.cvt.scalef32.f16.fp8(<2 x half> [[TMP0]], i32 [[TMP1]], float [[TMP2]], i32 0, i1 false)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <2 x half> [[TMP3]], ptr [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_f16_fp8_hip(v2h* out, v2h src, int src32, float scale) {
@@ -85,6 +91,7 @@ __device__ void test_cvt_scalef32_f16_fp8_hip(v2h* out, v2h src, int src32, floa
 // CHECK-LABEL: define dso_local void @_Z29test_cvt_scalef32_f16_bf8_hipPDv2_DF16_S_if(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <2 x half> noundef [[SRC:%.*]], i32 noundef [[SRC32:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // CHECK-NEXT:    [[SRC32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -103,6 +110,7 @@ __device__ void test_cvt_scalef32_f16_fp8_hip(v2h* out, v2h src, int src32, floa
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <2 x half> @llvm.amdgcn.cvt.scalef32.f16.bf8(<2 x half> [[TMP0]], i32 [[TMP1]], float [[TMP2]], i32 0, i1 false)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <2 x half> [[TMP3]], ptr [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_f16_bf8_hip(v2h* out, v2h src, int src32, float scale) {
@@ -112,6 +120,7 @@ __device__ void test_cvt_scalef32_f16_bf8_hip(v2h* out, v2h src, int src32, floa
 // CHECK-LABEL: define dso_local void @_Z32test_cvt_scalef32_pk_fp8_f16_hipPDv2_sS_Dv2_DF16_f(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <2 x i16> noundef [[SRC:%.*]], <2 x half> noundef [[A:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
@@ -130,6 +139,7 @@ __device__ void test_cvt_scalef32_f16_bf8_hip(v2h* out, v2h src, int src32, floa
 // CHECK-NEXT:    [[TMP3:%.*]] = call <2 x i16> @llvm.amdgcn.cvt.scalef32.pk.fp8.f16(<2 x i16> [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i1 false)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <2 x i16> [[TMP3]], ptr [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk_fp8_f16_hip(v2s* out, v2s src, v2h a, float scale) {
@@ -139,6 +149,7 @@ __device__ void test_cvt_scalef32_pk_fp8_f16_hip(v2s* out, v2s src, v2h a, float
 // CHECK-LABEL: define dso_local void @_Z32test_cvt_scalef32_pk_bf8_f16_hipPDv2_sS_Dv2_DF16_f(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <2 x i16> noundef [[SRC:%.*]], <2 x half> noundef [[A:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
@@ -157,6 +168,7 @@ __device__ void test_cvt_scalef32_pk_fp8_f16_hip(v2s* out, v2s src, v2h a, float
 // CHECK-NEXT:    [[TMP3:%.*]] = call <2 x i16> @llvm.amdgcn.cvt.scalef32.pk.bf8.f16(<2 x i16> [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i1 false)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <2 x i16> [[TMP3]], ptr [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk_bf8_f16_hip(v2s* out, v2s src, v2h a, float scale) {
@@ -166,6 +178,7 @@ __device__ void test_cvt_scalef32_pk_bf8_f16_hip(v2s* out, v2s src, v2h a, float
 // CHECK-LABEL: define dso_local void @_Z32test_cvt_scalef32_pk_f16_fp4_hipPDv2_DF16_jf(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], i32 noundef [[SRC:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SCALE_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -180,6 +193,7 @@ __device__ void test_cvt_scalef32_pk_bf8_f16_hip(v2s* out, v2s src, v2h a, float
 // CHECK-NEXT:    [[TMP2:%.*]] = call contract <2 x half> @llvm.amdgcn.cvt.scalef32.pk.f16.fp4(i32 [[TMP0]], float [[TMP1]], i32 0)
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <2 x half> [[TMP2]], ptr [[TMP3]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk_f16_fp4_hip(v2h* out, unsigned int src, float scale) {
@@ -189,6 +203,7 @@ __device__ void test_cvt_scalef32_pk_f16_fp4_hip(v2h* out, unsigned int src, flo
 // CHECK-LABEL: define dso_local void @_Z34test_cvt_scalef32_pk32_f16_fp6_hipPDv32_DF16_Dv6_jf(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <6 x i32> noundef [[SRC:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca <6 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[SCALE_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -203,6 +218,7 @@ __device__ void test_cvt_scalef32_pk_f16_fp4_hip(v2h* out, unsigned int src, flo
 // CHECK-NEXT:    [[TMP2:%.*]] = call contract <32 x half> @llvm.amdgcn.cvt.scalef32.pk32.f16.fp6(<6 x i32> [[TMP0]], float [[TMP1]])
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <32 x half> [[TMP2]], ptr [[TMP3]], align 64
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk32_f16_fp6_hip(v32h* out, v6ui src, float scale) {
@@ -212,6 +228,7 @@ __device__ void test_cvt_scalef32_pk32_f16_fp6_hip(v32h* out, v6ui src, float sc
 // CHECK-LABEL: define dso_local void @_Z34test_cvt_scalef32_pk32_f16_bf6_hipPDv32_DF16_Dv6_jf(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <6 x i32> noundef [[SRC:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca <6 x i32>, align 32, addrspace(5)
 // CHECK-NEXT:    [[SCALE_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -226,6 +243,7 @@ __device__ void test_cvt_scalef32_pk32_f16_fp6_hip(v32h* out, v6ui src, float sc
 // CHECK-NEXT:    [[TMP2:%.*]] = call contract <32 x half> @llvm.amdgcn.cvt.scalef32.pk32.f16.bf6(<6 x i32> [[TMP0]], float [[TMP1]])
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <32 x half> [[TMP2]], ptr [[TMP3]], align 64
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk32_f16_bf6_hip(v32h* out, v6ui src, float scale) {
@@ -235,6 +253,7 @@ __device__ void test_cvt_scalef32_pk32_f16_bf6_hip(v32h* out, v6ui src, float sc
 // CHECK-LABEL: define dso_local void @_Z32test_cvt_scalef32_pk_f16_fp8_hipPDv2_DF16_jf(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], i32 noundef [[SRC:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SCALE_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -249,6 +268,7 @@ __device__ void test_cvt_scalef32_pk32_f16_bf6_hip(v32h* out, v6ui src, float sc
 // CHECK-NEXT:    [[TMP2:%.*]] = call contract <2 x half> @llvm.amdgcn.cvt.scalef32.pk.f16.fp8(i32 [[TMP0]], float [[TMP1]], i1 false)
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <2 x half> [[TMP2]], ptr [[TMP3]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk_f16_fp8_hip(v2h* out, unsigned int src, float scale) {
@@ -258,6 +278,7 @@ __device__ void test_cvt_scalef32_pk_f16_fp8_hip(v2h* out, unsigned int src, flo
 // CHECK-LABEL: define dso_local void @_Z32test_cvt_scalef32_pk_f16_bf8_hipPDv2_DF16_jf(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], i32 noundef [[SRC:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SCALE_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -272,6 +293,7 @@ __device__ void test_cvt_scalef32_pk_f16_fp8_hip(v2h* out, unsigned int src, flo
 // CHECK-NEXT:    [[TMP2:%.*]] = call contract <2 x half> @llvm.amdgcn.cvt.scalef32.pk.f16.bf8(i32 [[TMP0]], float [[TMP1]], i1 false)
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <2 x half> [[TMP2]], ptr [[TMP3]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk_f16_bf8_hip(v2h* out, unsigned int src, float scale) {
@@ -281,6 +303,7 @@ __device__ void test_cvt_scalef32_pk_f16_bf8_hip(v2h* out, unsigned int src, flo
 // CHECK-LABEL: define dso_local void @_Z32test_cvt_scalef32_pk_fp4_f16_hipPjjDv2_DF16_f(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], i32 noundef [[SRC:%.*]], <2 x half> noundef [[A:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
@@ -299,6 +322,7 @@ __device__ void test_cvt_scalef32_pk_f16_bf8_hip(v2h* out, unsigned int src, flo
 // CHECK-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.cvt.scalef32.pk.fp4.f16(i32 [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i32 0)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i32 [[TMP3]], ptr [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_pk_fp4_f16_hip(unsigned int* out, unsigned int src, v2h a, float scale) {
@@ -308,6 +332,7 @@ __device__ void test_cvt_scalef32_pk_fp4_f16_hip(unsigned int* out, unsigned int
 // CHECK-LABEL: define dso_local void @_Z35test_cvt_scalef32_sr_pk_fp4_f16_hipPjjDv2_DF16_jf(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], i32 noundef [[SRC:%.*]], <2 x half> noundef [[A:%.*]], i32 noundef [[SEED:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
@@ -330,6 +355,7 @@ __device__ void test_cvt_scalef32_pk_fp4_f16_hip(unsigned int* out, unsigned int
 // CHECK-NEXT:    [[TMP4:%.*]] = call i32 @llvm.amdgcn.cvt.scalef32.sr.pk.fp4.f16(i32 [[TMP0]], <2 x half> [[TMP1]], i32 [[TMP2]], float [[TMP3]], i32 0)
 // CHECK-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i32 [[TMP4]], ptr [[TMP5]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_sr_pk_fp4_f16_hip(unsigned int* out, unsigned int src, v2h a, unsigned int seed, float scale) {
@@ -339,6 +365,7 @@ __device__ void test_cvt_scalef32_sr_pk_fp4_f16_hip(unsigned int* out, unsigned 
 // CHECK-LABEL: define dso_local void @_Z37test_cvt_scalef32_sr_pk32_bf6_f16_hipPDv6_jDv32_DF16_jf(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <32 x half> noundef [[A:%.*]], i32 noundef [[SEED:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <32 x half>, align 64, addrspace(5)
 // CHECK-NEXT:    [[SEED_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -357,6 +384,7 @@ __device__ void test_cvt_scalef32_sr_pk_fp4_f16_hip(unsigned int* out, unsigned 
 // CHECK-NEXT:    [[TMP3:%.*]] = call <6 x i32> @llvm.amdgcn.cvt.scalef32.sr.pk32.bf6.f16(<32 x half> [[TMP0]], i32 [[TMP1]], float [[TMP2]])
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <6 x i32> [[TMP3]], ptr [[TMP4]], align 32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_sr_pk32_bf6_f16_hip(v6ui* out, v32h a, unsigned int seed, float scale) {
@@ -366,6 +394,7 @@ __device__ void test_cvt_scalef32_sr_pk32_bf6_f16_hip(v6ui* out, v32h a, unsigne
 // CHECK-LABEL: define dso_local void @_Z37test_cvt_scalef32_sr_pk32_fp6_f16_hipPDv6_jDv32_DF16_jf(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <32 x half> noundef [[A:%.*]], i32 noundef [[SEED:%.*]], float noundef [[SCALE:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <32 x half>, align 64, addrspace(5)
 // CHECK-NEXT:    [[SEED_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -384,6 +413,7 @@ __device__ void test_cvt_scalef32_sr_pk32_bf6_f16_hip(v6ui* out, v32h a, unsigne
 // CHECK-NEXT:    [[TMP3:%.*]] = call <6 x i32> @llvm.amdgcn.cvt.scalef32.sr.pk32.fp6.f16(<32 x half> [[TMP0]], i32 [[TMP1]], float [[TMP2]])
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <6 x i32> [[TMP3]], ptr [[TMP4]], align 32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_scalef32_sr_pk32_fp6_f16_hip(v6ui* out, v32h a, unsigned int seed, float scale) {
@@ -393,6 +423,7 @@ __device__ void test_cvt_scalef32_sr_pk32_fp6_f16_hip(v6ui* out, v32h a, unsigne
 // CHECK-LABEL: define dso_local void @_Z23test_cvt_sr_f16_f32_hipPDv2_DF16_S_fj(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], <2 x half> noundef [[SRC:%.*]], float noundef [[A:%.*]], i32 noundef [[SEED:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SRC_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -411,9 +442,44 @@ __device__ void test_cvt_scalef32_sr_pk32_fp6_f16_hip(v6ui* out, v32h a, unsigne
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract <2 x half> @llvm.amdgcn.cvt.sr.f16.f32(<2 x half> [[TMP0]], float [[TMP1]], i32 [[TMP2]], i1 false)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store <2 x half> [[TMP3]], ptr [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cvt_sr_f16_f32_hip(v2h* out, v2h src, float a, unsigned int seed) {
   *out = __builtin_amdgcn_cvt_sr_f16_f32(src, a, seed, false);
 }
 
+//.
+// CHECK: [[META3]] = !{i32 0, !"_Z34test_cvt_scalef32_pk32_fp6_f16_hipPDv6_jDv32_DF16_f"}
+// CHECK: [[META4]] = !{i32 1, !"_Z34test_cvt_scalef32_pk32_fp6_f16_hipPDv6_jDv32_DF16_f"}
+// CHECK: [[META5]] = !{i32 0, !"_Z34test_cvt_scalef32_pk32_bf6_f16_hipPDv6_jDv32_DF16_f"}
+// CHECK: [[META6]] = !{i32 1, !"_Z34test_cvt_scalef32_pk32_bf6_f16_hipPDv6_jDv32_DF16_f"}
+// CHECK: [[META7]] = !{i32 0, !"_Z29test_cvt_scalef32_f16_fp8_hipPDv2_DF16_S_if"}
+// CHECK: [[META8]] = !{i32 1, !"_Z29test_cvt_scalef32_f16_fp8_hipPDv2_DF16_S_if"}
+// CHECK: [[META9]] = !{i32 0, !"_Z29test_cvt_scalef32_f16_bf8_hipPDv2_DF16_S_if"}
+// CHECK: [[META10]] = !{i32 1, !"_Z29test_cvt_scalef32_f16_bf8_hipPDv2_DF16_S_if"}
+// CHECK: [[META11]] = !{i32 0, !"_Z32test_cvt_scalef32_pk_fp8_f16_hipPDv2_sS_Dv2_DF16_f"}
+// CHECK: [[META12]] = !{i32 1, !"_Z32test_cvt_scalef32_pk_fp8_f16_hipPDv2_sS_Dv2_DF16_f"}
+// CHECK: [[META13]] = !{i32 0, !"_Z32test_cvt_scalef32_pk_bf8_f16_hipPDv2_sS_Dv2_DF16_f"}
+// CHECK: [[META14]] = !{i32 1, !"_Z32test_cvt_scalef32_pk_bf8_f16_hipPDv2_sS_Dv2_DF16_f"}
+// CHECK: [[META15]] = !{i32 0, !"_Z32test_cvt_scalef32_pk_f16_fp4_hipPDv2_DF16_jf"}
+// CHECK: [[META16]] = !{i32 1, !"_Z32test_cvt_scalef32_pk_f16_fp4_hipPDv2_DF16_jf"}
+// CHECK: [[META17]] = !{i32 0, !"_Z34test_cvt_scalef32_pk32_f16_fp6_hipPDv32_DF16_Dv6_jf"}
+// CHECK: [[META18]] = !{i32 1, !"_Z34test_cvt_scalef32_pk32_f16_fp6_hipPDv32_DF16_Dv6_jf"}
+// CHECK: [[META19]] = !{i32 0, !"_Z34test_cvt_scalef32_pk32_f16_bf6_hipPDv32_DF16_Dv6_jf"}
+// CHECK: [[META20]] = !{i32 1, !"_Z34test_cvt_scalef32_pk32_f16_bf6_hipPDv32_DF16_Dv6_jf"}
+// CHECK: [[META21]] = !{i32 0, !"_Z32test_cvt_scalef32_pk_f16_fp8_hipPDv2_DF16_jf"}
+// CHECK: [[META22]] = !{i32 1, !"_Z32test_cvt_scalef32_pk_f16_fp8_hipPDv2_DF16_jf"}
+// CHECK: [[META23]] = !{i32 0, !"_Z32test_cvt_scalef32_pk_f16_bf8_hipPDv2_DF16_jf"}
+// CHECK: [[META24]] = !{i32 1, !"_Z32test_cvt_scalef32_pk_f16_bf8_hipPDv2_DF16_jf"}
+// CHECK: [[META25]] = !{i32 0, !"_Z32test_cvt_scalef32_pk_fp4_f16_hipPjjDv2_DF16_f"}
+// CHECK: [[META26]] = !{i32 1, !"_Z32test_cvt_scalef32_pk_fp4_f16_hipPjjDv2_DF16_f"}
+// CHECK: [[META27]] = !{i32 0, !"_Z35test_cvt_scalef32_sr_pk_fp4_f16_hipPjjDv2_DF16_jf"}
+// CHECK: [[META28]] = !{i32 1, !"_Z35test_cvt_scalef32_sr_pk_fp4_f16_hipPjjDv2_DF16_jf"}
+// CHECK: [[META29]] = !{i32 0, !"_Z37test_cvt_scalef32_sr_pk32_bf6_f16_hipPDv6_jDv32_DF16_jf"}
+// CHECK: [[META30]] = !{i32 1, !"_Z37test_cvt_scalef32_sr_pk32_bf6_f16_hipPDv6_jDv32_DF16_jf"}
+// CHECK: [[META31]] = !{i32 0, !"_Z37test_cvt_scalef32_sr_pk32_fp6_f16_hipPDv6_jDv32_DF16_jf"}
+// CHECK: [[META32]] = !{i32 1, !"_Z37test_cvt_scalef32_sr_pk32_fp6_f16_hipPDv6_jDv32_DF16_jf"}
+// CHECK: [[META33]] = !{i32 0, !"_Z23test_cvt_sr_f16_f32_hipPDv2_DF16_S_fj"}
+// CHECK: [[META34]] = !{i32 1, !"_Z23test_cvt_sr_f16_f32_hipPDv2_DF16_S_fj"}
+//.

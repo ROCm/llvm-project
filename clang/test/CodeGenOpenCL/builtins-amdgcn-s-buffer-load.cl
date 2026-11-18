@@ -23,7 +23,9 @@ typedef half v4f16 __attribute__((ext_vector_type(4)));
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_i32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.ptr.s.buffer.load.i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8:![0-9]+]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.ptr.s.buffer.load.i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9:![0-9]+]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[TMP0]]
 //
 int test_amdgcn_s_buffer_load_i32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -32,7 +34,9 @@ int test_amdgcn_s_buffer_load_i32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_i32_non_const_offset(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.ptr.s.buffer.load.i32(ptr addrspace(8) [[RSRC:%.*]], i32 [[OFFSET:%.*]], i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call i32 @llvm.amdgcn.ptr.s.buffer.load.i32(ptr addrspace(8) [[RSRC:%.*]], i32 [[OFFSET:%.*]], i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[TMP0]]
 //
 int test_amdgcn_s_buffer_load_i32_non_const_offset(__amdgpu_buffer_rsrc_t rsrc, int offset) {
@@ -41,7 +45,9 @@ int test_amdgcn_s_buffer_load_i32_non_const_offset(__amdgpu_buffer_rsrc_t rsrc, 
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v2i32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <2 x i32> @llvm.amdgcn.ptr.s.buffer.load.v2i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <2 x i32> @llvm.amdgcn.ptr.s.buffer.load.v2i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <2 x i32> [[TMP0]]
 //
 v2i32 test_amdgcn_s_buffer_load_v2i32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -50,7 +56,9 @@ v2i32 test_amdgcn_s_buffer_load_v2i32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v3i32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <3 x i32> @llvm.amdgcn.ptr.s.buffer.load.v3i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <3 x i32> @llvm.amdgcn.ptr.s.buffer.load.v3i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <3 x i32> [[TMP0]]
 //
 v3i32 test_amdgcn_s_buffer_load_v3i32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -59,7 +67,9 @@ v3i32 test_amdgcn_s_buffer_load_v3i32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v4i32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.ptr.s.buffer.load.v4i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.ptr.s.buffer.load.v4i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x i32> [[TMP0]]
 //
 v4i32 test_amdgcn_s_buffer_load_v4i32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -68,7 +78,9 @@ v4i32 test_amdgcn_s_buffer_load_v4i32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v8i32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.ptr.s.buffer.load.v8i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.ptr.s.buffer.load.v8i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <8 x i32> [[TMP0]]
 //
 v8i32 test_amdgcn_s_buffer_load_v8i32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -77,7 +89,9 @@ v8i32 test_amdgcn_s_buffer_load_v8i32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v16i32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <16 x i32> @llvm.amdgcn.ptr.s.buffer.load.v16i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <16 x i32> @llvm.amdgcn.ptr.s.buffer.load.v16i32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <16 x i32> [[TMP0]]
 //
 v16i32 test_amdgcn_s_buffer_load_v16i32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -86,7 +100,9 @@ v16i32 test_amdgcn_s_buffer_load_v16i32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_f32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call float @llvm.amdgcn.ptr.s.buffer.load.f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call float @llvm.amdgcn.ptr.s.buffer.load.f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP0]]
 //
 float test_amdgcn_s_buffer_load_f32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -95,7 +111,9 @@ float test_amdgcn_s_buffer_load_f32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v2f32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <2 x float> @llvm.amdgcn.ptr.s.buffer.load.v2f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <2 x float> @llvm.amdgcn.ptr.s.buffer.load.v2f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <2 x float> [[TMP0]]
 //
 v2f32 test_amdgcn_s_buffer_load_v2f32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -104,7 +122,9 @@ v2f32 test_amdgcn_s_buffer_load_v2f32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v3f32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <3 x float> @llvm.amdgcn.ptr.s.buffer.load.v3f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <3 x float> @llvm.amdgcn.ptr.s.buffer.load.v3f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <3 x float> [[TMP0]]
 //
 v3f32 test_amdgcn_s_buffer_load_v3f32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -113,7 +133,9 @@ v3f32 test_amdgcn_s_buffer_load_v3f32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v4f32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.ptr.s.buffer.load.v4f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.ptr.s.buffer.load.v4f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP0]]
 //
 v4f32 test_amdgcn_s_buffer_load_v4f32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -122,7 +144,9 @@ v4f32 test_amdgcn_s_buffer_load_v4f32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v8f32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.ptr.s.buffer.load.v8f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.ptr.s.buffer.load.v8f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <8 x float> [[TMP0]]
 //
 v8f32 test_amdgcn_s_buffer_load_v8f32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -131,7 +155,9 @@ v8f32 test_amdgcn_s_buffer_load_v8f32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v16f32(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <16 x float> @llvm.amdgcn.ptr.s.buffer.load.v16f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <16 x float> @llvm.amdgcn.ptr.s.buffer.load.v16f32(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <16 x float> [[TMP0]]
 //
 v16f32 test_amdgcn_s_buffer_load_v16f32(__amdgpu_buffer_rsrc_t rsrc) {
@@ -140,7 +166,9 @@ v16f32 test_amdgcn_s_buffer_load_v16f32(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_i8(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call i8 @llvm.amdgcn.ptr.s.buffer.load.i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call i8 @llvm.amdgcn.ptr.s.buffer.load.i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i8 [[TMP0]]
 //
 char test_amdgcn_s_buffer_load_i8(__amdgpu_buffer_rsrc_t rsrc) {
@@ -149,7 +177,9 @@ char test_amdgcn_s_buffer_load_i8(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_u8(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call i8 @llvm.amdgcn.ptr.s.buffer.load.i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call i8 @llvm.amdgcn.ptr.s.buffer.load.i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i8 [[TMP0]]
 //
 unsigned char test_amdgcn_s_buffer_load_u8(__amdgpu_buffer_rsrc_t rsrc) {
@@ -158,7 +188,9 @@ unsigned char test_amdgcn_s_buffer_load_u8(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_i16(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call i16 @llvm.amdgcn.ptr.s.buffer.load.i16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call i16 @llvm.amdgcn.ptr.s.buffer.load.i16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i16 [[TMP0]]
 //
 short test_amdgcn_s_buffer_load_i16(__amdgpu_buffer_rsrc_t rsrc) {
@@ -167,7 +199,9 @@ short test_amdgcn_s_buffer_load_i16(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_u16(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call i16 @llvm.amdgcn.ptr.s.buffer.load.i16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call i16 @llvm.amdgcn.ptr.s.buffer.load.i16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i16 [[TMP0]]
 //
 unsigned short test_amdgcn_s_buffer_load_u16(__amdgpu_buffer_rsrc_t rsrc) {
@@ -176,7 +210,9 @@ unsigned short test_amdgcn_s_buffer_load_u16(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_f16(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call half @llvm.amdgcn.ptr.s.buffer.load.f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call half @llvm.amdgcn.ptr.s.buffer.load.f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret half [[TMP0]]
 //
 half test_amdgcn_s_buffer_load_f16(__amdgpu_buffer_rsrc_t rsrc) {
@@ -185,7 +221,9 @@ half test_amdgcn_s_buffer_load_f16(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v2f16(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <2 x half> @llvm.amdgcn.ptr.s.buffer.load.v2f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <2 x half> @llvm.amdgcn.ptr.s.buffer.load.v2f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <2 x half> [[TMP0]]
 //
 v2f16 test_amdgcn_s_buffer_load_v2f16(__amdgpu_buffer_rsrc_t rsrc) {
@@ -194,7 +232,9 @@ v2f16 test_amdgcn_s_buffer_load_v2f16(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v3f16(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <3 x half> @llvm.amdgcn.ptr.s.buffer.load.v3f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <3 x half> @llvm.amdgcn.ptr.s.buffer.load.v3f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META48:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <3 x half> [[TMP0]]
 //
 v3f16 test_amdgcn_s_buffer_load_v3f16(__amdgpu_buffer_rsrc_t rsrc) {
@@ -203,7 +243,9 @@ v3f16 test_amdgcn_s_buffer_load_v3f16(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v4f16(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x half> @llvm.amdgcn.ptr.s.buffer.load.v4f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META49:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x half> @llvm.amdgcn.ptr.s.buffer.load.v4f16(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META50:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP0]]
 //
 v4f16 test_amdgcn_s_buffer_load_v4f16(__amdgpu_buffer_rsrc_t rsrc) {
@@ -212,7 +254,9 @@ v4f16 test_amdgcn_s_buffer_load_v4f16(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v2i8(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <2 x i8> @llvm.amdgcn.ptr.s.buffer.load.v2i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META51:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <2 x i8> @llvm.amdgcn.ptr.s.buffer.load.v2i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META52:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <2 x i8> [[TMP0]]
 //
 v2i8 test_amdgcn_s_buffer_load_v2i8(__amdgpu_buffer_rsrc_t rsrc) {
@@ -221,7 +265,9 @@ v2i8 test_amdgcn_s_buffer_load_v2i8(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v3i8(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <3 x i8> @llvm.amdgcn.ptr.s.buffer.load.v3i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META53:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <3 x i8> @llvm.amdgcn.ptr.s.buffer.load.v3i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META54:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <3 x i8> [[TMP0]]
 //
 v3i8 test_amdgcn_s_buffer_load_v3i8(__amdgpu_buffer_rsrc_t rsrc) {
@@ -230,7 +276,9 @@ v3i8 test_amdgcn_s_buffer_load_v3i8(__amdgpu_buffer_rsrc_t rsrc) {
 
 // CHECK-LABEL: @test_amdgcn_s_buffer_load_v4i8(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x i8> @llvm.amdgcn.ptr.s.buffer.load.v4i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META8]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META55:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    [[TMP0:%.*]] = tail call <4 x i8> @llvm.amdgcn.ptr.s.buffer.load.v4i8(ptr addrspace(8) [[RSRC:%.*]], i32 0, i32 0), !invariant.load [[META9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META56:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x i8> [[TMP0]]
 //
 v4i8 test_amdgcn_s_buffer_load_v4i8(__amdgpu_buffer_rsrc_t rsrc) {

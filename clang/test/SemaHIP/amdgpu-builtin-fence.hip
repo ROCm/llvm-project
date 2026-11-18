@@ -21,13 +21,23 @@ template __device__ void test_dependent_scope<AgentScope>();
 // CHECK-LABEL: define internal void @_Z20test_dependent_orderILi5EEvv(
 // CHECK-SAME: ) #[[ATTR0:[0-9]+]] comdat {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    fence syncscope("agent") seq_cst
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define internal void @_Z20test_dependent_scopeIXadsoKcL_Z10AgentScopeEEEEvv(
 // CHECK-SAME: ) #[[ATTR0]] comdat {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    fence syncscope("agent") seq_cst
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
+//.
+// CHECK: [[META3]] = !{i32 0, !"_Z20test_dependent_orderILi5EEvv"}
+// CHECK: [[META4]] = !{i32 1, !"_Z20test_dependent_orderILi5EEvv"}
+// CHECK: [[META5]] = !{i32 0, !"_Z20test_dependent_scopeIXadsoKcL_Z10AgentScopeEEEEvv"}
+// CHECK: [[META6]] = !{i32 1, !"_Z20test_dependent_scopeIXadsoKcL_Z10AgentScopeEEEEvv"}
+//.

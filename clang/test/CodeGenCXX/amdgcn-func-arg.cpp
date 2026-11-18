@@ -7,22 +7,26 @@ public:
 // CHECK-LABEL: define linkonce_odr void @_ZN1AC1Ev(
 // CHECK-SAME: ptr noundef nonnull align 4 dereferenceable(4) [[THIS:%.*]]) unnamed_addr #[[ATTR1:[0-9]+]] comdat align 2 {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[THIS_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[THIS_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[THIS_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[THIS]], ptr [[THIS_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[THIS1:%.*]] = load ptr, ptr [[THIS_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    call void @_ZN1AC2Ev(ptr noundef nonnull align 4 dereferenceable(4) [[THIS1]]) #[[ATTR5:[0-9]+]]
+// CHECK-NEXT:    call void @_ZN1AC2Ev(ptr noundef nonnull align 4 dereferenceable(4) [[THIS1]]) #[[ATTR6:[0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
   A():x(0) {}
 // CHECK-LABEL: define linkonce_odr void @_ZN1AD1Ev(
 // CHECK-SAME: ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[THIS:%.*]]) unnamed_addr #[[ATTR1]] comdat align 2 {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[THIS_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[THIS_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[THIS_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[THIS]], ptr [[THIS_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[THIS1:%.*]] = load ptr, ptr [[THIS_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    call void @_ZN1AD2Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[THIS1]]) #[[ATTR6:[0-9]+]]
+// CHECK-NEXT:    call void @_ZN1AD2Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[THIS1]]) #[[ATTR7:[0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
   ~A() {}
@@ -41,12 +45,14 @@ void func_with_ref_arg(B &b);
 // CHECK-LABEL: define dso_local void @_Z22func_with_indirect_arg1A(
 // CHECK-SAME: ptr addrspace(5) nofreeobj noundef align 4 dereferenceable(4) [[A:%.*]]) #[[ATTR1]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A_INDIRECT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[P:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[P_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P]] to ptr
 // CHECK-NEXT:    store ptr addrspace(5) [[A]], ptr addrspace(5) [[A_INDIRECT_ADDR]], align 8
 // CHECK-NEXT:    [[A_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A]] to ptr
 // CHECK-NEXT:    store ptr [[A_ASCAST]], ptr [[P_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func_with_indirect_arg(A a) {
@@ -56,17 +62,19 @@ void func_with_indirect_arg(A a) {
 // CHECK-LABEL: define dso_local void @_Z22test_indirect_arg_autov(
 // CHECK-SAME: ) #[[ATTR1]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[A:%.*]] = alloca [[CLASS_A:%.*]], align 4, addrspace(5)
 // CHECK-NEXT:    [[AGG_TMP:%.*]] = alloca [[CLASS_A]], align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A]] to ptr
 // CHECK-NEXT:    [[AGG_TMP_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[AGG_TMP]] to ptr
-// CHECK-NEXT:    call void @_ZN1AC1Ev(ptr noundef nonnull align 4 dereferenceable(4) [[A_ASCAST]]) #[[ATTR5]]
+// CHECK-NEXT:    call void @_ZN1AC1Ev(ptr noundef nonnull align 4 dereferenceable(4) [[A_ASCAST]]) #[[ATTR6]]
 // CHECK-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr align 4 [[AGG_TMP_ASCAST]], ptr align 4 [[A_ASCAST]], i64 4, i1 false)
 // CHECK-NEXT:    [[AGG_TMP_ASCAST_ASCAST:%.*]] = addrspacecast ptr [[AGG_TMP_ASCAST]] to ptr addrspace(5)
-// CHECK-NEXT:    call void @_Z22func_with_indirect_arg1A(ptr addrspace(5) nofreeobj noundef align 4 dereferenceable(4) [[AGG_TMP_ASCAST_ASCAST]]) #[[ATTR5]]
-// CHECK-NEXT:    call void @_ZN1AD1Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[AGG_TMP_ASCAST]]) #[[ATTR6]]
-// CHECK-NEXT:    call void @_Z17func_with_ref_argR1A(ptr noundef nonnull align 4 dereferenceable(4) [[A_ASCAST]]) #[[ATTR5]]
-// CHECK-NEXT:    call void @_ZN1AD1Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[A_ASCAST]]) #[[ATTR6]]
+// CHECK-NEXT:    call void @_Z22func_with_indirect_arg1A(ptr addrspace(5) nofreeobj noundef align 4 dereferenceable(4) [[AGG_TMP_ASCAST_ASCAST]]) #[[ATTR6]]
+// CHECK-NEXT:    call void @_ZN1AD1Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[AGG_TMP_ASCAST]]) #[[ATTR7]]
+// CHECK-NEXT:    call void @_Z17func_with_ref_argR1A(ptr noundef nonnull align 4 dereferenceable(4) [[A_ASCAST]]) #[[ATTR6]]
+// CHECK-NEXT:    call void @_ZN1AD1Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[A_ASCAST]]) #[[ATTR7]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_indirect_arg_auto() {
@@ -78,13 +86,15 @@ void test_indirect_arg_auto() {
 // CHECK-LABEL: define dso_local void @_Z24test_indirect_arg_globalv(
 // CHECK-SAME: ) #[[ATTR1]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[AGG_TMP:%.*]] = alloca [[CLASS_A:%.*]], align 4, addrspace(5)
 // CHECK-NEXT:    [[AGG_TMP_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[AGG_TMP]] to ptr
 // CHECK-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr align 4 [[AGG_TMP_ASCAST]], ptr align 4 addrspacecast (ptr addrspace(1) @g_a to ptr), i64 4, i1 false)
 // CHECK-NEXT:    [[AGG_TMP_ASCAST_ASCAST:%.*]] = addrspacecast ptr [[AGG_TMP_ASCAST]] to ptr addrspace(5)
-// CHECK-NEXT:    call void @_Z22func_with_indirect_arg1A(ptr addrspace(5) nofreeobj noundef align 4 dereferenceable(4) [[AGG_TMP_ASCAST_ASCAST]]) #[[ATTR5]]
-// CHECK-NEXT:    call void @_ZN1AD1Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[AGG_TMP_ASCAST]]) #[[ATTR6]]
-// CHECK-NEXT:    call void @_Z17func_with_ref_argR1A(ptr noundef nonnull align 4 dereferenceable(4) addrspacecast (ptr addrspace(1) @g_a to ptr)) #[[ATTR5]]
+// CHECK-NEXT:    call void @_Z22func_with_indirect_arg1A(ptr addrspace(5) nofreeobj noundef align 4 dereferenceable(4) [[AGG_TMP_ASCAST_ASCAST]]) #[[ATTR6]]
+// CHECK-NEXT:    call void @_ZN1AD1Ev(ptr noundef nonnull align 4 dead_on_return(4) dereferenceable(4) [[AGG_TMP_ASCAST]]) #[[ATTR7]]
+// CHECK-NEXT:    call void @_Z17func_with_ref_argR1A(ptr noundef nonnull align 4 dereferenceable(4) addrspacecast (ptr addrspace(1) @g_a to ptr)) #[[ATTR6]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_indirect_arg_global() {
@@ -95,12 +105,14 @@ void test_indirect_arg_global() {
 // CHECK-LABEL: define dso_local void @_Z19func_with_byval_arg1B(
 // CHECK-SAME: ptr addrspace(5) noundef byref([[CLASS_B:%.*]]) align 4 [[TMP0:%.*]]) #[[ATTR1]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[B:%.*]] = alloca [[CLASS_B]], align 4, addrspace(5)
 // CHECK-NEXT:    [[P:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[P_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P]] to ptr
 // CHECK-NEXT:    call void @llvm.memcpy.p5.p5.i64(ptr addrspace(5) align 4 [[B]], ptr addrspace(5) align 4 [[TMP0]], i64 400, i1 false)
 // CHECK-NEXT:    [[B_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B]] to ptr
 // CHECK-NEXT:    store ptr [[B_ASCAST]], ptr [[P_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void func_with_byval_arg(B b) {
@@ -110,14 +122,16 @@ void func_with_byval_arg(B b) {
 // CHECK-LABEL: define dso_local void @_Z19test_byval_arg_autov(
 // CHECK-SAME: ) #[[ATTR1]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[B:%.*]] = alloca [[CLASS_B:%.*]], align 4, addrspace(5)
 // CHECK-NEXT:    [[AGG_TMP:%.*]] = alloca [[CLASS_B]], align 4, addrspace(5)
 // CHECK-NEXT:    [[B_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B]] to ptr
 // CHECK-NEXT:    [[AGG_TMP_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[AGG_TMP]] to ptr
 // CHECK-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr align 4 [[AGG_TMP_ASCAST]], ptr align 4 [[B_ASCAST]], i64 400, i1 false)
 // CHECK-NEXT:    [[AGG_TMP_ASCAST_ASCAST:%.*]] = addrspacecast ptr [[AGG_TMP_ASCAST]] to ptr addrspace(5)
-// CHECK-NEXT:    call void @_Z19func_with_byval_arg1B(ptr addrspace(5) noundef byref([[CLASS_B]]) align 4 [[AGG_TMP_ASCAST_ASCAST]]) #[[ATTR5]]
-// CHECK-NEXT:    call void @_Z17func_with_ref_argR1B(ptr noundef nonnull align 4 dereferenceable(400) [[B_ASCAST]]) #[[ATTR5]]
+// CHECK-NEXT:    call void @_Z19func_with_byval_arg1B(ptr addrspace(5) noundef byref([[CLASS_B]]) align 4 [[AGG_TMP_ASCAST_ASCAST]]) #[[ATTR6]]
+// CHECK-NEXT:    call void @_Z17func_with_ref_argR1B(ptr noundef nonnull align 4 dereferenceable(400) [[B_ASCAST]]) #[[ATTR6]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_byval_arg_auto() {
@@ -129,15 +143,35 @@ void test_byval_arg_auto() {
 // CHECK-LABEL: define dso_local void @_Z21test_byval_arg_globalv(
 // CHECK-SAME: ) #[[ATTR1]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[AGG_TMP:%.*]] = alloca [[CLASS_B:%.*]], align 4, addrspace(5)
 // CHECK-NEXT:    [[AGG_TMP_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[AGG_TMP]] to ptr
 // CHECK-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr align 4 [[AGG_TMP_ASCAST]], ptr align 4 addrspacecast (ptr addrspace(1) @g_b to ptr), i64 400, i1 false)
 // CHECK-NEXT:    [[AGG_TMP_ASCAST_ASCAST:%.*]] = addrspacecast ptr [[AGG_TMP_ASCAST]] to ptr addrspace(5)
-// CHECK-NEXT:    call void @_Z19func_with_byval_arg1B(ptr addrspace(5) noundef byref([[CLASS_B]]) align 4 [[AGG_TMP_ASCAST_ASCAST]]) #[[ATTR5]]
-// CHECK-NEXT:    call void @_Z17func_with_ref_argR1B(ptr noundef nonnull align 4 dereferenceable(400) addrspacecast (ptr addrspace(1) @g_b to ptr)) #[[ATTR5]]
+// CHECK-NEXT:    call void @_Z19func_with_byval_arg1B(ptr addrspace(5) noundef byref([[CLASS_B]]) align 4 [[AGG_TMP_ASCAST_ASCAST]]) #[[ATTR6]]
+// CHECK-NEXT:    call void @_Z17func_with_ref_argR1B(ptr noundef nonnull align 4 dereferenceable(400) addrspacecast (ptr addrspace(1) @g_b to ptr)) #[[ATTR6]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_byval_arg_global() {
   func_with_byval_arg(g_b);
   func_with_ref_arg(g_b);
 }
+//.
+// CHECK: [[META2]] = !{i32 0, !"_ZN1AC1Ev"}
+// CHECK: [[META3]] = !{i32 1, !"_ZN1AC1Ev"}
+// CHECK: [[META4]] = !{i32 0, !"_ZN1AD1Ev"}
+// CHECK: [[META5]] = !{i32 1, !"_ZN1AD1Ev"}
+// CHECK: [[META6]] = !{i32 0, !"_Z22func_with_indirect_arg1A"}
+// CHECK: [[META7]] = !{i32 1, !"_Z22func_with_indirect_arg1A"}
+// CHECK: [[META8]] = !{i32 0, !"_Z22test_indirect_arg_autov"}
+// CHECK: [[META9]] = !{i32 1, !"_Z22test_indirect_arg_autov"}
+// CHECK: [[META10]] = !{i32 0, !"_Z24test_indirect_arg_globalv"}
+// CHECK: [[META11]] = !{i32 1, !"_Z24test_indirect_arg_globalv"}
+// CHECK: [[META12]] = !{i32 0, !"_Z19func_with_byval_arg1B"}
+// CHECK: [[META13]] = !{i32 1, !"_Z19func_with_byval_arg1B"}
+// CHECK: [[META14]] = !{i32 0, !"_Z19test_byval_arg_autov"}
+// CHECK: [[META15]] = !{i32 1, !"_Z19test_byval_arg_autov"}
+// CHECK: [[META16]] = !{i32 0, !"_Z21test_byval_arg_globalv"}
+// CHECK: [[META17]] = !{i32 1, !"_Z21test_byval_arg_globalv"}
+//.

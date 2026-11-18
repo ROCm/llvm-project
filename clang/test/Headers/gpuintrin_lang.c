@@ -40,6 +40,7 @@ __device__ int foo() { return __gpu_thread_id_x(); }
 #elif defined(SYCL)
 extern "C" [[clang::sycl_external]] int foo() { return __gpu_thread_id_x(); }
 #else
+//
 // CUDA-LABEL: define dso_local i32 @foo(
 // CUDA-SAME: ) #[[ATTR0:[0-9]+]] {
 // CUDA-NEXT:  [[ENTRY:.*:]]
@@ -49,19 +50,31 @@ extern "C" [[clang::sycl_external]] int foo() { return __gpu_thread_id_x(); }
 // HIP-LABEL: define dso_local i32 @foo(
 // HIP-SAME: ) #[[ATTR0:[0-9]+]] {
 // HIP-NEXT:  [[ENTRY:.*:]]
+// HIP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// HIP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // HIP-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workitem.id.x()
+// HIP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
+// HIP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // HIP-NEXT:    ret i32 [[TMP0]]
 //
 // OPENCL-LABEL: define dso_local i32 @foo(
 // OPENCL-SAME: ) #[[ATTR0:[0-9]+]] {
 // OPENCL-NEXT:  [[ENTRY:.*:]]
+// OPENCL-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
+// OPENCL-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // OPENCL-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workitem.id.x()
+// OPENCL-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
+// OPENCL-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPENCL-NEXT:    ret i32 [[TMP0]]
 //
 // OPENMP-LABEL: define hidden i32 @foo(
 // OPENMP-SAME: ) #[[ATTR0:[0-9]+]] {
 // OPENMP-NEXT:  [[ENTRY:.*:]]
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPENMP-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workitem.id.x()
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
+// OPENMP-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // OPENMP-NEXT:    ret i32 [[TMP0]]
 //
 // SYCL-LABEL: define spir_func i32 @foo(
@@ -74,9 +87,34 @@ extern "C" [[clang::sycl_external]] int foo() { return __gpu_thread_id_x(); }
 // C89-LABEL: define dso_local i32 @foo(
 // C89-SAME: ) #[[ATTR0:[0-9]+]] {
 // C89-NEXT:  [[ENTRY:.*:]]
+// C89-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// C89-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // C89-NEXT:    [[TMP0:%.*]] = call i32 @llvm.amdgcn.workitem.id.x()
+// C89-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
+// C89-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // C89-NEXT:    ret i32 [[TMP0]]
 //
 int foo() { return __gpu_thread_id_x(); }
 #pragma omp declare target to(foo)
 #endif
+//.
+// HIP: [[META2]] = !{i32 0, !"foo"}
+// HIP: [[META3]] = !{i32 0, !"__gpu_thread_id_x"}
+// HIP: [[META4]] = !{i32 1, !"__gpu_thread_id_x"}
+// HIP: [[META5]] = !{i32 1, !"foo"}
+//.
+// OPENCL: [[META3]] = !{i32 0, !"foo"}
+// OPENCL: [[META4]] = !{i32 0, !"__gpu_thread_id_x"}
+// OPENCL: [[META5]] = !{i32 1, !"__gpu_thread_id_x"}
+// OPENCL: [[META6]] = !{i32 1, !"foo"}
+//.
+// OPENMP: [[META5]] = !{i32 0, !"foo"}
+// OPENMP: [[META6]] = !{i32 0, !"__gpu_thread_id_x$ompvariant$S2$s7$Pamdgcn"}
+// OPENMP: [[META7]] = !{i32 1, !"__gpu_thread_id_x$ompvariant$S2$s7$Pamdgcn"}
+// OPENMP: [[META8]] = !{i32 1, !"foo"}
+//.
+// C89: [[META2]] = !{i32 0, !"foo"}
+// C89: [[META3]] = !{i32 0, !"__gpu_thread_id_x"}
+// C89: [[META4]] = !{i32 1, !"__gpu_thread_id_x"}
+// C89: [[META5]] = !{i32 1, !"foo"}
+//.

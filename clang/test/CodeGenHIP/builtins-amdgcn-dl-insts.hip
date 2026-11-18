@@ -14,6 +14,7 @@ typedef unsigned short __attribute__((ext_vector_type(2))) ushort2;
 // CHECK-LABEL: define dso_local void @_Z21test_amdgcn_fdot2_hipPfDv2_DF16_S0_f(
 // CHECK-SAME: ptr noundef [[FOUT:%.*]], <2 x half> noundef [[V2HA:%.*]], <2 x half> noundef [[V2HB:%.*]], float noundef [[FC:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[FOUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[V2HA_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // CHECK-NEXT:    [[V2HB_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
@@ -40,6 +41,7 @@ typedef unsigned short __attribute__((ext_vector_type(2))) ushort2;
 // CHECK-NEXT:    [[TMP9:%.*]] = load ptr, ptr [[FOUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds float, ptr [[TMP9]], i64 1
 // CHECK-NEXT:    store float [[TMP8]], ptr [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_amdgcn_fdot2_hip(float* fOut, half2 v2hA, half2 v2hB, float fC) {
@@ -50,6 +52,7 @@ __device__ void test_amdgcn_fdot2_hip(float* fOut, half2 v2hA, half2 v2hB, float
 // CHECK-LABEL: define dso_local void @_Z21test_amdgcn_sdot2_hipPiDv2_sS0_i(
 // CHECK-SAME: ptr noundef [[SIOUT:%.*]], <2 x i16> noundef [[V2SSA:%.*]], <2 x i16> noundef [[V2SSB:%.*]], i32 noundef [[SIC:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[SIOUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[V2SSA_ADDR:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
 // CHECK-NEXT:    [[V2SSB_ADDR:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
@@ -76,6 +79,7 @@ __device__ void test_amdgcn_fdot2_hip(float* fOut, half2 v2hA, half2 v2hB, float
 // CHECK-NEXT:    [[TMP9:%.*]] = load ptr, ptr [[SIOUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds i32, ptr [[TMP9]], i64 1
 // CHECK-NEXT:    store i32 [[TMP8]], ptr [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_amdgcn_sdot2_hip(int* siOut, short2 v2ssA, short2 v2ssB, int siC) {
@@ -86,6 +90,7 @@ __device__ void test_amdgcn_sdot2_hip(int* siOut, short2 v2ssA, short2 v2ssB, in
 // CHECK-LABEL: define dso_local void @_Z21test_amdgcn_udot2_hipPjDv2_tS0_j(
 // CHECK-SAME: ptr noundef [[UIOUT:%.*]], <2 x i16> noundef [[V2USA:%.*]], <2 x i16> noundef [[V2USB:%.*]], i32 noundef [[UIC:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[UIOUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[V2USA_ADDR:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
 // CHECK-NEXT:    [[V2USB_ADDR:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
@@ -112,6 +117,7 @@ __device__ void test_amdgcn_sdot2_hip(int* siOut, short2 v2ssA, short2 v2ssB, in
 // CHECK-NEXT:    [[TMP9:%.*]] = load ptr, ptr [[UIOUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds i32, ptr [[TMP9]], i64 1
 // CHECK-NEXT:    store i32 [[TMP8]], ptr [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_amdgcn_udot2_hip(uint* uiOut, ushort2 v2usA, ushort2 v2usB, uint uiC) {
@@ -122,6 +128,7 @@ __device__ void test_amdgcn_udot2_hip(uint* uiOut, ushort2 v2usA, ushort2 v2usB,
 // CHECK-LABEL: define dso_local void @_Z21test_amdgcn_sdot4_hipPiiii(
 // CHECK-SAME: ptr noundef [[SIOUT:%.*]], i32 noundef [[SIA:%.*]], i32 noundef [[SIB:%.*]], i32 noundef [[SIC:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[SIOUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SIA_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SIB_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -148,6 +155,7 @@ __device__ void test_amdgcn_udot2_hip(uint* uiOut, ushort2 v2usA, ushort2 v2usB,
 // CHECK-NEXT:    [[TMP9:%.*]] = load ptr, ptr [[SIOUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds i32, ptr [[TMP9]], i64 1
 // CHECK-NEXT:    store i32 [[TMP8]], ptr [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_amdgcn_sdot4_hip(int* siOut, int siA, int siB, int siC) {
@@ -158,6 +166,7 @@ __device__ void test_amdgcn_sdot4_hip(int* siOut, int siA, int siB, int siC) {
 // CHECK-LABEL: define dso_local void @_Z21test_amdgcn_udot4_hipPjjjj(
 // CHECK-SAME: ptr noundef [[UIOUT:%.*]], i32 noundef [[UIA:%.*]], i32 noundef [[UIB:%.*]], i32 noundef [[UIC:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[UIOUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[UIA_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[UIB_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -184,6 +193,7 @@ __device__ void test_amdgcn_sdot4_hip(int* siOut, int siA, int siB, int siC) {
 // CHECK-NEXT:    [[TMP9:%.*]] = load ptr, ptr [[UIOUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds i32, ptr [[TMP9]], i64 1
 // CHECK-NEXT:    store i32 [[TMP8]], ptr [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_amdgcn_udot4_hip(uint* uiOut, uint uiA, uint uiB, uint uiC) {
@@ -194,6 +204,7 @@ __device__ void test_amdgcn_udot4_hip(uint* uiOut, uint uiA, uint uiB, uint uiC)
 // CHECK-LABEL: define dso_local void @_Z21test_amdgcn_sdot8_hipPiiii(
 // CHECK-SAME: ptr noundef [[SIOUT:%.*]], i32 noundef [[SIA:%.*]], i32 noundef [[SIB:%.*]], i32 noundef [[SIC:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[SIOUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SIA_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SIB_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -220,6 +231,7 @@ __device__ void test_amdgcn_udot4_hip(uint* uiOut, uint uiA, uint uiB, uint uiC)
 // CHECK-NEXT:    [[TMP9:%.*]] = load ptr, ptr [[SIOUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds i32, ptr [[TMP9]], i64 1
 // CHECK-NEXT:    store i32 [[TMP8]], ptr [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_amdgcn_sdot8_hip(int* siOut, int siA, int siB, int siC) {
@@ -230,6 +242,7 @@ __device__ void test_amdgcn_sdot8_hip(int* siOut, int siA, int siB, int siC) {
 // CHECK-LABEL: define dso_local void @_Z21test_amdgcn_udot8_hipPjjjj(
 // CHECK-SAME: ptr noundef [[UIOUT:%.*]], i32 noundef [[UIA:%.*]], i32 noundef [[UIB:%.*]], i32 noundef [[UIC:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[UIOUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[UIA_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[UIB_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -256,6 +269,7 @@ __device__ void test_amdgcn_sdot8_hip(int* siOut, int siA, int siB, int siC) {
 // CHECK-NEXT:    [[TMP9:%.*]] = load ptr, ptr [[UIOUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds i32, ptr [[TMP9]], i64 1
 // CHECK-NEXT:    store i32 [[TMP8]], ptr [[ARRAYIDX1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_amdgcn_udot8_hip(uint* uiOut, uint uiA, uint uiB, uint uiC) {
@@ -263,3 +277,19 @@ __device__ void test_amdgcn_udot8_hip(uint* uiOut, uint uiA, uint uiB, uint uiC)
   uiOut[1] = __builtin_amdgcn_udot8(uiA, uiB, uiC, true);
 }
 
+//.
+// CHECK: [[META3]] = !{i32 0, !"_Z21test_amdgcn_fdot2_hipPfDv2_DF16_S0_f"}
+// CHECK: [[META4]] = !{i32 1, !"_Z21test_amdgcn_fdot2_hipPfDv2_DF16_S0_f"}
+// CHECK: [[META5]] = !{i32 0, !"_Z21test_amdgcn_sdot2_hipPiDv2_sS0_i"}
+// CHECK: [[META6]] = !{i32 1, !"_Z21test_amdgcn_sdot2_hipPiDv2_sS0_i"}
+// CHECK: [[META7]] = !{i32 0, !"_Z21test_amdgcn_udot2_hipPjDv2_tS0_j"}
+// CHECK: [[META8]] = !{i32 1, !"_Z21test_amdgcn_udot2_hipPjDv2_tS0_j"}
+// CHECK: [[META9]] = !{i32 0, !"_Z21test_amdgcn_sdot4_hipPiiii"}
+// CHECK: [[META10]] = !{i32 1, !"_Z21test_amdgcn_sdot4_hipPiiii"}
+// CHECK: [[META11]] = !{i32 0, !"_Z21test_amdgcn_udot4_hipPjjjj"}
+// CHECK: [[META12]] = !{i32 1, !"_Z21test_amdgcn_udot4_hipPjjjj"}
+// CHECK: [[META13]] = !{i32 0, !"_Z21test_amdgcn_sdot8_hipPiiii"}
+// CHECK: [[META14]] = !{i32 1, !"_Z21test_amdgcn_sdot8_hipPiiii"}
+// CHECK: [[META15]] = !{i32 0, !"_Z21test_amdgcn_udot8_hipPjjjj"}
+// CHECK: [[META16]] = !{i32 1, !"_Z21test_amdgcn_udot8_hipPjjjj"}
+//.

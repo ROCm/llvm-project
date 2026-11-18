@@ -10,12 +10,14 @@ extern "C" __device__ int bar(const char *s);
 // CHECK-GFX1200-LABEL: define dso_local noundef i32 @_Z4foo1v(
 // CHECK-GFX1200-SAME: ) #[[ATTR0:[0-9]+]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[S:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-GFX1200-NEXT:    [[S_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[S]] to ptr
 // CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.s.prefetch.inst.p0(ptr @bar, i32 0)
 // CHECK-GFX1200-NEXT:    store ptr addrspacecast (ptr addrspace(4) @.str to ptr), ptr [[S_ASCAST]], align 8
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[S_ASCAST]], align 8
-// CHECK-GFX1200-NEXT:    [[CALL:%.*]] = call i32 @bar(ptr noundef [[TMP0]]) #[[ATTR3:[0-9]+]]
+// CHECK-GFX1200-NEXT:    [[CALL:%.*]] = call i32 @bar(ptr noundef [[TMP0]]) #[[ATTR4:[0-9]+]]
+// CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret i32 [[CALL]]
 //
 __device__ int foo1() {
@@ -27,6 +29,7 @@ __device__ int foo1() {
 // CHECK-GFX1200-LABEL: define dso_local noundef i32 @_Z4foo2i(
 // CHECK-GFX1200-SAME: i32 noundef [[ID:%.*]]) #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[RETVAL:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-GFX1200-NEXT:    [[ID_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-GFX1200-NEXT:    [[S:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -42,7 +45,7 @@ __device__ int foo1() {
 // CHECK-GFX1200:       [[IF_THEN]]:
 // CHECK-GFX1200-NEXT:    store ptr addrspacecast (ptr addrspace(4) @.str to ptr), ptr [[S_ASCAST]], align 8
 // CHECK-GFX1200-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[S_ASCAST]], align 8
-// CHECK-GFX1200-NEXT:    [[CALL:%.*]] = call i32 @bar(ptr noundef [[TMP1]]) #[[ATTR3]]
+// CHECK-GFX1200-NEXT:    [[CALL:%.*]] = call i32 @bar(ptr noundef [[TMP1]]) #[[ATTR4]]
 // CHECK-GFX1200-NEXT:    store i32 [[CALL]], ptr addrspace(5) [[RETVAL]], align 4
 // CHECK-GFX1200-NEXT:    br label %[[RETURN:.*]]
 // CHECK-GFX1200:       [[IF_END]]:
@@ -50,11 +53,12 @@ __device__ int foo1() {
 // CHECK-GFX1200:       [[NOBAR]]:
 // CHECK-GFX1200-NEXT:    store ptr addrspacecast (ptr addrspace(4) @.str.1 to ptr), ptr [[S2_ASCAST]], align 8
 // CHECK-GFX1200-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[S2_ASCAST]], align 8
-// CHECK-GFX1200-NEXT:    [[CALL1:%.*]] = call i32 @bar(ptr noundef [[TMP2]]) #[[ATTR3]]
+// CHECK-GFX1200-NEXT:    [[CALL1:%.*]] = call i32 @bar(ptr noundef [[TMP2]]) #[[ATTR4]]
 // CHECK-GFX1200-NEXT:    store i32 [[CALL1]], ptr addrspace(5) [[RETVAL]], align 4
 // CHECK-GFX1200-NEXT:    br label %[[RETURN]]
 // CHECK-GFX1200:       [[RETURN]]:
 // CHECK-GFX1200-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspace(5) [[RETVAL]], align 4
+// CHECK-GFX1200-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret i32 [[TMP3]]
 // CHECK-GFX1200:       [[INDIRECTGOTO:.*:]]
 // CHECK-GFX1200-NEXT:    indirectbr ptr poison, [label %[[NOBAR]]]
@@ -69,3 +73,9 @@ NOBAR:
   const char *s2 = "skip hello";
   return bar(s2);
 }
+//.
+// CHECK-GFX1200: [[META3]] = !{i32 0, !"_Z4foo1v"}
+// CHECK-GFX1200: [[META4]] = !{i32 1, !"_Z4foo1v"}
+// CHECK-GFX1200: [[META5]] = !{i32 0, !"_Z4foo2i"}
+// CHECK-GFX1200: [[META6]] = !{i32 1, !"_Z4foo2i"}
+//.

@@ -16,6 +16,7 @@ struct Foo {
 // AMDGCN-LABEL: define dso_local void @_Z3barPK3Foo(
 // AMDGCN-SAME: ptr dead_on_unwind noalias writable sret([[STRUCT_FOO:%.*]]) align 8 [[AGG_RESULT:%.*]], ptr noundef [[SRC_PTR:%.*]]) #[[ATTR0:[0-9]+]] {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[RESULT_PTR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGCN-NEXT:    [[SRC_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGCN-NEXT:    [[DST:%.*]] = alloca [[UNION_ANON:%.*]], align 8, addrspace(5)
@@ -24,7 +25,7 @@ struct Foo {
 // AMDGCN-NEXT:    [[DST_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DST]] to ptr
 // AMDGCN-NEXT:    store ptr [[AGG_RESULT]], ptr [[RESULT_PTR_ASCAST]], align 8
 // AMDGCN-NEXT:    store ptr [[SRC_PTR]], ptr [[SRC_PTR_ADDR_ASCAST]], align 8
-// AMDGCN-NEXT:    call void @_ZN3FooC1Ev(ptr noundef nonnull align 8 dereferenceable(8) [[AGG_RESULT]]) #[[ATTR1:[0-9]+]]
+// AMDGCN-NEXT:    call void @_ZN3FooC1Ev(ptr noundef nonnull align 8 dereferenceable(8) [[AGG_RESULT]]) #[[ATTR2:[0-9]+]]
 // AMDGCN-NEXT:    store ptr [[AGG_RESULT]], ptr [[DST_ASCAST]], align 8
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[SRC_PTR_ADDR_ASCAST]], align 8
 // AMDGCN-NEXT:    [[VAL:%.*]] = getelementptr inbounds nuw [[STRUCT_FOO]], ptr [[TMP0]], i32 0, i32 0
@@ -32,6 +33,7 @@ struct Foo {
 // AMDGCN-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[DST_ASCAST]], align 8
 // AMDGCN-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i64, ptr [[TMP2]], i64 0
 // AMDGCN-NEXT:    store i64 [[TMP1]], ptr [[ARRAYIDX]], align 8
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z3barPK3Foo(
@@ -66,3 +68,7 @@ __attribute__((device)) Foo bar(const Foo *const src_ptr) {
   dst.ptr64[0] = src_ptr->val;
   return result;
 }
+//.
+// AMDGCN: [[META3]] = !{i32 0, !"_Z3barPK3Foo"}
+// AMDGCN: [[META4]] = !{i32 1, !"_Z3barPK3Foo"}
+//.

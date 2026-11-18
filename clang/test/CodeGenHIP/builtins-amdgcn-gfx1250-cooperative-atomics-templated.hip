@@ -32,6 +32,7 @@ __device__ void test_amdgcn_cooperative_atomic_load_32x4B(int* addr, int *out)
 // CHECK-LABEL: define dso_local void @_Z42test_amdgcn_cooperative_atomic_store_32x4BPii(
 // CHECK-SAME: ptr noundef [[GADDR:%.*]], i32 noundef [[VAL:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[GADDR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[GADDR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[GADDR_ADDR]] to ptr
@@ -40,13 +41,15 @@ __device__ void test_amdgcn_cooperative_atomic_load_32x4B(int* addr, int *out)
 // CHECK-NEXT:    store i32 [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[GADDR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    call void @_Z39template_cooperative_atomic_store_32x4BILj5EEvPii(ptr noundef [[TMP0]], i32 noundef [[TMP1]]) #[[ATTR3:[0-9]+]]
+// CHECK-NEXT:    call void @_Z39template_cooperative_atomic_store_32x4BILj5EEvPii(ptr noundef [[TMP0]], i32 noundef [[TMP1]]) #[[ATTR4:[0-9]+]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define linkonce_odr void @_Z39template_cooperative_atomic_store_32x4BILj5EEvPii(
 // CHECK-SAME: ptr noundef [[GADDR:%.*]], i32 noundef [[VAL:%.*]]) #[[ATTR0]] comdat {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[GADDR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[GADDR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[GADDR_ADDR]] to ptr
@@ -55,13 +58,15 @@ __device__ void test_amdgcn_cooperative_atomic_load_32x4B(int* addr, int *out)
 // CHECK-NEXT:    store i32 [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[GADDR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = load i32, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    call void @llvm.amdgcn.cooperative.atomic.store.32x4B.p0(ptr [[TMP0]], i32 [[TMP1]], i32 5, metadata [[META3:![0-9]+]])
+// CHECK-NEXT:    call void @llvm.amdgcn.cooperative.atomic.store.32x4B.p0(ptr [[TMP0]], i32 [[TMP1]], i32 5, metadata [[META6:![0-9]+]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define dso_local void @_Z41test_amdgcn_cooperative_atomic_load_32x4BPiS_(
 // CHECK-SAME: ptr noundef [[ADDR:%.*]], ptr noundef [[OUT:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[ADDR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[ADDR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[ADDR_ADDR]] to ptr
@@ -69,23 +74,34 @@ __device__ void test_amdgcn_cooperative_atomic_load_32x4B(int* addr, int *out)
 // CHECK-NEXT:    store ptr [[ADDR]], ptr [[ADDR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[OUT]], ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[ADDR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[CALL:%.*]] = call noundef i32 @_Z38template_cooperative_atomic_load_32x4BILj5EEiPi(ptr noundef [[TMP0]]) #[[ATTR3]]
+// CHECK-NEXT:    [[CALL:%.*]] = call noundef i32 @_Z38template_cooperative_atomic_load_32x4BILj5EEiPi(ptr noundef [[TMP0]]) #[[ATTR4]]
 // CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i32 [[CALL]], ptr [[TMP1]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 //
 // CHECK-LABEL: define linkonce_odr noundef i32 @_Z38template_cooperative_atomic_load_32x4BILj5EEiPi(
 // CHECK-SAME: ptr noundef [[GADDR:%.*]]) #[[ATTR0]] comdat {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[GADDR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[GADDR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[GADDR_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[GADDR]], ptr [[GADDR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[GADDR_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = call i32 @llvm.amdgcn.cooperative.atomic.load.32x4B.p0(ptr [[TMP0]], i32 5, metadata [[META4:![0-9]+]])
+// CHECK-NEXT:    [[TMP1:%.*]] = call i32 @llvm.amdgcn.cooperative.atomic.load.32x4B.p0(ptr [[TMP0]], i32 5, metadata [[META11:![0-9]+]])
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[TMP1]]
 //
 //.
-// CHECK: [[META3]] = !{!"agent"}
-// CHECK: [[META4]] = !{!""}
+// CHECK: [[META3]] = !{i32 0, !"_Z42test_amdgcn_cooperative_atomic_store_32x4BPii"}
+// CHECK: [[META4]] = !{i32 1, !"_Z42test_amdgcn_cooperative_atomic_store_32x4BPii"}
+// CHECK: [[META5]] = !{i32 0, !"_Z39template_cooperative_atomic_store_32x4BILj5EEvPii"}
+// CHECK: [[META6]] = !{!"agent"}
+// CHECK: [[META7]] = !{i32 1, !"_Z39template_cooperative_atomic_store_32x4BILj5EEvPii"}
+// CHECK: [[META8]] = !{i32 0, !"_Z41test_amdgcn_cooperative_atomic_load_32x4BPiS_"}
+// CHECK: [[META9]] = !{i32 1, !"_Z41test_amdgcn_cooperative_atomic_load_32x4BPiS_"}
+// CHECK: [[META10]] = !{i32 0, !"_Z38template_cooperative_atomic_load_32x4BILj5EEiPi"}
+// CHECK: [[META11]] = !{!""}
+// CHECK: [[META12]] = !{i32 1, !"_Z38template_cooperative_atomic_load_32x4BILj5EEiPi"}
 //.

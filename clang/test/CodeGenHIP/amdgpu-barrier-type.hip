@@ -27,18 +27,20 @@ __attribute__((device)) void useBar(__amdgpu_named_workgroup_barrier_t *);
 // CHECK-LABEL: define {{[^@]+}}@_Z7testSemPu34__amdgpu_named_workgroup_barrier_t
 // CHECK-SAME: (ptr noundef [[P:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef [[TMP0]]) #[[ATTR2:[0-9]+]]
-// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef addrspacecast (ptr addrspace(15) @bar to ptr)) #[[ATTR2]]
-// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef addrspacecast (ptr addrspace(15) @bar_wrapper_str to ptr)) #[[ATTR2]]
-// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef addrspacecast (ptr addrspace(15) @bar_wrapperwrapper_str to ptr)) #[[ATTR2]]
-// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef getelementptr inbounds nuw (i8, ptr addrspacecast (ptr addrspace(15) @bar_arr to ptr), i64 1)) #[[ATTR2]]
-// CHECK-NEXT:    [[CALL:%.*]] = call noundef ptr @_Z6getBarv() #[[ATTR2]]
-// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef [[CALL]]) #[[ATTR2]]
-// CHECK-NEXT:    [[CALL1:%.*]] = call noundef ptr @_Z6getBarv() #[[ATTR2]]
+// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef [[TMP0]]) #[[ATTR3:[0-9]+]]
+// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef addrspacecast (ptr addrspace(15) @bar to ptr)) #[[ATTR3]]
+// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef addrspacecast (ptr addrspace(15) @bar_wrapper_str to ptr)) #[[ATTR3]]
+// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef addrspacecast (ptr addrspace(15) @bar_wrapperwrapper_str to ptr)) #[[ATTR3]]
+// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef getelementptr inbounds nuw (i8, ptr addrspacecast (ptr addrspace(15) @bar_arr to ptr), i64 1)) #[[ATTR3]]
+// CHECK-NEXT:    [[CALL:%.*]] = call noundef ptr @_Z6getBarv() #[[ATTR3]]
+// CHECK-NEXT:    call void @_Z6useBarPu34__amdgpu_named_workgroup_barrier_t(ptr noundef [[CALL]]) #[[ATTR3]]
+// CHECK-NEXT:    [[CALL1:%.*]] = call noundef ptr @_Z6getBarv() #[[ATTR3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret ptr [[CALL1]]
 //
 __attribute__((device)) __amdgpu_named_workgroup_barrier_t *testSem(__amdgpu_named_workgroup_barrier_t *p) {

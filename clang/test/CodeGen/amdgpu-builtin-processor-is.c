@@ -13,14 +13,18 @@
 // AMDGCN-GFX900-LABEL: define dso_local void @foo(
 // AMDGCN-GFX900-SAME: ) #[[ATTR0:[0-9]+]] {
 // AMDGCN-GFX900-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-GFX900-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-GFX900-NEXT:    call void @llvm.trap()
 // AMDGCN-GFX900-NEXT:    unreachable
 // AMDGCN-GFX900:       [[BB0:.*:]]
+// AMDGCN-GFX900-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-GFX900-NEXT:    ret void
 //
 // AMDGCN-GFX1010-LABEL: define dso_local void @foo(
 // AMDGCN-GFX1010-SAME: ) #[[ATTR0:[0-9]+]] {
 // AMDGCN-GFX1010-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-GFX1010-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// AMDGCN-GFX1010-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-GFX1010-NEXT:    ret void
 //
 // AMDGCNSPIRV-LABEL: define spir_func void @foo(
@@ -64,8 +68,10 @@ void foo() {
 //.
 // AMDGCN-GFX900: attributes #[[ATTR0]] = { convergent noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // AMDGCN-GFX900: attributes #[[ATTR1:[0-9]+]] = { cold noreturn nounwind memory(inaccessiblemem: write) }
+// AMDGCN-GFX900: attributes #[[ATTR2:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // AMDGCN-GFX1010: attributes #[[ATTR0]] = { convergent noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
+// AMDGCN-GFX1010: attributes #[[ATTR1:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // AMDGCNSPIRV: attributes #[[ATTR0]] = { noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // AMDGCNSPIRV: attributes #[[ATTR1:[0-9]+]] = { nounwind }
@@ -73,9 +79,13 @@ void foo() {
 //.
 // AMDGCN-GFX900: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // AMDGCN-GFX900: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// AMDGCN-GFX900: [[META2]] = !{i32 0, !"foo"}
+// AMDGCN-GFX900: [[META3]] = !{i32 1, !"foo"}
 //.
 // AMDGCN-GFX1010: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // AMDGCN-GFX1010: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// AMDGCN-GFX1010: [[META2]] = !{i32 0, !"foo"}
+// AMDGCN-GFX1010: [[META3]] = !{i32 1, !"foo"}
 //.
 // AMDGCNSPIRV: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // AMDGCNSPIRV: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}

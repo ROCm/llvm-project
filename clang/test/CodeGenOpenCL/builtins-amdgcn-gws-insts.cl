@@ -15,11 +15,15 @@ typedef unsigned int uint;
 // CHECK-LABEL: define dso_local amdgpu_kernel void @test_builtins_amdgcn_gws_insts
 // CHECK-SAME: (i32 noundef [[A:%.*]], i32 noundef [[B:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {{.*}}{
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    tail call void @llvm.amdgcn.ds.gws.init(i32 [[A]], i32 [[B]])
 // CHECK-NEXT:    tail call void @llvm.amdgcn.ds.gws.barrier(i32 [[A]], i32 [[B]])
 // CHECK-NEXT:    tail call void @llvm.amdgcn.ds.gws.sema.v(i32 [[A]])
 // CHECK-NEXT:    tail call void @llvm.amdgcn.ds.gws.sema.br(i32 [[A]], i32 [[B]])
 // CHECK-NEXT:    tail call void @llvm.amdgcn.ds.gws.sema.p(i32 [[A]])
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 kernel void test_builtins_amdgcn_gws_insts(uint a, uint b) {

@@ -23,6 +23,7 @@
 // OPENCL12-LABEL: define dso_local void @test1_builtin_alloca(
 // OPENCL12-SAME: i32 noundef [[N:%.*]]) #[[ATTR0:[0-9]+]] {
 // OPENCL12-NEXT:  [[ENTRY:.*:]]
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL12-NEXT:    [[ALLOC_PTR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL12-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -31,11 +32,13 @@
 // OPENCL12-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL12-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 8, addrspace(5)
 // OPENCL12-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR]], align 4
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    ret void
 //
 // OPENCL20-LABEL: define dso_local void @test1_builtin_alloca(
 // OPENCL20-SAME: i32 noundef [[N:%.*]]) #[[ATTR0:[0-9]+]] {
 // OPENCL20-NEXT:  [[ENTRY:.*:]]
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL20-NEXT:    [[ALLOC_PTR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL20-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -44,11 +47,13 @@
 // OPENCL20-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL20-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 8, addrspace(5)
 // OPENCL20-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR]], align 4
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    ret void
 //
 // OPENCL30-LABEL: define dso_local void @test1_builtin_alloca(
 // OPENCL30-SAME: i32 noundef [[N:%.*]]) #[[ATTR0:[0-9]+]] {
 // OPENCL30-NEXT:  [[ENTRY:.*:]]
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30-NEXT:    [[ALLOC_PTR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -57,11 +62,13 @@
 // OPENCL30-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL30-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 8, addrspace(5)
 // OPENCL30-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR]], align 4
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    ret void
 //
 // OPENCL30GAS-LABEL: define dso_local void @test1_builtin_alloca(
 // OPENCL30GAS-SAME: i32 noundef [[N:%.*]]) #[[ATTR0:[0-9]+]] {
 // OPENCL30GAS-NEXT:  [[ENTRY:.*:]]
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    [[ALLOC_PTR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -70,6 +77,7 @@
 // OPENCL30GAS-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL30GAS-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 8, addrspace(5)
 // OPENCL30GAS-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR]], align 4
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    ret void
 //
 void test1_builtin_alloca(unsigned n) {
@@ -91,6 +99,7 @@ void test1_builtin_alloca(unsigned n) {
 // OPENCL12-LABEL: define dso_local void @test1_builtin_alloca_uninitialized(
 // OPENCL12-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL12-NEXT:  [[ENTRY:.*:]]
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL12-NEXT:    [[ALLOC_PTR_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL12-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -99,11 +108,13 @@ void test1_builtin_alloca(unsigned n) {
 // OPENCL12-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL12-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 8, addrspace(5)
 // OPENCL12-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_UNINITIALIZED]], align 4
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    ret void
 //
 // OPENCL20-LABEL: define dso_local void @test1_builtin_alloca_uninitialized(
 // OPENCL20-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL20-NEXT:  [[ENTRY:.*:]]
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL20-NEXT:    [[ALLOC_PTR_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL20-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -112,11 +123,13 @@ void test1_builtin_alloca(unsigned n) {
 // OPENCL20-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL20-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 8, addrspace(5)
 // OPENCL20-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_UNINITIALIZED]], align 4
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    ret void
 //
 // OPENCL30-LABEL: define dso_local void @test1_builtin_alloca_uninitialized(
 // OPENCL30-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30-NEXT:  [[ENTRY:.*:]]
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30-NEXT:    [[ALLOC_PTR_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -125,11 +138,13 @@ void test1_builtin_alloca(unsigned n) {
 // OPENCL30-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL30-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 8, addrspace(5)
 // OPENCL30-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_UNINITIALIZED]], align 4
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    ret void
 //
 // OPENCL30GAS-LABEL: define dso_local void @test1_builtin_alloca_uninitialized(
 // OPENCL30GAS-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30GAS-NEXT:  [[ENTRY:.*:]]
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    [[ALLOC_PTR_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -138,6 +153,7 @@ void test1_builtin_alloca(unsigned n) {
 // OPENCL30GAS-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL30GAS-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 8, addrspace(5)
 // OPENCL30GAS-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_UNINITIALIZED]], align 4
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    ret void
 //
 void test1_builtin_alloca_uninitialized(unsigned n) {
@@ -159,6 +175,7 @@ void test1_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL12-LABEL: define dso_local void @test1_builtin_alloca_with_align(
 // OPENCL12-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL12-NEXT:  [[ENTRY:.*:]]
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL12-NEXT:    [[ALLOC_PTR_ALIGN:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL12-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -167,11 +184,13 @@ void test1_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL12-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL12-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 1, addrspace(5)
 // OPENCL12-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN]], align 4
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    ret void
 //
 // OPENCL20-LABEL: define dso_local void @test1_builtin_alloca_with_align(
 // OPENCL20-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL20-NEXT:  [[ENTRY:.*:]]
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL20-NEXT:    [[ALLOC_PTR_ALIGN:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL20-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -180,11 +199,13 @@ void test1_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL20-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL20-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 1, addrspace(5)
 // OPENCL20-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN]], align 4
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    ret void
 //
 // OPENCL30-LABEL: define dso_local void @test1_builtin_alloca_with_align(
 // OPENCL30-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30-NEXT:  [[ENTRY:.*:]]
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30-NEXT:    [[ALLOC_PTR_ALIGN:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -193,11 +214,13 @@ void test1_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL30-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL30-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 1, addrspace(5)
 // OPENCL30-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN]], align 4
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    ret void
 //
 // OPENCL30GAS-LABEL: define dso_local void @test1_builtin_alloca_with_align(
 // OPENCL30GAS-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30GAS-NEXT:  [[ENTRY:.*:]]
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    [[ALLOC_PTR_ALIGN:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -206,6 +229,7 @@ void test1_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL30GAS-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL30GAS-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 1, addrspace(5)
 // OPENCL30GAS-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN]], align 4
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    ret void
 //
 void test1_builtin_alloca_with_align(unsigned n) {
@@ -227,6 +251,7 @@ void test1_builtin_alloca_with_align(unsigned n) {
 // OPENCL12-LABEL: define dso_local void @test1_builtin_alloca_with_align_uninitialized(
 // OPENCL12-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL12-NEXT:  [[ENTRY:.*:]]
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL12-NEXT:    [[ALLOC_PTR_ALIGN_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL12-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -235,11 +260,13 @@ void test1_builtin_alloca_with_align(unsigned n) {
 // OPENCL12-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL12-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 1, addrspace(5)
 // OPENCL12-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN_UNINITIALIZED]], align 4
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    ret void
 //
 // OPENCL20-LABEL: define dso_local void @test1_builtin_alloca_with_align_uninitialized(
 // OPENCL20-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL20-NEXT:  [[ENTRY:.*:]]
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL20-NEXT:    [[ALLOC_PTR_ALIGN_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL20-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -248,11 +275,13 @@ void test1_builtin_alloca_with_align(unsigned n) {
 // OPENCL20-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL20-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 1, addrspace(5)
 // OPENCL20-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN_UNINITIALIZED]], align 4
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    ret void
 //
 // OPENCL30-LABEL: define dso_local void @test1_builtin_alloca_with_align_uninitialized(
 // OPENCL30-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30-NEXT:  [[ENTRY:.*:]]
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30-NEXT:    [[ALLOC_PTR_ALIGN_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -261,11 +290,13 @@ void test1_builtin_alloca_with_align(unsigned n) {
 // OPENCL30-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL30-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 1, addrspace(5)
 // OPENCL30-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN_UNINITIALIZED]], align 4
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    ret void
 //
 // OPENCL30GAS-LABEL: define dso_local void @test1_builtin_alloca_with_align_uninitialized(
 // OPENCL30GAS-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30GAS-NEXT:  [[ENTRY:.*:]]
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    [[ALLOC_PTR_ALIGN_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -274,6 +305,7 @@ void test1_builtin_alloca_with_align(unsigned n) {
 // OPENCL30GAS-NEXT:    [[MUL:%.*]] = mul i64 [[CONV]], 4
 // OPENCL30GAS-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[MUL]], align 1, addrspace(5)
 // OPENCL30GAS-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN_UNINITIALIZED]], align 4
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    ret void
 //
 void test1_builtin_alloca_with_align_uninitialized(unsigned n) {
@@ -294,6 +326,7 @@ void test1_builtin_alloca_with_align_uninitialized(unsigned n) {
 // OPENCL12-LABEL: define dso_local void @test2_builtin_alloca(
 // OPENCL12-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL12-NEXT:  [[ENTRY:.*:]]
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL12-NEXT:    [[ALLOC_PTR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL12-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -301,11 +334,13 @@ void test1_builtin_alloca_with_align_uninitialized(unsigned n) {
 // OPENCL12-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL12-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 8, addrspace(5)
 // OPENCL12-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR]], align 4
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    ret void
 //
 // OPENCL20-LABEL: define dso_local void @test2_builtin_alloca(
 // OPENCL20-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL20-NEXT:  [[ENTRY:.*:]]
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL20-NEXT:    [[ALLOC_PTR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL20-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -313,11 +348,13 @@ void test1_builtin_alloca_with_align_uninitialized(unsigned n) {
 // OPENCL20-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL20-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 8, addrspace(5)
 // OPENCL20-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR]], align 4
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    ret void
 //
 // OPENCL30-LABEL: define dso_local void @test2_builtin_alloca(
 // OPENCL30-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30-NEXT:  [[ENTRY:.*:]]
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30-NEXT:    [[ALLOC_PTR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -325,11 +362,13 @@ void test1_builtin_alloca_with_align_uninitialized(unsigned n) {
 // OPENCL30-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL30-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 8, addrspace(5)
 // OPENCL30-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR]], align 4
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    ret void
 //
 // OPENCL30GAS-LABEL: define dso_local void @test2_builtin_alloca(
 // OPENCL30GAS-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30GAS-NEXT:  [[ENTRY:.*:]]
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    [[ALLOC_PTR:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -337,6 +376,7 @@ void test1_builtin_alloca_with_align_uninitialized(unsigned n) {
 // OPENCL30GAS-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL30GAS-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 8, addrspace(5)
 // OPENCL30GAS-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR]], align 4
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    ret void
 //
 void test2_builtin_alloca(unsigned n) {
@@ -357,6 +397,7 @@ void test2_builtin_alloca(unsigned n) {
 // OPENCL12-LABEL: define dso_local void @test2_builtin_alloca_uninitialized(
 // OPENCL12-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL12-NEXT:  [[ENTRY:.*:]]
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL12-NEXT:    [[ALLOC_PTR_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL12-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -364,11 +405,13 @@ void test2_builtin_alloca(unsigned n) {
 // OPENCL12-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL12-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 8, addrspace(5)
 // OPENCL12-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_UNINITIALIZED]], align 4
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    ret void
 //
 // OPENCL20-LABEL: define dso_local void @test2_builtin_alloca_uninitialized(
 // OPENCL20-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL20-NEXT:  [[ENTRY:.*:]]
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL20-NEXT:    [[ALLOC_PTR_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL20-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -376,11 +419,13 @@ void test2_builtin_alloca(unsigned n) {
 // OPENCL20-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL20-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 8, addrspace(5)
 // OPENCL20-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_UNINITIALIZED]], align 4
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    ret void
 //
 // OPENCL30-LABEL: define dso_local void @test2_builtin_alloca_uninitialized(
 // OPENCL30-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30-NEXT:  [[ENTRY:.*:]]
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30-NEXT:    [[ALLOC_PTR_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -388,11 +433,13 @@ void test2_builtin_alloca(unsigned n) {
 // OPENCL30-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL30-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 8, addrspace(5)
 // OPENCL30-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_UNINITIALIZED]], align 4
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    ret void
 //
 // OPENCL30GAS-LABEL: define dso_local void @test2_builtin_alloca_uninitialized(
 // OPENCL30GAS-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30GAS-NEXT:  [[ENTRY:.*:]]
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    [[ALLOC_PTR_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -400,6 +447,7 @@ void test2_builtin_alloca(unsigned n) {
 // OPENCL30GAS-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL30GAS-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 8, addrspace(5)
 // OPENCL30GAS-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_UNINITIALIZED]], align 4
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    ret void
 //
 void test2_builtin_alloca_uninitialized(unsigned n) {
@@ -420,6 +468,7 @@ void test2_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL12-LABEL: define dso_local void @test2_builtin_alloca_with_align(
 // OPENCL12-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL12-NEXT:  [[ENTRY:.*:]]
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL12-NEXT:    [[ALLOC_PTR_ALIGN:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL12-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -427,11 +476,13 @@ void test2_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL12-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL12-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 1, addrspace(5)
 // OPENCL12-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN]], align 4
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    ret void
 //
 // OPENCL20-LABEL: define dso_local void @test2_builtin_alloca_with_align(
 // OPENCL20-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL20-NEXT:  [[ENTRY:.*:]]
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL20-NEXT:    [[ALLOC_PTR_ALIGN:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL20-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -439,11 +490,13 @@ void test2_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL20-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL20-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 1, addrspace(5)
 // OPENCL20-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN]], align 4
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    ret void
 //
 // OPENCL30-LABEL: define dso_local void @test2_builtin_alloca_with_align(
 // OPENCL30-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30-NEXT:  [[ENTRY:.*:]]
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30-NEXT:    [[ALLOC_PTR_ALIGN:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -451,11 +504,13 @@ void test2_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL30-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL30-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 1, addrspace(5)
 // OPENCL30-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN]], align 4
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    ret void
 //
 // OPENCL30GAS-LABEL: define dso_local void @test2_builtin_alloca_with_align(
 // OPENCL30GAS-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30GAS-NEXT:  [[ENTRY:.*:]]
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    [[ALLOC_PTR_ALIGN:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -463,6 +518,7 @@ void test2_builtin_alloca_uninitialized(unsigned n) {
 // OPENCL30GAS-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL30GAS-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 1, addrspace(5)
 // OPENCL30GAS-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN]], align 4
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    ret void
 //
 void test2_builtin_alloca_with_align(unsigned n) {
@@ -483,6 +539,7 @@ void test2_builtin_alloca_with_align(unsigned n) {
 // OPENCL12-LABEL: define dso_local void @test2_builtin_alloca_with_align_uninitialized(
 // OPENCL12-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL12-NEXT:  [[ENTRY:.*:]]
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL12-NEXT:    [[ALLOC_PTR_ALIGN_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL12-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -490,11 +547,13 @@ void test2_builtin_alloca_with_align(unsigned n) {
 // OPENCL12-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL12-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 1, addrspace(5)
 // OPENCL12-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN_UNINITIALIZED]], align 4
+// OPENCL12-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // OPENCL12-NEXT:    ret void
 //
 // OPENCL20-LABEL: define dso_local void @test2_builtin_alloca_with_align_uninitialized(
 // OPENCL20-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL20-NEXT:  [[ENTRY:.*:]]
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL20-NEXT:    [[ALLOC_PTR_ALIGN_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL20-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -502,11 +561,13 @@ void test2_builtin_alloca_with_align(unsigned n) {
 // OPENCL20-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL20-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 1, addrspace(5)
 // OPENCL20-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN_UNINITIALIZED]], align 4
+// OPENCL20-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // OPENCL20-NEXT:    ret void
 //
 // OPENCL30-LABEL: define dso_local void @test2_builtin_alloca_with_align_uninitialized(
 // OPENCL30-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30-NEXT:  [[ENTRY:.*:]]
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30-NEXT:    [[ALLOC_PTR_ALIGN_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -514,11 +575,13 @@ void test2_builtin_alloca_with_align(unsigned n) {
 // OPENCL30-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL30-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 1, addrspace(5)
 // OPENCL30-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN_UNINITIALIZED]], align 4
+// OPENCL30-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // OPENCL30-NEXT:    ret void
 //
 // OPENCL30GAS-LABEL: define dso_local void @test2_builtin_alloca_with_align_uninitialized(
 // OPENCL30GAS-SAME: i32 noundef [[N:%.*]]) #[[ATTR0]] {
 // OPENCL30GAS-NEXT:  [[ENTRY:.*:]]
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    [[N_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    [[ALLOC_PTR_ALIGN_UNINITIALIZED:%.*]] = alloca ptr addrspace(5), align 4, addrspace(5)
 // OPENCL30GAS-NEXT:    store i32 [[N]], ptr addrspace(5) [[N_ADDR]], align 4
@@ -526,8 +589,78 @@ void test2_builtin_alloca_with_align(unsigned n) {
 // OPENCL30GAS-NEXT:    [[CONV:%.*]] = zext i32 [[TMP0]] to i64
 // OPENCL30GAS-NEXT:    [[TMP1:%.*]] = alloca i8, i64 [[CONV]], align 1, addrspace(5)
 // OPENCL30GAS-NEXT:    store ptr addrspace(5) [[TMP1]], ptr addrspace(5) [[ALLOC_PTR_ALIGN_UNINITIALIZED]], align 4
+// OPENCL30GAS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // OPENCL30GAS-NEXT:    ret void
 //
 void test2_builtin_alloca_with_align_uninitialized(unsigned n) {
     __private void *alloc_ptr_align_uninitialized = __builtin_alloca_with_align_uninitialized(n, 8);
 }
+//.
+// OPENCL12: [[META3]] = !{i32 0, !"test1_builtin_alloca"}
+// OPENCL12: [[META4]] = !{i32 1, !"test1_builtin_alloca"}
+// OPENCL12: [[META5]] = !{i32 0, !"test1_builtin_alloca_uninitialized"}
+// OPENCL12: [[META6]] = !{i32 1, !"test1_builtin_alloca_uninitialized"}
+// OPENCL12: [[META7]] = !{i32 0, !"test1_builtin_alloca_with_align"}
+// OPENCL12: [[META8]] = !{i32 1, !"test1_builtin_alloca_with_align"}
+// OPENCL12: [[META9]] = !{i32 0, !"test1_builtin_alloca_with_align_uninitialized"}
+// OPENCL12: [[META10]] = !{i32 1, !"test1_builtin_alloca_with_align_uninitialized"}
+// OPENCL12: [[META11]] = !{i32 0, !"test2_builtin_alloca"}
+// OPENCL12: [[META12]] = !{i32 1, !"test2_builtin_alloca"}
+// OPENCL12: [[META13]] = !{i32 0, !"test2_builtin_alloca_uninitialized"}
+// OPENCL12: [[META14]] = !{i32 1, !"test2_builtin_alloca_uninitialized"}
+// OPENCL12: [[META15]] = !{i32 0, !"test2_builtin_alloca_with_align"}
+// OPENCL12: [[META16]] = !{i32 1, !"test2_builtin_alloca_with_align"}
+// OPENCL12: [[META17]] = !{i32 0, !"test2_builtin_alloca_with_align_uninitialized"}
+// OPENCL12: [[META18]] = !{i32 1, !"test2_builtin_alloca_with_align_uninitialized"}
+//.
+// OPENCL20: [[META3]] = !{i32 0, !"test1_builtin_alloca"}
+// OPENCL20: [[META4]] = !{i32 1, !"test1_builtin_alloca"}
+// OPENCL20: [[META5]] = !{i32 0, !"test1_builtin_alloca_uninitialized"}
+// OPENCL20: [[META6]] = !{i32 1, !"test1_builtin_alloca_uninitialized"}
+// OPENCL20: [[META7]] = !{i32 0, !"test1_builtin_alloca_with_align"}
+// OPENCL20: [[META8]] = !{i32 1, !"test1_builtin_alloca_with_align"}
+// OPENCL20: [[META9]] = !{i32 0, !"test1_builtin_alloca_with_align_uninitialized"}
+// OPENCL20: [[META10]] = !{i32 1, !"test1_builtin_alloca_with_align_uninitialized"}
+// OPENCL20: [[META11]] = !{i32 0, !"test2_builtin_alloca"}
+// OPENCL20: [[META12]] = !{i32 1, !"test2_builtin_alloca"}
+// OPENCL20: [[META13]] = !{i32 0, !"test2_builtin_alloca_uninitialized"}
+// OPENCL20: [[META14]] = !{i32 1, !"test2_builtin_alloca_uninitialized"}
+// OPENCL20: [[META15]] = !{i32 0, !"test2_builtin_alloca_with_align"}
+// OPENCL20: [[META16]] = !{i32 1, !"test2_builtin_alloca_with_align"}
+// OPENCL20: [[META17]] = !{i32 0, !"test2_builtin_alloca_with_align_uninitialized"}
+// OPENCL20: [[META18]] = !{i32 1, !"test2_builtin_alloca_with_align_uninitialized"}
+//.
+// OPENCL30: [[META3]] = !{i32 0, !"test1_builtin_alloca"}
+// OPENCL30: [[META4]] = !{i32 1, !"test1_builtin_alloca"}
+// OPENCL30: [[META5]] = !{i32 0, !"test1_builtin_alloca_uninitialized"}
+// OPENCL30: [[META6]] = !{i32 1, !"test1_builtin_alloca_uninitialized"}
+// OPENCL30: [[META7]] = !{i32 0, !"test1_builtin_alloca_with_align"}
+// OPENCL30: [[META8]] = !{i32 1, !"test1_builtin_alloca_with_align"}
+// OPENCL30: [[META9]] = !{i32 0, !"test1_builtin_alloca_with_align_uninitialized"}
+// OPENCL30: [[META10]] = !{i32 1, !"test1_builtin_alloca_with_align_uninitialized"}
+// OPENCL30: [[META11]] = !{i32 0, !"test2_builtin_alloca"}
+// OPENCL30: [[META12]] = !{i32 1, !"test2_builtin_alloca"}
+// OPENCL30: [[META13]] = !{i32 0, !"test2_builtin_alloca_uninitialized"}
+// OPENCL30: [[META14]] = !{i32 1, !"test2_builtin_alloca_uninitialized"}
+// OPENCL30: [[META15]] = !{i32 0, !"test2_builtin_alloca_with_align"}
+// OPENCL30: [[META16]] = !{i32 1, !"test2_builtin_alloca_with_align"}
+// OPENCL30: [[META17]] = !{i32 0, !"test2_builtin_alloca_with_align_uninitialized"}
+// OPENCL30: [[META18]] = !{i32 1, !"test2_builtin_alloca_with_align_uninitialized"}
+//.
+// OPENCL30GAS: [[META3]] = !{i32 0, !"test1_builtin_alloca"}
+// OPENCL30GAS: [[META4]] = !{i32 1, !"test1_builtin_alloca"}
+// OPENCL30GAS: [[META5]] = !{i32 0, !"test1_builtin_alloca_uninitialized"}
+// OPENCL30GAS: [[META6]] = !{i32 1, !"test1_builtin_alloca_uninitialized"}
+// OPENCL30GAS: [[META7]] = !{i32 0, !"test1_builtin_alloca_with_align"}
+// OPENCL30GAS: [[META8]] = !{i32 1, !"test1_builtin_alloca_with_align"}
+// OPENCL30GAS: [[META9]] = !{i32 0, !"test1_builtin_alloca_with_align_uninitialized"}
+// OPENCL30GAS: [[META10]] = !{i32 1, !"test1_builtin_alloca_with_align_uninitialized"}
+// OPENCL30GAS: [[META11]] = !{i32 0, !"test2_builtin_alloca"}
+// OPENCL30GAS: [[META12]] = !{i32 1, !"test2_builtin_alloca"}
+// OPENCL30GAS: [[META13]] = !{i32 0, !"test2_builtin_alloca_uninitialized"}
+// OPENCL30GAS: [[META14]] = !{i32 1, !"test2_builtin_alloca_uninitialized"}
+// OPENCL30GAS: [[META15]] = !{i32 0, !"test2_builtin_alloca_with_align"}
+// OPENCL30GAS: [[META16]] = !{i32 1, !"test2_builtin_alloca_with_align"}
+// OPENCL30GAS: [[META17]] = !{i32 0, !"test2_builtin_alloca_with_align_uninitialized"}
+// OPENCL30GAS: [[META18]] = !{i32 1, !"test2_builtin_alloca_with_align_uninitialized"}
+//.

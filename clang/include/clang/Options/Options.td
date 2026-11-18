@@ -3357,6 +3357,10 @@ def finstrument_function_entry_bare : Flag<["-"], "finstrument-function-entry-ba
   Visibility<[ClangOption, CC1Option]>,
   HelpText<"Instrument function entry only, after inlining, without arguments to the instrumentation call">,
   MarshallingInfoFlag<CodeGenOpts<"InstrumentFunctionEntryBare">>;
+def fsqtt_instrument : Flag<["-"], "fsqtt-instrument">,
+  Group<f_Group>, Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Instrument functions for SQTT tracing (HIP device, C, C++, OpenCL)">,
+  MarshallingInfoFlag<CodeGenOpts<"SQTTInstrument">>;
 def fcf_protection_EQ : Joined<["-"], "fcf-protection=">,
   Visibility<[ClangOption, CLOption, CC1Option]>, Group<f_Group>,
   HelpText<"Instrument control-flow architecture protection">, Values<"return,branch,full,none">;

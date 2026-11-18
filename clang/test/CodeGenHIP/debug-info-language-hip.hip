@@ -10,13 +10,15 @@
 #define __device__ __attribute__((device))
 
 // CHECK-LABEL: define dso_local void @_Z12hip_functionv(
-// CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG7:![0-9]+]] {
+// CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG6:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true), !dbg [[DBG12:![0-9]+]]
 // CHECK-NEXT:    [[X:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[X_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[X]] to ptr
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[X]], [[META12:![0-9]+]], !DIExpression(DW_OP_constu, 1, DW_OP_swap, DW_OP_xderef), [[META14:![0-9]+]])
-// CHECK-NEXT:    store i32 42, ptr [[X_ASCAST]], align 4, !dbg [[META14]]
-// CHECK-NEXT:    ret void, !dbg [[DBG15:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[X]], [[META13:![0-9]+]], !DIExpression(DW_OP_constu, 1, DW_OP_swap, DW_OP_xderef), [[META15:![0-9]+]])
+// CHECK-NEXT:    store i32 42, ptr [[X_ASCAST]], align 4, !dbg [[META15]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true), !dbg [[DBG17:![0-9]+]]
+// CHECK-NEXT:    ret void, !dbg [[DBG17]]
 //
 __device__ void hip_function() {
   int x = 42;
@@ -24,13 +26,16 @@ __device__ void hip_function() {
 //.
 // CHECK: [[META0:![0-9]+]] = distinct !DICompileUnit(language: DW_LANG_HIP, file: [[META1:![0-9]+]], producer: "{{.*}}clang version {{.*}}", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, splitDebugInlining: false, nameTableKind: None)
 // CHECK: [[META1]] = !DIFile(filename: "{{.*}}<stdin>", directory: {{.*}})
-// CHECK: [[DBG7]] = distinct !DISubprogram(name: "hip_function", linkageName: "_Z12hip_functionv", scope: [[META8:![0-9]+]], file: [[META8]], line: 21, type: [[META9:![0-9]+]], scopeLine: 21, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META11:![0-9]+]])
-// CHECK: [[META8]] = !DIFile(filename: "{{.*}}debug-info-language-hip.hip", directory: {{.*}})
-// CHECK: [[META9]] = !DISubroutineType(types: [[META10:![0-9]+]])
-// CHECK: [[META10]] = !{null}
-// CHECK: [[META11]] = !{}
-// CHECK: [[META12]] = !DILocalVariable(name: "x", scope: [[DBG7]], file: [[META8]], line: 22, type: [[META13:![0-9]+]])
-// CHECK: [[META13]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
-// CHECK: [[META14]] = !DILocation(line: 22, column: 7, scope: [[DBG7]])
-// CHECK: [[DBG15]] = !DILocation(line: 23, column: 1, scope: [[DBG7]])
+// CHECK: [[DBG6]] = distinct !DISubprogram(name: "hip_function", linkageName: "_Z12hip_functionv", scope: [[META7:![0-9]+]], file: [[META7]], line: 23, type: [[META8:![0-9]+]], scopeLine: 23, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META10:![0-9]+]])
+// CHECK: [[META7]] = !DIFile(filename: "{{.*}}debug-info-language-hip.hip", directory: {{.*}})
+// CHECK: [[META8]] = !DISubroutineType(types: [[META9:![0-9]+]])
+// CHECK: [[META9]] = !{null}
+// CHECK: [[META10]] = !{}
+// CHECK: [[META11]] = !{i32 0, !"_Z12hip_functionv"}
+// CHECK: [[DBG12]] = !DILocation(line: 23, scope: [[DBG6]])
+// CHECK: [[META13]] = !DILocalVariable(name: "x", scope: [[DBG6]], file: [[META7]], line: 24, type: [[META14:![0-9]+]])
+// CHECK: [[META14]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
+// CHECK: [[META15]] = !DILocation(line: 24, column: 7, scope: [[DBG6]])
+// CHECK: [[META16]] = !{i32 1, !"_Z12hip_functionv"}
+// CHECK: [[DBG17]] = !DILocation(line: 25, column: 1, scope: [[DBG6]])
 //.

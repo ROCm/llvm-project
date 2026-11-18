@@ -12,6 +12,7 @@ extern "C" __device__ int printf(const char *format, ...);
 // AMDGCN-LABEL: define dso_local noundef i32 @_Z4foo1v(
 // AMDGCN-SAME: ) #[[ATTR0:[0-9]+]] {
 // AMDGCN-NEXT:  [[ENTRY:.*]]:
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[S:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGCN-NEXT:    [[S_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[S]] to ptr
 // AMDGCN-NEXT:    store ptr addrspacecast (ptr addrspace(4) @.str to ptr), ptr [[S_ASCAST]], align 8
@@ -58,6 +59,7 @@ extern "C" __device__ int printf(const char *format, ...);
 // AMDGCN-NEXT:    [[TMP28:%.*]] = ptrtoint ptr [[TMP1]] to i64
 // AMDGCN-NEXT:    [[TMP29:%.*]] = call i64 @__ockl_printf_append_args(i64 [[TMP27]], i32 1, i64 [[TMP28]], i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i32 1)
 // AMDGCN-NEXT:    [[TMP30:%.*]] = trunc i64 [[TMP29]] to i32
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret i32 [[TMP30]]
 //
 // AMDGCNSPIRV-LABEL: define spir_func noundef i32 @_Z4foo1v(
@@ -121,6 +123,7 @@ __device__ char *dstr;
 // AMDGCN-LABEL: define dso_local noundef i32 @_Z4foo2v(
 // AMDGCN-SAME: ) #[[ATTR0:[0-9]+]] {
 // AMDGCN-NEXT:  [[ENTRY:.*]]:
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[TMP0:%.*]] = load ptr, ptr addrspacecast (ptr addrspace(1) @dstr to ptr), align 8
 // AMDGCN-NEXT:    [[TMP1:%.*]] = load ptr, ptr addrspacecast (ptr addrspace(1) @dstr to ptr), align 8
 // AMDGCN-NEXT:    [[TMP2:%.*]] = call i64 @__ockl_printf_begin(i64 0)
@@ -160,6 +163,7 @@ __device__ char *dstr;
 // AMDGCN-NEXT:    [[TMP24:%.*]] = ptrtoint ptr [[TMP1]] to i64
 // AMDGCN-NEXT:    [[TMP25:%.*]] = call i64 @__ockl_printf_append_args(i64 [[TMP23]], i32 1, i64 [[TMP24]], i64 0, i64 0, i64 0, i64 0, i64 0, i64 0, i32 1)
 // AMDGCN-NEXT:    [[TMP26:%.*]] = trunc i64 [[TMP25]] to i32
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret i32 [[TMP26]]
 //
 // AMDGCNSPIRV-LABEL: define spir_func noundef i32 @_Z4foo2v(
@@ -209,3 +213,9 @@ __device__ char *dstr;
 __device__ int foo2() {
   return printf("%s %p\n", dstr, dstr);
 }
+//.
+// AMDGCN: {{![0-9]+}} = !{i32 0, !"_Z4foo1v"}
+// AMDGCN: {{![0-9]+}} = !{i32 1, !"_Z4foo1v"}
+// AMDGCN: {{![0-9]+}} = !{i32 0, !"_Z4foo2v"}
+// AMDGCN: {{![0-9]+}} = !{i32 1, !"_Z4foo2v"}
+//.

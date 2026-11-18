@@ -18,8 +18,10 @@ typedef int    v8i   __attribute__((ext_vector_type(8)));
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_f32_16x16x16_f16_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], <8 x half> noundef [[A:%.*]], <8 x half> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.f16.v8f32.v8f16(<8 x half> [[A]], <8 x half> [[B]], <8 x float> [[C]])
-// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7:![0-9]+]]
+// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9:![0-9]+]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x16_f16_w32(global v8f* out, v8h a, v8h b, v8f c)
@@ -34,8 +36,10 @@ void test_amdgcn_wmma_f32_16x16x16_f16_w32(global v8f* out, v8h a, v8h b, v8f c)
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_f32_16x16x16_bf16_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], <8 x i16> noundef [[A:%.*]], <8 x i16> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.bf16.v8f32.v8i16(<8 x i16> [[A]], <8 x i16> [[B]], <8 x float> [[C]])
-// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x16_bf16_w32(global v8f* out, v8s a, v8s b, v8f c)
@@ -50,8 +54,10 @@ void test_amdgcn_wmma_f32_16x16x16_bf16_w32(global v8f* out, v8s a, v8s b, v8f c
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_f16_16x16x16_f16_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], <8 x half> noundef [[A:%.*]], <8 x half> noundef [[B:%.*]], <8 x half> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x half> @llvm.amdgcn.wmma.f16.16x16x16.f16.v8f16.v8f16(<8 x half> [[A]], <8 x half> [[B]], <8 x half> [[C]], i1 false)
-// CHECK-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x half> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_f16_16x16x16_f16_w32(global v8h* out, v8h a, v8h b, v8h c)
@@ -66,8 +72,10 @@ void test_amdgcn_wmma_f16_16x16x16_f16_w32(global v8h* out, v8h a, v8h b, v8h c)
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_bf16_16x16x16_bf16_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], <8 x i16> noundef [[A:%.*]], <8 x i16> noundef [[B:%.*]], <8 x i16> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x i16> @llvm.amdgcn.wmma.bf16.16x16x16.bf16.v8i16.v8i16(<8 x i16> [[A]], <8 x i16> [[B]], <8 x i16> [[C]], i1 false)
-// CHECK-NEXT:    store <8 x i16> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x i16> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_bf16_16x16x16_bf16_w32(global v8s* out, v8s a, v8s b, v8s c)
@@ -82,8 +90,10 @@ void test_amdgcn_wmma_bf16_16x16x16_bf16_w32(global v8s* out, v8s a, v8s b, v8s 
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_i32_16x16x16_iu8_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], <2 x i32> noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <8 x i32> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.wmma.i32.16x16x16.iu8.v8i32.v2i32(i1 true, <2 x i32> [[A]], i1 true, <2 x i32> [[B]], <8 x i32> [[C]], i1 false)
-// CHECK-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_i32_16x16x16_iu8_w32(global v8i* out, v2i a, v2i b, v8i c)
@@ -98,8 +108,10 @@ void test_amdgcn_wmma_i32_16x16x16_iu8_w32(global v8i* out, v2i a, v2i b, v8i c)
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_i32_16x16x16_iu4_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], i32 noundef [[A:%.*]], i32 noundef [[B:%.*]], <8 x i32> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.wmma.i32.16x16x16.iu4.v8i32.i32(i1 true, i32 [[A]], i1 true, i32 [[B]], <8 x i32> [[C]], i1 false)
-// CHECK-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_i32_16x16x16_iu4_w32(global v8i* out, int a, int b, v8i c)
@@ -110,8 +122,10 @@ void test_amdgcn_wmma_i32_16x16x16_iu4_w32(global v8i* out, int a, int b, v8i c)
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_f32_16x16x16_fp8_fp8_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], <2 x i32> noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8.v8f32.v2i32(<2 x i32> [[A]], <2 x i32> [[B]], <8 x float> [[C]])
-// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x16_fp8_fp8_w32(global v8f* out, v2i a, v2i b, v8f c)
@@ -122,8 +136,10 @@ void test_amdgcn_wmma_f32_16x16x16_fp8_fp8_w32(global v8f* out, v2i a, v2i b, v8
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_f32_16x16x16_fp8_bf8_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], <2 x i32> noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.bf8.v8f32.v2i32(<2 x i32> [[A]], <2 x i32> [[B]], <8 x float> [[C]])
-// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x16_fp8_bf8_w32(global v8f* out, v2i a, v2i b, v8f c)
@@ -134,8 +150,10 @@ void test_amdgcn_wmma_f32_16x16x16_fp8_bf8_w32(global v8f* out, v2i a, v2i b, v8
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_f32_16x16x16_bf8_fp8_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], <2 x i32> noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.bf8.fp8.v8f32.v2i32(<2 x i32> [[A]], <2 x i32> [[B]], <8 x float> [[C]])
-// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x16_bf8_fp8_w32(global v8f* out, v2i a, v2i b, v8f c)
@@ -146,8 +164,10 @@ void test_amdgcn_wmma_f32_16x16x16_bf8_fp8_w32(global v8f* out, v2i a, v2i b, v8
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_f32_16x16x16_bf8_bf8_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], <2 x i32> noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <8 x float> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.bf8.bf8.v8f32.v2i32(<2 x i32> [[A]], <2 x i32> [[B]], <8 x float> [[C]])
-// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_f32_16x16x16_bf8_bf8_w32(global v8f* out, v2i a, v2i b, v8f c)
@@ -158,8 +178,10 @@ void test_amdgcn_wmma_f32_16x16x16_bf8_bf8_w32(global v8f* out, v2i a, v2i b, v8
 // CHECK-LABEL: define dso_local void @test_amdgcn_wmma_i32_16x16x32_iu4_w32(
 // CHECK-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 32)) [[OUT:%.*]], <2 x i32> noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <8 x i32> noundef [[C:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call <8 x i32> @llvm.amdgcn.wmma.i32.16x16x32.iu4.v8i32.v2i32(i1 true, <2 x i32> [[A]], i1 true, <2 x i32> [[B]], <8 x i32> [[C]], i1 false)
-// CHECK-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA7]]
+// CHECK-NEXT:    store <8 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 32, !tbaa [[CHAR_TBAA9]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_amdgcn_wmma_i32_16x16x32_iu4_w32(global v8i* out, v2i a, v2i b, v8i c)
@@ -167,7 +189,29 @@ void test_amdgcn_wmma_i32_16x16x32_iu4_w32(global v8i* out, v2i a, v2i b, v8i c)
   *out = __builtin_amdgcn_wmma_i32_16x16x32_iu4_w32_gfx12(true, a, true, b, c, false);
 }
 //.
-// CHECK: [[META5:![0-9]+]] = !{!"omnipotent char", [[META6:![0-9]+]], i64 0}
-// CHECK: [[META6]] = !{!"Simple C/C++ TBAA"}
-// CHECK: [[CHAR_TBAA7]] = !{[[META5]], [[META5]], i64 0}
+// CHECK: [[META6:![0-9]+]] = !{!"omnipotent char", [[META7:![0-9]+]], i64 0}
+// CHECK: [[META7]] = !{!"Simple C/C++ TBAA"}
+// CHECK: [[META8]] = !{i32 0, !"test_amdgcn_wmma_f32_16x16x16_f16_w32"}
+// CHECK: [[CHAR_TBAA9]] = !{[[META6]], [[META6]], i64 0}
+// CHECK: [[META10]] = !{i32 1, !"test_amdgcn_wmma_f32_16x16x16_f16_w32"}
+// CHECK: [[META11]] = !{i32 0, !"test_amdgcn_wmma_f32_16x16x16_bf16_w32"}
+// CHECK: [[META12]] = !{i32 1, !"test_amdgcn_wmma_f32_16x16x16_bf16_w32"}
+// CHECK: [[META13]] = !{i32 0, !"test_amdgcn_wmma_f16_16x16x16_f16_w32"}
+// CHECK: [[META14]] = !{i32 1, !"test_amdgcn_wmma_f16_16x16x16_f16_w32"}
+// CHECK: [[META15]] = !{i32 0, !"test_amdgcn_wmma_bf16_16x16x16_bf16_w32"}
+// CHECK: [[META16]] = !{i32 1, !"test_amdgcn_wmma_bf16_16x16x16_bf16_w32"}
+// CHECK: [[META17]] = !{i32 0, !"test_amdgcn_wmma_i32_16x16x16_iu8_w32"}
+// CHECK: [[META18]] = !{i32 1, !"test_amdgcn_wmma_i32_16x16x16_iu8_w32"}
+// CHECK: [[META19]] = !{i32 0, !"test_amdgcn_wmma_i32_16x16x16_iu4_w32"}
+// CHECK: [[META20]] = !{i32 1, !"test_amdgcn_wmma_i32_16x16x16_iu4_w32"}
+// CHECK: [[META21]] = !{i32 0, !"test_amdgcn_wmma_f32_16x16x16_fp8_fp8_w32"}
+// CHECK: [[META22]] = !{i32 1, !"test_amdgcn_wmma_f32_16x16x16_fp8_fp8_w32"}
+// CHECK: [[META23]] = !{i32 0, !"test_amdgcn_wmma_f32_16x16x16_fp8_bf8_w32"}
+// CHECK: [[META24]] = !{i32 1, !"test_amdgcn_wmma_f32_16x16x16_fp8_bf8_w32"}
+// CHECK: [[META25]] = !{i32 0, !"test_amdgcn_wmma_f32_16x16x16_bf8_fp8_w32"}
+// CHECK: [[META26]] = !{i32 1, !"test_amdgcn_wmma_f32_16x16x16_bf8_fp8_w32"}
+// CHECK: [[META27]] = !{i32 0, !"test_amdgcn_wmma_f32_16x16x16_bf8_bf8_w32"}
+// CHECK: [[META28]] = !{i32 1, !"test_amdgcn_wmma_f32_16x16x16_bf8_bf8_w32"}
+// CHECK: [[META29]] = !{i32 0, !"test_amdgcn_wmma_i32_16x16x32_iu4_w32"}
+// CHECK: [[META30]] = !{i32 1, !"test_amdgcn_wmma_i32_16x16x32_iu4_w32"}
 //.

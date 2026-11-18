@@ -11,6 +11,8 @@ typedef half half4 __attribute__((ext_vector_type(4)));
 // CHECK-LABEL: define dso_local noundef <4 x half> @test_assign_half4_to_float16_4(
 // CHECK-SAME: <4 x half> noundef returned [[F16_4:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[F16_4]]
 //
 half4 test_assign_half4_to_float16_4(float16_4 f16_4) {
@@ -20,6 +22,8 @@ half4 test_assign_half4_to_float16_4(float16_4 f16_4) {
 // CHECK-LABEL: define dso_local noundef <4 x half> @test_assign_float16_4_to_half4(
 // CHECK-SAME: <4 x half> noundef returned [[H4:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[H4]]
 //
 float16_4 test_assign_float16_4_to_half4(half4 h4) {
@@ -29,8 +33,18 @@ float16_4 test_assign_float16_4_to_half4(half4 h4) {
 // CHECK-LABEL: define dso_local noundef <4 x half> @test_float16_4_to_half4(
 // CHECK-SAME: <4 x half> noundef returned [[F16_4:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[F16_4]]
 //
 half4 test_float16_4_to_half4(float16_4 f16_4) {
   return (half4)f16_4;
 }
+//.
+// CHECK: [[META8]] = !{i32 0, !"test_assign_half4_to_float16_4"}
+// CHECK: [[META9]] = !{i32 1, !"test_assign_half4_to_float16_4"}
+// CHECK: [[META10]] = !{i32 0, !"test_assign_float16_4_to_half4"}
+// CHECK: [[META11]] = !{i32 1, !"test_assign_float16_4_to_half4"}
+// CHECK: [[META12]] = !{i32 0, !"test_float16_4_to_half4"}
+// CHECK: [[META13]] = !{i32 1, !"test_float16_4_to_half4"}
+//.

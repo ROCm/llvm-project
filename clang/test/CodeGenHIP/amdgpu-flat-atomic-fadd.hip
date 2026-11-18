@@ -15,6 +15,7 @@ __device__ double global_double;
 // CHECK-LABEL: define dso_local void @_Z30test_flat_atomic_fadd_f32_flatPff(
 // CHECK-SAME: ptr noundef [[PTR:%.*]], float noundef [[VAL:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca float, align 4, addrspace(5)
@@ -25,8 +26,9 @@ __device__ double global_double;
 // CHECK-NEXT:    store float [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META3:![0-9]+]], !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META4:![0-9]+]], !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store float [[TMP2]], ptr [[RESULT_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z30test_flat_atomic_fadd_f32_flatPff(
@@ -59,6 +61,7 @@ __device__ void test_flat_atomic_fadd_f32_flat(float *ptr, float val) {
 // CHECK-LABEL: define dso_local void @_Z30test_flat_atomic_fadd_f64_flatPdd(
 // CHECK-SAME: ptr noundef [[PTR:%.*]], double noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca double, align 8, addrspace(5)
@@ -69,8 +72,9 @@ __device__ void test_flat_atomic_fadd_f32_flat(float *ptr, float val) {
 // CHECK-NEXT:    store double [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = load double, ptr [[VAL_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], double [[TMP1]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], double [[TMP1]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store double [[TMP2]], ptr [[RESULT_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z30test_flat_atomic_fadd_f64_flatPdd(
@@ -103,6 +107,7 @@ __device__ void test_flat_atomic_fadd_f64_flat(double *ptr, double val) {
 // CHECK-LABEL: define dso_local void @_Z32test_flat_atomic_fadd_f32_sharedPff(
 // CHECK-SAME: ptr noundef [[PTR:%.*]], float noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca float, align 4, addrspace(5)
@@ -113,8 +118,9 @@ __device__ void test_flat_atomic_fadd_f64_flat(double *ptr, double val) {
 // CHECK-NEXT:    store float [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = load float, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META3]], !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store float [[TMP2]], ptr [[RESULT_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z32test_flat_atomic_fadd_f32_sharedPff(
@@ -147,6 +153,7 @@ __device__ void test_flat_atomic_fadd_f32_shared(__shared__ float *ptr, float va
 // CHECK-LABEL: define dso_local void @_Z32test_flat_atomic_fadd_f64_sharedPdd(
 // CHECK-SAME: ptr noundef [[PTR:%.*]], double noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca double, align 8, addrspace(5)
@@ -157,8 +164,9 @@ __device__ void test_flat_atomic_fadd_f32_shared(__shared__ float *ptr, float va
 // CHECK-NEXT:    store double [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = load double, ptr [[VAL_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], double [[TMP1]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], double [[TMP1]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store double [[TMP2]], ptr [[RESULT_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z32test_flat_atomic_fadd_f64_sharedPdd(
@@ -191,14 +199,16 @@ __device__ void test_flat_atomic_fadd_f64_shared(__shared__ double *ptr, double 
 // CHECK-LABEL: define dso_local void @_Z34test_flat_atomic_fadd_f32_constantf(
 // CHECK-SAME: float noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VAL_ADDR]] to ptr
 // CHECK-NEXT:    [[RESULT_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[RESULT]] to ptr
 // CHECK-NEXT:    store float [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(4) @const_float to ptr), float [[TMP0]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META3]], !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(4) @const_float to ptr), float [[TMP0]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store float [[TMP1]], ptr [[RESULT_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z34test_flat_atomic_fadd_f32_constantf(
@@ -227,14 +237,16 @@ __device__ void test_flat_atomic_fadd_f32_constant(float val) {
 // CHECK-LABEL: define dso_local void @_Z34test_flat_atomic_fadd_f64_constantd(
 // CHECK-SAME: double noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VAL_ADDR]] to ptr
 // CHECK-NEXT:    [[RESULT_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[RESULT]] to ptr
 // CHECK-NEXT:    store double [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load double, ptr [[VAL_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(4) @const_double to ptr), double [[TMP0]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(4) @const_double to ptr), double [[TMP0]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store double [[TMP1]], ptr [[RESULT_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z34test_flat_atomic_fadd_f64_constantd(
@@ -263,14 +275,16 @@ __device__ void test_flat_atomic_fadd_f64_constant(double val) {
 // CHECK-LABEL: define dso_local void @_Z32test_flat_atomic_fadd_f32_globalf(
 // CHECK-SAME: float noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VAL_ADDR]] to ptr
 // CHECK-NEXT:    [[RESULT_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[RESULT]] to ptr
 // CHECK-NEXT:    store float [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @global_float to ptr), float [[TMP0]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META3]], !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @global_float to ptr), float [[TMP0]] syncscope("agent") monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store float [[TMP1]], ptr [[RESULT_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z32test_flat_atomic_fadd_f32_globalf(
@@ -299,14 +313,16 @@ __device__ void test_flat_atomic_fadd_f32_global(float val) {
 // CHECK-LABEL: define dso_local void @_Z32test_flat_atomic_fadd_f64_globald(
 // CHECK-SAME: double noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VAL_ADDR]] to ptr
 // CHECK-NEXT:    [[RESULT_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[RESULT]] to ptr
 // CHECK-NEXT:    store double [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load double, ptr [[VAL_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @global_double to ptr), double [[TMP0]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @global_double to ptr), double [[TMP0]] syncscope("agent") monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store double [[TMP1]], ptr [[RESULT_ASCAST]], align 8
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z32test_flat_atomic_fadd_f64_globald(
@@ -338,6 +354,7 @@ typedef short __attribute__((ext_vector_type(2))) short2;
 // CHECK-LABEL: define dso_local void @_Z32test_flat_atomic_fadd_v2f16_flatPDv2_DF16_S_(
 // CHECK-SAME: ptr noundef [[PTR:%.*]], <2 x half> noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca <2 x half>, align 4, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca <2 x half>, align 4, addrspace(5)
@@ -348,8 +365,9 @@ typedef short __attribute__((ext_vector_type(2))) short2;
 // CHECK-NEXT:    store <2 x half> [[VAL]], ptr [[VAL_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = load <2 x half>, ptr [[VAL_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], <2 x half> [[TMP1]] syncscope("agent") monotonic, align 4, !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], <2 x half> [[TMP1]] syncscope("agent") monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    store <2 x half> [[TMP2]], ptr [[RESULT_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z32test_flat_atomic_fadd_v2f16_flatPDv2_DF16_S_(
@@ -382,6 +400,7 @@ __device__ void test_flat_atomic_fadd_v2f16_flat(half2 *ptr, half2 val) {
 // CHECK-LABEL: define dso_local void @_Z33test_flat_atomic_fadd_v2bf16_flatPDv2_sS_(
 // CHECK-SAME: ptr noundef [[PTR:%.*]], <2 x i16> noundef [[VAL:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VAL_ADDR:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
 // CHECK-NEXT:    [[RESULT:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
@@ -393,9 +412,10 @@ __device__ void test_flat_atomic_fadd_v2f16_flat(half2 *ptr, half2 val) {
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = load <2 x i16>, ptr [[VAL_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP2:%.*]] = bitcast <2 x i16> [[TMP1]] to <2 x bfloat>
-// CHECK-NEXT:    [[TMP3:%.*]] = atomicrmw fadd ptr [[TMP0]], <2 x bfloat> [[TMP2]] syncscope("agent") monotonic, align 4, !amdgpu.no.fine.grained.memory [[META3]]
+// CHECK-NEXT:    [[TMP3:%.*]] = atomicrmw fadd ptr [[TMP0]], <2 x bfloat> [[TMP2]] syncscope("agent") monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // CHECK-NEXT:    [[TMP4:%.*]] = bitcast <2 x bfloat> [[TMP3]] to <2 x i16>
 // CHECK-NEXT:    store <2 x i16> [[TMP4]], ptr [[RESULT_ASCAST]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 // SPIRV-LABEL: define spir_func void @_Z33test_flat_atomic_fadd_v2bf16_flatPDv2_sS_(
@@ -427,7 +447,27 @@ __device__ void test_flat_atomic_fadd_v2bf16_flat(short2 *ptr, short2 val) {
     short2 result = __builtin_amdgcn_flat_atomic_fadd_v2bf16(ptr, val);
 }
 //.
-// CHECK: [[META3]] = !{}
+// CHECK: [[META3]] = !{i32 0, !"_Z30test_flat_atomic_fadd_f32_flatPff"}
+// CHECK: [[META4]] = !{}
+// CHECK: [[META5]] = !{i32 1, !"_Z30test_flat_atomic_fadd_f32_flatPff"}
+// CHECK: [[META6]] = !{i32 0, !"_Z30test_flat_atomic_fadd_f64_flatPdd"}
+// CHECK: [[META7]] = !{i32 1, !"_Z30test_flat_atomic_fadd_f64_flatPdd"}
+// CHECK: [[META8]] = !{i32 0, !"_Z32test_flat_atomic_fadd_f32_sharedPff"}
+// CHECK: [[META9]] = !{i32 1, !"_Z32test_flat_atomic_fadd_f32_sharedPff"}
+// CHECK: [[META10]] = !{i32 0, !"_Z32test_flat_atomic_fadd_f64_sharedPdd"}
+// CHECK: [[META11]] = !{i32 1, !"_Z32test_flat_atomic_fadd_f64_sharedPdd"}
+// CHECK: [[META12]] = !{i32 0, !"_Z34test_flat_atomic_fadd_f32_constantf"}
+// CHECK: [[META13]] = !{i32 1, !"_Z34test_flat_atomic_fadd_f32_constantf"}
+// CHECK: [[META14]] = !{i32 0, !"_Z34test_flat_atomic_fadd_f64_constantd"}
+// CHECK: [[META15]] = !{i32 1, !"_Z34test_flat_atomic_fadd_f64_constantd"}
+// CHECK: [[META16]] = !{i32 0, !"_Z32test_flat_atomic_fadd_f32_globalf"}
+// CHECK: [[META17]] = !{i32 1, !"_Z32test_flat_atomic_fadd_f32_globalf"}
+// CHECK: [[META18]] = !{i32 0, !"_Z32test_flat_atomic_fadd_f64_globald"}
+// CHECK: [[META19]] = !{i32 1, !"_Z32test_flat_atomic_fadd_f64_globald"}
+// CHECK: [[META20]] = !{i32 0, !"_Z32test_flat_atomic_fadd_v2f16_flatPDv2_DF16_S_"}
+// CHECK: [[META21]] = !{i32 1, !"_Z32test_flat_atomic_fadd_v2f16_flatPDv2_DF16_S_"}
+// CHECK: [[META22]] = !{i32 0, !"_Z33test_flat_atomic_fadd_v2bf16_flatPDv2_sS_"}
+// CHECK: [[META23]] = !{i32 1, !"_Z33test_flat_atomic_fadd_v2bf16_flatPDv2_sS_"}
 //.
 // SPIRV: [[META4]] = !{!"has.gfx940-insts"}
 // SPIRV: [[META5]] = !{}

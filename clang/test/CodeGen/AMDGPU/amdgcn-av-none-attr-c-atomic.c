@@ -10,12 +10,14 @@
 // CHECK-LABEL: define dso_local void @test_atomic_rmw_add(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw add ptr [[TMP0]], i32 1 seq_cst, align 4, !mmra [[META2:![0-9]+]], !amdgpu.no.fine.grained.memory [[META3:![0-9]+]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw add ptr [[TMP0]], i32 1 seq_cst, align 4, !mmra [[META3:![0-9]+]], !amdgpu.no.fine.grained.memory [[META4:![0-9]+]], !amdgpu.no.remote.memory [[META4]]
 // CHECK-NEXT:    [[TMP2:%.*]] = add i32 [[TMP1]], 1
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_atomic_rmw_add(_Atomic int *p) {
@@ -25,11 +27,13 @@ void test_atomic_rmw_add(_Atomic int *p) {
 // CHECK-LABEL: define dso_local void @test_atomic_store(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    store atomic i32 42, ptr [[TMP0]] seq_cst, align 4, !mmra [[META2]]
+// CHECK-NEXT:    store atomic i32 42, ptr [[TMP0]] seq_cst, align 4, !mmra [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_atomic_store(_Atomic int *p) {
@@ -39,11 +43,13 @@ void test_atomic_store(_Atomic int *p) {
 // CHECK-LABEL: define dso_local void @test_atomic_load(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[ATOMIC_LOAD:%.*]] = load atomic i32, ptr [[TMP0]] seq_cst, align 4, !mmra [[META2]]
+// CHECK-NEXT:    [[ATOMIC_LOAD:%.*]] = load atomic i32, ptr [[TMP0]] seq_cst, align 4, !mmra [[META3]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_atomic_load(_Atomic int *p) {
@@ -55,18 +61,28 @@ void test_atomic_load(_Atomic int *p) {
 // CHECK-LABEL: define dso_local void @test_no_attr(
 // CHECK-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // CHECK-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw add ptr [[TMP0]], i32 1 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// CHECK-NEXT:    [[TMP1:%.*]] = atomicrmw add ptr [[TMP0]], i32 1 seq_cst, align 4, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
 // CHECK-NEXT:    [[TMP2:%.*]] = add i32 [[TMP1]], 1
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_no_attr(_Atomic int *p) {
   *p += 1;
 }
 //.
-// CHECK: [[META2]] = !{!"amdgcn-av", !"none"}
-// CHECK: [[META3]] = !{}
+// CHECK: [[META2]] = !{i32 0, !"test_atomic_rmw_add"}
+// CHECK: [[META3]] = !{!"amdgcn-av", !"none"}
+// CHECK: [[META4]] = !{}
+// CHECK: [[META5]] = !{i32 1, !"test_atomic_rmw_add"}
+// CHECK: [[META6]] = !{i32 0, !"test_atomic_store"}
+// CHECK: [[META7]] = !{i32 1, !"test_atomic_store"}
+// CHECK: [[META8]] = !{i32 0, !"test_atomic_load"}
+// CHECK: [[META9]] = !{i32 1, !"test_atomic_load"}
+// CHECK: [[META10]] = !{i32 0, !"test_no_attr"}
+// CHECK: [[META11]] = !{i32 1, !"test_no_attr"}
 //.

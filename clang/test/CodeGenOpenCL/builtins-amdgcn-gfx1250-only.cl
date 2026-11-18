@@ -9,7 +9,9 @@ typedef unsigned short __attribute__((ext_vector_type(2))) ushort2;
 
 // CHECK-LABEL: @test_setprio_inc_wg(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    call void @llvm.amdgcn.s.setprio.inc.wg(i16 10)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_setprio_inc_wg() {
@@ -18,6 +20,7 @@ void test_setprio_inc_wg() {
 
 // CHECK-LABEL: @test_prefetch(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[FPTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[GPTR_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    store ptr [[FPTR:%.*]], ptr addrspace(5) [[FPTR_ADDR]], align 8
@@ -26,6 +29,7 @@ void test_setprio_inc_wg() {
 // CHECK-NEXT:    call void @llvm.amdgcn.flat.prefetch(ptr [[TMP0]], i32 0)
 // CHECK-NEXT:    [[TMP1:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[GPTR_ADDR]], align 8
 // CHECK-NEXT:    call void @llvm.amdgcn.global.prefetch(ptr addrspace(1) [[TMP1]], i32 8)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_prefetch(generic void *fptr, global void *gptr) {
@@ -35,6 +39,7 @@ void test_prefetch(generic void *fptr, global void *gptr) {
 
 // CHECK-LABEL: @test_cvt_pk_fp8_f32_e5m3(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[OLD_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -49,6 +54,7 @@ void test_prefetch(generic void *fptr, global void *gptr) {
 // CHECK-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.cvt.pk.fp8.f32.e5m3(float [[TMP0]], float [[TMP1]], i32 [[TMP2]], i1 true)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
 // CHECK-NEXT:    store i32 [[TMP3]], ptr addrspace(1) [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_cvt_pk_fp8_f32_e5m3(global int* out, int old, float a, float b)
@@ -58,6 +64,7 @@ void test_cvt_pk_fp8_f32_e5m3(global int* out, int old, float a, float b)
 
 // CHECK-LABEL: @test_cvt_sr_fp8_f32_e5m3(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[OLD_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca float, align 4, addrspace(5)
@@ -72,6 +79,7 @@ void test_cvt_pk_fp8_f32_e5m3(global int* out, int old, float a, float b)
 // CHECK-NEXT:    [[TMP3:%.*]] = call i32 @llvm.amdgcn.cvt.sr.fp8.f32.e5m3(float [[TMP0]], i32 [[TMP1]], i32 [[TMP2]], i32 3)
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
 // CHECK-NEXT:    store i32 [[TMP3]], ptr addrspace(1) [[TMP4]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_cvt_sr_fp8_f32_e5m3(global int* out, int old, float a, int b)
@@ -81,6 +89,7 @@ void test_cvt_sr_fp8_f32_e5m3(global int* out, int old, float a, int b)
 
 // CHECK-LABEL: @test_cvt_f32_fp8_e5m3(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store ptr addrspace(1) [[OUT:%.*]], ptr addrspace(5) [[OUT_ADDR]], align 8
@@ -105,6 +114,7 @@ void test_cvt_sr_fp8_f32_e5m3(global int* out, int old, float a, int b)
 // CHECK-NEXT:    [[CONV3:%.*]] = fptosi float [[TMP10]] to i32
 // CHECK-NEXT:    [[TMP11:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
 // CHECK-NEXT:    store i32 [[CONV3]], ptr addrspace(1) [[TMP11]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_cvt_f32_fp8_e5m3(global int* out, int a)
@@ -117,6 +127,7 @@ void test_cvt_f32_fp8_e5m3(global int* out, int a)
 
 // CHECK-LABEL: @test_add_min_max(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -149,6 +160,7 @@ void test_cvt_f32_fp8_e5m3(global int* out, int a)
 // CHECK-NEXT:    [[TMP18:%.*]] = call i32 @llvm.amdgcn.add.min.u32(i32 [[TMP15]], i32 [[TMP16]], i32 [[TMP17]], i1 true)
 // CHECK-NEXT:    [[TMP19:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[OUT_ADDR]], align 8
 // CHECK-NEXT:    store i32 [[TMP18]], ptr addrspace(1) [[TMP19]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_add_min_max(global int *out, int a, int b, int c)
@@ -161,6 +173,7 @@ void test_add_min_max(global int *out, int a, int b, int c)
 
 // CHECK-LABEL: @test_pk_add_min_max(
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[UOUT_ADDR:%.*]] = alloca ptr addrspace(1), align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca <2 x i16>, align 4, addrspace(5)
@@ -201,6 +214,7 @@ void test_add_min_max(global int *out, int a, int b, int c)
 // CHECK-NEXT:    [[TMP18:%.*]] = call <2 x i16> @llvm.amdgcn.pk.add.min.u16(<2 x i16> [[TMP15]], <2 x i16> [[TMP16]], <2 x i16> [[TMP17]], i1 true)
 // CHECK-NEXT:    [[TMP19:%.*]] = load ptr addrspace(1), ptr addrspace(5) [[UOUT_ADDR]], align 8
 // CHECK-NEXT:    store <2 x i16> [[TMP18]], ptr addrspace(1) [[TMP19]], align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 void test_pk_add_min_max(global short2 *out, global ushort2 *uout, short2 a, short2 b, short2 c, ushort2 ua, ushort2 ub, ushort2 uc)

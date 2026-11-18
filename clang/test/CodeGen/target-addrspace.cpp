@@ -14,9 +14,11 @@
 // AMDGPU-LABEL: define hidden void @_Z1fPv(
 // AMDGPU-SAME: ptr noundef [[P:%.*]]) #[[ATTR0:[0-9]+]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // AMDGPU-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 void f(void *p) {}
@@ -33,11 +35,13 @@ void f(void *p) {}
 // AMDGPU-LABEL: define hidden void @_Z2p1Pv(
 // AMDGPU-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // AMDGPU-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
-// AMDGPU-NEXT:    call void @_Z1fPv(ptr noundef [[TMP0]]) #[[ATTR1:[0-9]+]]
+// AMDGPU-NEXT:    call void @_Z1fPv(ptr noundef [[TMP0]]) #[[ATTR2:[0-9]+]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 void p1(void [[clang::address_space(0)]] * p) { f(p); }
@@ -53,11 +57,13 @@ void p1(void [[clang::address_space(0)]] * p) { f(p); }
 // AMDGPU-LABEL: define hidden noundef ptr @_Z2p2PU3AS3v(
 // AMDGPU-SAME: ptr addrspace(3) noundef [[P:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[P_ADDR:%.*]] = alloca ptr addrspace(3), align 4, addrspace(5)
 // AMDGPU-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // AMDGPU-NEXT:    store ptr addrspace(3) [[P]], ptr [[P_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load ptr addrspace(3), ptr [[P_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(3) [[TMP0]] to ptr
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret ptr [[TMP1]]
 //
 void *p2(void [[clang::address_space(3)]] * p) { return p; }
@@ -73,11 +79,13 @@ void *p2(void [[clang::address_space(3)]] * p) { return p; }
 // AMDGPU-LABEL: define hidden noundef ptr @_Z2p3PU3AS3v(
 // AMDGPU-SAME: ptr addrspace(3) noundef [[P:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[P_ADDR:%.*]] = alloca ptr addrspace(3), align 4, addrspace(5)
 // AMDGPU-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // AMDGPU-NEXT:    store ptr addrspace(3) [[P]], ptr [[P_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load ptr addrspace(3), ptr [[P_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(3) [[TMP0]] to ptr
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret ptr [[TMP1]]
 //
 void *p3(void [[clang::address_space(3)]] * p) { return p; }
@@ -106,11 +114,13 @@ template <typename Ty> void foo(Ty *) {}
 // AMDGPU-LABEL: define hidden void @_Z2t1Pv(
 // AMDGPU-SAME: ptr noundef [[P:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[P_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGPU-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // AMDGPU-NEXT:    store ptr [[P]], ptr [[P_ADDR_ASCAST]], align 8
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[P_ADDR_ASCAST]], align 8
-// AMDGPU-NEXT:    call void @_Z3fooIvEvPT_(ptr noundef [[TMP0]]) #[[ATTR1]]
+// AMDGPU-NEXT:    call void @_Z3fooIvEvPT_(ptr noundef [[TMP0]]) #[[ATTR2]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 void t1(void *p) { foo(p); }
@@ -126,11 +136,27 @@ void t1(void *p) { foo(p); }
 // AMDGPU-LABEL: define hidden void @_Z2t3PU3AS3v(
 // AMDGPU-SAME: ptr addrspace(3) noundef [[P:%.*]]) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    [[P_ADDR:%.*]] = alloca ptr addrspace(3), align 4, addrspace(5)
 // AMDGPU-NEXT:    [[P_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P_ADDR]] to ptr
 // AMDGPU-NEXT:    store ptr addrspace(3) [[P]], ptr [[P_ADDR_ASCAST]], align 4
 // AMDGPU-NEXT:    [[TMP0:%.*]] = load ptr addrspace(3), ptr [[P_ADDR_ASCAST]], align 4
-// AMDGPU-NEXT:    call void @_Z3fooIU3AS3vEvPT_(ptr addrspace(3) noundef [[TMP0]]) #[[ATTR1]]
+// AMDGPU-NEXT:    call void @_Z3fooIU3AS3vEvPT_(ptr addrspace(3) noundef [[TMP0]]) #[[ATTR2]]
+// AMDGPU-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // AMDGPU-NEXT:    ret void
 //
 void t3(void [[clang::address_space(3)]] *p) { foo(p); }
+//.
+// AMDGPU: [[META2]] = !{i32 0, !"_Z1fPv"}
+// AMDGPU: [[META3]] = !{i32 1, !"_Z1fPv"}
+// AMDGPU: [[META4]] = !{i32 0, !"_Z2p1Pv"}
+// AMDGPU: [[META5]] = !{i32 1, !"_Z2p1Pv"}
+// AMDGPU: [[META6]] = !{i32 0, !"_Z2p2PU3AS3v"}
+// AMDGPU: [[META7]] = !{i32 1, !"_Z2p2PU3AS3v"}
+// AMDGPU: [[META8]] = !{i32 0, !"_Z2p3PU3AS3v"}
+// AMDGPU: [[META9]] = !{i32 1, !"_Z2p3PU3AS3v"}
+// AMDGPU: [[META10]] = !{i32 0, !"_Z2t1Pv"}
+// AMDGPU: [[META11]] = !{i32 1, !"_Z2t1Pv"}
+// AMDGPU: [[META14]] = !{i32 0, !"_Z2t3PU3AS3v"}
+// AMDGPU: [[META15]] = !{i32 1, !"_Z2t3PU3AS3v"}
+//.

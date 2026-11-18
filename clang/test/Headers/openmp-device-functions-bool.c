@@ -13,6 +13,7 @@ enum my_bool {
 // CHECK-LABEL: define hidden i32 @use_my_bool(
 // CHECK-SAME: i32 noundef [[B:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[T:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[F:%.*]] = alloca i32, align 4, addrspace(5)
@@ -26,6 +27,7 @@ enum my_bool {
 // CHECK-NEXT:    [[TOBOOL:%.*]] = icmp ne i32 [[TMP0]], 0
 // CHECK-NEXT:    [[LNOT:%.*]] = xor i1 [[TOBOOL]], true
 // CHECK-NEXT:    [[LNOT_EXT:%.*]] = zext i1 [[LNOT]] to i32
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret i32 [[LNOT_EXT]]
 //
 enum my_bool use_my_bool(enum my_bool b) {
@@ -36,3 +38,7 @@ enum my_bool use_my_bool(enum my_bool b) {
 }
 
 #pragma omp end declare target
+//.
+// CHECK: [[META4]] = !{i32 0, !"use_my_bool"}
+// CHECK: [[META5]] = !{i32 1, !"use_my_bool"}
+//.

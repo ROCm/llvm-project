@@ -8,7 +8,9 @@
 // CHECK-LABEL: define dso_local float @test_atomic_fmax_f32(
 // CHECK-SAME: ptr addrspace(8) nofree captures(none) [[RSRC:%.*]], float noundef [[X:%.*]], i32 noundef [[OFFSET:%.*]], i32 noundef [[SOFFSET:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call float @llvm.amdgcn.raw.ptr.buffer.atomic.fmax.f32(float [[X]], ptr addrspace(8) [[RSRC]], i32 [[OFFSET]], i32 [[SOFFSET]], i32 0)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP0]]
 //
 float test_atomic_fmax_f32(__amdgpu_buffer_rsrc_t rsrc, float x, int offset, int soffset) {
@@ -18,9 +20,17 @@ float test_atomic_fmax_f32(__amdgpu_buffer_rsrc_t rsrc, float x, int offset, int
 // CHECK-LABEL: define dso_local double @test_atomic_fmax_f64(
 // CHECK-SAME: ptr addrspace(8) nofree captures(none) [[RSRC:%.*]], double noundef [[X:%.*]], i32 noundef [[OFFSET:%.*]], i32 noundef [[SOFFSET:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[TMP0:%.*]] = tail call double @llvm.amdgcn.raw.ptr.buffer.atomic.fmax.f64(double [[X]], ptr addrspace(8) [[RSRC]], i32 [[OFFSET]], i32 [[SOFFSET]], i32 0)
+// CHECK-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret double [[TMP0]]
 //
 double test_atomic_fmax_f64(__amdgpu_buffer_rsrc_t rsrc, double x, int offset, int soffset) {
   return __builtin_amdgcn_raw_ptr_buffer_atomic_fmax_f64(x, rsrc, offset, soffset, 0);
 }
+//.
+// CHECK: [[META8]] = !{i32 0, !"test_atomic_fmax_f32"}
+// CHECK: [[META9]] = !{i32 1, !"test_atomic_fmax_f32"}
+// CHECK: [[META10]] = !{i32 0, !"test_atomic_fmax_f64"}
+// CHECK: [[META11]] = !{i32 1, !"test_atomic_fmax_f64"}
+//.

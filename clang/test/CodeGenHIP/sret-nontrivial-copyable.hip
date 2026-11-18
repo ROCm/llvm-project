@@ -26,24 +26,28 @@ Wrapper::Wrapper() noexcept : field(make()) {}
 // AMDGCN-LABEL: define dso_local void @_ZN7WrapperC2Ev(
 // AMDGCN-SAME: ptr noundef nonnull align 8 dereferenceable(16) [[THIS:%.*]]) unnamed_addr #[[ATTR0:[0-9]+]] align 2 {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[THIS_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGCN-NEXT:    [[THIS_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[THIS_ADDR]] to ptr
 // AMDGCN-NEXT:    store ptr [[THIS]], ptr [[THIS_ADDR_ASCAST]], align 8
 // AMDGCN-NEXT:    [[THIS1:%.*]] = load ptr, ptr [[THIS_ADDR_ASCAST]], align 8
 // AMDGCN-NEXT:    store ptr addrspace(1) getelementptr inbounds inrange(-16, 16) (i8, ptr addrspace(1) @_ZTV7Wrapper, i64 16), ptr [[THIS1]], align 8
 // AMDGCN-NEXT:    [[FIELD:%.*]] = getelementptr inbounds nuw [[STRUCT_WRAPPER:%.*]], ptr [[THIS1]], i32 0, i32 1
-// AMDGCN-NEXT:    call void @_Z4makev(ptr dead_on_unwind writable sret([[STRUCT_NONTRIVIALPTR:%.*]]) align 8 [[FIELD]]) #[[ATTR2:[0-9]+]]
+// AMDGCN-NEXT:    call void @_Z4makev(ptr dead_on_unwind writable sret([[STRUCT_NONTRIVIALPTR:%.*]]) align 8 [[FIELD]]) #[[ATTR3:[0-9]+]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
 // AMDGCN-LABEL: define dso_local void @_ZN7WrapperC1Ev(
 // AMDGCN-SAME: ptr noundef nonnull align 8 dereferenceable(16) [[THIS:%.*]]) unnamed_addr #[[ATTR0]] align 2 {
 // AMDGCN-NEXT:  [[ENTRY:.*:]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    [[THIS_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // AMDGCN-NEXT:    [[THIS_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[THIS_ADDR]] to ptr
 // AMDGCN-NEXT:    store ptr [[THIS]], ptr [[THIS_ADDR_ASCAST]], align 8
 // AMDGCN-NEXT:    [[THIS1:%.*]] = load ptr, ptr [[THIS_ADDR_ASCAST]], align 8
-// AMDGCN-NEXT:    call void @_ZN7WrapperC2Ev(ptr noundef nonnull align 8 dereferenceable(16) [[THIS1]]) #[[ATTR2]]
+// AMDGCN-NEXT:    call void @_ZN7WrapperC2Ev(ptr noundef nonnull align 8 dereferenceable(16) [[THIS1]]) #[[ATTR3]]
+// AMDGCN-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // AMDGCN-NEXT:    ret void
 //
 //
@@ -70,3 +74,9 @@ Wrapper::Wrapper() noexcept : field(make()) {}
 // SPIRV-NEXT:    call spir_func addrspace(4) void @_ZN7WrapperC2Ev(ptr addrspace(4) noundef align 8 dereferenceable_or_null(16) [[THIS1]]) #[[ATTR2]]
 // SPIRV-NEXT:    ret void
 //
+//.
+// AMDGCN: [[META2]] = !{i32 0, !"_ZN7WrapperC2Ev"}
+// AMDGCN: [[META3]] = !{i32 1, !"_ZN7WrapperC2Ev"}
+// AMDGCN: [[META4]] = !{i32 0, !"_ZN7WrapperC1Ev"}
+// AMDGCN: [[META5]] = !{i32 1, !"_ZN7WrapperC1Ev"}
+//.

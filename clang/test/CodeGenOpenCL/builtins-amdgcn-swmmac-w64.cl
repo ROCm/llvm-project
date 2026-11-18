@@ -15,8 +15,10 @@ typedef short  v8s   __attribute__((ext_vector_type(8)));
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_f32_16x16x32_f16_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], <4 x half> noundef [[A:%.*]], <8 x half> noundef [[B:%.*]], <4 x float> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0:[0-9]+]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.swmmac.f32.16x16x32.f16.v4f32.v4f16.v8f16.i32(<4 x half> [[A]], <8 x half> [[B]], <4 x float> [[C]], i32 [[INDEX]])
-// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7:![0-9]+]]
+// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9:![0-9]+]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x32_f16_w64(global v4f* out, v4h a, v8h b, v4f c, int index)
@@ -27,8 +29,10 @@ void test_amdgcn_swmmac_f32_16x16x32_f16_w64(global v4f* out, v4h a, v8h b, v4f 
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_f32_16x16x32_bf16_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], <4 x i16> noundef [[A:%.*]], <8 x i16> noundef [[B:%.*]], <4 x float> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.swmmac.f32.16x16x32.bf16.v4f32.v4i16.v8i16.i32(<4 x i16> [[A]], <8 x i16> [[B]], <4 x float> [[C]], i32 [[INDEX]])
-// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x32_bf16_w64(global v4f* out, v4s a, v8s b, v4f c, int index)
@@ -39,8 +43,10 @@ void test_amdgcn_swmmac_f32_16x16x32_bf16_w64(global v4f* out, v4s a, v8s b, v4f
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_f16_16x16x32_f16_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 8)) [[OUT:%.*]], <4 x half> noundef [[A:%.*]], <8 x half> noundef [[B:%.*]], <4 x half> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x half> @llvm.amdgcn.swmmac.f16.16x16x32.f16.v4f16.v4f16.v8f16.i32(<4 x half> [[A]], <8 x half> [[B]], <4 x half> [[C]], i32 [[INDEX]])
-// CHECK-GFX1200-NEXT:    store <4 x half> [[TMP0]], ptr addrspace(1) [[OUT]], align 8, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x half> [[TMP0]], ptr addrspace(1) [[OUT]], align 8, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f16_16x16x32_f16_w64(global v4h* out, v4h a, v8h b, v4h c, int index)
@@ -51,8 +57,10 @@ void test_amdgcn_swmmac_f16_16x16x32_f16_w64(global v4h* out, v4h a, v8h b, v4h 
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_bf16_16x16x32_bf16_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 8)) [[OUT:%.*]], <4 x i16> noundef [[A:%.*]], <8 x i16> noundef [[B:%.*]], <4 x i16> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x i16> @llvm.amdgcn.swmmac.bf16.16x16x32.bf16.v4i16.v4i16.v8i16.i32(<4 x i16> [[A]], <8 x i16> [[B]], <4 x i16> [[C]], i32 [[INDEX]])
-// CHECK-GFX1200-NEXT:    store <4 x i16> [[TMP0]], ptr addrspace(1) [[OUT]], align 8, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x i16> [[TMP0]], ptr addrspace(1) [[OUT]], align 8, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_bf16_16x16x32_bf16_w64(global v4s* out, v4s a, v8s b, v4s c, int index)
@@ -63,8 +71,10 @@ void test_amdgcn_swmmac_bf16_16x16x32_bf16_w64(global v4s* out, v4s a, v8s b, v4
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_i32_16x16x32_iu8_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], i32 noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <4 x i32> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.swmmac.i32.16x16x32.iu8.v4i32.i32.v2i32.i32(i1 true, i32 [[A]], i1 true, <2 x i32> [[B]], <4 x i32> [[C]], i32 [[INDEX]], i1 true)
-// CHECK-GFX1200-NEXT:    store <4 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_i32_16x16x32_iu8_w64(global v4i* out, int a, v2i b, v4i c, int index)
@@ -75,8 +85,10 @@ void test_amdgcn_swmmac_i32_16x16x32_iu8_w64(global v4i* out, int a, v2i b, v4i 
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_i32_16x16x32_iu4_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], i32 noundef [[A:%.*]], i32 noundef [[B:%.*]], <4 x i32> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.swmmac.i32.16x16x32.iu4.v4i32.i32.i32.i32(i1 true, i32 [[A]], i1 true, i32 [[B]], <4 x i32> [[C]], i32 [[INDEX]], i1 true)
-// CHECK-GFX1200-NEXT:    store <4 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_i32_16x16x32_iu4_w64(global v4i* out, int a, int b, v4i c, int index)
@@ -87,8 +99,10 @@ void test_amdgcn_swmmac_i32_16x16x32_iu4_w64(global v4i* out, int a, int b, v4i 
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_i32_16x16x64_iu4_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], i32 noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <4 x i32> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x i32> @llvm.amdgcn.swmmac.i32.16x16x64.iu4.v4i32.i32.v2i32.i32(i1 true, i32 [[A]], i1 true, <2 x i32> [[B]], <4 x i32> [[C]], i32 [[INDEX]], i1 true)
-// CHECK-GFX1200-NEXT:    store <4 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x i32> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_i32_16x16x64_iu4_w64(global v4i* out, int a, v2i b, v4i c, int index)
@@ -99,8 +113,10 @@ void test_amdgcn_swmmac_i32_16x16x64_iu4_w64(global v4i* out, int a, v2i b, v4i 
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_f32_16x16x32_fp8_fp8_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], i32 noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <4 x float> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.swmmac.f32.16x16x32.fp8.fp8.v4f32.i32.v2i32.i32(i32 [[A]], <2 x i32> [[B]], <4 x float> [[C]], i32 [[INDEX]])
-// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x32_fp8_fp8_w64(global v4f* out, int a, v2i b, v4f c, int index)
@@ -111,8 +127,10 @@ void test_amdgcn_swmmac_f32_16x16x32_fp8_fp8_w64(global v4f* out, int a, v2i b, 
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_f32_16x16x32_fp8_bf8_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], i32 noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <4 x float> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.swmmac.f32.16x16x32.fp8.bf8.v4f32.i32.v2i32.i32(i32 [[A]], <2 x i32> [[B]], <4 x float> [[C]], i32 [[INDEX]])
-// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x32_fp8_bf8_w64(global v4f* out, int a, v2i b, v4f c, int index)
@@ -123,8 +141,10 @@ void test_amdgcn_swmmac_f32_16x16x32_fp8_bf8_w64(global v4f* out, int a, v2i b, 
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_f32_16x16x32_bf8_fp8_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], i32 noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <4 x float> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.swmmac.f32.16x16x32.bf8.fp8.v4f32.i32.v2i32.i32(i32 [[A]], <2 x i32> [[B]], <4 x float> [[C]], i32 [[INDEX]])
-// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x32_bf8_fp8_w64(global v4f* out, int a, v2i b, v4f c, int index)
@@ -135,8 +155,10 @@ void test_amdgcn_swmmac_f32_16x16x32_bf8_fp8_w64(global v4f* out, int a, v2i b, 
 // CHECK-GFX1200-LABEL: define dso_local void @test_amdgcn_swmmac_f32_16x16x32_bf8_bf8_w64(
 // CHECK-GFX1200-SAME: ptr addrspace(1) nofree noundef writeonly captures(none) initializes((0, 16)) [[OUT:%.*]], i32 noundef [[A:%.*]], <2 x i32> noundef [[B:%.*]], <4 x float> noundef [[C:%.*]], i32 noundef [[INDEX:%.*]]) local_unnamed_addr #[[ATTR0]] {
 // CHECK-GFX1200-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    [[TMP0:%.*]] = tail call <4 x float> @llvm.amdgcn.swmmac.f32.16x16x32.bf8.bf8.v4f32.i32.v2i32.i32(i32 [[A]], <2 x i32> [[B]], <4 x float> [[C]], i32 [[INDEX]])
-// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA7]]
+// CHECK-GFX1200-NEXT:    store <4 x float> [[TMP0]], ptr addrspace(1) [[OUT]], align 16, !tbaa [[CHAR_TBAA9]]
+// CHECK-GFX1200-NEXT:    tail call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX1200-NEXT:    ret void
 //
 void test_amdgcn_swmmac_f32_16x16x32_bf8_bf8_w64(global v4f* out, int a, v2i b, v4f c, int index)
@@ -144,7 +166,29 @@ void test_amdgcn_swmmac_f32_16x16x32_bf8_bf8_w64(global v4f* out, int a, v2i b, 
   *out = __builtin_amdgcn_swmmac_f32_16x16x32_bf8_bf8_w64(a, b, c, index);
 }
 //.
-// CHECK-GFX1200: [[META5:![0-9]+]] = !{!"omnipotent char", [[META6:![0-9]+]], i64 0}
-// CHECK-GFX1200: [[META6]] = !{!"Simple C/C++ TBAA"}
-// CHECK-GFX1200: [[CHAR_TBAA7]] = !{[[META5]], [[META5]], i64 0}
+// CHECK-GFX1200: [[META6:![0-9]+]] = !{!"omnipotent char", [[META7:![0-9]+]], i64 0}
+// CHECK-GFX1200: [[META7]] = !{!"Simple C/C++ TBAA"}
+// CHECK-GFX1200: [[META8]] = !{i32 0, !"test_amdgcn_swmmac_f32_16x16x32_f16_w64"}
+// CHECK-GFX1200: [[CHAR_TBAA9]] = !{[[META6]], [[META6]], i64 0}
+// CHECK-GFX1200: [[META10]] = !{i32 1, !"test_amdgcn_swmmac_f32_16x16x32_f16_w64"}
+// CHECK-GFX1200: [[META11]] = !{i32 0, !"test_amdgcn_swmmac_f32_16x16x32_bf16_w64"}
+// CHECK-GFX1200: [[META12]] = !{i32 1, !"test_amdgcn_swmmac_f32_16x16x32_bf16_w64"}
+// CHECK-GFX1200: [[META13]] = !{i32 0, !"test_amdgcn_swmmac_f16_16x16x32_f16_w64"}
+// CHECK-GFX1200: [[META14]] = !{i32 1, !"test_amdgcn_swmmac_f16_16x16x32_f16_w64"}
+// CHECK-GFX1200: [[META15]] = !{i32 0, !"test_amdgcn_swmmac_bf16_16x16x32_bf16_w64"}
+// CHECK-GFX1200: [[META16]] = !{i32 1, !"test_amdgcn_swmmac_bf16_16x16x32_bf16_w64"}
+// CHECK-GFX1200: [[META17]] = !{i32 0, !"test_amdgcn_swmmac_i32_16x16x32_iu8_w64"}
+// CHECK-GFX1200: [[META18]] = !{i32 1, !"test_amdgcn_swmmac_i32_16x16x32_iu8_w64"}
+// CHECK-GFX1200: [[META19]] = !{i32 0, !"test_amdgcn_swmmac_i32_16x16x32_iu4_w64"}
+// CHECK-GFX1200: [[META20]] = !{i32 1, !"test_amdgcn_swmmac_i32_16x16x32_iu4_w64"}
+// CHECK-GFX1200: [[META21]] = !{i32 0, !"test_amdgcn_swmmac_i32_16x16x64_iu4_w64"}
+// CHECK-GFX1200: [[META22]] = !{i32 1, !"test_amdgcn_swmmac_i32_16x16x64_iu4_w64"}
+// CHECK-GFX1200: [[META23]] = !{i32 0, !"test_amdgcn_swmmac_f32_16x16x32_fp8_fp8_w64"}
+// CHECK-GFX1200: [[META24]] = !{i32 1, !"test_amdgcn_swmmac_f32_16x16x32_fp8_fp8_w64"}
+// CHECK-GFX1200: [[META25]] = !{i32 0, !"test_amdgcn_swmmac_f32_16x16x32_fp8_bf8_w64"}
+// CHECK-GFX1200: [[META26]] = !{i32 1, !"test_amdgcn_swmmac_f32_16x16x32_fp8_bf8_w64"}
+// CHECK-GFX1200: [[META27]] = !{i32 0, !"test_amdgcn_swmmac_f32_16x16x32_bf8_fp8_w64"}
+// CHECK-GFX1200: [[META28]] = !{i32 1, !"test_amdgcn_swmmac_f32_16x16x32_bf8_fp8_w64"}
+// CHECK-GFX1200: [[META29]] = !{i32 0, !"test_amdgcn_swmmac_f32_16x16x32_bf8_bf8_w64"}
+// CHECK-GFX1200: [[META30]] = !{i32 1, !"test_amdgcn_swmmac_f32_16x16x32_bf8_bf8_w64"}
 //.

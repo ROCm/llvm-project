@@ -33,6 +33,7 @@
 // DEV-LABEL: define dso_local void @_Z12test_defaultPf(
 // DEV-SAME: ptr noundef [[A:%.*]]) #[[ATTR0:[0-9]+]] {
 // DEV-NEXT:  [[ENTRY:.*:]]
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEV-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // DEV-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -41,14 +42,16 @@
 // DEV-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // DEV-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // DEV-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META3:![0-9]+]], !amdgpu.no.remote.memory [[META3]]
+// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4:![0-9]+]], !amdgpu.no.remote.memory [[META4]]
 // DEV-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // DEV-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local void @_Z12test_defaultPf(
 // OPT-SAME: ptr noundef [[A:%.*]]) #[[ATTR0:[0-9]+]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // OPT-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // OPT-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -57,9 +60,10 @@
 // OPT-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // OPT-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // OPT-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META3:![0-9]+]], !amdgpu.no.remote.memory [[META3]]
+// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4:![0-9]+]], !amdgpu.no.remote.memory [[META4]]
 // OPT-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // OPT-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // SPIRV-DEV-LABEL: define spir_func void @_Z12test_defaultPf(
@@ -116,6 +120,7 @@ __device__ __host__ void test_default(float *a) {
 // DEV-LABEL: define dso_local void @_Z8test_onePf(
 // DEV-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // DEV-NEXT:  [[ENTRY:.*:]]
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEV-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // DEV-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -124,14 +129,16 @@ __device__ __host__ void test_default(float *a) {
 // DEV-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // DEV-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // DEV-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
 // DEV-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // DEV-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local void @_Z8test_onePf(
 // OPT-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // OPT-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // OPT-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -140,9 +147,10 @@ __device__ __host__ void test_default(float *a) {
 // OPT-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // OPT-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // OPT-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META3]], !amdgpu.no.remote.memory [[META3]]
+// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.remote.memory [[META4]]
 // OPT-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // OPT-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // SPIRV-DEV-LABEL: define spir_func void @_Z8test_onePf(
@@ -201,6 +209,7 @@ __device__ __host__ void test_one(float *a) {
 // DEV-LABEL: define dso_local void @_Z8test_twoPf(
 // DEV-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // DEV-NEXT:  [[ENTRY:.*:]]
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEV-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // DEV-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -209,14 +218,16 @@ __device__ __host__ void test_one(float *a) {
 // DEV-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // DEV-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // DEV-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META3]], !amdgpu.no.fine.grained.memory [[META3]]
+// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.fine.grained.memory [[META4]]
 // DEV-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // DEV-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local void @_Z8test_twoPf(
 // OPT-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // OPT-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // OPT-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -225,9 +236,10 @@ __device__ __host__ void test_one(float *a) {
 // OPT-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // OPT-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // OPT-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META3]]
+// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4]]
 // OPT-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // OPT-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // SPIRV-DEV-LABEL: define spir_func void @_Z8test_twoPf(
@@ -286,6 +298,7 @@ __device__ __host__ void test_two(float *a) {
 // DEV-LABEL: define dso_local void @_Z10test_threePf(
 // DEV-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // DEV-NEXT:  [[ENTRY:.*:]]
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEV-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // DEV-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -294,14 +307,16 @@ __device__ __host__ void test_two(float *a) {
 // DEV-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // DEV-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // DEV-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.remote.memory [[META3]]
+// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.remote.memory [[META4]]
 // DEV-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // DEV-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local void @_Z10test_threePf(
 // OPT-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // OPT-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // OPT-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -310,9 +325,10 @@ __device__ __host__ void test_two(float *a) {
 // OPT-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // OPT-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // OPT-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.remote.memory [[META3]]
+// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.remote.memory [[META4]]
 // OPT-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // OPT-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // SPIRV-DEV-LABEL: define spir_func void @_Z10test_threePf(
@@ -371,6 +387,7 @@ __device__ __host__ void test_three(float *a) {
 // DEV-LABEL: define dso_local void @_Z19test_multiple_attrsPf(
 // DEV-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // DEV-NEXT:  [[ENTRY:.*:]]
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEV-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // DEV-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -379,14 +396,16 @@ __device__ __host__ void test_three(float *a) {
 // DEV-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // DEV-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // DEV-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META3]]
+// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // DEV-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // DEV-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local void @_Z19test_multiple_attrsPf(
 // OPT-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // OPT-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // OPT-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -395,9 +414,10 @@ __device__ __host__ void test_three(float *a) {
 // OPT-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // OPT-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // OPT-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META3]]
+// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4]]
 // OPT-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // OPT-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // SPIRV-DEV-LABEL: define spir_func void @_Z19test_multiple_attrsPf(
@@ -480,6 +500,7 @@ __device__ __host__ void test_multiple_attrs(float *a) {
 // DEV-LABEL: define dso_local void @_Z11test_nestedPf(
 // DEV-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // DEV-NEXT:  [[ENTRY:.*:]]
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // DEV-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // DEV-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -494,7 +515,7 @@ __device__ __host__ void test_multiple_attrs(float *a) {
 // DEV-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // DEV-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // DEV-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META3]], !amdgpu.no.remote.memory [[META3]]
+// DEV-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
 // DEV-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // DEV-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // DEV-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
@@ -506,20 +527,22 @@ __device__ __host__ void test_multiple_attrs(float *a) {
 // DEV-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // DEV-NEXT:    store float 3.000000e+00, ptr addrspace(5) [[DOTATOMICTMP3]], align 4
 // DEV-NEXT:    [[TMP9:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP3]], align 4
-// DEV-NEXT:    [[TMP10:%.*]] = atomicrmw fmin ptr [[TMP8]], float [[TMP9]] syncscope("workgroup") acquire, align 4, !amdgpu.no.remote.memory [[META3]]
+// DEV-NEXT:    [[TMP10:%.*]] = atomicrmw fmin ptr [[TMP8]], float [[TMP9]] syncscope("workgroup") acquire, align 4, !amdgpu.no.remote.memory [[META4]]
 // DEV-NEXT:    store float [[TMP10]], ptr addrspace(5) [[ATOMIC_TEMP4]], align 4
 // DEV-NEXT:    [[TMP11:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP4]], align 4
 // DEV-NEXT:    [[TMP12:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // DEV-NEXT:    store float 4.000000e+00, ptr addrspace(5) [[DOTATOMICTMP5]], align 4
 // DEV-NEXT:    [[TMP13:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP5]], align 4
-// DEV-NEXT:    [[TMP14:%.*]] = atomicrmw fsub ptr [[TMP12]], float [[TMP13]] syncscope("wavefront") release, align 4, !amdgpu.no.fine.grained.memory [[META3]]
+// DEV-NEXT:    [[TMP14:%.*]] = atomicrmw fsub ptr [[TMP12]], float [[TMP13]] syncscope("wavefront") release, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // DEV-NEXT:    store float [[TMP14]], ptr addrspace(5) [[ATOMIC_TEMP6]], align 4
 // DEV-NEXT:    [[TMP15:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP6]], align 4
+// DEV-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // DEV-NEXT:    ret void
 //
 // OPT-LABEL: define dso_local void @_Z11test_nestedPf(
 // OPT-SAME: ptr noundef [[A:%.*]]) #[[ATTR0]] {
 // OPT-NEXT:  [[ENTRY:.*:]]
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // OPT-NEXT:    [[DOTATOMICTMP:%.*]] = alloca float, align 4, addrspace(5)
 // OPT-NEXT:    [[ATOMIC_TEMP:%.*]] = alloca float, align 4, addrspace(5)
@@ -534,7 +557,7 @@ __device__ __host__ void test_multiple_attrs(float *a) {
 // OPT-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // OPT-NEXT:    store float 1.000000e+00, ptr addrspace(5) [[DOTATOMICTMP]], align 4
 // OPT-NEXT:    [[TMP1:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP]], align 4
-// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META3]], !amdgpu.no.remote.memory [[META3]]
+// OPT-NEXT:    [[TMP2:%.*]] = atomicrmw fadd ptr [[TMP0]], float [[TMP1]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.remote.memory [[META4]]
 // OPT-NEXT:    store float [[TMP2]], ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // OPT-NEXT:    [[TMP3:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP]], align 4
 // OPT-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
@@ -546,15 +569,16 @@ __device__ __host__ void test_multiple_attrs(float *a) {
 // OPT-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // OPT-NEXT:    store float 3.000000e+00, ptr addrspace(5) [[DOTATOMICTMP3]], align 4
 // OPT-NEXT:    [[TMP9:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP3]], align 4
-// OPT-NEXT:    [[TMP10:%.*]] = atomicrmw fmin ptr [[TMP8]], float [[TMP9]] syncscope("workgroup") acquire, align 4, !amdgpu.no.remote.memory [[META3]]
+// OPT-NEXT:    [[TMP10:%.*]] = atomicrmw fmin ptr [[TMP8]], float [[TMP9]] syncscope("workgroup") acquire, align 4, !amdgpu.no.remote.memory [[META4]]
 // OPT-NEXT:    store float [[TMP10]], ptr addrspace(5) [[ATOMIC_TEMP4]], align 4
 // OPT-NEXT:    [[TMP11:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP4]], align 4
 // OPT-NEXT:    [[TMP12:%.*]] = load ptr, ptr [[A_ADDR_ASCAST]], align 8
 // OPT-NEXT:    store float 4.000000e+00, ptr addrspace(5) [[DOTATOMICTMP5]], align 4
 // OPT-NEXT:    [[TMP13:%.*]] = load float, ptr addrspace(5) [[DOTATOMICTMP5]], align 4
-// OPT-NEXT:    [[TMP14:%.*]] = atomicrmw fsub ptr [[TMP12]], float [[TMP13]] syncscope("wavefront") release, align 4, !amdgpu.no.fine.grained.memory [[META3]]
+// OPT-NEXT:    [[TMP14:%.*]] = atomicrmw fsub ptr [[TMP12]], float [[TMP13]] syncscope("wavefront") release, align 4, !amdgpu.no.fine.grained.memory [[META4]]
 // OPT-NEXT:    store float [[TMP14]], ptr addrspace(5) [[ATOMIC_TEMP6]], align 4
 // OPT-NEXT:    [[TMP15:%.*]] = load float, ptr addrspace(5) [[ATOMIC_TEMP6]], align 4
+// OPT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // OPT-NEXT:    ret void
 //
 // SPIRV-DEV-LABEL: define spir_func void @_Z11test_nestedPf(
@@ -669,9 +693,33 @@ template<typename T> __device__ __host__ void test_template(T *a) {
 template __device__ __host__ void test_template<float>(float *a);
 
 //.
-// DEV: [[META3]] = !{}
+// DEV: [[META3]] = !{i32 0, !"_Z12test_defaultPf"}
+// DEV: [[META4]] = !{}
+// DEV: [[META5]] = !{i32 1, !"_Z12test_defaultPf"}
+// DEV: [[META6]] = !{i32 0, !"_Z8test_onePf"}
+// DEV: [[META7]] = !{i32 1, !"_Z8test_onePf"}
+// DEV: [[META8]] = !{i32 0, !"_Z8test_twoPf"}
+// DEV: [[META9]] = !{i32 1, !"_Z8test_twoPf"}
+// DEV: [[META10]] = !{i32 0, !"_Z10test_threePf"}
+// DEV: [[META11]] = !{i32 1, !"_Z10test_threePf"}
+// DEV: [[META12]] = !{i32 0, !"_Z19test_multiple_attrsPf"}
+// DEV: [[META13]] = !{i32 1, !"_Z19test_multiple_attrsPf"}
+// DEV: [[META14]] = !{i32 0, !"_Z11test_nestedPf"}
+// DEV: [[META15]] = !{i32 1, !"_Z11test_nestedPf"}
 //.
-// OPT: [[META3]] = !{}
+// OPT: [[META3]] = !{i32 0, !"_Z12test_defaultPf"}
+// OPT: [[META4]] = !{}
+// OPT: [[META5]] = !{i32 1, !"_Z12test_defaultPf"}
+// OPT: [[META6]] = !{i32 0, !"_Z8test_onePf"}
+// OPT: [[META7]] = !{i32 1, !"_Z8test_onePf"}
+// OPT: [[META8]] = !{i32 0, !"_Z8test_twoPf"}
+// OPT: [[META9]] = !{i32 1, !"_Z8test_twoPf"}
+// OPT: [[META10]] = !{i32 0, !"_Z10test_threePf"}
+// OPT: [[META11]] = !{i32 1, !"_Z10test_threePf"}
+// OPT: [[META12]] = !{i32 0, !"_Z19test_multiple_attrsPf"}
+// OPT: [[META13]] = !{i32 1, !"_Z19test_multiple_attrsPf"}
+// OPT: [[META14]] = !{i32 0, !"_Z11test_nestedPf"}
+// OPT: [[META15]] = !{i32 1, !"_Z11test_nestedPf"}
 //.
 // SPIRV-DEV: [[META4]] = !{}
 //.

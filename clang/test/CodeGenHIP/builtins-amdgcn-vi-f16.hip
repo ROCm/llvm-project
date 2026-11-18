@@ -10,6 +10,7 @@
 // CHECK-LABEL: define dso_local void @_Z18test_div_fixup_f16PDF16_DF16_DF16_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]], half noundef [[B:%.*]], half noundef [[C:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca half, align 2, addrspace(5)
@@ -28,6 +29,7 @@
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract half @llvm.amdgcn.div.fixup.f16(half [[TMP0]], half [[TMP1]], half [[TMP2]])
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP3]], ptr [[TMP4]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_div_fixup_f16(_Float16 *out, _Float16 a, _Float16 b, _Float16 c) {
@@ -37,6 +39,7 @@ __device__ void test_div_fixup_f16(_Float16 *out, _Float16 a, _Float16 b, _Float
 // CHECK-LABEL: define dso_local void @_Z12test_rcp_f16PDF16_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT_ADDR]] to ptr
@@ -47,6 +50,7 @@ __device__ void test_div_fixup_f16(_Float16 *out, _Float16 a, _Float16 b, _Float
 // CHECK-NEXT:    [[TMP1:%.*]] = call contract half @llvm.amdgcn.rcp.f16(half [[TMP0]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_rcp_f16(_Float16 *out, _Float16 a) {
@@ -56,6 +60,7 @@ __device__ void test_rcp_f16(_Float16 *out, _Float16 a) {
 // CHECK-LABEL: define dso_local void @_Z13test_sqrt_f16PDF16_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT_ADDR]] to ptr
@@ -66,6 +71,7 @@ __device__ void test_rcp_f16(_Float16 *out, _Float16 a) {
 // CHECK-NEXT:    [[TMP1:%.*]] = call contract half @llvm.amdgcn.sqrt.f16(half [[TMP0]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_sqrt_f16(_Float16 *out, _Float16 a) {
@@ -75,6 +81,7 @@ __device__ void test_sqrt_f16(_Float16 *out, _Float16 a) {
 // CHECK-LABEL: define dso_local void @_Z12test_rsq_f16PDF16_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT_ADDR]] to ptr
@@ -85,6 +92,7 @@ __device__ void test_sqrt_f16(_Float16 *out, _Float16 a) {
 // CHECK-NEXT:    [[TMP1:%.*]] = call contract half @llvm.amdgcn.rsq.f16(half [[TMP0]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_rsq_f16(_Float16 *out, _Float16 a) {
@@ -94,6 +102,7 @@ __device__ void test_rsq_f16(_Float16 *out, _Float16 a) {
 // CHECK-LABEL: define dso_local void @_Z12test_sin_f16PDF16_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT_ADDR]] to ptr
@@ -104,6 +113,7 @@ __device__ void test_rsq_f16(_Float16 *out, _Float16 a) {
 // CHECK-NEXT:    [[TMP1:%.*]] = call contract half @llvm.amdgcn.sin.f16(half [[TMP0]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_sin_f16(_Float16 *out, _Float16 a) {
@@ -113,6 +123,7 @@ __device__ void test_sin_f16(_Float16 *out, _Float16 a) {
 // CHECK-LABEL: define dso_local void @_Z12test_cos_f16PDF16_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT_ADDR]] to ptr
@@ -123,6 +134,7 @@ __device__ void test_sin_f16(_Float16 *out, _Float16 a) {
 // CHECK-NEXT:    [[TMP1:%.*]] = call contract half @llvm.amdgcn.cos.f16(half [[TMP0]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_cos_f16(_Float16 *out, _Float16 a) {
@@ -132,6 +144,7 @@ __device__ void test_cos_f16(_Float16 *out, _Float16 a) {
 // CHECK-LABEL: define dso_local void @_Z14test_ldexp_f16PDF16_DF16_i(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -147,6 +160,7 @@ __device__ void test_cos_f16(_Float16 *out, _Float16 a) {
 // CHECK-NEXT:    [[TMP3:%.*]] = call contract half @llvm.ldexp.f16.i16(half [[TMP0]], i16 [[TMP2]])
 // CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP3]], ptr [[TMP4]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_ldexp_f16(_Float16 *out, _Float16 a, int b) {
@@ -156,6 +170,7 @@ __device__ void test_ldexp_f16(_Float16 *out, _Float16 a, int b) {
 // CHECK-LABEL: define dso_local void @_Z19test_frexp_mant_f16PDF16_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT_ADDR]] to ptr
@@ -166,6 +181,7 @@ __device__ void test_ldexp_f16(_Float16 *out, _Float16 a, int b) {
 // CHECK-NEXT:    [[TMP1:%.*]] = call contract half @llvm.amdgcn.frexp.mant.f16(half [[TMP0]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_frexp_mant_f16(_Float16 *out, _Float16 a) {
@@ -175,6 +191,7 @@ __device__ void test_frexp_mant_f16(_Float16 *out, _Float16 a) {
 // CHECK-LABEL: define dso_local void @_Z18test_frexp_exp_f16PsDF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT_ADDR]] to ptr
@@ -185,6 +202,7 @@ __device__ void test_frexp_mant_f16(_Float16 *out, _Float16 a) {
 // CHECK-NEXT:    [[TMP1:%.*]] = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half [[TMP0]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i16 [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_frexp_exp_f16(short *out, _Float16 a) {
@@ -194,6 +212,7 @@ __device__ void test_frexp_exp_f16(short *out, _Float16 a) {
 // CHECK-LABEL: define dso_local void @_Z14test_fract_f16PDF16_DF16_(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[OUT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT_ADDR]] to ptr
@@ -204,6 +223,7 @@ __device__ void test_frexp_exp_f16(short *out, _Float16 a) {
 // CHECK-NEXT:    [[TMP1:%.*]] = call contract half @llvm.amdgcn.fract.f16(half [[TMP0]])
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[TMP1]], ptr [[TMP2]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_fract_f16(_Float16 *out, _Float16 a) {
@@ -213,6 +233,7 @@ __device__ void test_fract_f16(_Float16 *out, _Float16 a) {
 // CHECK-LABEL: define dso_local void @_Z14test_class_f16PDF16_DF16_i(
 // CHECK-SAME: ptr noundef [[OUT:%.*]], half noundef [[A:%.*]], i32 noundef [[B:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca half, align 2, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -228,8 +249,33 @@ __device__ void test_fract_f16(_Float16 *out, _Float16 a) {
 // CHECK-NEXT:    [[CONV:%.*]] = uitofp contract i1 [[TMP2]] to half
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store half [[CONV]], ptr [[TMP3]], align 2
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 __device__ void test_class_f16(_Float16 *out, _Float16 a, int b) {
   *out = __builtin_amdgcn_classh(a, b);
 }
+//.
+// CHECK: [[META3]] = !{i32 0, !"_Z18test_div_fixup_f16PDF16_DF16_DF16_DF16_"}
+// CHECK: [[META4]] = !{i32 1, !"_Z18test_div_fixup_f16PDF16_DF16_DF16_DF16_"}
+// CHECK: [[META5]] = !{i32 0, !"_Z12test_rcp_f16PDF16_DF16_"}
+// CHECK: [[META6]] = !{i32 1, !"_Z12test_rcp_f16PDF16_DF16_"}
+// CHECK: [[META7]] = !{i32 0, !"_Z13test_sqrt_f16PDF16_DF16_"}
+// CHECK: [[META8]] = !{i32 1, !"_Z13test_sqrt_f16PDF16_DF16_"}
+// CHECK: [[META9]] = !{i32 0, !"_Z12test_rsq_f16PDF16_DF16_"}
+// CHECK: [[META10]] = !{i32 1, !"_Z12test_rsq_f16PDF16_DF16_"}
+// CHECK: [[META11]] = !{i32 0, !"_Z12test_sin_f16PDF16_DF16_"}
+// CHECK: [[META12]] = !{i32 1, !"_Z12test_sin_f16PDF16_DF16_"}
+// CHECK: [[META13]] = !{i32 0, !"_Z12test_cos_f16PDF16_DF16_"}
+// CHECK: [[META14]] = !{i32 1, !"_Z12test_cos_f16PDF16_DF16_"}
+// CHECK: [[META15]] = !{i32 0, !"_Z14test_ldexp_f16PDF16_DF16_i"}
+// CHECK: [[META16]] = !{i32 1, !"_Z14test_ldexp_f16PDF16_DF16_i"}
+// CHECK: [[META17]] = !{i32 0, !"_Z19test_frexp_mant_f16PDF16_DF16_"}
+// CHECK: [[META18]] = !{i32 1, !"_Z19test_frexp_mant_f16PDF16_DF16_"}
+// CHECK: [[META19]] = !{i32 0, !"_Z18test_frexp_exp_f16PsDF16_"}
+// CHECK: [[META20]] = !{i32 1, !"_Z18test_frexp_exp_f16PsDF16_"}
+// CHECK: [[META21]] = !{i32 0, !"_Z14test_fract_f16PDF16_DF16_"}
+// CHECK: [[META22]] = !{i32 1, !"_Z14test_fract_f16PDF16_DF16_"}
+// CHECK: [[META23]] = !{i32 0, !"_Z14test_class_f16PDF16_DF16_i"}
+// CHECK: [[META24]] = !{i32 1, !"_Z14test_class_f16PDF16_DF16_i"}
+//.

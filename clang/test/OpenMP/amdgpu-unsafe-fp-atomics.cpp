@@ -10,19 +10,23 @@ double dv, dx;
 // DEFAULT-LABEL: define hidden void @_Z15atomic_fadd_f32v(
 // DEFAULT-SAME: ) #[[ATTR0:[0-9]+]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load float, ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
-// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4:![0-9]+]], !amdgpu.no.remote.memory [[META4]]
+// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META5:![0-9]+]], !amdgpu.no.remote.memory [[META5]]
 // DEFAULT-NEXT:    [[ADD:%.*]] = fadd float [[TMP1]], [[TMP0]]
 // DEFAULT-NEXT:    store float [[ADD]], ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // UNSAFE-FP-ATOMICS-LABEL: define hidden void @_Z15atomic_fadd_f32v(
 // UNSAFE-FP-ATOMICS-SAME: ) #[[ATTR0:[0-9]+]] {
 // UNSAFE-FP-ATOMICS-NEXT:  [[ENTRY:.*:]]
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    [[TMP0:%.*]] = load float, ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
-// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4:![0-9]+]], !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !atomic.ignore.denormal.mode [[META5:![0-9]+]], !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // UNSAFE-FP-ATOMICS-NEXT:    [[ADD:%.*]] = fadd float [[TMP1]], [[TMP0]]
 // UNSAFE-FP-ATOMICS-NEXT:    store float [[ADD]], ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    ret void
 //
 void atomic_fadd_f32() {
@@ -33,19 +37,23 @@ void atomic_fadd_f32() {
 // DEFAULT-LABEL: define hidden void @_Z15atomic_fadd_f64v(
 // DEFAULT-SAME: ) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load double, ptr addrspacecast (ptr addrspace(1) @dv to ptr), align 8
-// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @dx to ptr), double [[TMP0]] monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @dx to ptr), double [[TMP0]] monotonic, align 8, !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // DEFAULT-NEXT:    [[ADD:%.*]] = fadd double [[TMP1]], [[TMP0]]
 // DEFAULT-NEXT:    store double [[ADD]], ptr addrspacecast (ptr addrspace(1) @dv to ptr), align 8
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // UNSAFE-FP-ATOMICS-LABEL: define hidden void @_Z15atomic_fadd_f64v(
 // UNSAFE-FP-ATOMICS-SAME: ) #[[ATTR0]] {
 // UNSAFE-FP-ATOMICS-NEXT:  [[ENTRY:.*:]]
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    [[TMP0:%.*]] = load double, ptr addrspacecast (ptr addrspace(1) @dv to ptr), align 8
-// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @dx to ptr), double [[TMP0]] monotonic, align 8, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @dx to ptr), double [[TMP0]] monotonic, align 8, !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // UNSAFE-FP-ATOMICS-NEXT:    [[ADD:%.*]] = fadd double [[TMP1]], [[TMP0]]
 // UNSAFE-FP-ATOMICS-NEXT:    store double [[ADD]], ptr addrspacecast (ptr addrspace(1) @dv to ptr), align 8
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    ret void
 //
 void atomic_fadd_f64() {
@@ -58,19 +66,23 @@ enum { ompx_fast_fp_atomics = 1 << 19, ompx_safe_fp_atomics = 1 << 20 };
 // DEFAULT-LABEL: define hidden void @_Z25atomic_fadd_f32_fast_hintv(
 // DEFAULT-SAME: ) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load float, ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
-// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !atomic.ignore.denormal.mode [[META5]], !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // DEFAULT-NEXT:    [[ADD:%.*]] = fadd float [[TMP1]], [[TMP0]]
 // DEFAULT-NEXT:    store float [[ADD]], ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // UNSAFE-FP-ATOMICS-LABEL: define hidden void @_Z25atomic_fadd_f32_fast_hintv(
 // UNSAFE-FP-ATOMICS-SAME: ) #[[ATTR0]] {
 // UNSAFE-FP-ATOMICS-NEXT:  [[ENTRY:.*:]]
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    [[TMP0:%.*]] = load float, ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
-// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !atomic.ignore.denormal.mode [[META4]], !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !atomic.ignore.denormal.mode [[META5]], !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // UNSAFE-FP-ATOMICS-NEXT:    [[ADD:%.*]] = fadd float [[TMP1]], [[TMP0]]
 // UNSAFE-FP-ATOMICS-NEXT:    store float [[ADD]], ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    ret void
 //
 void atomic_fadd_f32_fast_hint() {
@@ -81,19 +93,23 @@ void atomic_fadd_f32_fast_hint() {
 // DEFAULT-LABEL: define hidden void @_Z25atomic_fadd_f32_safe_hintv(
 // DEFAULT-SAME: ) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load float, ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
-// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // DEFAULT-NEXT:    [[ADD:%.*]] = fadd float [[TMP1]], [[TMP0]]
 // DEFAULT-NEXT:    store float [[ADD]], ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // UNSAFE-FP-ATOMICS-LABEL: define hidden void @_Z25atomic_fadd_f32_safe_hintv(
 // UNSAFE-FP-ATOMICS-SAME: ) #[[ATTR0]] {
 // UNSAFE-FP-ATOMICS-NEXT:  [[ENTRY:.*:]]
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    [[TMP0:%.*]] = load float, ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
-// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // UNSAFE-FP-ATOMICS-NEXT:    [[ADD:%.*]] = fadd float [[TMP1]], [[TMP0]]
 // UNSAFE-FP-ATOMICS-NEXT:    store float [[ADD]], ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    ret void
 //
 void atomic_fadd_f32_safe_hint() {
@@ -104,19 +120,23 @@ void atomic_fadd_f32_safe_hint() {
 // DEFAULT-LABEL: define hidden void @_Z26atomic_fadd_f32_both_hintsv(
 // DEFAULT-SAME: ) #[[ATTR0]] {
 // DEFAULT-NEXT:  [[ENTRY:.*:]]
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    [[TMP0:%.*]] = load float, ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
-// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// DEFAULT-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // DEFAULT-NEXT:    [[ADD:%.*]] = fadd float [[TMP1]], [[TMP0]]
 // DEFAULT-NEXT:    store float [[ADD]], ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
+// DEFAULT-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // DEFAULT-NEXT:    ret void
 //
 // UNSAFE-FP-ATOMICS-LABEL: define hidden void @_Z26atomic_fadd_f32_both_hintsv(
 // UNSAFE-FP-ATOMICS-SAME: ) #[[ATTR0]] {
 // UNSAFE-FP-ATOMICS-NEXT:  [[ENTRY:.*:]]
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    [[TMP0:%.*]] = load float, ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
-// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META4]], !amdgpu.no.remote.memory [[META4]]
+// UNSAFE-FP-ATOMICS-NEXT:    [[TMP1:%.*]] = atomicrmw fadd ptr addrspacecast (ptr addrspace(1) @fx to ptr), float [[TMP0]] monotonic, align 4, !amdgpu.no.fine.grained.memory [[META5]], !amdgpu.no.remote.memory [[META5]]
 // UNSAFE-FP-ATOMICS-NEXT:    [[ADD:%.*]] = fadd float [[TMP1]], [[TMP0]]
 // UNSAFE-FP-ATOMICS-NEXT:    store float [[ADD]], ptr addrspacecast (ptr addrspace(1) @fv to ptr), align 4
+// UNSAFE-FP-ATOMICS-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // UNSAFE-FP-ATOMICS-NEXT:    ret void
 //
 void atomic_fadd_f32_both_hints() {
@@ -126,7 +146,27 @@ void atomic_fadd_f32_both_hints() {
 
 #pragma omp end declare target
 //.
-// DEFAULT: [[META4]] = !{}
+// DEFAULT: [[META4]] = !{i32 0, !"_Z15atomic_fadd_f32v"}
+// DEFAULT: [[META5]] = !{}
+// DEFAULT: [[META6]] = !{i32 1, !"_Z15atomic_fadd_f32v"}
+// DEFAULT: [[META7]] = !{i32 0, !"_Z15atomic_fadd_f64v"}
+// DEFAULT: [[META8]] = !{i32 1, !"_Z15atomic_fadd_f64v"}
+// DEFAULT: [[META9]] = !{i32 0, !"_Z25atomic_fadd_f32_fast_hintv"}
+// DEFAULT: [[META10]] = !{i32 1, !"_Z25atomic_fadd_f32_fast_hintv"}
+// DEFAULT: [[META11]] = !{i32 0, !"_Z25atomic_fadd_f32_safe_hintv"}
+// DEFAULT: [[META12]] = !{i32 1, !"_Z25atomic_fadd_f32_safe_hintv"}
+// DEFAULT: [[META13]] = !{i32 0, !"_Z26atomic_fadd_f32_both_hintsv"}
+// DEFAULT: [[META14]] = !{i32 1, !"_Z26atomic_fadd_f32_both_hintsv"}
 //.
-// UNSAFE-FP-ATOMICS: [[META4]] = !{}
+// UNSAFE-FP-ATOMICS: [[META4]] = !{i32 0, !"_Z15atomic_fadd_f32v"}
+// UNSAFE-FP-ATOMICS: [[META5]] = !{}
+// UNSAFE-FP-ATOMICS: [[META6]] = !{i32 1, !"_Z15atomic_fadd_f32v"}
+// UNSAFE-FP-ATOMICS: [[META7]] = !{i32 0, !"_Z15atomic_fadd_f64v"}
+// UNSAFE-FP-ATOMICS: [[META8]] = !{i32 1, !"_Z15atomic_fadd_f64v"}
+// UNSAFE-FP-ATOMICS: [[META9]] = !{i32 0, !"_Z25atomic_fadd_f32_fast_hintv"}
+// UNSAFE-FP-ATOMICS: [[META10]] = !{i32 1, !"_Z25atomic_fadd_f32_fast_hintv"}
+// UNSAFE-FP-ATOMICS: [[META11]] = !{i32 0, !"_Z25atomic_fadd_f32_safe_hintv"}
+// UNSAFE-FP-ATOMICS: [[META12]] = !{i32 1, !"_Z25atomic_fadd_f32_safe_hintv"}
+// UNSAFE-FP-ATOMICS: [[META13]] = !{i32 0, !"_Z26atomic_fadd_f32_both_hintsv"}
+// UNSAFE-FP-ATOMICS: [[META14]] = !{i32 1, !"_Z26atomic_fadd_f32_both_hintsv"}
 //.

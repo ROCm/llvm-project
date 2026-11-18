@@ -8,6 +8,7 @@ typedef _Float16 half4 __attribute__((ext_vector_type(4)));
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_gather4_lz_2d_v4f32_f32_r(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -28,6 +29,7 @@ typedef _Float16 half4 __attribute__((ext_vector_type(4)));
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x float> @llvm.amdgcn.image.gather4.lz.2d.v4f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP4]]
 //
 float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_r(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -38,6 +40,7 @@ float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_r(float4 v4f32, float f32, int 
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_gather4_lz_2d_v4f32_f32_g(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -58,6 +61,7 @@ float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_r(float4 v4f32, float f32, int 
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x float> @llvm.amdgcn.image.gather4.lz.2d.v4f32.f32.v8i32.v4i32(i32 2, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP4]]
 //
 float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_g(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -68,6 +72,7 @@ float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_g(float4 v4f32, float f32, int 
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_gather4_lz_2d_v4f32_f32_b(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -88,6 +93,7 @@ float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_g(float4 v4f32, float f32, int 
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x float> @llvm.amdgcn.image.gather4.lz.2d.v4f32.f32.v8i32.v4i32(i32 4, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META7:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP4]]
 //
 float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_b(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -98,6 +104,7 @@ float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_b(float4 v4f32, float f32, int 
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_gather4_lz_2d_v4f32_f32_a(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META8:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -118,6 +125,7 @@ float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_b(float4 v4f32, float f32, int 
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x float> @llvm.amdgcn.image.gather4.lz.2d.v4f32.f32.v8i32.v4i32(i32 8, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META9:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP4]]
 //
 float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_a(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -128,6 +136,7 @@ float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_a(float4 v4f32, float f32, int 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_gather4_lz_2d_v4f16_f32_r(
 // CHECK-SAME: <4 x half> noundef [[V4F16:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META10:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F16_ADDR:%.*]] = alloca <4 x half>, align 8, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -148,6 +157,7 @@ float4 test_amdgcn_image_gather4_lz_2d_v4f32_f32_a(float4 v4f32, float f32, int 
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x half> @llvm.amdgcn.image.gather4.lz.2d.v4f16.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META11:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP4]]
 //
 half4 test_amdgcn_image_gather4_lz_2d_v4f16_f32_r(half4 v4f16, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -158,6 +168,7 @@ half4 test_amdgcn_image_gather4_lz_2d_v4f16_f32_r(half4 v4f16, float f32, int i3
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_lz_1d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META12:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -177,6 +188,7 @@ half4 test_amdgcn_image_gather4_lz_2d_v4f16_f32_r(half4 v4f16, float f32, int i3
 // CHECK-NEXT:    [[TMP1:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP2:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP3:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.lz.1d.v4f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], <8 x i32> [[TMP1]], <4 x i32> [[TMP2]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META13:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP3]]
 //
 float4 test_amdgcn_image_sample_lz_1d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -187,6 +199,7 @@ float4 test_amdgcn_image_sample_lz_1d_v4f32_f32(float4 v4f32, float f32, int i32
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_l_1d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META14:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -207,6 +220,7 @@ float4 test_amdgcn_image_sample_lz_1d_v4f32_f32(float4 v4f32, float f32, int i32
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.l.1d.v4f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META15:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP4]]
 //
 float4 test_amdgcn_image_sample_l_1d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -217,6 +231,7 @@ float4 test_amdgcn_image_sample_l_1d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_d_1d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META16:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -238,6 +253,7 @@ float4 test_amdgcn_image_sample_l_1d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.d.1d.v4f32.f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META17:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP5]]
 //
 float4 test_amdgcn_image_sample_d_1d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -248,6 +264,7 @@ float4 test_amdgcn_image_sample_d_1d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_lz_2d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META18:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -268,6 +285,7 @@ float4 test_amdgcn_image_sample_d_1d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.lz.2d.v4f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META19:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP4]]
 //
 float4 test_amdgcn_image_sample_lz_2d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -278,6 +296,7 @@ float4 test_amdgcn_image_sample_lz_2d_v4f32_f32(float4 v4f32, float f32, int i32
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_l_2d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META20:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -299,6 +318,7 @@ float4 test_amdgcn_image_sample_lz_2d_v4f32_f32(float4 v4f32, float f32, int i32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.l.2d.v4f32.f32.v8i32.v4i32(i32 10, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META21:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP5]]
 //
 float4 test_amdgcn_image_sample_l_2d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -309,6 +329,7 @@ float4 test_amdgcn_image_sample_l_2d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_d_2d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META22:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -333,6 +354,7 @@ float4 test_amdgcn_image_sample_l_2d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP6:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP7:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP8:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.d.2d.v4f32.f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], float [[TMP4]], float [[TMP5]], <8 x i32> [[TMP6]], <4 x i32> [[TMP7]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META23:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP8]]
 //
 float4 test_amdgcn_image_sample_d_2d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -342,6 +364,7 @@ float4 test_amdgcn_image_sample_d_2d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_lz_3d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META24:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -363,6 +386,7 @@ float4 test_amdgcn_image_sample_d_2d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.lz.3d.v4f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META25:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP5]]
 //
 float4 test_amdgcn_image_sample_lz_3d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -373,6 +397,7 @@ float4 test_amdgcn_image_sample_lz_3d_v4f32_f32(float4 v4f32, float f32, int i32
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_l_3d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META26:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -395,6 +420,7 @@ float4 test_amdgcn_image_sample_lz_3d_v4f32_f32(float4 v4f32, float f32, int i32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.l.3d.v4f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META27:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP6]]
 //
 float4 test_amdgcn_image_sample_l_3d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -405,6 +431,7 @@ float4 test_amdgcn_image_sample_l_3d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_d_3d_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META28:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -432,6 +459,7 @@ float4 test_amdgcn_image_sample_l_3d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP9:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP10:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP11:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.d.3d.v4f32.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], float [[TMP4]], float [[TMP5]], float [[TMP6]], float [[TMP7]], float [[TMP8]], <8 x i32> [[TMP9]], <4 x i32> [[TMP10]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META29:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP11]]
 //
 float4 test_amdgcn_image_sample_d_3d_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -442,6 +470,7 @@ float4 test_amdgcn_image_sample_d_3d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_lz_cube_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META30:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -463,6 +492,7 @@ float4 test_amdgcn_image_sample_d_3d_v4f32_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.lz.cube.v4f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META31:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP5]]
 //
 float4 test_amdgcn_image_sample_lz_cube_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -473,6 +503,7 @@ float4 test_amdgcn_image_sample_lz_cube_v4f32_f32(float4 v4f32, float f32, int i
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_l_cube_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META32:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -495,6 +526,7 @@ float4 test_amdgcn_image_sample_lz_cube_v4f32_f32(float4 v4f32, float f32, int i
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.l.cube.v4f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META33:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP6]]
 //
 float4 test_amdgcn_image_sample_l_cube_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -505,6 +537,7 @@ float4 test_amdgcn_image_sample_l_cube_v4f32_f32(float4 v4f32, float f32, int i3
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_lz_1darray_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META34:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -525,6 +558,7 @@ float4 test_amdgcn_image_sample_l_cube_v4f32_f32(float4 v4f32, float f32, int i3
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.lz.1darray.v4f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META35:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP4]]
 //
 float4 test_amdgcn_image_sample_lz_1darray_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -535,6 +569,7 @@ float4 test_amdgcn_image_sample_lz_1darray_v4f32_f32(float4 v4f32, float f32, in
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_l_1darray_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META36:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -556,6 +591,7 @@ float4 test_amdgcn_image_sample_lz_1darray_v4f32_f32(float4 v4f32, float f32, in
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.l.1darray.v4f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META37:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP5]]
 //
 float4 test_amdgcn_image_sample_l_1darray_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -566,6 +602,7 @@ float4 test_amdgcn_image_sample_l_1darray_v4f32_f32(float4 v4f32, float f32, int
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_d_1darray_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META38:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -588,6 +625,7 @@ float4 test_amdgcn_image_sample_l_1darray_v4f32_f32(float4 v4f32, float f32, int
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.d.1darray.v4f32.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META39:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP6]]
 //
 float4 test_amdgcn_image_sample_d_1darray_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -598,6 +636,7 @@ float4 test_amdgcn_image_sample_d_1darray_v4f32_f32(float4 v4f32, float f32, int
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_lz_2darray_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META40:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -619,6 +658,7 @@ float4 test_amdgcn_image_sample_d_1darray_v4f32_f32(float4 v4f32, float f32, int
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.lz.2darray.v4f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META41:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP5]]
 //
 float4 test_amdgcn_image_sample_lz_2darray_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -629,6 +669,7 @@ float4 test_amdgcn_image_sample_lz_2darray_v4f32_f32(float4 v4f32, float f32, in
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_l_2darray_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META42:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -651,6 +692,7 @@ float4 test_amdgcn_image_sample_lz_2darray_v4f32_f32(float4 v4f32, float f32, in
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.l.2darray.v4f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META43:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP6]]
 //
 float4 test_amdgcn_image_sample_l_2darray_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -661,6 +703,7 @@ float4 test_amdgcn_image_sample_l_2darray_v4f32_f32(float4 v4f32, float f32, int
 // CHECK-LABEL: define dso_local <4 x float> @test_amdgcn_image_sample_d_2darray_v4f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META44:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -686,6 +729,7 @@ float4 test_amdgcn_image_sample_l_2darray_v4f32_f32(float4 v4f32, float f32, int
 // CHECK-NEXT:    [[TMP7:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP8:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP9:%.*]] = call <4 x float> @llvm.amdgcn.image.sample.d.2darray.v4f32.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], float [[TMP4]], float [[TMP5]], float [[TMP6]], <8 x i32> [[TMP7]], <4 x i32> [[TMP8]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META45:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x float> [[TMP9]]
 //
 float4 test_amdgcn_image_sample_d_2darray_v4f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -696,6 +740,7 @@ float4 test_amdgcn_image_sample_d_2darray_v4f32_f32(float4 v4f32, float f32, int
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_lz_1d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META46:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -715,6 +760,7 @@ float4 test_amdgcn_image_sample_d_2darray_v4f32_f32(float4 v4f32, float f32, int
 // CHECK-NEXT:    [[TMP1:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP2:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP3:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.lz.1d.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], <8 x i32> [[TMP1]], <4 x i32> [[TMP2]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META47:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP3]]
 //
 half4 test_amdgcn_image_sample_lz_1d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -725,6 +771,7 @@ half4 test_amdgcn_image_sample_lz_1d_v4f16_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_l_1d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META48:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -745,6 +792,7 @@ half4 test_amdgcn_image_sample_lz_1d_v4f16_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.l.1d.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META49:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP4]]
 //
 half4 test_amdgcn_image_sample_l_1d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -755,6 +803,7 @@ half4 test_amdgcn_image_sample_l_1d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_d_1d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META50:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -776,6 +825,7 @@ half4 test_amdgcn_image_sample_l_1d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.d.1d.v4f16.f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META51:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP5]]
 //
 half4 test_amdgcn_image_sample_d_1d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -786,6 +836,7 @@ half4 test_amdgcn_image_sample_d_1d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_lz_2d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META52:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -806,6 +857,7 @@ half4 test_amdgcn_image_sample_d_1d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.lz.2d.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META53:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP4]]
 //
 half4 test_amdgcn_image_sample_lz_2d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -816,6 +868,7 @@ half4 test_amdgcn_image_sample_lz_2d_v4f16_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_l_2d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META54:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -837,6 +890,7 @@ half4 test_amdgcn_image_sample_lz_2d_v4f16_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.l.2d.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META55:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP5]]
 //
 half4 test_amdgcn_image_sample_l_2d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -847,6 +901,7 @@ half4 test_amdgcn_image_sample_l_2d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_d_2d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META56:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -871,6 +926,7 @@ half4 test_amdgcn_image_sample_l_2d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-NEXT:    [[TMP6:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP7:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP8:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.d.2d.v4f16.f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], float [[TMP4]], float [[TMP5]], <8 x i32> [[TMP6]], <4 x i32> [[TMP7]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META57:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP8]]
 //
 half4 test_amdgcn_image_sample_d_2d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -881,6 +937,7 @@ half4 test_amdgcn_image_sample_d_2d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_lz_3d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META58:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -902,6 +959,7 @@ half4 test_amdgcn_image_sample_d_2d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.lz.3d.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META59:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP5]]
 //
 half4 test_amdgcn_image_sample_lz_3d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -912,6 +970,7 @@ half4 test_amdgcn_image_sample_lz_3d_v4f16_f32(float4 v4f32, float f32, int i32,
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_l_3d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META60:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -934,6 +993,7 @@ half4 test_amdgcn_image_sample_lz_3d_v4f16_f32(float4 v4f32, float f32, int i32,
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.l.3d.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META61:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP6]]
 //
 half4 test_amdgcn_image_sample_l_3d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -944,6 +1004,7 @@ half4 test_amdgcn_image_sample_l_3d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_d_3d_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META62:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -971,6 +1032,7 @@ half4 test_amdgcn_image_sample_l_3d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-NEXT:    [[TMP9:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP10:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP11:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.d.3d.v4f16.f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], float [[TMP4]], float [[TMP5]], float [[TMP6]], float [[TMP7]], float [[TMP8]], <8 x i32> [[TMP9]], <4 x i32> [[TMP10]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META63:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP11]]
 //
 half4 test_amdgcn_image_sample_d_3d_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -981,6 +1043,7 @@ half4 test_amdgcn_image_sample_d_3d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_lz_cube_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META64:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1002,6 +1065,7 @@ half4 test_amdgcn_image_sample_d_3d_v4f16_f32(float4 v4f32, float f32, int i32, 
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.lz.cube.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META65:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP5]]
 //
 half4 test_amdgcn_image_sample_lz_cube_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1012,6 +1076,7 @@ half4 test_amdgcn_image_sample_lz_cube_v4f16_f32(float4 v4f32, float f32, int i3
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_l_cube_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META66:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1034,6 +1099,7 @@ half4 test_amdgcn_image_sample_lz_cube_v4f16_f32(float4 v4f32, float f32, int i3
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.l.cube.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META67:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP6]]
 //
 half4 test_amdgcn_image_sample_l_cube_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1044,6 +1110,7 @@ half4 test_amdgcn_image_sample_l_cube_v4f16_f32(float4 v4f32, float f32, int i32
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_lz_1darray_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META68:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1064,6 +1131,7 @@ half4 test_amdgcn_image_sample_l_cube_v4f16_f32(float4 v4f32, float f32, int i32
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.lz.1darray.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META69:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP4]]
 //
 half4 test_amdgcn_image_sample_lz_1darray_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1074,6 +1142,7 @@ half4 test_amdgcn_image_sample_lz_1darray_v4f16_f32(float4 v4f32, float f32, int
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_l_1darray_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META70:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1095,6 +1164,7 @@ half4 test_amdgcn_image_sample_lz_1darray_v4f16_f32(float4 v4f32, float f32, int
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.l.1darray.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META71:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP5]]
 //
 half4 test_amdgcn_image_sample_l_1darray_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1105,6 +1175,7 @@ half4 test_amdgcn_image_sample_l_1darray_v4f16_f32(float4 v4f32, float f32, int 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_d_1darray_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META72:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1127,6 +1198,7 @@ half4 test_amdgcn_image_sample_l_1darray_v4f16_f32(float4 v4f32, float f32, int 
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.d.1darray.v4f16.f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META73:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP6]]
 //
 half4 test_amdgcn_image_sample_d_1darray_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1137,6 +1209,7 @@ half4 test_amdgcn_image_sample_d_1darray_v4f16_f32(float4 v4f32, float f32, int 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_lz_2darray_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META74:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1158,6 +1231,7 @@ half4 test_amdgcn_image_sample_d_1darray_v4f16_f32(float4 v4f32, float f32, int 
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.lz.2darray.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META75:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP5]]
 //
 half4 test_amdgcn_image_sample_lz_2darray_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1168,6 +1242,7 @@ half4 test_amdgcn_image_sample_lz_2darray_v4f16_f32(float4 v4f32, float f32, int
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_l_2darray_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META76:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1190,6 +1265,7 @@ half4 test_amdgcn_image_sample_lz_2darray_v4f16_f32(float4 v4f32, float f32, int
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.l.2darray.v4f16.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META77:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP6]]
 //
 half4 test_amdgcn_image_sample_l_2darray_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1200,6 +1276,7 @@ half4 test_amdgcn_image_sample_l_2darray_v4f16_f32(float4 v4f32, float f32, int 
 // CHECK-LABEL: define dso_local <4 x half> @test_amdgcn_image_sample_d_2darray_v4f16_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META78:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1225,6 +1302,7 @@ half4 test_amdgcn_image_sample_l_2darray_v4f16_f32(float4 v4f32, float f32, int 
 // CHECK-NEXT:    [[TMP7:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP8:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP9:%.*]] = call <4 x half> @llvm.amdgcn.image.sample.d.2darray.v4f16.f32.f32.v8i32.v4i32(i32 15, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], float [[TMP4]], float [[TMP5]], float [[TMP6]], <8 x i32> [[TMP7]], <4 x i32> [[TMP8]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META79:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret <4 x half> [[TMP9]]
 //
 half4 test_amdgcn_image_sample_d_2darray_v4f16_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1235,6 +1313,7 @@ half4 test_amdgcn_image_sample_d_2darray_v4f16_f32(float4 v4f32, float f32, int 
 // CHECK-LABEL: define dso_local float @test_amdgcn_image_sample_lz_2d_f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META80:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1255,6 +1334,7 @@ half4 test_amdgcn_image_sample_d_2darray_v4f16_f32(float4 v4f32, float f32, int 
 // CHECK-NEXT:    [[TMP2:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP3:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP4:%.*]] = call float @llvm.amdgcn.image.sample.lz.2d.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], <8 x i32> [[TMP2]], <4 x i32> [[TMP3]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META81:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP4]]
 //
 float test_amdgcn_image_sample_lz_2d_f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1265,6 +1345,7 @@ float test_amdgcn_image_sample_lz_2d_f32_f32(float4 v4f32, float f32, int i32, _
 // CHECK-LABEL: define dso_local float @test_amdgcn_image_sample_l_2d_f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META82:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1286,6 +1367,7 @@ float test_amdgcn_image_sample_lz_2d_f32_f32(float4 v4f32, float f32, int i32, _
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call float @llvm.amdgcn.image.sample.l.2d.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META83:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP5]]
 //
 float test_amdgcn_image_sample_l_2d_f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1296,6 +1378,7 @@ float test_amdgcn_image_sample_l_2d_f32_f32(float4 v4f32, float f32, int i32, __
 // CHECK-LABEL: define dso_local float @test_amdgcn_image_sample_d_2d_f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META84:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1320,6 +1403,7 @@ float test_amdgcn_image_sample_l_2d_f32_f32(float4 v4f32, float f32, int i32, __
 // CHECK-NEXT:    [[TMP6:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP7:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP8:%.*]] = call float @llvm.amdgcn.image.sample.d.2d.f32.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], float [[TMP4]], float [[TMP5]], <8 x i32> [[TMP6]], <4 x i32> [[TMP7]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META85:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP8]]
 //
 float test_amdgcn_image_sample_d_2d_f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1330,6 +1414,7 @@ float test_amdgcn_image_sample_d_2d_f32_f32(float4 v4f32, float f32, int i32, __
 // CHECK-LABEL: define dso_local float @test_amdgcn_image_sample_lz_2darray_f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META86:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1351,6 +1436,7 @@ float test_amdgcn_image_sample_d_2d_f32_f32(float4 v4f32, float f32, int i32, __
 // CHECK-NEXT:    [[TMP3:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP4:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP5:%.*]] = call float @llvm.amdgcn.image.sample.lz.2darray.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], <8 x i32> [[TMP3]], <4 x i32> [[TMP4]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META87:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP5]]
 //
 float test_amdgcn_image_sample_lz_2darray_f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1361,6 +1447,7 @@ float test_amdgcn_image_sample_lz_2darray_f32_f32(float4 v4f32, float f32, int i
 // CHECK-LABEL: define dso_local float @test_amdgcn_image_sample_l_2darray_f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META88:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1383,6 +1470,7 @@ float test_amdgcn_image_sample_lz_2darray_f32_f32(float4 v4f32, float f32, int i
 // CHECK-NEXT:    [[TMP4:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP5:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP6:%.*]] = call float @llvm.amdgcn.image.sample.l.2darray.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], <8 x i32> [[TMP4]], <4 x i32> [[TMP5]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META89:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP6]]
 //
 float test_amdgcn_image_sample_l_2darray_f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
@@ -1393,6 +1481,7 @@ float test_amdgcn_image_sample_l_2darray_f32_f32(float4 v4f32, float f32, int i3
 // CHECK-LABEL: define dso_local float @test_amdgcn_image_sample_d_2darray_f32_f32(
 // CHECK-SAME: <4 x float> noundef [[V4F32:%.*]], float noundef [[F32:%.*]], i32 noundef [[I32:%.*]], <8 x i32> [[TEX:%.*]], <4 x i32> noundef [[VEC4I32:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META90:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    [[V4F32_ADDR:%.*]] = alloca <4 x float>, align 16, addrspace(5)
 // CHECK-NEXT:    [[F32_ADDR:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    [[I32_ADDR:%.*]] = alloca i32, align 4, addrspace(5)
@@ -1418,9 +1507,102 @@ float test_amdgcn_image_sample_l_2darray_f32_f32(float4 v4f32, float f32, int i3
 // CHECK-NEXT:    [[TMP7:%.*]] = load <8 x i32>, ptr [[TEX_ADDR_ASCAST]], align 32
 // CHECK-NEXT:    [[TMP8:%.*]] = load <4 x i32>, ptr [[VEC4I32_ADDR_ASCAST]], align 16
 // CHECK-NEXT:    [[TMP9:%.*]] = call float @llvm.amdgcn.image.sample.d.2darray.f32.f32.f32.v8i32.v4i32(i32 1, float [[TMP0]], float [[TMP1]], float [[TMP2]], float [[TMP3]], float [[TMP4]], float [[TMP5]], float [[TMP6]], <8 x i32> [[TMP7]], <4 x i32> [[TMP8]], i1 false, i32 120, i32 110)
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META91:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret float [[TMP9]]
 //
 float test_amdgcn_image_sample_d_2darray_f32_f32(float4 v4f32, float f32, int i32, __amdgpu_texture_t tex, int4 vec4i32) {
 
   return __builtin_amdgcn_image_sample_d_2darray_f32_f32(1, f32, f32, f32, f32, f32, f32, f32, tex, vec4i32, 0, 120, 110);
 }
+//.
+// CHECK: [[META2]] = !{i32 0, !"test_amdgcn_image_gather4_lz_2d_v4f32_f32_r"}
+// CHECK: [[META3]] = !{i32 1, !"test_amdgcn_image_gather4_lz_2d_v4f32_f32_r"}
+// CHECK: [[META4]] = !{i32 0, !"test_amdgcn_image_gather4_lz_2d_v4f32_f32_g"}
+// CHECK: [[META5]] = !{i32 1, !"test_amdgcn_image_gather4_lz_2d_v4f32_f32_g"}
+// CHECK: [[META6]] = !{i32 0, !"test_amdgcn_image_gather4_lz_2d_v4f32_f32_b"}
+// CHECK: [[META7]] = !{i32 1, !"test_amdgcn_image_gather4_lz_2d_v4f32_f32_b"}
+// CHECK: [[META8]] = !{i32 0, !"test_amdgcn_image_gather4_lz_2d_v4f32_f32_a"}
+// CHECK: [[META9]] = !{i32 1, !"test_amdgcn_image_gather4_lz_2d_v4f32_f32_a"}
+// CHECK: [[META10]] = !{i32 0, !"test_amdgcn_image_gather4_lz_2d_v4f16_f32_r"}
+// CHECK: [[META11]] = !{i32 1, !"test_amdgcn_image_gather4_lz_2d_v4f16_f32_r"}
+// CHECK: [[META12]] = !{i32 0, !"test_amdgcn_image_sample_lz_1d_v4f32_f32"}
+// CHECK: [[META13]] = !{i32 1, !"test_amdgcn_image_sample_lz_1d_v4f32_f32"}
+// CHECK: [[META14]] = !{i32 0, !"test_amdgcn_image_sample_l_1d_v4f32_f32"}
+// CHECK: [[META15]] = !{i32 1, !"test_amdgcn_image_sample_l_1d_v4f32_f32"}
+// CHECK: [[META16]] = !{i32 0, !"test_amdgcn_image_sample_d_1d_v4f32_f32"}
+// CHECK: [[META17]] = !{i32 1, !"test_amdgcn_image_sample_d_1d_v4f32_f32"}
+// CHECK: [[META18]] = !{i32 0, !"test_amdgcn_image_sample_lz_2d_v4f32_f32"}
+// CHECK: [[META19]] = !{i32 1, !"test_amdgcn_image_sample_lz_2d_v4f32_f32"}
+// CHECK: [[META20]] = !{i32 0, !"test_amdgcn_image_sample_l_2d_v4f32_f32"}
+// CHECK: [[META21]] = !{i32 1, !"test_amdgcn_image_sample_l_2d_v4f32_f32"}
+// CHECK: [[META22]] = !{i32 0, !"test_amdgcn_image_sample_d_2d_v4f32_f32"}
+// CHECK: [[META23]] = !{i32 1, !"test_amdgcn_image_sample_d_2d_v4f32_f32"}
+// CHECK: [[META24]] = !{i32 0, !"test_amdgcn_image_sample_lz_3d_v4f32_f32"}
+// CHECK: [[META25]] = !{i32 1, !"test_amdgcn_image_sample_lz_3d_v4f32_f32"}
+// CHECK: [[META26]] = !{i32 0, !"test_amdgcn_image_sample_l_3d_v4f32_f32"}
+// CHECK: [[META27]] = !{i32 1, !"test_amdgcn_image_sample_l_3d_v4f32_f32"}
+// CHECK: [[META28]] = !{i32 0, !"test_amdgcn_image_sample_d_3d_v4f32_f32"}
+// CHECK: [[META29]] = !{i32 1, !"test_amdgcn_image_sample_d_3d_v4f32_f32"}
+// CHECK: [[META30]] = !{i32 0, !"test_amdgcn_image_sample_lz_cube_v4f32_f32"}
+// CHECK: [[META31]] = !{i32 1, !"test_amdgcn_image_sample_lz_cube_v4f32_f32"}
+// CHECK: [[META32]] = !{i32 0, !"test_amdgcn_image_sample_l_cube_v4f32_f32"}
+// CHECK: [[META33]] = !{i32 1, !"test_amdgcn_image_sample_l_cube_v4f32_f32"}
+// CHECK: [[META34]] = !{i32 0, !"test_amdgcn_image_sample_lz_1darray_v4f32_f32"}
+// CHECK: [[META35]] = !{i32 1, !"test_amdgcn_image_sample_lz_1darray_v4f32_f32"}
+// CHECK: [[META36]] = !{i32 0, !"test_amdgcn_image_sample_l_1darray_v4f32_f32"}
+// CHECK: [[META37]] = !{i32 1, !"test_amdgcn_image_sample_l_1darray_v4f32_f32"}
+// CHECK: [[META38]] = !{i32 0, !"test_amdgcn_image_sample_d_1darray_v4f32_f32"}
+// CHECK: [[META39]] = !{i32 1, !"test_amdgcn_image_sample_d_1darray_v4f32_f32"}
+// CHECK: [[META40]] = !{i32 0, !"test_amdgcn_image_sample_lz_2darray_v4f32_f32"}
+// CHECK: [[META41]] = !{i32 1, !"test_amdgcn_image_sample_lz_2darray_v4f32_f32"}
+// CHECK: [[META42]] = !{i32 0, !"test_amdgcn_image_sample_l_2darray_v4f32_f32"}
+// CHECK: [[META43]] = !{i32 1, !"test_amdgcn_image_sample_l_2darray_v4f32_f32"}
+// CHECK: [[META44]] = !{i32 0, !"test_amdgcn_image_sample_d_2darray_v4f32_f32"}
+// CHECK: [[META45]] = !{i32 1, !"test_amdgcn_image_sample_d_2darray_v4f32_f32"}
+// CHECK: [[META46]] = !{i32 0, !"test_amdgcn_image_sample_lz_1d_v4f16_f32"}
+// CHECK: [[META47]] = !{i32 1, !"test_amdgcn_image_sample_lz_1d_v4f16_f32"}
+// CHECK: [[META48]] = !{i32 0, !"test_amdgcn_image_sample_l_1d_v4f16_f32"}
+// CHECK: [[META49]] = !{i32 1, !"test_amdgcn_image_sample_l_1d_v4f16_f32"}
+// CHECK: [[META50]] = !{i32 0, !"test_amdgcn_image_sample_d_1d_v4f16_f32"}
+// CHECK: [[META51]] = !{i32 1, !"test_amdgcn_image_sample_d_1d_v4f16_f32"}
+// CHECK: [[META52]] = !{i32 0, !"test_amdgcn_image_sample_lz_2d_v4f16_f32"}
+// CHECK: [[META53]] = !{i32 1, !"test_amdgcn_image_sample_lz_2d_v4f16_f32"}
+// CHECK: [[META54]] = !{i32 0, !"test_amdgcn_image_sample_l_2d_v4f16_f32"}
+// CHECK: [[META55]] = !{i32 1, !"test_amdgcn_image_sample_l_2d_v4f16_f32"}
+// CHECK: [[META56]] = !{i32 0, !"test_amdgcn_image_sample_d_2d_v4f16_f32"}
+// CHECK: [[META57]] = !{i32 1, !"test_amdgcn_image_sample_d_2d_v4f16_f32"}
+// CHECK: [[META58]] = !{i32 0, !"test_amdgcn_image_sample_lz_3d_v4f16_f32"}
+// CHECK: [[META59]] = !{i32 1, !"test_amdgcn_image_sample_lz_3d_v4f16_f32"}
+// CHECK: [[META60]] = !{i32 0, !"test_amdgcn_image_sample_l_3d_v4f16_f32"}
+// CHECK: [[META61]] = !{i32 1, !"test_amdgcn_image_sample_l_3d_v4f16_f32"}
+// CHECK: [[META62]] = !{i32 0, !"test_amdgcn_image_sample_d_3d_v4f16_f32"}
+// CHECK: [[META63]] = !{i32 1, !"test_amdgcn_image_sample_d_3d_v4f16_f32"}
+// CHECK: [[META64]] = !{i32 0, !"test_amdgcn_image_sample_lz_cube_v4f16_f32"}
+// CHECK: [[META65]] = !{i32 1, !"test_amdgcn_image_sample_lz_cube_v4f16_f32"}
+// CHECK: [[META66]] = !{i32 0, !"test_amdgcn_image_sample_l_cube_v4f16_f32"}
+// CHECK: [[META67]] = !{i32 1, !"test_amdgcn_image_sample_l_cube_v4f16_f32"}
+// CHECK: [[META68]] = !{i32 0, !"test_amdgcn_image_sample_lz_1darray_v4f16_f32"}
+// CHECK: [[META69]] = !{i32 1, !"test_amdgcn_image_sample_lz_1darray_v4f16_f32"}
+// CHECK: [[META70]] = !{i32 0, !"test_amdgcn_image_sample_l_1darray_v4f16_f32"}
+// CHECK: [[META71]] = !{i32 1, !"test_amdgcn_image_sample_l_1darray_v4f16_f32"}
+// CHECK: [[META72]] = !{i32 0, !"test_amdgcn_image_sample_d_1darray_v4f16_f32"}
+// CHECK: [[META73]] = !{i32 1, !"test_amdgcn_image_sample_d_1darray_v4f16_f32"}
+// CHECK: [[META74]] = !{i32 0, !"test_amdgcn_image_sample_lz_2darray_v4f16_f32"}
+// CHECK: [[META75]] = !{i32 1, !"test_amdgcn_image_sample_lz_2darray_v4f16_f32"}
+// CHECK: [[META76]] = !{i32 0, !"test_amdgcn_image_sample_l_2darray_v4f16_f32"}
+// CHECK: [[META77]] = !{i32 1, !"test_amdgcn_image_sample_l_2darray_v4f16_f32"}
+// CHECK: [[META78]] = !{i32 0, !"test_amdgcn_image_sample_d_2darray_v4f16_f32"}
+// CHECK: [[META79]] = !{i32 1, !"test_amdgcn_image_sample_d_2darray_v4f16_f32"}
+// CHECK: [[META80]] = !{i32 0, !"test_amdgcn_image_sample_lz_2d_f32_f32"}
+// CHECK: [[META81]] = !{i32 1, !"test_amdgcn_image_sample_lz_2d_f32_f32"}
+// CHECK: [[META82]] = !{i32 0, !"test_amdgcn_image_sample_l_2d_f32_f32"}
+// CHECK: [[META83]] = !{i32 1, !"test_amdgcn_image_sample_l_2d_f32_f32"}
+// CHECK: [[META84]] = !{i32 0, !"test_amdgcn_image_sample_d_2d_f32_f32"}
+// CHECK: [[META85]] = !{i32 1, !"test_amdgcn_image_sample_d_2d_f32_f32"}
+// CHECK: [[META86]] = !{i32 0, !"test_amdgcn_image_sample_lz_2darray_f32_f32"}
+// CHECK: [[META87]] = !{i32 1, !"test_amdgcn_image_sample_lz_2darray_f32_f32"}
+// CHECK: [[META88]] = !{i32 0, !"test_amdgcn_image_sample_l_2darray_f32_f32"}
+// CHECK: [[META89]] = !{i32 1, !"test_amdgcn_image_sample_l_2darray_f32_f32"}
+// CHECK: [[META90]] = !{i32 0, !"test_amdgcn_image_sample_d_2darray_f32_f32"}
+// CHECK: [[META91]] = !{i32 1, !"test_amdgcn_image_sample_d_2darray_f32_f32"}
+//.

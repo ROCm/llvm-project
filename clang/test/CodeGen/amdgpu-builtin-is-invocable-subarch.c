@@ -9,14 +9,18 @@
 // AMDGPU900-LABEL: define dso_local void @foo(
 // AMDGPU900-SAME: ) #[[ATTR0:[0-9]+]] {
 // AMDGPU900-NEXT:  [[ENTRY:.*:]]
+// AMDGPU900-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
+// AMDGPU900-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGPU900-NEXT:    ret void
 //
 // AMDGPU1010-LABEL: define dso_local void @foo(
 // AMDGPU1010-SAME: ) #[[ATTR0:[0-9]+]] {
 // AMDGPU1010-NEXT:  [[ENTRY:.*:]]
+// AMDGPU1010-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // AMDGPU1010-NEXT:    call void @llvm.trap()
 // AMDGPU1010-NEXT:    unreachable
 // AMDGPU1010:       [[BB0:.*:]]
+// AMDGPU1010-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // AMDGPU1010-NEXT:    ret void
 //
 void foo() {
@@ -27,13 +31,19 @@ void foo() {
 }
 //.
 // AMDGPU900: attributes #[[ATTR0]] = { convergent noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
+// AMDGPU900: attributes #[[ATTR1:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // AMDGPU1010: attributes #[[ATTR0]] = { convergent noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 // AMDGPU1010: attributes #[[ATTR1:[0-9]+]] = { cold noreturn nounwind memory(inaccessiblemem: write) }
+// AMDGPU1010: attributes #[[ATTR2:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // AMDGPU900: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // AMDGPU900: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// AMDGPU900: [[META2]] = !{i32 0, !"foo"}
+// AMDGPU900: [[META3]] = !{i32 1, !"foo"}
 //.
 // AMDGPU1010: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // AMDGPU1010: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// AMDGPU1010: [[META2]] = !{i32 0, !"foo"}
+// AMDGPU1010: [[META3]] = !{i32 1, !"foo"}
 //.

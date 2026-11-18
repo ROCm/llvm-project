@@ -105,6 +105,11 @@ bool AMDGPUMCInstLower::lowerOperand(const MachineOperand &MO,
     MCSymbol *Sym = Ctx.getOrCreateSymbol(StringRef(MO.getSymbolName()));
     const MCExpr *Expr =
         MCSymbolRefExpr::create(Sym, getSpecifier(MO.getTargetFlags()), Ctx);
+    int64_t Offset = MO.getOffset();
+    if (Offset != 0) {
+      Expr = MCBinaryExpr::createAdd(Expr, MCConstantExpr::create(Offset, Ctx),
+                                     Ctx);
+    }
     MCOp = MCOperand::createExpr(Expr);
     return true;
   }
@@ -378,6 +383,13 @@ void AMDGPUAsmPrinter::emitInstruction(const MachineInstr *MI) {
     if (MI->getOpcode() == AMDGPU::WAVE_BARRIER) {
       if (isVerbose())
         OutStreamer->emitRawComment(" wave barrier");
+      return;
+    }
+
+    if (MI->getOpcode() == AMDGPU::SQTT_EVENT_COMMENT) {
+      if (isVerbose())
+        OutStreamer->emitRawComment(" sqtt_event " +
+                                    Twine(MI->getOperand(0).getImm()));
       return;
     }
 

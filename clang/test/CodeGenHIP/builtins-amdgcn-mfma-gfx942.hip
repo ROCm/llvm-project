@@ -14,6 +14,7 @@ typedef _Float16 v16h  __attribute__((ext_vector_type(16)));
 // CHECK-GFX942-LABEL: define dso_local void @_Z32test_smfmac_f32_16x16x32_f16_hipPDv4_fDv4_DF16_Dv8_DF16_S_i(
 // CHECK-GFX942-SAME: ptr noundef [[OUT:%.*]], <4 x half> noundef [[A:%.*]], <8 x half> noundef [[B:%.*]], <4 x float> noundef [[C:%.*]], i32 noundef [[IDX:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-GFX942-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX942-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX942-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-GFX942-NEXT:    [[A_ADDR:%.*]] = alloca <4 x half>, align 8, addrspace(5)
 // CHECK-GFX942-NEXT:    [[B_ADDR:%.*]] = alloca <8 x half>, align 16, addrspace(5)
@@ -36,6 +37,7 @@ typedef _Float16 v16h  __attribute__((ext_vector_type(16)));
 // CHECK-GFX942-NEXT:    [[TMP4:%.*]] = call contract <4 x float> @llvm.amdgcn.smfmac.f32.16x16x32.f16(<4 x half> [[TMP0]], <8 x half> [[TMP1]], <4 x float> [[TMP2]], i32 [[TMP3]], i32 0, i32 0)
 // CHECK-GFX942-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-GFX942-NEXT:    store <4 x float> [[TMP4]], ptr [[TMP5]], align 16
+// CHECK-GFX942-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META4:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX942-NEXT:    ret void
 //
 __device__ void test_smfmac_f32_16x16x32_f16_hip(v4f* out, v4h a, v8h b, v4f c, int idx) {
@@ -45,6 +47,7 @@ __device__ void test_smfmac_f32_16x16x32_f16_hip(v4f* out, v4h a, v8h b, v4f c, 
 // CHECK-GFX942-LABEL: define dso_local void @_Z32test_smfmac_f32_32x32x16_f16_hipPDv16_fDv4_DF16_Dv8_DF16_S_i(
 // CHECK-GFX942-SAME: ptr noundef [[OUT:%.*]], <4 x half> noundef [[A:%.*]], <8 x half> noundef [[B:%.*]], <16 x float> noundef [[C:%.*]], i32 noundef [[IDX:%.*]]) #[[ATTR0]] {
 // CHECK-GFX942-NEXT:  [[ENTRY:.*:]]
+// CHECK-GFX942-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META5:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX942-NEXT:    [[OUT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-GFX942-NEXT:    [[A_ADDR:%.*]] = alloca <4 x half>, align 8, addrspace(5)
 // CHECK-GFX942-NEXT:    [[B_ADDR:%.*]] = alloca <8 x half>, align 16, addrspace(5)
@@ -67,8 +70,15 @@ __device__ void test_smfmac_f32_16x16x32_f16_hip(v4f* out, v4h a, v8h b, v4f c, 
 // CHECK-GFX942-NEXT:    [[TMP4:%.*]] = call contract <16 x float> @llvm.amdgcn.smfmac.f32.32x32x16.f16(<4 x half> [[TMP0]], <8 x half> [[TMP1]], <16 x float> [[TMP2]], i32 [[TMP3]], i32 0, i32 0)
 // CHECK-GFX942-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT_ADDR_ASCAST]], align 8
 // CHECK-GFX942-NEXT:    store <16 x float> [[TMP4]], ptr [[TMP5]], align 64
+// CHECK-GFX942-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META6:![0-9]+]], i32 poison, i1 true)
 // CHECK-GFX942-NEXT:    ret void
 //
 __device__ void test_smfmac_f32_32x32x16_f16_hip(v16f* out, v4h a, v8h b, v16f c, int idx) {
   *out = __builtin_amdgcn_smfmac_f32_32x32x16_f16(a, b, c, idx, 0, 0);
 }
+//.
+// CHECK-GFX942: [[META3]] = !{i32 0, !"_Z32test_smfmac_f32_16x16x32_f16_hipPDv4_fDv4_DF16_Dv8_DF16_S_i"}
+// CHECK-GFX942: [[META4]] = !{i32 1, !"_Z32test_smfmac_f32_16x16x32_f16_hipPDv4_fDv4_DF16_Dv8_DF16_S_i"}
+// CHECK-GFX942: [[META5]] = !{i32 0, !"_Z32test_smfmac_f32_32x32x16_f16_hipPDv16_fDv4_DF16_Dv8_DF16_S_i"}
+// CHECK-GFX942: [[META6]] = !{i32 1, !"_Z32test_smfmac_f32_32x32x16_f16_hipPDv16_fDv4_DF16_Dv8_DF16_S_i"}
+//.

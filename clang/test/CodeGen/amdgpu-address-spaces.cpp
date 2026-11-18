@@ -33,6 +33,7 @@ int [[clang::address_space(999)]] bbb = 1234;
 // CHECK-LABEL: define dso_local amdgpu_kernel void @foo(
 // CHECK-SAME: ) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META2:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    store i32 0, ptr addrspace(1) @a, align 4
 // CHECK-NEXT:    store i32 0, ptr @b, align 4
 // CHECK-NEXT:    store i32 0, ptr addrspace(3) @d, align 4
@@ -43,6 +44,7 @@ int [[clang::address_space(999)]] bbb = 1234;
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) @u, align 4
 // CHECK-NEXT:    store i32 0, ptr addrspace(6) @aaa, align 4
 // CHECK-NEXT:    store i32 0, ptr addrspace(999) @bbb, align 4
+// CHECK-NEXT:    call void @llvm.amdgcn.sqtt.event(metadata [[META3:![0-9]+]], i32 poison, i1 true)
 // CHECK-NEXT:    ret void
 //
 extern "C" [[clang::amdgpu_kernel]] void foo() {
@@ -61,7 +63,10 @@ extern "C" [[clang::amdgpu_kernel]] void foo() {
 }
 //.
 // CHECK: attributes #[[ATTR0]] = { convergent mustprogress noinline nounwind optnone "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
+// CHECK: attributes #[[ATTR1:[0-9]+]] = { convergent nocallback nofree nosync nounwind willreturn }
 //.
 // CHECK: [[META0:![0-9]+]] = !{i32 1, !"amdhsa_code_object_version", i32 600}
 // CHECK: [[META1:![0-9]+]] = !{!"{{.*}}clang version {{.*}}"}
+// CHECK: [[META2]] = !{i32 0, !"foo"}
+// CHECK: [[META3]] = !{i32 1, !"foo"}
 //.
