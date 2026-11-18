@@ -466,8 +466,15 @@ jobs:
           rm build-comgr/amd_comgr.dll
           touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
 
-      - name: Test - Comgr (check-comgr)
+      - name: Test - Comgr (lit + gtest + ctest)
         id: check_comgr
         env:
           AMD_COMGR_REDIRECT_LOGS: stderr
-        run: ninja -C build-comgr check-comgr
+        run: |
+          # Finish relinking and copying DLLs before launching test processes.
+          ninja -C build-comgr all
+          python build/bin/llvm-lit.py build-comgr/test-lit -v
+          for test in build-comgr/test-unit/*.exe; do
+            "$test"
+          done
+          ctest --test-dir build-comgr --output-on-failure
