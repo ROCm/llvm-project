@@ -14,6 +14,8 @@ namespace mlir::amdgpu {
 FailureOr<Chipset> Chipset::parse(StringRef name) {
   if (!name.consume_front("gfx"))
     return failure();
+  // Ignore processor feature suffixes such as "-strict" (e.g. gfx1250-strict).
+  name = name.split('-').first;
   if (name.size() < 3)
     return failure();
 

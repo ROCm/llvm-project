@@ -122,7 +122,7 @@ static HWEvents getEventsForImpl(const MachineInstr &Inst,
     assert(Inst.mayLoadOrStore());
     HWEvents E = HWEvents::NONE;
     if (TII.mayAccessVMEMThroughFlat(Inst)) {
-      if (ST.hasWaitXcnt())
+      if (ST.hasWaitXcnt() && ST.isXNACKEnabled())
         E |= HWEvents::VMEM_GROUP;
       E |= getSimplifiedVMEMEventsFor(Inst, TII);
     }
@@ -146,7 +146,7 @@ static HWEvents getEventsForImpl(const MachineInstr &Inst,
     // followed "S_WAITCNT vmcnt(0)" is needed after to ensure the writeback has
     // completed.
     HWEvents E = getSimplifiedVMEMEventsFor(Inst, TII);
-    if (ST.hasWaitXcnt())
+    if (ST.hasWaitXcnt() && ST.isXNACKEnabled())
       E |= HWEvents::VMEM_GROUP;
     if (ST.vmemWriteNeedsExpWaitcnt() &&
         (Inst.mayStore() || SIInstrInfo::isAtomicRet(Inst)))
@@ -156,7 +156,7 @@ static HWEvents getEventsForImpl(const MachineInstr &Inst,
   }
 
   if (TII.isSMRD(Inst)) {
-    if (ST.hasWaitXcnt())
+    if (ST.hasWaitXcnt() && ST.isXNACKEnabled())
       return HWEvents::SMEM_GROUP | HWEvents::SMEM_ACCESS;
     return HWEvents::SMEM_ACCESS;
   }

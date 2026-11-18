@@ -685,6 +685,7 @@ class AMDGPUCvtScaleF32SRIntrinsic<LLVMType DstTy, LLVMType Src0Ty, string name>
   [DstTy], [Src0Ty, llvm_i32_ty, llvm_float_ty]
 >, ClangBuiltin<"__builtin_amdgcn_"#name>;
 
+let TargetFeatures = "block16-cvt-scale-insts" in {
 def int_amdgcn_cvt_scale_pk8_f16_fp8   : AMDGPUCvtScaleIntrinsic<llvm_v8f16_ty,   llvm_v2i32_ty, "cvt_scale_pk8_f16_fp8">;
 def int_amdgcn_cvt_scale_pk8_bf16_fp8  : AMDGPUCvtScaleIntrinsic<llvm_v8bf16_ty,  llvm_v2i32_ty, "cvt_scale_pk8_bf16_fp8">;
 def int_amdgcn_cvt_scale_pk8_f16_bf8   : AMDGPUCvtScaleIntrinsic<llvm_v8f16_ty,   llvm_v2i32_ty, "cvt_scale_pk8_f16_bf8">;
@@ -700,6 +701,7 @@ def int_amdgcn_cvt_scale_pk16_f16_fp6  : AMDGPUCvtScaleIntrinsic<llvm_v16f16_ty,
 def int_amdgcn_cvt_scale_pk16_bf16_fp6 : AMDGPUCvtScaleIntrinsic<llvm_v16bf16_ty, llvm_v3i32_ty, "cvt_scale_pk16_bf16_fp6">;
 def int_amdgcn_cvt_scale_pk16_f32_fp6  : AMDGPUCvtScaleIntrinsic<llvm_v16f32_ty,  llvm_v3i32_ty, "cvt_scale_pk16_f32_fp6">;
 def int_amdgcn_cvt_scale_pk16_f32_bf6  : AMDGPUCvtScaleIntrinsic<llvm_v16f32_ty,  llvm_v3i32_ty, "cvt_scale_pk16_f32_bf6">;
+}
 
 class AMDGPUCvtScaleF32ToFP6BF6Intrinsic<LLVMType DstTy, LLVMType Src0Ty, LLVMType Src1Ty, string name> : PureIntrinsic<
   [DstTy], [Src0Ty, Src1Ty, llvm_float_ty]
@@ -4219,6 +4221,7 @@ def int_amdgcn_wmma_f16_16x16x64_fp8_fp8  : AMDGPUWmmaIntrinsicModsC<llvm_anyint
 def int_amdgcn_wmma_f16_16x16x64_fp8_bf8  : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
 def int_amdgcn_wmma_f16_16x16x64_bf8_fp8  : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
 def int_amdgcn_wmma_f16_16x16x64_bf8_bf8  : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
+let TargetFeatures = "wmma-16x16x128fp8-insts" in {
 def int_amdgcn_wmma_f16_16x16x128_fp8_fp8 : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
 def int_amdgcn_wmma_f16_16x16x128_fp8_bf8 : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
 def int_amdgcn_wmma_f16_16x16x128_bf8_fp8 : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
@@ -4227,13 +4230,16 @@ def int_amdgcn_wmma_f32_16x16x128_fp8_fp8 : AMDGPUWmmaIntrinsicModsC<llvm_anyint
 def int_amdgcn_wmma_f32_16x16x128_fp8_bf8 : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
 def int_amdgcn_wmma_f32_16x16x128_bf8_fp8 : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
 def int_amdgcn_wmma_f32_16x16x128_bf8_bf8 : AMDGPUWmmaIntrinsicModsC<llvm_anyint_ty, llvm_anyfloat_ty>;
+}
 def int_amdgcn_wmma_i32_16x16x64_iu8      : AMDGPUWmmaIntrinsicModsABClamp<llvm_anyint_ty, llvm_anyint_ty>;
 def int_amdgcn_wmma_f32_16x16x128_f8f6f4  : AMDGPUWmmaIntrinsicModsC_MatrixFMT;
 def int_amdgcn_wmma_scale_f32_16x16x128_f8f6f4   : AMDGPUWmmaScaleIntrinsicModsC<llvm_i32_ty>;
 def int_amdgcn_wmma_scale16_f32_16x16x128_f8f6f4 : AMDGPUWmmaScaleIntrinsicModsC<llvm_i64_ty>;
+let TargetFeatures = "wmma-f4-insts" in {
 def int_amdgcn_wmma_f32_32x16x128_f4       : AMDGPUWmmaIntrinsicF4ModsC<llvm_anyint_ty, llvm_anyint_ty, llvm_anyfloat_ty>;
 def int_amdgcn_wmma_scale_f32_32x16x128_f4 : AMDGPUWmmaScaleF4IntrinsicModsC<llvm_i32_ty>;
 def int_amdgcn_wmma_scale16_f32_32x16x128_f4 : AMDGPUWmmaScaleF4IntrinsicModsC<llvm_i64_ty>;
+}
 }
 
 class AMDGPUSWmmacIntrinsicABIdx<LLVMType A, LLVMType B, LLVMType CD, LLVMType Index> :
@@ -4356,4 +4362,38 @@ def int_amdgcn_addrspacecast_nonnull : DefaultAttrsIntrinsic<
 /// incoming block.
 def int_amdgcn_dead: DefaultAttrsIntrinsic<[llvm_any_ty], [],
     [IntrNoMem]>;
+
+// Hint the register allocator to place the result in a specific VGPR bank on
+// targets with 1024 addressable VGPRs (gfx1250). The bank operand is a
+// compile-time constant in [0, 3]:
+//   bank 0 = v0-v255, bank 1 = v256-v511, bank 2 = v512-v767, bank 3 = v768-v1023.
+// This is an identity function at the IR level; the bank argument is consumed by
+// the pre-RA AMDGPUSchedBank pass which attaches a register allocation hint.
+// The hint is advisory: the allocator honors it only when the bank has free
+// registers, and never spills to satisfy it.
+def int_amdgcn_sched_bank : DefaultAttrsIntrinsic<
+  [llvm_any_ty], [LLVMMatchType<0>, llvm_i32_ty],
+  [IntrNoMem, IntrSpeculatable, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+
+// Hint the register allocator to place the result in a specific VGPR/SGPR/AGPR
+// register number. These are identity functions at the IR level; the register
+// number and strict flag arguments are consumed by the pre-RA AMDGPUSchedBank
+// pass which attaches a register allocation hint.
+//   regnum: the target HW register index (e.g., 42 means v42/s42/a42).
+//   strict: 1 = allocator must obey if possible, 0 = advisory hint.
+// For wide values (64/128/256 bit), regnum is the starting register index.
+def int_amdgcn_sched_vgpr : DefaultAttrsIntrinsic<
+  [llvm_any_ty], [LLVMMatchType<0>, llvm_i32_ty, llvm_i32_ty],
+  [IntrNoMem, IntrSpeculatable, IntrWillReturn,
+   ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+
+def int_amdgcn_sched_sgpr : DefaultAttrsIntrinsic<
+  [llvm_any_ty], [LLVMMatchType<0>, llvm_i32_ty, llvm_i32_ty],
+  [IntrNoMem, IntrSpeculatable, IntrWillReturn,
+   ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+
+def int_amdgcn_sched_agpr : DefaultAttrsIntrinsic<
+  [llvm_any_ty], [LLVMMatchType<0>, llvm_i32_ty, llvm_i32_ty],
+  [IntrNoMem, IntrSpeculatable, IntrWillReturn,
+   ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
 }

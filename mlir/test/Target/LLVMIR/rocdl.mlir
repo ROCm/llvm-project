@@ -150,6 +150,13 @@ llvm.func @kernel_func_waves_per_eu()
   llvm.return
 }
 
+llvm.func @kernel_func_waves_per_eu_range()
+    attributes {rocdl.kernel, rocdl.waves_per_eu = "1,1"} {
+  // CHECK-LABEL: amdgpu_kernel void @kernel_func_waves_per_eu_range()
+  // CHECK: #[[$KERNEL_WAVES_PER_EU_RANGE_ATTR:[0-9]+]]
+  llvm.return
+}
+
 llvm.func @kernel_func_unsafe_fp_atomics()
     attributes {rocdl.kernel, rocdl.unsafe_fp_atomics = true} {
   // CHECK-LABEL: amdgpu_kernel void @kernel_func_unsafe_fp_atomics()
@@ -442,6 +449,46 @@ llvm.func @rocdl.iglp.opt() {
   // CHECK-NEXT: call void @llvm.amdgcn.iglp.opt(i32 1)
   rocdl.iglp.opt 1
   llvm.return
+}
+
+llvm.func @rocdl.sched.bank(%val : f32, %ival : i32) -> f32 {
+  // CHECK-LABEL: rocdl.sched.bank
+  // strict (default): bank 2 → encoded as 6 (2 | 4)
+  // CHECK: call float @llvm.amdgcn.sched.bank.f32(float %{{.*}}, i32 6)
+  %0 = rocdl.sched.bank %val, 2 : f32
+  // soft: bank 1 → encoded as 1
+  // CHECK: call i32 @llvm.amdgcn.sched.bank.i32(i32 %{{.*}}, i32 1)
+  %1 = rocdl.sched.bank %ival, 1 soft : i32
+  llvm.return %0 : f32
+}
+
+llvm.func @rocdl.sched.vgpr(%val : f32, %ival : i32) -> f32 {
+  // CHECK-LABEL: rocdl.sched.vgpr
+  // strict (default): regnum 42, strict 1
+  // CHECK: call float @llvm.amdgcn.sched.vgpr.f32(float %{{.*}}, i32 42, i32 1)
+  %0 = rocdl.sched.vgpr %val, 42 : f32
+  // soft: regnum 10, strict 0
+  // CHECK: call i32 @llvm.amdgcn.sched.vgpr.i32(i32 %{{.*}}, i32 10, i32 0)
+  %1 = rocdl.sched.vgpr %ival, 10 soft : i32
+  llvm.return %0 : f32
+}
+
+llvm.func @rocdl.sched.sgpr(%val : f32, %ival : i32) -> f32 {
+  // CHECK-LABEL: rocdl.sched.sgpr
+  // CHECK: call float @llvm.amdgcn.sched.sgpr.f32(float %{{.*}}, i32 20, i32 1)
+  %0 = rocdl.sched.sgpr %val, 20 : f32
+  // CHECK: call i32 @llvm.amdgcn.sched.sgpr.i32(i32 %{{.*}}, i32 5, i32 0)
+  %1 = rocdl.sched.sgpr %ival, 5 soft : i32
+  llvm.return %0 : f32
+}
+
+llvm.func @rocdl.sched.agpr(%val : f32, %ival : i32) -> f32 {
+  // CHECK-LABEL: rocdl.sched.agpr
+  // CHECK: call float @llvm.amdgcn.sched.agpr.f32(float %{{.*}}, i32 8, i32 1)
+  %0 = rocdl.sched.agpr %val, 8 : f32
+  // CHECK: call i32 @llvm.amdgcn.sched.agpr.i32(i32 %{{.*}}, i32 0, i32 0)
+  %1 = rocdl.sched.agpr %ival, 0 soft : i32
+  llvm.return %0 : f32
 }
 
 llvm.func @rocdl.xdlops(%arg0 : f32, %arg1 : f32,
@@ -2252,4 +2299,5 @@ llvm.func @rocdl_dot_fp8_family(%i32: i32, %f32: f32) -> f32 {
 // CHECK-DAG: ![[$REQD_WORK_GROUP_SIZE]] = !{i32 16, i32 4, i32 2}
 // CHECK-DAG: ![[$REQD_BLOCK_SIZE]] = !{i32 8, i32 4, i32 2}
 // CHECK-DAG: attributes #[[$KERNEL_WAVES_PER_EU_ATTR]] = { "amdgpu-flat-work-group-size"="1,256" "amdgpu-waves-per-eu"="2" "uniform-work-group-size" }
+// CHECK-DAG: attributes #[[$KERNEL_WAVES_PER_EU_RANGE_ATTR]] = { "amdgpu-flat-work-group-size"="1,256" "amdgpu-waves-per-eu"="1,1" "uniform-work-group-size" }
 // CHECK-DAG: attributes #[[$KERNEL_UNSAFE_FP_ATOMICS_ATTR]] = { "amdgpu-flat-work-group-size"="1,256" "amdgpu-unsafe-fp-atomics"="true" "uniform-work-group-size" }

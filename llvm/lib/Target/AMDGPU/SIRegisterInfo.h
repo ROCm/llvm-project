@@ -33,7 +33,19 @@ struct SGPRSpillBuilder;
 /// Register allocation hint types. Helps eliminate unneeded COPY with True16
 namespace AMDGPURI {
 
-enum { Size16 = 1, Size32 = 2 };
+enum {
+  Size16 = 1,
+  Size32 = 2,
+  SameBank = 3,
+  BankHint = 4,
+  StrictBankHint = 5,
+  VGPRRegHint = 6,
+  StrictVGPRRegHint = 7,
+  SGPRRegHint = 8,
+  StrictSGPRRegHint = 9,
+  AGPRRegHint = 10,
+  StrictAGPRRegHint = 11,
+};
 
 } // end namespace AMDGPURI
 

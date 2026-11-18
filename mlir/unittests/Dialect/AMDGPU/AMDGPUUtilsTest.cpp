@@ -30,6 +30,12 @@ TEST(ChipsetTest, Parsing) {
   EXPECT_EQ(chipset->majorVersion, 11u);
   EXPECT_EQ(chipset->minorVersion, 0u);
   EXPECT_EQ(chipset->steppingVersion, 3u);
+
+  chipset = Chipset::parse("gfx1250-strict");
+  ASSERT_TRUE(succeeded(chipset));
+  EXPECT_EQ(chipset->majorVersion, 12u);
+  EXPECT_EQ(chipset->minorVersion, 5u);
+  EXPECT_EQ(chipset->steppingVersion, 0u);
 }
 
 TEST(ChipsetTest, ParsingInvalid) {

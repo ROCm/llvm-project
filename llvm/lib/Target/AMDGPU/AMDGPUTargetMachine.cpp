@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUTargetMachine.h"
+#include "llvm/Support/Process.h"
 #include "AMDGPU.h"
 #include "AMDGPUAliasAnalysis.h"
 #include "AMDGPUAsmPrinter.h"
@@ -35,6 +36,7 @@
 #include "AMDGPURemoveIncompatibleFunctions.h"
 #include "AMDGPUReserveWWMRegs.h"
 #include "AMDGPUResourceUsageAnalysis.h"
+#include "AMDGPUSchedBank.h"
 #include "AMDGPUSplitModule.h"
 #include "AMDGPUTargetObjectFile.h"
 #include "AMDGPUTargetTransformInfo.h"
@@ -671,6 +673,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUAsmPrinterPass(*PR);
   initializeAMDGPUDAGToDAGISelLegacyPass(*PR);
   initializeAMDGPUPrepareAGPRAllocLegacyPass(*PR);
+  initializeAMDGPUSchedBankPass(*PR);
   initializeGCNDPPCombineLegacyPass(*PR);
   initializeSILowerI1CopiesLegacyPass(*PR);
   initializeAMDGPUGlobalISelDivergenceLoweringPass(*PR);
@@ -1343,6 +1346,18 @@ GCNTargetMachine::getSubtargetImpl(const Function &F) const {
 
   using AMDGPU::TargetIDSetting;
   TargetIDSetting Xnack = getTargetIDSettingFromModuleFlag(M, "amdgpu.xnack");
+  // Experiment only: hardware XNACK is disabled. Override the per-function
+  // machine subtarget for Any while retaining the module/global MC target
+  // identity as Any. The asm printer therefore still serializes Any ELF flags
+  // and metadata. Explicit module flag settings retain their normal behavior.
+  if (GPU == "gfx1250" && Xnack == TargetIDSetting::Any) {
+    if (auto Mode = sys::Process::GetEnv("LLVM_GFX1250_ANY_XNACK_CODEGEN")) {
+      if (*Mode != "0" && *Mode != "1")
+        report_fatal_error("LLVM_GFX1250_ANY_XNACK_CODEGEN must be 0 or 1");
+      Xnack = *Mode == "1" ? TargetIDSetting::On : TargetIDSetting::Off;
+    }
+  }
+
   TargetIDSetting SramEcc =
       getTargetIDSettingFromModuleFlag(M, "amdgpu.sramecc");
 
@@ -1830,6 +1845,7 @@ void GCNPassConfig::addFastRegAlloc() {
 }
 
 void GCNPassConfig::addPreRegAlloc() {
+  addPass(&AMDGPUSchedBankID);
   if (getOptLevel() != CodeGenOptLevel::None)
     addPass(&AMDGPUPrepareAGPRAllocLegacyID);
 }
@@ -2641,6 +2657,7 @@ Error AMDGPUCodeGenPassBuilder::addOptimizedRegAlloc(
 }
 
 void AMDGPUCodeGenPassBuilder::addPreRegAlloc(PassManagerWrapper &PMW) const {
+  addMachineFunctionPass(AMDGPUSchedBankPass(), PMW);
   if (getOptLevel() != CodeGenOptLevel::None)
     addMachineFunctionPass(AMDGPUPrepareAGPRAllocPass(), PMW);
 }

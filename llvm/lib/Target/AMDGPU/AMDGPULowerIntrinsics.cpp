@@ -14,6 +14,8 @@
 #include "AMDGPU.h"
 #include "AMDGPUTargetMachine.h"
 #include "GCNSubtarget.h"
+#include "SIDefines.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
@@ -39,6 +41,7 @@ public:
 private:
   bool visitBarrier(IntrinsicInst &I);
   bool visitPtrSBufferLoad(IntrinsicInst &I);
+  bool visitUnscaledWMMA(IntrinsicInst &I);
 };
 
 class AMDGPULowerIntrinsicsLegacy : public ModulePass {
@@ -80,6 +83,10 @@ bool AMDGPULowerIntrinsicsImpl::run() {
     case Intrinsic::amdgcn_ptr_s_buffer_load:
       forEachCall(
           F, [&](IntrinsicInst *II) { Changed |= visitPtrSBufferLoad(*II); });
+      break;
+    case Intrinsic::amdgcn_wmma_f32_16x16x128_f8f6f4:
+      forEachCall(
+          F, [&](IntrinsicInst *II) { Changed |= visitUnscaledWMMA(*II); });
       break;
     }
   }
@@ -215,6 +222,39 @@ PreservedAnalyses AMDGPULowerIntrinsicsPass::run(Module &M,
   if (!Impl.run())
     return PreservedAnalyses::all();
   return PreservedAnalyses::none();
+}
+
+bool AMDGPULowerIntrinsicsImpl::visitUnscaledWMMA(IntrinsicInst &I) {
+  assert(I.getIntrinsicID() == Intrinsic::amdgcn_wmma_f32_16x16x128_f8f6f4);
+
+  const GCNSubtarget &ST = TM.getSubtarget<GCNSubtarget>(*I.getFunction());
+  if (!ST.hasGFX1250_STRICT())
+    return false;
+
+  IRBuilder<> B(&I);
+
+  // Convert unscaled WMMA into a scaled version with scale factors 0.
+  // Zero is the exponent that hardware treats as 1.0.
+  SmallVector<Value *, 14> Args(I.args());
+  Args.push_back(B.getInt32(0)); // matrix_a_scale
+  Args.push_back(
+      B.getInt32(AMDGPU::WMMA::MATRIX_SCALE_FMT_E8)); // matrix_a_scale_fmt
+  Args.push_back(B.getInt32(0)); // matrix a scale exponential
+  Args.push_back(B.getInt32(0)); // matrix_b_scale
+  Args.push_back(
+      B.getInt32(AMDGPU::WMMA::MATRIX_SCALE_FMT_E8)); // matrix_b_scale_fmt
+  Args.push_back(B.getInt32(0)); // matrix b scale exponential
+  Args.push_back(B.getInt1(0));  // matrix_a_reuse
+  Args.push_back(B.getInt1(0));  // matrix_b_reuse
+
+  CallInst *NewI = B.CreateIntrinsicWithoutFolding(
+      I.getType(), Intrinsic::amdgcn_wmma_scale_f32_16x16x128_f8f6f4, Args);
+  I.replaceAllUsesWith(NewI);
+  NewI->copyMetadata(I);
+  NewI->takeName(&I);
+  I.eraseFromParent();
+
+  return true;
 }
 
 bool AMDGPULowerIntrinsicsLegacy::runOnModule(Module &M) {
