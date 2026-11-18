@@ -1754,6 +1754,9 @@ void llvm::InsertDebugValueAtStoreLoc(DbgVariableRecord *DVR, StoreInst *SI,
   DIExpr = dropInitialDeref(DIExpr);
   Value *DV = SI->getValueOperand();
 
+  if (isa<UndefValue>(DV) && !isa<PoisonValue>(DV))
+    return;
+
   DebugLoc NewLoc = getDebugValueLoc(DVR);
 
   insertDbgValueOrDbgVariableRecord(Builder, DV, DIVar, DIExpr, NewLoc,
@@ -3519,6 +3522,7 @@ void llvm::copyMetadataForLoad(LoadInst &Dest, const LoadInst &Source) {
     case LLVMContext::MD_noundef:
     case LLVMContext::MD_noalias_addrspace:
     case LLVMContext::MD_invariant_group:
+    case LLVMContext::MD_mmra:
       // All of these directly apply.
       Dest.setMetadata(ID, N);
       break;
