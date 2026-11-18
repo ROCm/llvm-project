@@ -456,6 +456,8 @@ public:
 
   const MCTargetOptions &getTargetOptions() const { return TargetOptions; }
 
+  unsigned getAsmMacroMaxNestingDepth() const;
+
   /// Get the code pointer size in bytes.
   unsigned getCodePointerSize() const { return CodePointerSize; }
 
