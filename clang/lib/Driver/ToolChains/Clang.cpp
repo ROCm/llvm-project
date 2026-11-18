@@ -2467,6 +2467,14 @@ void Clang::AddHexagonTargetArgs(const ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-machine-sink-split=0");
 
+  // Let debuggers find the caller's HLX vector stack pointer.
+  if (const Arg *A = Args.getLastArg(options::OPT_g_Group);
+      A && !A->getOption().matches(options::OPT_g0) &&
+      !A->getOption().matches(options::OPT_ggdb0)) {
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-hexagon-save-parent-vsp");
+  }
+
   addQFloatBackendArg(getToolChain().getDriver(), Args, CmdArgs);
 }
 
@@ -7584,6 +7592,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.addOptOutFlag(CmdArgs, options::OPT_mstack_arg_probe,
                      options::OPT_mno_stack_arg_probe);
 
+  if (Arg *A = Args.getLastArg(options::OPT_msmall_int_abi_compat_EQ))
+    A->render(Args, CmdArgs);
+
   if (Arg *A = Args.getLastArg(options::OPT_mrestrict_it,
                                options::OPT_mno_restrict_it)) {
     if (A->getOption().matches(options::OPT_mrestrict_it)) {
@@ -10020,8 +10031,11 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
   };
   auto ToolChainHasSanitizerRT = [&](const ToolChain &TC, const ArgList &TCArgs,
                                      Action::OffloadKind Kind) {
-    if (TC.getSanitizerArgs(TCArgs, /*BA=*/{}, Kind).needsCsanRt())
+    const SanitizerArgs &SanArgs = TC.getSanitizerArgs(TCArgs, /*BA=*/{}, Kind);
+    if (SanArgs.needsCsanRt())
       return ToolChainHasRT(TC, "csan");
+    if (SanArgs.needsDasanRt())
+      return true;
     return ToolChainHasRT(TC, "ubsan_minimal") ||
            ToolChainHasRT(TC, "ubsan_standalone");
   };

@@ -1250,6 +1250,14 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
         (A->getOption().matches(options::OPT_fglobal_isel) ? "1" : "0")));
   }
 
+  if (Arg *A = Args.getLastArg(options::OPT_fdevirtualize_speculatively,
+                               options::OPT_fno_devirtualize_speculatively))
+    CmdArgs.push_back(Args.MakeArgString(
+        Twine(PluginOptPrefix) + "-devirtualize-speculatively=" +
+        (A->getOption().matches(options::OPT_fdevirtualize_speculatively)
+             ? "1"
+             : "0")));
+
   if (IsOSAIX) {
     if (!ToolChain.useIntegratedAs())
       CmdArgs.push_back(
@@ -1818,6 +1826,11 @@ static bool hostNeedsCsanOffloadRt(Compilation &C, const ToolChain &HostTC) {
       C, HostTC, [](const SanitizerArgs &S) { return S.needsCsanRt(); });
 }
 
+static bool hostNeedsDasanRt(Compilation &C, const ToolChain &HostTC) {
+  return hostNeedsOffloadRt(
+      C, HostTC, [](const SanitizerArgs &S) { return S.needsDasanRt(); });
+}
+
 static void
 collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
                          const ArgList &Args,
@@ -1832,6 +1845,7 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
   const bool NeedsCsanOffloadRt = hostNeedsCsanOffloadRt(C, TC);
   const bool NeedsUbsanRt = SanArgs.needsUbsanRt() || NeedsUbsanOffloadRt;
   const bool NeedsCsanRt = SanArgs.needsCsanRt() || NeedsCsanOffloadRt;
+  const bool NeedsDasanRt = SanArgs.needsDasanRt() || hostNeedsDasanRt(C, TC);
   // Collect shared runtimes.
   if (SanArgs.needsSharedRt()) {
     if (SanArgs.needsAsanRt()) {
@@ -1852,6 +1866,8 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
       else
         SharedRuntimes.push_back("ubsan_standalone");
     }
+    if (NeedsDasanRt && !TC.getTriple().isGPU())
+      SharedRuntimes.push_back("dasan");
     if (SanArgs.needsScudoRt()) {
       SharedRuntimes.push_back("scudo_standalone");
     }
@@ -1895,6 +1911,9 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
   }
   if (NeedsCsanOffloadRt && !Args.hasArg(options::OPT_shared))
     HelperStaticRuntimes.push_back("csan_offload-preinit");
+  if (NeedsDasanRt && !TC.getTriple().isGPU() &&
+      !Args.hasArg(options::OPT_shared))
+    HelperStaticRuntimes.push_back("dasan-preinit");
 
   // Collect static runtimes.
   if (Args.hasArg(options::OPT_shared)) {
@@ -1961,6 +1980,8 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
   }
   if (!SanArgs.needsSharedRt() && SanArgs.needsTysanRt())
     StaticRuntimes.push_back("tysan");
+  if (NeedsDasanRt && (!SanArgs.needsSharedRt() || TC.getTriple().isGPU()))
+    StaticRuntimes.push_back("dasan");
   if (!SanArgs.needsSharedRt() && NeedsUbsanRt) {
     if (SanArgs.requiresMinimalRuntime()) {
       StaticRuntimes.push_back("ubsan_minimal");

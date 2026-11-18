@@ -82,6 +82,7 @@
 #include "llvm/Transforms/Instrumentation/ConcurrencySanitizer.h"
 #include "llvm/Transforms/Instrumentation/CopyProf.h"
 #include "llvm/Transforms/Instrumentation/DataFlowSanitizer.h"
+#include "llvm/Transforms/Instrumentation/DeviceAddressSanitizer.h"
 #include "llvm/Transforms/Instrumentation/GCOVProfiler.h"
 #include "llvm/Transforms/Instrumentation/HWAddressSanitizer.h"
 #include "llvm/Transforms/Instrumentation/InstrProfiling.h"
@@ -722,6 +723,13 @@ static void addSanitizers(const Triple &TargetTriple,
     if (LangOpts.Sanitize.has(SanitizerKind::Realtime))
       MPM.addPass(RealtimeSanitizerPass());
 
+    if (LangOpts.Sanitize.has(SanitizerKind::DeviceAddress)) {
+      DeviceAddressSanitizerOptions Opts;
+      Opts.Recover =
+          CodeGenOpts.SanitizeRecover.has(SanitizerKind::DeviceAddress);
+      MPM.addPass(DeviceAddressSanitizerPass(Opts));
+    }
+
     auto ASanPass = [&](SanitizerMask Mask, bool CompileKernel) {
       if (LangOpts.Sanitize.has(Mask)) {
         bool UseGlobalGC = asanUseGlobalsGC(TargetTriple, CodeGenOpts);
@@ -1274,16 +1282,19 @@ void EmitAssemblyHelper::RunCodegenPipeline(
   // this also adds codegenerator level optimization passes.
   CodeGenFileType CGFT = getCodeGenFileType(Action);
 
-  // Invoke pre-codegen callback from plugin, which might want to take over the
-  // entire code generation itself.
-  for (const std::unique_ptr<llvm::PassPlugin> &Plugin : CI.getPassPlugins()) {
-    if (Plugin->invokePreCodeGenCallback(*TheModule, *TM, CGFT, *OS))
-      return;
-  }
-
   if (!CodeGenOpts.SplitDwarfOutput.empty()) {
     DwoOS = openOutputFile(CodeGenOpts.SplitDwarfOutput);
     if (!DwoOS)
+      return;
+  }
+
+  // Invoke pre-codegen callback from plugin, which might want to take over the
+  // entire code generation itself.
+  for (const std::unique_ptr<llvm::PassPlugin> &Plugin : CI.getPassPlugins()) {
+    if (Plugin->invokePreCodeGenCallback(
+            *TM, *TheModule, *OS, DwoOS ? &DwoOS->os() : nullptr, CGFT,
+            !CodeGenOpts.VerifyModule, /*DisableSimplifyLibCalls=*/false,
+            /*MSI=*/nullptr, CI.getVirtualFileSystemPtr()))
       return;
   }
 

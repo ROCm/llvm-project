@@ -12,7 +12,7 @@
 
 #include "Utils/ELF.h"
 
-#include "Shared/APITypes.h"
+#include "APITypes.h"
 #include "Shared/Debug.h"
 
 #include "llvm/BinaryFormat/Magic.h"

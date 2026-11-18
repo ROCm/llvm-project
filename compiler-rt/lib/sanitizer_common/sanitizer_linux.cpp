@@ -617,10 +617,23 @@ uptr internal_rename(const char *oldpath, const char *newpath) {
 uptr internal_sched_yield() { return internal_syscall(SYSCALL(sched_yield)); }
 
 void internal_usleep(u64 useconds) {
+#    if SANITIZER_LINUX && defined(__NR_clock_nanosleep_time64)
+  struct {
+    s64 tv_sec;
+    s64 tv_nsec;
+  } ts64;
+  ts64.tv_sec = useconds / 1000000;
+  ts64.tv_nsec = (useconds % 1000000) * 1000;
+  [[maybe_unused]] uptr Res = internal_syscall(
+      SYSCALL(clock_nanosleep_time64), CLOCK_MONOTONIC, 0, &ts64, &ts64);
+  [[maybe_unused]] int Err;
+  DCHECK(!internal_iserror(Res, &Err) || Err != ENOSYS);
+#    else
   struct timespec ts;
   ts.tv_sec = useconds / 1000000;
   ts.tv_nsec = (useconds % 1000000) * 1000;
   internal_syscall(SYSCALL(nanosleep), &ts, &ts);
+#    endif
 }
 
 uptr internal_execve(const char *filename, char *const argv[],
@@ -2901,22 +2914,6 @@ void OnDlOpen(const char* filename, int flag) {
   }
 #  endif
 }
-
-#  if SANITIZER_AMDHSA
-void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag) {
-  if (filename && (internal_strstr(filename, "libamdhip64.so") ||
-      internal_strstr(filename, "libhsa-runtime64.so") ||
-      internal_strstr(filename, "libamdocl64.so")) && !(flag & RTLD_GLOBAL)) {
-    flag |= RTLD_GLOBAL;
-    if (Verbosity() >= 2) {
-      Printf(
-          "RTLD_GLOBAL flag on dlopen call forced on for %s due to AMDGPU "
-          "device sanitizer runtime requirements.\n",
-          filename);
-    }
-  }
-}
-#endif
 
 uptr FindAvailableMemoryRange(uptr size, uptr alignment, uptr left_padding,
                               uptr *largest_gap_found,
