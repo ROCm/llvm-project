@@ -62,6 +62,7 @@
 #include "llvm/TargetParser/RISCVTargetParser.h"
 #include <cctype>
 #include <iterator>
+#include <optional>
 
 using namespace clang::driver;
 using namespace clang::driver::tools;
@@ -3052,11 +3053,14 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
   // CUDA and HIP don't rely on the frontend to pass an ffp-contract option.
   // If one wasn't given by the user, don't pass it here.
   StringRef FPContract;
-  StringRef LastSeenFfpContractOption;
+  // Explicit contraction options and unsafe math establish a fallback.
+  // Without one, disabling unsafe math leaves precise/strict models unchanged.
+  std::optional<StringRef> FPContractFallback;
   StringRef LastFpContractOverrideOption;
-  bool SeenUnsafeMathModeOption = false;
-  if (!JA.isDeviceOffloading(Action::OFK_Cuda) &&
-      !JA.isOffloading(Action::OFK_HIP))
+  const bool UseFrontendFPContractDefault =
+      JA.isDeviceOffloading(Action::OFK_Cuda) ||
+      JA.isOffloading(Action::OFK_HIP);
+  if (!UseFrontendFPContractDefault)
     FPContract = "on";
   bool StrictFPModel = false;
   StringRef Float16ExcessPrecision = "";
@@ -3064,6 +3068,12 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
   LangOptions::ComplexRangeKind Range = LangOptions::ComplexRangeKind::CX_None;
   std::string ComplexRangeStr;
   StringRef LastComplexRangeOption;
+
+  auto enableUnsafeFPContract = [&]() {
+    FPContract = "fast";
+    if (!FPContractFallback)
+      FPContractFallback = "on";
+  };
 
   // Lambda to set fast-math options. This is also used by -ffp-model=fast
   auto applyFastMath = [&](bool Aggressive, StringRef CallerOption) {
@@ -3087,28 +3097,13 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
     TrappingMath = false;
     RoundingFPMath = false;
     FPExceptionBehavior = "";
-    FPContract = "fast";
-    SeenUnsafeMathModeOption = true;
+    enableUnsafeFPContract();
   };
 
   // Lambda to consolidate common handling for fp-contract
   auto restoreFPContractState = [&]() {
-    // CUDA and HIP don't rely on the frontend to pass an ffp-contract option.
-    // For other targets, if the state has been changed by one of the
-    // unsafe-math umbrella options a subsequent -fno-fast-math or
-    // -fno-unsafe-math-optimizations option reverts to the last value seen for
-    // the -ffp-contract option or "on" if we have not seen the -ffp-contract
-    // option. If we have not seen an unsafe-math option or -ffp-contract,
-    // we leave the FPContract state unchanged.
-    if (!JA.isDeviceOffloading(Action::OFK_Cuda) &&
-        !JA.isOffloading(Action::OFK_HIP)) {
-      if (LastSeenFfpContractOption != "")
-        FPContract = LastSeenFfpContractOption;
-      else if (SeenUnsafeMathModeOption)
-        FPContract = "on";
-    }
-    // In this case, we're reverting to the last explicit fp-contract option
-    // or the platform default
+    if (!UseFrontendFPContractDefault && FPContractFallback)
+      FPContract = *FPContractFallback;
     LastFpContractOverrideOption = "";
   };
 
@@ -3309,7 +3304,7 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
         }
 
         FPContract = Val;
-        LastSeenFfpContractOption = Val;
+        FPContractFallback = Val;
         LastFpContractOverrideOption = "";
       } else
         D.Diag(diag::err_drv_unsupported_option_argument)
@@ -3388,9 +3383,8 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
       ApproxFunc = true;
       TrappingMath = false;
       FPExceptionBehavior = "";
-      FPContract = "fast";
+      enableUnsafeFPContract();
       LastFpContractOverrideOption = "-funsafe-math-optimizations";
-      SeenUnsafeMathModeOption = true;
       break;
     case options::OPT_fno_unsafe_math_optimizations:
       AssociativeMath = false;
@@ -3435,7 +3429,6 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
       else
         Range = LangOptions::ComplexRangeKind::CX_None;
       LastComplexRangeOption = "";
-      LastFpContractOverrideOption = "";
       break;
     } // End switch (A->getOption().getID())
 
@@ -8753,8 +8746,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                     options::OPT_fno_keep_persistent_storage_variables);
   Args.addOptInFlag(CmdArgs, options::OPT_fkeep_inline_functions,
                     options::OPT_fno_keep_inline_functions);
-  Args.addOptInFlag(CmdArgs, options::OPT_fmodule_local_hints,
-                    options::OPT_fno_module_local_hints);
+  Args.addOptOutFlag(CmdArgs, options::OPT_fmodule_local_hints,
+                     options::OPT_fno_module_local_hints);
   Args.addOptInFlag(CmdArgs, options::OPT_fcomplete_member_pointers,
                     options::OPT_fno_complete_member_pointers);
   if (Arg *A = Args.getLastArg(options::OPT_cxx_static_destructors_EQ))
