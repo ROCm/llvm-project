@@ -63,8 +63,8 @@ public:
   if (ompt::Initialized && ompt::lookupCallbackByCode) {                       \
     ompt::lookupCallbackByCode((ompt_callbacks_t)(Code),                       \
                                ((ompt_callback_t *)&(Name##_fn)));             \
-    ODBG(ODT_Tool) << "class bound " << #Name                                  \
-                   << "=" << ((void *)(uint64_t)Name##_fn);                    \
+    ODBG(ODT_Tool) << "class bound " << #Name << "="                           \
+                   << ((void *)(uint64_t)Name##_fn);                           \
   }
 
     FOREACH_OMPT_DEVICE_EVENT(bindOmptCallback);

@@ -54,7 +54,7 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
   // correct, we will synchronize explicitly when the object is deleted. Update
   // the error with the result of the synchronize operation.
   if (AsyncInfoPtr == &LocalAsyncInfo && LocalAsyncInfo.Queue && !Err) {
-     ODBG(ODT_Init) << "Synchronizing Operation for LOCAL";
+    ODBG(ODT_Init) << "Synchronizing Operation for LOCAL";
     Err = Device.synchronize(&LocalAsyncInfo);
     // Invalidate the wrapper object.
   }
@@ -1311,7 +1311,7 @@ int GenericPluginTy::prepopulate_page_table(int32_t DeviceId, void *ptr,
     auto Err = getDevice(DeviceId).prepopulatePageTable(ptr, size);
 
     if (Err) {
-      REPORT() <<"Failure prepopulating GPU page table (ptr: " << ptr
+      REPORT() << "Failure prepopulating GPU page table (ptr: " << ptr
                << "size:" << size;
       return OFFLOAD_FAIL;
     }

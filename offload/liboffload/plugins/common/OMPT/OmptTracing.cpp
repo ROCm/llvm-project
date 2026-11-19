@@ -12,8 +12,8 @@
 
 #ifdef OMPT_SUPPORT
 
-#include "Shared/Debug.h"
 #include "OmptDeviceTracing.h"
+#include "Shared/Debug.h"
 #include "omp-tools.h"
 
 #include <atomic>
@@ -62,9 +62,11 @@ void llvm::omp::target::ompt::setDeviceId(ompt_device_t *Device,
   if (DeviceIterator != Devices.end()) {
     auto CurrentDeviceId = DeviceIterator->second;
     if (DeviceId == CurrentDeviceId) {
-      REPORT() << "Tried to duplicate OMPT Device= " << Device <<  " ID=" << DeviceId;
+      REPORT() << "Tried to duplicate OMPT Device= " << Device
+               << " ID=" << DeviceId;
     } else {
-      REPORT() << "Tried to overwrite OMPT Device=" << Device << " (ID=" << CurrentDeviceId << " with new ID=" << DeviceId;
+      REPORT() << "Tried to overwrite OMPT Device=" << Device
+               << " (ID=" << CurrentDeviceId << " with new ID=" << DeviceId;
     }
     return;
   }
@@ -74,7 +76,7 @@ void llvm::omp::target::ompt::setDeviceId(ompt_device_t *Device,
 void llvm::omp::target::ompt::removeDeviceId(ompt_device_t *Device) {
   int DeviceId = getDeviceId(Device);
   if (DeviceId < 0) {
-    REPORT() << "Tried to remove Device= " << Device <<  " ID=" << DeviceId;
+    REPORT() << "Tried to remove Device= " << Device << " ID=" << DeviceId;
     return;
   }
   std::unique_lock<std::mutex> Lock(DeviceIdWritingMutex);
@@ -89,8 +91,9 @@ OMPT_API_ROUTINE ompt_set_result_t ompt_set_trace_ompt(ompt_device_t *Device,
 
   int DeviceId = getDeviceId(Device);
   if (DeviceId < 0) {
-    REPORT() << "Failed to set trace events for Device=" << Device <<
-                 " (Unknown device) [Enable=" << Enable << " EventTy=" << EventTy;
+    REPORT() << "Failed to set trace events for Device=" << Device
+             << " (Unknown device) [Enable=" << Enable
+             << " EventTy=" << EventTy;
     return ompt_set_never;
   }
 
@@ -104,7 +107,8 @@ ompt_start_trace(ompt_device_t *Device, ompt_callback_buffer_request_t Request,
 
   int DeviceId = getDeviceId(Device);
   if (DeviceId < 0) {
-    REPORT() << "Failed to start trace for Device=" << Device << " (Unknown device";
+    REPORT() << "Failed to start trace for Device=" << Device
+             << " (Unknown device";
     // Indicate failure
     return 0;
   }
@@ -121,8 +125,8 @@ ompt_start_trace(ompt_device_t *Device, ompt_callback_buffer_request_t Request,
       if (DeviceId >= 0)
         setGlobalOmptKernelProfile(Device, /*Enable=*/1);
       else
-        REPORT() << "May not enable kernel profiling for invalid device id=" <<
-               DeviceId;
+        REPORT() << "May not enable kernel profiling for invalid device id="
+                 << DeviceId;
     }
   }
   return libomptarget_ompt_start_trace(DeviceId, Request, Complete);
@@ -139,7 +143,8 @@ OMPT_API_ROUTINE int ompt_stop_trace(ompt_device_t *Device) {
 
   int DeviceId = getDeviceId(Device);
   if (DeviceId < 0) {
-    REPORT() << "Failed to stop trace for Device=" << Device << " (Unknown device)";
+    REPORT() << "Failed to stop trace for Device=" << Device
+             << " (Unknown device)";
     // Indicate failure
     return 0;
   }
