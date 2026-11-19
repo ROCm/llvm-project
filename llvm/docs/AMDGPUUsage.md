@@ -3703,7 +3703,8 @@ on the register budget. Callers and callees rely on this floor without seeing
 each other's register usage. It is not the occupancy the function achieves: a
 function may use fewer registers than the cap and therefore achieve a higher
 occupancy. For example, the ABI occupancy may be 4 even when the function
-achieves an occupancy of 10.
+achieves an occupancy of 10. `.amdgpu_occupancy` records this floor; see
+{ref}`amdgpu-assembler-directive-amdgpu-info`.
 
 A caller with ABI occupancy `N` can call a callee only when the callee's ABI
 occupancy is at least `N`. A lower ABI occupancy raises the callee's register
@@ -3742,6 +3743,126 @@ accepts it. A request above the hardware maximum, or outside the occupancy
 range implied by the workgroup size and LDS, is rejected and leaves the floor
 and the register cap unchanged. The raised value is still the floor, not the
 occupancy the function achieves.
+
+(amdgpu-object-linking)=
+
+## Object Linking
+
+:::{warning}
+Object linking is an experimental feature.
+:::
+
+AMDGPU supports separate compilation with object linking. Each translation
+unit is compiled into a relocatable object, and `ld.lld` links the relocatable
+objects into one code object. Code in one object can call functions and use
+variables that are defined in other objects.
+
+The backend writes information about each function to the `.amdgpu.info`
+section of the relocatable object (see {ref}`amdgpu-info-section`). This
+information includes the resource usage of the function (registers, stack, and
+LDS), the functions that it calls, and the LDS and named barrier variables that
+it uses. LDS and named barrier variables are emitted as symbols.
+
+`ld.lld` uses this information to:
+
+- Assign LDS offsets and named barrier IDs.
+- Compute the resource usage of each kernel from all functions that the kernel
+  can call, in all objects.
+- Report an error for a call that does not follow the ABI rules, for example a
+  call between functions that use different wavefront sizes or incompatible ABI
+  occupancies (see {ref}`amdgpu-abi-occupancy`).
+
+### Enabling Object Linking
+
+The backend option `-amdgpu-enable-object-linking` enables object linking. It
+is off by default. Pass it to every compilation of the program. With LTO, also
+pass it to the code generation at link time, for example with
+`-plugin-opt=-amdgpu-enable-object-linking` for `ld.lld`.
+
+For HIP, the Clang driver enables object linking automatically for relocatable
+device code (RDC) when device LTO is ThinLTO or is disabled. The driver then
+passes `-amdgpu-enable-object-linking` to the device compilation and to the
+device link. There is no Clang option to enable or disable object linking.
+
+:::{list-table} Object Linking for HIP in the Clang Driver
+:name: amdgpu-object-linking-driver-table
+:header-rows: 1
+
+* - Mode
+  - Device LTO
+  - Object Linking
+* - Non-RDC (default)
+  - Any
+  - Off. Each translation unit is a complete device program.
+* - RDC (`-fgpu-rdc`)
+  - Full (default, `-foffload-lto`)
+  - Off. The device program is compiled as one module.
+* - RDC (`-fgpu-rdc`)
+  - ThinLTO (`-foffload-lto=thin`)
+  - On. Each ThinLTO backend emits a relocatable object.
+* - RDC (`-fgpu-rdc`)
+  - Disabled (`-fno-offload-lto`)
+  - On. Each device compilation emits a relocatable object.
+:::
+
+OpenMP offloading and SPIR-V device code do not use object linking.
+
+(amdgpu-object-linking-limitations)=
+
+### Limitations
+
+There is no ABI stability promise for object linking at this time. All
+relocatable objects in a device link must be compiled by the same compiler, and
+the link must use `ld.lld` from the same toolchain.
+
+These configurations are not supported:
+
+- A target OS other than `amdhsa`.
+- A device link that mixes relocatable objects compiled with object linking and
+  code compiled without object linking, for example bitcode compiled for full
+  LTO.
+
+The linker does not detect all unsupported configurations.
+
+(amdgpu-thinlto)=
+
+## ThinLTO
+
+:::{warning}
+ThinLTO is an experimental feature for AMDGPU.
+:::
+
+AMDGPU supports ThinLTO. Each translation unit is compiled into bitcode with a
+module summary. At link time, the thin link reads the summaries of all modules
+and selects the functions that each module imports from other modules. A
+ThinLTO backend then optimizes each module and compiles it into a relocatable
+object, and `ld.lld` links these objects with object linking (see
+{ref}`amdgpu-object-linking`).
+
+The thin link also propagates kernel attributes, such as
+`amdgpu-flat-work-group-size` and `amdgpu-waves-per-eu`, across modules. Each
+device function gets attribute values that are compatible with all kernels that
+can call it, directly or through other functions.
+
+For HIP, compile and link with `-fgpu-rdc -foffload-lto=thin`. The Clang
+driver then enables object linking for the device compilation and the device
+link. OpenMP offloading uses ThinLTO without object linking: each ThinLTO
+backend imports all functions that its module calls.
+
+### Limitations
+
+The limitations of object linking also apply to ThinLTO (see
+{ref}`amdgpu-object-linking-limitations`).
+
+There is no compatibility guarantee for ThinLTO bitcode at this time. All
+bitcode in a device link, including bitcode in static libraries, must be
+compiled by the same compiler that does the link.
+
+These configurations are not supported:
+
+- A device link that mixes ThinLTO bitcode and bitcode compiled for full LTO.
+- A device link that mixes ThinLTO bitcode and relocatable objects, for example
+  from a static library that was compiled without device LTO.
 
 (amdgpu-elf-code-object)=
 
@@ -4435,11 +4556,10 @@ if needed.
 
 `.amdgpu.info`
 
-: Per-function metadata for AMDGPU object linking, emitted only in relocatable
-  code objects when object linking is enabled
-  (`-amdgpu-enable-object-linking`). The linker uses this section to
-  propagate resource usage (registers, stack, LDS) and resolve call graph
-  dependencies across translation units.
+: Per-function metadata emitted only in relocatable code objects when object
+  linking is enabled. The linker uses this section to propagate resource usage
+  (registers, stack, LDS) and resolve call graph dependencies across
+  translation units.
 
   Each entry uses a tagged, length-prefixed binary encoding:
 
@@ -4489,6 +4609,9 @@ if needed.
   * - 10
     - `INFO_TYPEID`
     - u32 strtab offset; function type-ID
+  * - 11
+    - `INFO_OCCUPANCY`
+    - u32; ABI occupancy
   :::
 
   :::{list-table} AMDGPU Info Function Flags (`INFO_FLAGS`)
@@ -4507,6 +4630,12 @@ if needed.
   * - 0x4
     - `FUNC_HAS_DYN_STACK`
     - Function has dynamic stack allocation
+  * - 0x8
+    - `FUNC_FULL_SIMD_MODE`
+    - Function uses full SIMD execution mode
+  * - 0x10
+    - `FUNC_WAVE32`
+    - Function uses wave32; otherwise wave64
   :::
 
   Symbol references (`INFO_FUNC`, `INFO_USE`, `INFO_CALL`) generate
@@ -18017,6 +18146,8 @@ The following sub-directives may appear inside the block:
   - Accumulator VGPRs used (u32)
 * - `.amdgpu_private_segment_size` *n*
   - Private segment size in bytes (u32)
+* - `.amdgpu_occupancy` *value*
+  - ABI occupancy (u32). See {ref}`amdgpu-abi-occupancy` for more details.
 * - `.amdgpu_use` *symbol*
   - Resource dependency (LDS or barrier)
 * - `.amdgpu_call` *symbol*
@@ -18036,6 +18167,7 @@ Example:
   .amdgpu_num_vgpr 32
   .amdgpu_num_agpr 0
   .amdgpu_private_segment_size 0
+  .amdgpu_occupancy 4
   .amdgpu_use lds_var
   .amdgpu_call helper
   .amdgpu_indirect_call "vi"

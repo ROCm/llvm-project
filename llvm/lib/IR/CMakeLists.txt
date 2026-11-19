@@ -12,6 +12,7 @@ add_llvm_component_library(LLVMCore
   BasicBlock.cpp
   BuiltinGCs.cpp
   BundleAttributes.cpp
+  CallTypeIdentifier.cpp
   Comdat.cpp
   ConstantFold.cpp
   ConstantFPRange.cpp

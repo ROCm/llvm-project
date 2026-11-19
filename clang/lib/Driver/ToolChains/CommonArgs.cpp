@@ -2939,6 +2939,36 @@ bool tools::haveAMDGPUCodeObjectVersionArgument(
   return getAMDGPUCodeObjectArgument(D, Args) != nullptr;
 }
 
+bool tools::shouldUseAMDGPUObjectLinking(const ToolChain &TC,
+                                         const llvm::opt::ArgList &Args,
+                                         Action::OffloadKind Kind,
+                                         bool AssumeRDC) {
+  if (!TC.getTriple().isAMDGCN())
+    return false;
+
+  // Only HIP and CUDA device code can use object linking. Non-RDC device code
+  // is a complete program per translation unit, so it is never linked with
+  // other relocatable objects.
+  bool IsRDC = AssumeRDC;
+  switch (Kind) {
+  case Action::OFK_Cuda:
+  case Action::OFK_HIP:
+    IsRDC |= Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,
+                          /*Default=*/false);
+    break;
+  default:
+    return false;
+  }
+  if (!IsRDC)
+    return false;
+
+  // Full LTO compiles the whole device program as one module. Without LTO,
+  // or with ThinLTO, the backend emits relocatable objects that are linked
+  // with each other.
+  LTOKind LTOMode = TC.getLTOMode(Args, Kind);
+  return LTOMode == LTOK_None || LTOMode == LTOK_Thin;
+}
+
 void tools::addMachineOutlinerArgs(const Driver &D,
                                    const llvm::opt::ArgList &Args,
                                    llvm::opt::ArgStringList &CmdArgs,

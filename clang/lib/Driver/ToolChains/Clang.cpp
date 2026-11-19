@@ -10172,7 +10172,9 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       else if (DeviceLTOMode == LTOK_Thin) {
         CmdArgs.push_back(Args.MakeArgString(
             "--device-compiler=" + TC->getTripleString() + "=-flto=thin"));
-        if (TC->getTriple().isAMDGPU()) {
+        // OpenMP does not use object linking, so each ThinLTO backend imports
+        // all functions and internalizes the symbols.
+        if (TC->getTriple().isAMDGPU() && Kind == Action::OFK_OpenMP) {
           CmdArgs.push_back(
               Args.MakeArgString("--device-linker=" + TC->getTripleString() +
                                  "=-plugin-opt=-force-import-all"));
@@ -10182,13 +10184,20 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
           CmdArgs.push_back(Args.MakeArgString(
               "--device-linker=" + TC->getTripleString() +
               "=-plugin-opt=-avail-extern-gv-in-addrspace-to-local=3"));
-          if (Kind == Action::OFK_OpenMP) {
-            CmdArgs.push_back(
-                Args.MakeArgString("--device-linker=" + TC->getTripleString() +
-                                   "=-plugin-opt=-amdgpu-internalize-symbols"));
-          }
+          CmdArgs.push_back(
+              Args.MakeArgString("--device-linker=" + TC->getTripleString() +
+                                 "=-plugin-opt=-amdgpu-internalize-symbols"));
         }
       }
+
+      // Except for the per-TU HIP non-RDC fat binary job (the same condition
+      // as SuppressHIPNoRDCVerbose), this job links relocatable device code,
+      // even if `-fgpu-rdc` is not on the link command line.
+      if (shouldUseAMDGPUObjectLinking(*TC, ToolChainArgs, Kind,
+                                       /*AssumeRDC=*/!SuppressHIPNoRDCVerbose))
+        CmdArgs.push_back(
+            Args.MakeArgString("--device-linker=" + TC->getTripleString() +
+                               "=-plugin-opt=-amdgpu-enable-object-linking"));
     }
   }
 
