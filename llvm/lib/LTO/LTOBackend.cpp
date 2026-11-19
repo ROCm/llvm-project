@@ -508,7 +508,7 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
       !isEmptyModule(Mod) ? &CombinedIndex : nullptr;
 
   // Allow plugins to handle or even take over code generation entirely.
-  for (const PassPlugin *Plugin : getPassPlugins(Conf)) {
+  for (const PassPlugin *Plugin : getPassPlugins(Conf.Conf)) {
     if (Plugin->invokePreCodeGenCallback(
             *TM, Mod, *Stream->OS, DwoOut ? &DwoOut->os() : nullptr,
             Conf.CGFileType, /*DisableVerify=*/true,
