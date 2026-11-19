@@ -1,15 +1,10 @@
 add_subdirectory(API)
 
-add_subdirectory(plugins)
-# Expose the variables set by the plugins to the tests.
-set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS}" PARENT_SCOPE)
-set(LIBOMPTARGET_TESTED_PLUGINS "${LIBOMPTARGET_TESTED_PLUGINS}" PARENT_SCOPE)
-
 add_library(LLVMOffloadObjects OBJECT
   src/OffloadLib.cpp
   src/OffloadImpl.cpp
 )
-add_dependencies(LLVMOffloadObjects OffloadAPI LLVMOffloadPluginErrcodes)
+add_dependencies(LLVMOffloadObjects OffloadAPI PluginErrcodes)
 set_target_properties(LLVMOffloadObjects PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if(LLVM_LINK_LLVM_DYLIB)
@@ -18,10 +13,10 @@ else()
   llvm_map_components_to_libnames(llvm_libs FrontendOpenMP Support)
 endif()
 
-target_link_libraries(LLVMOffloadObjects PRIVATE LLVMOffloadPluginCommon)
+target_link_libraries(LLVMOffloadObjects PRIVATE PluginCommon)
 
 foreach(plugin IN LISTS LIBOMPTARGET_PLUGINS_TO_BUILD)
-    target_link_libraries(LLVMOffloadObjects PRIVATE LLVMOffloadPlugin.${plugin})
+    target_link_libraries(LLVMOffloadObjects PRIVATE omptarget.rtl.${plugin})
 endforeach()
 
 
@@ -32,8 +27,8 @@ target_include_directories(LLVMOffloadObjects PUBLIC
                             ${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${CMAKE_CURRENT_SOURCE_DIR}/../include
                             PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/plugins/common/include
-                            ${CMAKE_CURRENT_BINARY_DIR}/plugins/common/include
+                            ${CMAKE_CURRENT_SOURCE_DIR}/../plugins-nextgen/common/include
+                            ${CMAKE_CURRENT_BINARY_DIR}/../plugins-nextgen/common/include
                             )
 target_compile_options(LLVMOffloadObjects PRIVATE ${offload_compile_flags})
 target_compile_definitions(LLVMOffloadObjects PRIVATE
