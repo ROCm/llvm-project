@@ -8,7 +8,7 @@ import tempfile
 import lit.formats
 
 config.name = "Comgr"
-config.suffixes = {".hip", ".cl", ".c", ".cpp"}
+config.suffixes = {".hip", ".cl", ".c", ".cpp", ".test"}
 config.test_format = lit.formats.ShTest(
     execute_external=True, force_execute_external=True
 )

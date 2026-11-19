@@ -78,9 +78,9 @@ void PluginManager::init() {
   ODBG(ODT_Init) << "RTLs loaded!";
 }
 
-void PluginManager::deinit() {
-  TIMESCOPE();
-  ODBG(ODT_Deinit) << "Unloading RTLs...";
+void PluginManager::deinitDevices() {
+  if (DevicesDeinitialized.exchange(true))
+    return;
 
   auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
   for (DeviceTy &Device : devices(ExclusiveDevicesAccessor)) {
@@ -99,7 +99,16 @@ void PluginManager::deinit() {
 #endif
 
   Platforms.clear();
+}
+
+void PluginManager::deinit() {
+  TIMESCOPE();
+  ODBG(ODT_Deinit) << "Unloading RTLs...";
+
+  deinitDevices();
+
   if (LibOffloadInitialized) {
+    LibOffloadInitialized = false;
     if (auto Err = olShutDown())
       REPORT() << "Failed to denitialize liboffload: " << Err->Details;
   }
