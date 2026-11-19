@@ -13,7 +13,7 @@
 
 #include "llvm/ADT/StringRef.h"
 
-namespace llvm::omp::target::plugin {
+namespace llvm::offload::plugin {
 
 /// Runtime options of an AMDGPU device.
 struct AMDGPUDeviceOptionsTy {
@@ -36,6 +36,6 @@ struct AMDGPUDeviceOptionsTy {
   }
 };
 
-} // namespace llvm::omp::target::plugin
+} // namespace llvm::offload::plugin
 
 #endif // OFFLOAD_PLUGINS_NEXTGEN_AMDGPU_AMDGPUDEVICEOPTIONS_H
