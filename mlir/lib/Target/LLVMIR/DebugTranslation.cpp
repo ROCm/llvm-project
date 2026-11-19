@@ -290,6 +290,12 @@ llvm::DIDerivedType *DebugTranslation::translateImpl(DIDerivedTypeAttr attr) {
       /*Flags=*/static_cast<llvm::DINode::DIFlags>(attr.getFlags()), extraData);
 }
 
+llvm::DIEnumerator *DebugTranslation::translateImpl(DIEnumeratorAttr attr) {
+  return llvm::DIEnumerator::get(llvmCtx, attr.getValue().getValue(),
+                                 attr.getIsUnsigned(),
+                                 getMDStringOrNull(attr.getName()));
+}
+
 llvm::DIStringType *DebugTranslation::translateImpl(DIStringTypeAttr attr) {
   return llvm::DIStringType::get(
       llvmCtx, attr.getTag(), getMDStringOrNull(attr.getName()),
@@ -559,8 +565,8 @@ llvm::DINode *DebugTranslation::translate(DINodeAttr attr) {
   if (!node)
     node = TypeSwitch<DINodeAttr, llvm::DINode *>(attr)
                .Case<DIBasicTypeAttr, DICommonBlockAttr, DICompileUnitAttr,
-                     DICompositeTypeAttr, DIDerivedTypeAttr, DIFileAttr,
-                     DIGenericSubrangeAttr, DIGlobalVariableAttr,
+                     DICompositeTypeAttr, DIDerivedTypeAttr, DIEnumeratorAttr,
+                     DIFileAttr, DIGenericSubrangeAttr, DIGlobalVariableAttr,
                      DIImportedEntityAttr, DILabelAttr, DILexicalBlockAttr,
                      DILexicalBlockFileAttr, DILocalVariableAttr, DIModuleAttr,
                      DINamespaceAttr, DINullTypeAttr, DIStringTypeAttr,
