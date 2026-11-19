@@ -230,7 +230,6 @@ private:
       llvm::SmallVectorImpl<mlir::Value> &mapVars,
       llvm::SmallVectorImpl<Object> &mapObjects,
       llvm::StringRef mapperIdNameRef = "", bool isMotionModifier = false,
-      llvm::omp::Directive directive = llvm::omp::OMPD_unknown,
       llvm::omp::Clause clause = llvm::omp::OMPC_unknown) const;
 
   void processMapObjectsWithIterator(
@@ -241,8 +240,8 @@ private:
       std::map<Object, OmpMapParentAndMemberData> &parentMemberIndices,
       mlir::omp::MapClauseOps &result,
       llvm::SmallVectorImpl<Object> &mapObjects,
-      llvm::StringRef mapperIdNameRef = "", bool isMotionModifier = false,
-      llvm::omp::Directive directive = llvm::omp::OMPD_unknown) const;
+      llvm::StringRef mapperIdNameRef = "",
+      bool isMotionModifier = false) const;
 
   lower::AbstractConverter &converter;
   semantics::SemanticsContext &semaCtx;
