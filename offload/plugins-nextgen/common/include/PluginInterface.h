@@ -22,11 +22,11 @@
 #include <variant>
 #include <vector>
 
-#include "ExclusiveAccess.h"
 // Downstream: __tgt_async_info is defined in APITypes.h.
-#include "Shared/APITypes.h"
+#include "APITypes.h"
 #include "Shared/Debug.h"
 #include "Shared/EnvironmentVar.h"
+#include "Shared/ExclusiveAccess.h"
 #include "Shared/Utils.h"
 
 #include "GenericProfiler.h"
@@ -81,7 +81,7 @@ inline Error error(error::ErrorCode Code, const char *S) {
 }
 
 inline Error error(error::ErrorCode Code, Error &&OtherError,
-                   const char *Context) {
+                   StringRef Context) {
   return error::createOffloadError(Code, std::move(OtherError), Context);
 }
 

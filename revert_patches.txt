@@ -23,3 +23,9 @@ https://amd-hub.atlassian.net/browse/AIPROFSDK-1253
 two misbehaving lits: wasm/Driver.cpp Macho/Driver.cpp
 [LLD] Disable bitcode verification in release builds (#242663)
 ---
+breaks smoke-fort and smoke-fort-limbo
+[mlir] [arith] Combine op for select (#234818) 
+---
+needs LTO integration from MattC
+[LTO] Invoke PreCodeGenCallback from LTO backends and load plugins upfront (#231516)
+---

@@ -20,7 +20,8 @@ int main(int argc, char *argv[]) {
       DataSetExec;
   amd_comgr_action_info_t DataAction;
   size_t Count;
-  const char *CodeGenOptions[] = {"-mllvm", "--color"};
+  const char *CodeGenOptions[] = {"-mllvm", "--color", "-mllvm",
+                                  "-amdgpu-internalize-symbols"};
   size_t CodeGenOptionsCount =
       sizeof(CodeGenOptions) / sizeof(CodeGenOptions[0]);
 

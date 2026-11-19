@@ -137,6 +137,7 @@ LLVMContextImpl::~LLVMContextImpl() {
   FPConstants.clear();
   FPSplatConstants.clear();
   CDSConstants.clear();
+  TheNoneToken.reset();
 
   // Destroy attribute node lists.
   for (FoldingSetIterator<AttributeSetNode> I = AttrsSetNodes.begin(),

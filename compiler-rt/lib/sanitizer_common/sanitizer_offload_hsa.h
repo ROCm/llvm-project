@@ -6,7 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Minimal HSA declarations without a ROCm dependency.
+// Canonical HSA declarations for compiler-rt sanitizers (offload + AMDHSA).
+// Minimal HSA declarations without a ROCm dependency, so no ROCm install is
+// required. This is the only HSA header compiler-rt uses; types, enumerator
+// values and signatures must match the ROCr ABI.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,6 +18,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include "sanitizer_platform.h"
 
 #define SANITIZER_HSA_LIBRARY "libhsa-runtime64"
 
@@ -47,18 +52,8 @@
   X(hsa_amd_vmem_unmap)                   \
   X(hsa_amd_vmem_set_access)
 
-#if defined(SANITIZER_AMDHSA) && SANITIZER_AMDHSA && \
-    __has_include(<hsa.h>) && __has_include(<hsa_ext_amd.h>) &&              \
-    __has_include(<hsa_ven_amd_loader.h>)
-#  include <hsa.h>
-#  include <hsa_ext_amd.h>
-#  include <hsa_ven_amd_loader.h>
-#  define SANITIZER_USE_SYSTEM_HSA
-#endif
-
 extern "C" {
 
-#ifndef SANITIZER_USE_SYSTEM_HSA
 typedef struct hsa_agent_s {
   uint64_t handle;
 } hsa_agent_t;
@@ -102,6 +97,10 @@ typedef enum {
   HSA_STATUS_SUCCESS = 0,
   HSA_STATUS_INFO_BREAK = 0x1,
   HSA_STATUS_ERROR = 0x1000,
+  HSA_STATUS_ERROR_INVALID_ARGUMENT = 0x1001,
+  HSA_STATUS_ERROR_OUT_OF_RESOURCES = 0x1008,
+  HSA_STATUS_ERROR_NOT_INITIALIZED = 0x100B,
+  HSA_STATUS_ERROR_INVALID_RUNTIME_STATE = 0x1025,
 } hsa_status_t;
 
 typedef enum {
@@ -208,62 +207,6 @@ typedef enum {
   HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT = 22,
 } hsa_executable_symbol_info_t;
 
-typedef enum { HSA_EXT_POINTER_TYPE_HSA = 1 } hsa_amd_pointer_type_t;
-
-typedef enum { HSA_QUEUE_TYPE_SINGLE = 1 } hsa_queue_type_t;
-
-typedef struct hsa_amd_pointer_info_s {
-  uint32_t size;
-  hsa_amd_pointer_type_t type;
-  void* agentBaseAddress;
-  void* hostBaseAddress;
-  size_t sizeInBytes;
-  void* userData;
-  hsa_agent_t agentOwner;
-  uint32_t global_flags;
-  bool registered;
-} hsa_amd_pointer_info_t;
-
-typedef struct hsa_queue_s {
-  hsa_queue_type32_t type;
-  uint32_t features;
-  void* base_address;
-  hsa_signal_t doorbell_signal;
-  uint32_t size;
-  uint32_t reserved1;
-  uint64_t id;
-} hsa_queue_t;
-
-static_assert(sizeof(hsa_amd_pointer_info_t) == 56, "layout drift");
-static_assert(offsetof(hsa_amd_pointer_info_t, sizeInBytes) == 24,
-              "layout drift");
-static_assert(offsetof(hsa_amd_pointer_info_t, global_flags) == 48,
-              "layout drift");
-static_assert(sizeof(hsa_queue_t) == 40, "layout drift");
-static_assert(offsetof(hsa_queue_t, doorbell_signal) == 16, "layout drift");
-
-typedef enum {
-  HSA_AMD_GPU_MEMORY_FAULT_EVENT = 0,
-} hsa_amd_event_type_t;
-
-typedef struct hsa_amd_gpu_memory_fault_info_s {
-  hsa_agent_t agent;
-  uint64_t virtual_address;
-  uint32_t fault_reason_mask;
-} hsa_amd_gpu_memory_fault_info_t;
-
-typedef struct hsa_amd_event_s {
-  hsa_amd_event_type_t event_type;
-  hsa_amd_gpu_memory_fault_info_t memory_fault;
-} hsa_amd_event_t;
-
-static_assert(sizeof(hsa_amd_event_t) == 32, "layout drift");
-static_assert(offsetof(hsa_amd_event_t, memory_fault.virtual_address) == 16,
-              "layout drift");
-
-typedef hsa_status_t (*hsa_amd_system_event_callback_t)(
-    const hsa_amd_event_t* event, void* data);
-
 typedef enum { HSA_EXTENSION_AMD_LOADER = 0x201 } hsa_extension_t;
 
 typedef enum {
@@ -298,7 +241,6 @@ struct hsa_ven_amd_loader_segment_descriptor_t {
   const void* segment_base;
   size_t segment_size;
 };
-#endif
 
 static_assert(sizeof(hsa_ven_amd_loader_segment_descriptor_t) == 64,
               "layout drift");
@@ -316,6 +258,102 @@ static_assert(offsetof(hsa_ven_amd_loader_segment_descriptor_t, segment_base) ==
 static_assert(offsetof(hsa_ven_amd_loader_segment_descriptor_t, segment_size) ==
                   56,
               "layout drift");
+
+// Pointer queries, IPC and virtual memory, used by the ASan HSA interceptors.
+typedef enum {
+  HSA_EXT_POINTER_TYPE_UNKNOWN = 0,
+  HSA_EXT_POINTER_TYPE_HSA = 1,
+  HSA_EXT_POINTER_TYPE_LOCKED = 2,
+  HSA_EXT_POINTER_TYPE_GRAPHICS = 3,
+  HSA_EXT_POINTER_TYPE_IPC = 4,
+  HSA_EXT_POINTER_TYPE_RESERVED_ADDR = 5,
+  HSA_EXT_POINTER_TYPE_HSA_VMEM = 6,
+} hsa_amd_pointer_type_t;
+
+typedef struct hsa_amd_pointer_info_s {
+  uint32_t size;
+  hsa_amd_pointer_type_t type;
+  void* agentBaseAddress;
+  void* hostBaseAddress;
+  size_t sizeInBytes;
+  void* userData;
+  hsa_agent_t agentOwner;
+  uint32_t global_flags;
+  bool registered;
+} hsa_amd_pointer_info_t;
+
+static_assert(sizeof(hsa_amd_pointer_info_t) == 56, "layout drift");
+static_assert(offsetof(hsa_amd_pointer_info_t, sizeInBytes) == 24,
+              "layout drift");
+static_assert(offsetof(hsa_amd_pointer_info_t, global_flags) == 48,
+              "layout drift");
+
+typedef enum { HSA_QUEUE_TYPE_SINGLE = 1 } hsa_queue_type_t;
+
+typedef struct hsa_queue_s {
+  hsa_queue_type32_t type;
+  uint32_t features;
+  void* base_address;
+  hsa_signal_t doorbell_signal;
+  uint32_t size;
+  uint32_t reserved1;
+  uint64_t id;
+} hsa_queue_t;
+
+static_assert(sizeof(hsa_queue_t) == 40, "layout drift");
+static_assert(offsetof(hsa_queue_t, doorbell_signal) == 16, "layout drift");
+
+typedef struct hsa_amd_ipc_memory_s {
+  uint32_t handle[8];
+} hsa_amd_ipc_memory_t;
+
+static_assert(sizeof(hsa_amd_ipc_memory_t) == 32, "layout drift");
+
+typedef enum {
+  HSA_AMD_SDMA_ENGINE_0 = 0x1,
+  HSA_AMD_SDMA_ENGINE_1 = 0x2,
+  HSA_AMD_SDMA_ENGINE_2 = 0x4,
+  HSA_AMD_SDMA_ENGINE_3 = 0x8,
+  HSA_AMD_SDMA_ENGINE_4 = 0x10,
+  HSA_AMD_SDMA_ENGINE_5 = 0x20,
+  HSA_AMD_SDMA_ENGINE_6 = 0x40,
+  HSA_AMD_SDMA_ENGINE_7 = 0x80,
+  HSA_AMD_SDMA_ENGINE_8 = 0x100,
+  HSA_AMD_SDMA_ENGINE_9 = 0x200,
+  HSA_AMD_SDMA_ENGINE_10 = 0x400,
+  HSA_AMD_SDMA_ENGINE_11 = 0x800,
+  HSA_AMD_SDMA_ENGINE_12 = 0x1000,
+  HSA_AMD_SDMA_ENGINE_13 = 0x2000,
+  HSA_AMD_SDMA_ENGINE_14 = 0x4000,
+  HSA_AMD_SDMA_ENGINE_15 = 0x8000,
+} hsa_amd_sdma_engine_id_t;
+
+typedef enum {
+  HSA_AMD_GPU_MEMORY_FAULT_EVENT = 0,
+  HSA_AMD_GPU_HW_EXCEPTION_EVENT = 1,
+  HSA_AMD_GPU_MEMORY_ERROR_EVENT = 2,
+  HSA_AMD_SYSTEM_SHUTDOWN_EVENT = 3,
+} hsa_amd_event_type_t;
+
+typedef struct hsa_amd_gpu_memory_fault_info_s {
+  hsa_agent_t agent;
+  uint64_t virtual_address;
+  uint32_t fault_reason_mask;
+} hsa_amd_gpu_memory_fault_info_t;
+
+typedef struct hsa_amd_event_s {
+  hsa_amd_event_type_t event_type;
+  union {
+    hsa_amd_gpu_memory_fault_info_t memory_fault;
+  };
+} hsa_amd_event_t;
+
+static_assert(sizeof(hsa_amd_event_t) == 32, "layout drift");
+static_assert(offsetof(hsa_amd_event_t, memory_fault.virtual_address) == 16,
+              "layout drift");
+
+typedef hsa_status_t (*hsa_amd_system_event_callback_t)(
+    const hsa_amd_event_t* event, void* data);
 
 // Version 1.04 of HSA_EXTENSION_AMD_LOADER. Slots are appended, so an older
 // runtime fills the prefix and leaves the tail null. CreateFromFile and
@@ -348,7 +386,6 @@ static_assert(offsetof(LoaderApi, CreateFromFile) == 5 * sizeof(void*),
 static_assert(offsetof(LoaderApi, GetLoadSize) == 7 * sizeof(void*),
               "layout drift");
 
-#ifndef SANITIZER_USE_SYSTEM_HSA
 hsa_status_t hsa_init(void);
 hsa_status_t hsa_shut_down(void);
 hsa_status_t hsa_system_get_info(hsa_system_info_t attribute, void* value);
@@ -442,10 +479,24 @@ hsa_signal_value_t hsa_signal_wait_scacquire(hsa_signal_t signal,
                                              hsa_signal_value_t compare_value,
                                              uint64_t timeout_hint,
                                              hsa_wait_state_t wait_state_hint);
-#endif
+hsa_status_t hsa_amd_memory_async_copy(void* dst, hsa_agent_t dst_agent,
+                                       const void* src, hsa_agent_t src_agent,
+                                       size_t size, uint32_t num_dep_signals,
+                                       const hsa_signal_t* dep_signals,
+                                       hsa_signal_t completion_signal);
+hsa_status_t hsa_amd_memory_async_copy_on_engine(
+    void* dst, hsa_agent_t dst_agent, const void* src, hsa_agent_t src_agent,
+    size_t size, uint32_t num_dep_signals, const hsa_signal_t* dep_signals,
+    hsa_signal_t completion_signal, hsa_amd_sdma_engine_id_t engine_id,
+    bool force_copy_on_sdma);
+hsa_status_t hsa_amd_ipc_memory_create(void* ptr, size_t len,
+                                       hsa_amd_ipc_memory_t* handle);
+hsa_status_t hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t* handle,
+                                       size_t len, uint32_t num_agents,
+                                       const hsa_agent_t* mapping_agents,
+                                       void** mapped_ptr);
+hsa_status_t hsa_amd_ipc_memory_detach(void* mapped_ptr);
 
 }  // extern "C"
-
-#undef SANITIZER_USE_SYSTEM_HSA
 
 #endif  // SANITIZER_OFFLOAD_HSA_H

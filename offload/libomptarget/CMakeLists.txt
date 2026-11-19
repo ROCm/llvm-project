@@ -5,29 +5,29 @@ if(NOT TARGET "omp")
 endif()
 
 add_library(omptarget SHARED
-  interface.cpp
-  omptarget.cpp
-  OffloadRTL.cpp
-  LegacyAPI.cpp
+  src/interface.cpp
+  src/omptarget.cpp
+  src/OffloadRTL.cpp
+  src/LegacyAPI.cpp
 
-  OpenMP/API.cpp
-  OpenMP/InteropAPI.cpp
-  OpenMP/OMPT/Callback.cpp
-  OpenMP/OMPT/OmptTracing.cpp
-  OpenMP/OMPT/OmptTracingBuffer.cpp
+  src/API.cpp
+  src/InteropAPI.cpp
+  src/OMPT/Callback.cpp
+  src/OMPT/OmptTracing.cpp
+  src/OMPT/OmptTracingBuffer.cpp
 
-  ../libompaccsupport/AsyncInfo.cpp
-  ../libompaccsupport/BackendConfig.cpp
-  ../libompaccsupport/device.cpp
-  ../libompaccsupport/PluginManager.cpp
-  ../libompaccsupport/DeviceImage.cpp
-  ../libompaccsupport/Mapping.cpp
-  ../libompaccsupport/OmpAccError.cpp
-  ../libompaccsupport/Platform.cpp
-  ../libompaccsupport/Program.cpp
-  ../libompaccsupport/RecordReplay.cpp
+  ../libompaccsupport/src/AsyncInfo.cpp
+  ../libompaccsupport/src/BackendConfig.cpp
+  ../libompaccsupport/src/device.cpp
+  ../libompaccsupport/src/PluginManager.cpp
+  ../libompaccsupport/src/DeviceImage.cpp
+  ../libompaccsupport/src/Mapping.cpp
+  ../libompaccsupport/src/OmpAccError.cpp
+  ../libompaccsupport/src/Platform.cpp
+  ../libompaccsupport/src/Program.cpp
+  ../libompaccsupport/src/RecordReplay.cpp
 
-  KernelLanguage/API.cpp
+  src/KernelLanguage/API.cpp
 )
 
 if(LLVM_LINK_LLVM_DYLIB)
@@ -37,7 +37,9 @@ else()
 endif()
 target_link_libraries(omptarget PRIVATE omp ${llvm_libs})
 target_include_directories(omptarget PRIVATE
-  ${LIBOMPTARGET_INCLUDE_DIR} ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${LIBOMPACCSUPPORT_INCLUDE_DIR}
+  ${LIBOMPTARGET_INCLUDE_DIR}
   # Downstream: GenericProfiler.h for the OMPT profiler.
   ${CMAKE_CURRENT_SOURCE_DIR}/../plugins-nextgen/common/include
   ${CMAKE_CURRENT_BINARY_DIR}/../plugins-nextgen/common/include

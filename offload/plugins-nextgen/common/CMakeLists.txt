@@ -45,7 +45,7 @@ if (OMPT_TARGET_DEFAULT AND LIBOMPTARGET_OMPT_SUPPORT)
     ${CMAKE_CURRENT_BINARY_DIR}/include
     ${CMAKE_CURRENT_BINARY_DIR}/../../liboffload/API
     ${LIBOMPTARGET_LLVM_INCLUDE_DIRS}
-    ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
+    ${LIBOMPACCSUPPORT_INCLUDE_DIR}
     ${LIBOMPTARGET_INCLUDE_DIR}
   )
   target_compile_options(PluginOmpt PUBLIC ${offload_compile_flags} -fPIC )
@@ -72,8 +72,9 @@ target_include_directories(PluginCommon PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}/include
   ${CMAKE_CURRENT_BINARY_DIR}/../../liboffload/API
   ${LIBOMPTARGET_LLVM_INCLUDE_DIRS}
-  ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
   ${LIBOMPTARGET_INCLUDE_DIR}
+  # Downstream: APITypes.h for __tgt_async_info in PluginInterface.h.
+  ${LIBOMPACCSUPPORT_INCLUDE_DIR}
 )
 
 set_target_properties(PluginCommon PROPERTIES POSITION_INDEPENDENT_CODE ON)
