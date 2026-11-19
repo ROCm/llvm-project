@@ -68,8 +68,10 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/OffloadBinary.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/LibraryOptionsContext.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/MemoryBufferRef.h"
 #include "llvm/Support/Path.h"
@@ -604,8 +606,10 @@ getOutputStream(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
 }
 
 // clang/tools/driver/cc1as_main.cpp,  ExecuteAssemblerImpl()
-static bool executeAssemblerImpl(AssemblerInvocation &Opts,
-                                 DiagnosticsEngine &Diags, raw_ostream &LogS) {
+static bool
+executeAssemblerImpl(const cl::LibraryOptionsContext &LibraryOptions,
+                     AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
+                     raw_ostream &LogS) {
   // Get the target specific parser.
   std::string Error;
   const Target *TheTarget =
@@ -641,6 +645,7 @@ static bool executeAssemblerImpl(AssemblerInvocation &Opts,
   assert(MRI && "Unable to create target register info!");
 
   llvm::MCTargetOptions MCOptions;
+  MCOptions.LibraryOptions = &LibraryOptions;
   MCOptions.X86RelaxRelocations = Opts.RelaxELFRelocations;
   MCOptions.CompressDebugSections = Opts.CompressDebugSections;
   std::unique_ptr<MCAsmInfo> MAI(
@@ -777,9 +782,10 @@ static bool executeAssemblerImpl(AssemblerInvocation &Opts,
   return Failed;
 }
 
-static bool executeAssembler(AssemblerInvocation &Opts,
+static bool executeAssembler(const cl::LibraryOptionsContext &LibraryOptions,
+                             AssemblerInvocation &Opts,
                              DiagnosticsEngine &Diags, raw_ostream &LogS) {
-  bool Failed = executeAssemblerImpl(Opts, Diags, LogS);
+  bool Failed = executeAssemblerImpl(LibraryOptions, Opts, Diags, LogS);
 
   // Delete output file if there were errors.
   if (Failed && Opts.OutputPath != "-") {
@@ -855,17 +861,17 @@ static void initializeCommandLineArgs(SmallVectorImpl<const char *> &Args) {
 
 // Parse -mllvm options
 static amd_comgr_status_t
-parseLLVMOptions(const std::vector<std::string> &Options) {
-  std::vector<const char *> LLVMArgs;
-  for (auto Option : Options) {
-    LLVMArgs.push_back("");
+parseLLVMOptions(cl::LibraryOptionsContext &LibraryOptions,
+                 const std::vector<std::string> &Options, raw_ostream &LogS) {
+  if (Options.empty())
+    return AMD_COMGR_STATUS_SUCCESS;
+
+  SmallVector<const char *> LLVMArgs = {"comgr (LLVM option parsing)"};
+  for (const std::string &Option : Options)
     LLVMArgs.push_back(Option.c_str());
-    if (!cl::ParseCommandLineOptions(LLVMArgs.size(), &LLVMArgs[0],
-                                     "-mllvm options parsing")) {
-      return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
-    }
-    LLVMArgs.clear();
-  }
+  if (!cl::parseCommandLineOptions(LibraryOptions, LLVMArgs,
+                                   "-mllvm options parsing", &LogS))
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
@@ -1013,10 +1019,11 @@ executeCommand(const Command &Job, raw_ostream &LogS,
     if (!AssemblerInvocation::createFromArgs(Asm, Argv, Diags)) {
       return AMD_COMGR_STATUS_ERROR;
     }
-    if (auto Status = parseLLVMOptions(Asm.LLVMArgs)) {
+    cl::LibraryOptionsContext LibraryOptions;
+    if (auto Status = parseLLVMOptions(LibraryOptions, Asm.LLVMArgs, LogS)) {
       return Status;
     }
-    if (executeAssembler(Asm, Diags, LogS)) {
+    if (executeAssembler(LibraryOptions, Asm, Diags, LogS)) {
       return AMD_COMGR_STATUS_ERROR;
     }
   } else if (Job.getCreator().getName() == LinkerJobName) {
