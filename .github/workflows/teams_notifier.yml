@@ -31,15 +31,17 @@ jobs:
         id: extract_urls
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROJECT_NAME: ${{ github.event.repository.name }}
+          JOB_NAME_TO_MATCH: ${{ inputs.JOB_NAME_TO_MATCH }}
         run: |
           RUN_ID="$GITHUB_RUN_ID"  # Use the current run ID
 
           ORG_NAME="${{ github.repository_owner }}"
-          PROJECT_NAME="${{ github.event.repository.name }}"
+          PROJECT_NAME="${PROJECT_NAME}"
     
           JOBS_URL="https://api.github.com/repos/$ORG_NAME/$PROJECT_NAME/actions/runs/$RUN_ID/jobs"
           JOB_ID=$(curl -H "Authorization: token $GITHUB_TOKEN" -L "$JOBS_URL" \
-                  | jq -r --arg JOB_NAME "${{ inputs.JOB_NAME_TO_MATCH }}" \
+                  | jq -r --arg JOB_NAME "${JOB_NAME_TO_MATCH}" \
                   '.jobs[] | select(.name==$JOB_NAME) | .id')
 
 
