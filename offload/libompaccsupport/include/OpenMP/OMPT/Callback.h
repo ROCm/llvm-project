@@ -61,6 +61,11 @@ void finalizeLibrary(ompt_data_t *tool_data);
 /// functions to their respective higher layer.
 void connectLibrary();
 
+/// Counterpart of \p connectLibrary: marks OMPT as uninitialized in this
+/// library. Idempotent; it is also reached through \p finalizeLibrary when
+/// libomp finalizes OMPT.
+void disconnectLibrary();
+
 /// OMPT initialization status; false if initializeLibrary has not been executed
 extern bool Initialized;
 
