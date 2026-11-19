@@ -35,15 +35,14 @@ extern uint64_t getSystemTimestampInNs();
 using namespace llvm::omp::target::debug;
 
 namespace llvm {
-namespace omp {
-namespace target {
-namespace plugin {
+namespace offload::plugin {
 struct GenericDeviceTy;
 struct GenericPluginTy;
 class GenericProfilerTy;
+} // namespace offload::plugin
 
-} // namespace plugin
-
+namespace omp {
+namespace target {
 namespace ompt {
 
 // From Callback.h / Callback.cpp
@@ -54,7 +53,7 @@ extern bool Initialized;
  *
  * Forwards / Implements the different generic hooks with OMPT semantics.
  */
-class OmptProfilerTy : public plugin::GenericProfilerTy {
+class OmptProfilerTy : public offload::plugin::GenericProfilerTy {
 public:
   /** Public members **/
   OmptProfilerTy() {
@@ -78,7 +77,7 @@ public:
   void handleDataDelete(uint64_t StartNanos, uint64_t EndNanos, void *TgtPtr,
                         void *Data) override;
 
-  void handlePreKernelLaunch(plugin::GenericDeviceTy *Device,
+  void handlePreKernelLaunch(offload::plugin::GenericDeviceTy *Device,
                              uint32_t NumBlocks[3],
                              __tgt_async_info *AI) override;
 

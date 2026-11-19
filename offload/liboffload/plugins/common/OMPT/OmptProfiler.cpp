@@ -30,7 +30,7 @@ void ompt::OmptProfilerTy::handleDataDelete(uint64_t StartNanos,
 }
 
 void ompt::OmptProfilerTy::handlePreKernelLaunch(
-    plugin::GenericDeviceTy *Device, uint32_t NumBlocks[3],
+    llvm::offload::plugin::GenericDeviceTy *Device, uint32_t NumBlocks[3],
     __tgt_async_info *AI) {
   if (!ompt::isTracedDevice(getDeviceId(Device)))
     return;
