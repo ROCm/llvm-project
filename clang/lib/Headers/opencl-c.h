@@ -12383,8 +12383,8 @@ void __ovld vstorea_half_rte(double, size_t, half *);
 void __ovld vstorea_half_rtz(double, size_t, half *);
 void __ovld vstorea_half_rtp(double, size_t, half *);
 void __ovld vstorea_half_rtn(double, size_t, half *);
-#endif //cl_khr_fp64
-#endif //defined(__opencl_c_generic_address_space)
+#endif // cl_khr_fp64
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float __ovld __purefn vloada_half(size_t, const __global half *);
@@ -12421,8 +12421,8 @@ void __ovld vstorea_half_rte(double, size_t, __private half *);
 void __ovld vstorea_half_rtz(double, size_t, __private half *);
 void __ovld vstorea_half_rtp(double, size_t, __private half *);
 void __ovld vstorea_half_rtn(double, size_t, __private half *);
-#endif //cl_khr_fp64
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // cl_khr_fp64
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 // OpenCL v1.1 s6.11.8, v1.2 s6.12.8, v2.0 s6.13.8 - Synchronization Functions
 
