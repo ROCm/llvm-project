@@ -12364,6 +12364,66 @@ void __ovld vstorea_half16_rtn(double16, size_t, __private half *);
 #endif //cl_khr_fp64
 #endif //defined(__opencl_c_named_address_space_builtins)
 
+/**
+ * Downstream: scalar vloada_half and vstorea_half*. They are not part of the
+ * OpenCL C specification, but the ROCm OpenCL library implements them and
+ * OpenCLBuiltins.td declares them.
+ */
+float __ovld __purefn vloada_half(size_t, const __constant half *);
+#if defined(__opencl_c_generic_address_space)
+float __ovld __purefn vloada_half(size_t, const half *);
+void __ovld vstorea_half(float, size_t, half *);
+void __ovld vstorea_half_rte(float, size_t, half *);
+void __ovld vstorea_half_rtz(float, size_t, half *);
+void __ovld vstorea_half_rtp(float, size_t, half *);
+void __ovld vstorea_half_rtn(float, size_t, half *);
+#ifdef cl_khr_fp64
+void __ovld vstorea_half(double, size_t, half *);
+void __ovld vstorea_half_rte(double, size_t, half *);
+void __ovld vstorea_half_rtz(double, size_t, half *);
+void __ovld vstorea_half_rtp(double, size_t, half *);
+void __ovld vstorea_half_rtn(double, size_t, half *);
+#endif //cl_khr_fp64
+#endif //defined(__opencl_c_generic_address_space)
+
+#if defined(__opencl_c_named_address_space_builtins)
+float __ovld __purefn vloada_half(size_t, const __global half *);
+float __ovld __purefn vloada_half(size_t, const __local half *);
+float __ovld __purefn vloada_half(size_t, const __private half *);
+void __ovld vstorea_half(float, size_t, __global half *);
+void __ovld vstorea_half_rte(float, size_t, __global half *);
+void __ovld vstorea_half_rtz(float, size_t, __global half *);
+void __ovld vstorea_half_rtp(float, size_t, __global half *);
+void __ovld vstorea_half_rtn(float, size_t, __global half *);
+void __ovld vstorea_half(float, size_t, __local half *);
+void __ovld vstorea_half_rte(float, size_t, __local half *);
+void __ovld vstorea_half_rtz(float, size_t, __local half *);
+void __ovld vstorea_half_rtp(float, size_t, __local half *);
+void __ovld vstorea_half_rtn(float, size_t, __local half *);
+void __ovld vstorea_half(float, size_t, __private half *);
+void __ovld vstorea_half_rte(float, size_t, __private half *);
+void __ovld vstorea_half_rtz(float, size_t, __private half *);
+void __ovld vstorea_half_rtp(float, size_t, __private half *);
+void __ovld vstorea_half_rtn(float, size_t, __private half *);
+#ifdef cl_khr_fp64
+void __ovld vstorea_half(double, size_t, __global half *);
+void __ovld vstorea_half_rte(double, size_t, __global half *);
+void __ovld vstorea_half_rtz(double, size_t, __global half *);
+void __ovld vstorea_half_rtp(double, size_t, __global half *);
+void __ovld vstorea_half_rtn(double, size_t, __global half *);
+void __ovld vstorea_half(double, size_t, __local half *);
+void __ovld vstorea_half_rte(double, size_t, __local half *);
+void __ovld vstorea_half_rtz(double, size_t, __local half *);
+void __ovld vstorea_half_rtp(double, size_t, __local half *);
+void __ovld vstorea_half_rtn(double, size_t, __local half *);
+void __ovld vstorea_half(double, size_t, __private half *);
+void __ovld vstorea_half_rte(double, size_t, __private half *);
+void __ovld vstorea_half_rtz(double, size_t, __private half *);
+void __ovld vstorea_half_rtp(double, size_t, __private half *);
+void __ovld vstorea_half_rtn(double, size_t, __private half *);
+#endif //cl_khr_fp64
+#endif //defined(__opencl_c_named_address_space_builtins)
+
 // OpenCL v1.1 s6.11.8, v1.2 s6.12.8, v2.0 s6.13.8 - Synchronization Functions
 
 /**
