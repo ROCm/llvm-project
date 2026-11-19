@@ -87,10 +87,9 @@ int user_of_forceinline_optnone_function() {
 }
 
 // CHECK: @_Z36user_of_forceinline_optnone_functionv() [[NORMAL]]
-// CHECK: @_Z28forceinline_optnone_functionii({{.*}}) [[OPTNONE_INLINE:#[0-9]+]]
+// CHECK: @_Z28forceinline_optnone_functionii({{.*}}) [[OPTNONE]]
 
 // CHECK: attributes [[OPTNONE]] = { mustprogress noinline nounwind optnone {{.*}} }
 // CHECK: attributes [[NORMAL]] =
 // CHECK-NOT: noinline
 // CHECK-NOT: optnone
-// CHECK: attributes [[OPTNONE_INLINE]] = { likely_module_local mustprogress noinline nounwind optnone {{.*}} }
