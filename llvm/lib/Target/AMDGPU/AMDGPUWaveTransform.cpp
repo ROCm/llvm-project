@@ -3175,6 +3175,20 @@ bool AMDGPUWaveTransform::run(MachineFunction &MF) {
 
   TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
 
+  // The reconverging CFG construction assumes every cycle has a single entry.
+  // FixIrreducible guarantees this on IR, but machine passes and MIR input can
+  // still produce multi-entry cycles.
+  for (CycleRef C : CycleInfo->cycles()) {
+    if (CycleInfo->isReducible(C))
+      continue;
+    std::string Msg;
+    raw_string_ostream OS(Msg);
+    OS << "amdgpu-wave-transform: irreducible cycle with entries "
+       << CycleInfo->printEntries(C, CycleInfo->getSSAContext())
+       << " in function '" << MF.getName() << "' is not supported";
+    reportFatalUsageError(Twine(Msg));
+  }
+
   // Step 1: Compute reconverging Wave CFG.
   ReconvergeCFGHelper ReconvergeHelper(*CycleInfo, *DomTree);
   ReconvergeHelper.run();
