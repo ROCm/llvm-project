@@ -73,8 +73,9 @@ jobs:
       - name: Evaluate workflow results
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: ${{ github.workflow }}
         run: |
           python build_tools/github_actions/workflow_summary.py \
-            --workflow-name="${{ github.workflow }}" \
+            --workflow-name="${WORKFLOW_NAME}" \
             --run-id="${{ github.run_id }}" \
             --run-attempt="${{ github.run_attempt }}"
