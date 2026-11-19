@@ -882,8 +882,7 @@ private:
 /// generic kernel class.
 struct AMDGPUKernelTy : public GenericKernelTy {
   /// Create an AMDGPU kernel with a name and an execution mode.
-  AMDGPUKernelTy(StringRef Name, GenericGlobalHandlerTy &Handler)
-      : GenericKernelTy(Name) {}
+  AMDGPUKernelTy(StringRef Name) : GenericKernelTy(Name) {}
 
   /// Initialize the AMDGPU kernel.
   Error initImpl(GenericDeviceTy &Device, DeviceImageTy &Image) override {
@@ -3365,7 +3364,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
                            "failed to allocate memory for AMDGPU kernel");
 
-    new (AMDGPUKernel) AMDGPUKernelTy(Name, Plugin.getGlobalHandler());
+    new (AMDGPUKernel) AMDGPUKernelTy(Name);
 
     return *AMDGPUKernel;
   }
@@ -4582,7 +4581,7 @@ private:
       return Plugin::success();
 
     // Allocate and construct the AMDGPU kernel.
-    AMDGPUKernelTy AMDGPUKernel(KernelName, Plugin.getGlobalHandler());
+    AMDGPUKernelTy AMDGPUKernel(KernelName);
     if (auto Err = AMDGPUKernel.init(*this, Image))
       return Err;
 
@@ -4915,7 +4914,7 @@ private:
       return Plugin::success();
     }
 
-    AMDGPUKernelTy DMInitKernel(KernelName, Plugin.getGlobalHandler());
+    AMDGPUKernelTy DMInitKernel(KernelName);
     if (auto Err = DMInitKernel.init(*this, Image)) {
       return Err;
     }
