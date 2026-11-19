@@ -138,6 +138,7 @@ This is a proposal for changes to the way LLVM represents debug information inte
 ### Step 1: RFC
 
 - Create and iterate on an RFC to get feedback
+  - See [WIP RFC](./DIExpressionReworkRFC.md)
 
 ### Step 2: Basic Scaffolding
 

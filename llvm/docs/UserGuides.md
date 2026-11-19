@@ -42,6 +42,7 @@ InstrRefDebugInfo
 RemoveDIsDebugInfo
 KeyInstructionsDebugInfo
 DIExpressionReworkPlan
+DIExpressionReworkRFC
 DynamicDebugging
 InstrProfileFormat
 InstCombineContributorGuide
