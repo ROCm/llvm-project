@@ -8,8 +8,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef OPENMP_LIBOMPTARGET_PLUGINS_NEXTGEN_COMMON_PLUGININTERFACE_H
-#define OPENMP_LIBOMPTARGET_PLUGINS_NEXTGEN_COMMON_PLUGININTERFACE_H
+#ifndef OFFLOAD_PLUGIN_COMMON_PLUGININTERFACE_H
+#define OFFLOAD_PLUGIN_COMMON_PLUGININTERFACE_H
 
 #include <cstddef>
 #include <cstdint>
@@ -53,9 +53,7 @@ using namespace llvm::offload::debug;
 using namespace llvm::omp::target::debug;
 
 namespace llvm {
-namespace omp {
-namespace target {
-
+namespace offload {
 namespace plugin {
 
 struct GenericPluginTy;
@@ -1838,8 +1836,7 @@ protected:
 };
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
-#endif // OPENMP_LIBOMPTARGET_PLUGINS_COMMON_PLUGININTERFACE_H
+#endif // OFFLOAD_PLUGIN_COMMON_PLUGININTERFACE_H

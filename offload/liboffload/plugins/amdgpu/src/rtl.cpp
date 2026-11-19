@@ -117,8 +117,7 @@ void setHSATicksToTimeConstant() { TicksToTime = setTicksToTime(); }
 
 /// Forward declare
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 
 struct AMDGPUSignalTy;
@@ -175,8 +174,7 @@ getOrNullProfilerSpecificData(AsyncInfoWrapperTy &AsyncInfoWrapper) {
 }
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 /// Enable/disable async copy profiling.
@@ -212,8 +210,7 @@ static double getTimeOfDay() {
 }
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 
 /// Forward declarations for all specialized data structures.
@@ -1172,7 +1169,7 @@ private:
 
   /// Reference counter for tracking the concurrent use count. This is mainly
   /// used for knowing how many streams are using the signal.
-  RefCountTy<uint32_t> UseCount;
+  omp::target::RefCountTy<uint32_t> UseCount;
 };
 
 /// Classes for holding AMDGPU signals and managing signals.
@@ -3001,9 +2998,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     // Load the grid values depending on the wavefront.
     if (WavefrontSize == 32)
-      GridValues = getAMDGPUGridValues<32>();
+      GridValues = llvm::omp::getAMDGPUGridValues<32>();
     else if (WavefrontSize == 64)
-      GridValues = getAMDGPUGridValues<64>();
+      GridValues = llvm::omp::getAMDGPUGridValues<64>();
     else
       return Plugin::error(ErrorCode::UNSUPPORTED,
                            "unexpected AMDGPU wavefront %d", WavefrontSize);
@@ -6149,20 +6146,19 @@ void setHSAQueueProfiling(void *Device, int Enable) {
 }
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #ifdef OMPT_SUPPORT
 /// Enable/disable kernel profiling for the given device.
 void setGlobalOmptKernelProfile(void *Device, int Enable) {
-  llvm::omp::target::plugin::setHSAQueueProfiling(Device, Enable);
+  llvm::offload::plugin::setHSAQueueProfiling(Device, Enable);
 }
 
 #endif
 
 extern "C" {
-llvm::omp::target::plugin::GenericPluginTy *createPlugin_amdgpu() {
-  return new llvm::omp::target::plugin::AMDGPUPluginTy();
+llvm::offload::plugin::GenericPluginTy *createPlugin_amdgpu() {
+  return new llvm::offload::plugin::AMDGPUPluginTy();
 }
 }
