@@ -75,7 +75,6 @@ public:
     return false;
   }
 
-
   Expected<bool> isImageCompatible(StringRef Image) const override;
 };
 

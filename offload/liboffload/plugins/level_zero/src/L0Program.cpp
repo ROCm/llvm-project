@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "L0Plugin.h"
 #include "L0Program.h"
+#include "L0Plugin.h"
 
 #include "llvm/Object/OffloadBinary.h"
 

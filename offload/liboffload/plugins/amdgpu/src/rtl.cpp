@@ -16,9 +16,9 @@
 #include <cstdint>
 #include <cstring>
 #include <deque>
-#include <memory>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <sys/time.h>
@@ -103,7 +103,8 @@ double setTicksToTime() {
   if (Status == HSA_STATUS_SUCCESS)
     TicksToTime = (double)1e9 / (double)TicksFrequency;
   else
-    ODBG(ODT_Tool) << "Error calling hsa_system_get_info for timestamp frequency";
+    ODBG(ODT_Tool)
+        << "Error calling hsa_system_get_info for timestamp frequency";
 
   return TicksToTime;
 }
@@ -741,11 +742,13 @@ struct AMDGPUMemoryManagerTy : public DeviceAllocatorTy {
     if (OMPX_AMDMemoryMgrThreshold > sizeof(size_t) * CHAR_BIT - 1) {
       // if user input is too large, trim it down to the upper limit of size_t.
       OMPX_AMDMemoryMgrThreshold = sizeof(size_t) * CHAR_BIT - 1;
-      ODBG(ODT_Tool) << "User input for AMDGPUMemoryManager threshhold is too larget and was "
+      ODBG(ODT_Tool) << "User input for AMDGPUMemoryManager threshhold is too "
+                        "larget and was "
                      << "trimmed to: " << OMPX_AMDMemoryMgrThreshold.get();
     }
     const size_t Threshold = 1UL << OMPX_AMDMemoryMgrThreshold;
-    ODBG(ODT_Tool) << "AMDGPUMemoryManager threshhold was set to: " <<  Threshold << " B";
+    ODBG(ODT_Tool) << "AMDGPUMemoryManager threshhold was set to: " << Threshold
+                   << " B";
     this->MemoryManager = new MemoryManagerTy(*this, Threshold);
     this->MemoryPool = &MemoryPool;
     return Plugin::success();
@@ -1073,13 +1076,13 @@ private:
     } else {
       MaxWorkgroupNum =
           std::min(MaxWorkgroupNum, MaxWavesPerCU / WavesPerWorkgroup);
-      MaxWorkgroupNum = std::min(MaxWorkgroupNum,
-                                 amdgpu_arch::MaxWorkgroupNumPerCU);
+      MaxWorkgroupNum =
+          std::min(MaxWorkgroupNum, amdgpu_arch::MaxWorkgroupNumPerCU);
     }
 
     // per SIMD
-    unsigned WaveNumByLDS = divideCeil(WavesPerWorkgroup * MaxWorkgroupNum,
-                                       amdgpu_arch::SIMDPerCU);
+    unsigned WaveNumByLDS =
+        divideCeil(WavesPerWorkgroup * MaxWorkgroupNum, amdgpu_arch::SIMDPerCU);
     WaveNumByLDS = std::min(WaveNumByLDS, MaxWavesPerEU);
 
     return WaveNumByLDS;
@@ -1973,7 +1976,7 @@ public:
 
     // Push the kernel with the output signal and an input signal (optional)
     ODBG(ODT_Tool) << "Using Queue: " << Queue
-                   << " with HSA Queue: " <<  Queue->getHsaQueue();
+                   << " with HSA Queue: " << Queue->getHsaQueue();
     // If we are running an RPC server we want to wake up the server thread
     // whenever there is a kernel running and let it sleep otherwise.
     if (Device.getRPCServer())
@@ -2617,8 +2620,8 @@ struct AMDGPUStreamManagerTy final
     QueueSize = HSAQueueSize;
     MaxNumQueues = NumHSAQueues;
     // Initialize one queue eagerly
-    if (auto Err =
-            Queues.front().init(Device, Agent, QueueSize, OMPX_EnableQueueProfiling))
+    if (auto Err = Queues.front().init(Device, Agent, QueueSize,
+                                       OMPX_EnableQueueProfiling))
       return Err;
 
     return GenericDeviceResourceManagerTy::init(InitialSize);
@@ -2686,8 +2689,8 @@ private:
     }
 
     // Make sure the queue is initialized, then add user & assign.
-    if (auto Err =
-            Queues[Index].init(Device, Agent, QueueSize, OMPX_EnableQueueProfiling))
+    if (auto Err = Queues[Index].init(Device, Agent, QueueSize,
+                                      OMPX_EnableQueueProfiling))
       return Err;
     Queues[Index].addUser();
     Stream->Queue = &Queues[Index];
@@ -3013,7 +3016,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     unsigned GfxGen = 0u;
     if (!llvm::to_integer(Arch.slice(sizeof("gfx") - 1, Arch.size() - 2),
                           GfxGen))
-      return Plugin::error(ErrorCode::UNKNOWN, "Invalid GFX architecture string");
+      return Plugin::error(ErrorCode::UNKNOWN,
+                           "Invalid GFX architecture string");
 
     // TODO: Will try to eliminate this calculation, since its duplicated.
     // See: 'getMaxWaveScratchSize' in 'llvm/lib/Target/AMDGPU/GCNSubtarget.h'.
@@ -3914,13 +3918,13 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         Size / PatternSize);
   }
 
-
   Error setCoarseGrainMemoryImpl(void *ptr, int64_t size,
                                  bool set_attr = true) override final {
     // If the table has not yet been created, check if the gpu arch is
     // MI200 and create it, but only if USM Map is enabled.
     if (!IsEquippedWithGFX90A || !EnableGFX90ACoarseGrainUsmMaps)
-      return Plugin::error(ErrorCode::UNKNOWN, "Invalid request to set coarse grain mode");
+      return Plugin::error(ErrorCode::UNKNOWN,
+                           "Invalid request to set coarse grain mode");
     if (!CoarseGrainMemoryTable)
       CoarseGrainMemoryTable = new AMDGPUMemTypeBitFieldTable(
           AMDGPU_X86_64_SystemConfiguration::max_addressable_byte +
@@ -3941,7 +3945,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       tt.value = HSA_AMD_SVM_GLOBAL_FLAG_COARSE_GRAINED;
       hsa_status_t err = hsa_amd_svm_attributes_set(ptr, size, &tt, 1);
       if (err != HSA_STATUS_SUCCESS) {
-        return Plugin::error(ErrorCode::UNKNOWN, "Failed to switch memotry to coarse grain mode.");
+        return Plugin::error(ErrorCode::UNKNOWN,
+                             "Failed to switch memotry to coarse grain mode.");
       }
     }
 
@@ -3966,7 +3971,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     tt.value = Agent.handle;
     hsa_status_t err = hsa_amd_svm_attributes_set(ptr, size, &tt, 1);
     if (err != HSA_STATUS_SUCCESS) {
-      return Plugin::error(ErrorCode::UNKNOWN, "Failed to prepopulate GPU page table.");
+      return Plugin::error(ErrorCode::UNKNOWN,
+                           "Failed to prepopulate GPU page table.");
     }
     return Plugin::success();
   }
@@ -4507,17 +4513,21 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       if (MemoryPool->isCoarseGrained()) {
         DevPtr = nullptr;
 
-        Error Err = MemoryPool->allocate(PreAllocSize, &DevPtr, /* alignemnt*/0);
+        Error Err =
+            MemoryPool->allocate(PreAllocSize, &DevPtr, /* alignemnt*/ 0);
         if (Err)
-          return Plugin::error(ErrorCode::UNKNOWN, "Device memory pool preallocation failed");
+          return Plugin::error(ErrorCode::UNKNOWN,
+                               "Device memory pool preallocation failed");
 
         Err = MemoryPool->enableAccess(DevPtr, PreAllocSize, {getAgent()});
         if (Err)
-          return Plugin::error(ErrorCode::UNKNOWN, "Preallocated device memory pool inaccessible");
+          return Plugin::error(ErrorCode::UNKNOWN,
+                               "Preallocated device memory pool inaccessible");
 
         Err = MemoryPool->zeroInitializeMemory(DevPtr, PreAllocSize);
         if (Err)
-          return Plugin::error(ErrorCode::UNKNOWN,
+          return Plugin::error(
+              ErrorCode::UNKNOWN,
               "Zero initialization of preallocated device memory pool failed");
 
         // Ensure slab is 2MB aligned
@@ -4874,12 +4884,14 @@ private:
   /// Assume host (h) timing is related to device (d) timing as
   /// h = m.d + o, where m is the slope and o is the offset.
   /// Calculate slope and offset from the two host and device timepoints.
-  void deriveHostToDeviceClockOffset(DevHostTimePair Start, DevHostTimePair End) {
+  void deriveHostToDeviceClockOffset(DevHostTimePair Start,
+                                     DevHostTimePair End) {
     double HostDiff = End.Host - Start.Host;
     uint64_t DeviceDiff = End.Device - Start.Device;
     double Slope = DeviceDiff != 0 ? (HostDiff / DeviceDiff) : HostDiff;
     double Offset = Start.Host - Slope * Start.Device;
-    ODBG(ODT_Tool) << "Translate time Slope: " << Slope << " Offset: " << Offset;
+    ODBG(ODT_Tool) << "Translate time Slope: " << Slope
+                   << " Offset: " << Offset;
     Plugin.getProfiler()->setTimeConversionFactors(Slope, Offset);
   }
 
@@ -5383,7 +5395,7 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
 
   void checkInvalidImage(__tgt_device_image *TgtImage) override final {
     hsa_utils::checkImageCompatibilityWithSystemXnackMode(TgtImage,
-                                                      IsXnackEnabled());
+                                                          IsXnackEnabled());
   }
 
   /// Check whether the image is compatible with an AMDGPU device.

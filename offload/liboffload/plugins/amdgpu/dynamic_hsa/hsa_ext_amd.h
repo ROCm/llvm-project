@@ -172,11 +172,11 @@ hsa_status_t hsa_amd_agents_allow_access(uint32_t num_agents,
                                          const uint32_t *flags,
                                          const void *ptr);
 
-hsa_status_t hsa_amd_memory_lock(void* host_ptr, size_t size,
-                                hsa_agent_t* agents, int num_agent,
-                                void** agent_ptr);
+hsa_status_t hsa_amd_memory_lock(void *host_ptr, size_t size,
+                                 hsa_agent_t *agents, int num_agent,
+                                 void **agent_ptr);
 
-hsa_status_t hsa_amd_memory_unlock(void* host_ptr);
+hsa_status_t hsa_amd_memory_unlock(void *host_ptr);
 
 hsa_status_t hsa_amd_memory_fill(void *ptr, uint32_t value, size_t count);
 
@@ -224,8 +224,8 @@ typedef enum {
 typedef struct hsa_amd_pointer_info_s {
   uint32_t size;
   hsa_amd_pointer_type_t type;
-  void* agentBaseAddress;
-  void* hostBaseAddress;
+  void *agentBaseAddress;
+  void *hostBaseAddress;
   size_t sizeInBytes;
   void *userData;
   hsa_agent_t agentOwner;
@@ -245,11 +245,10 @@ typedef struct hsa_amd_memory_access_desc_s {
   hsa_agent_t agent_handle;
 } hsa_amd_memory_access_desc_t;
 
-hsa_status_t hsa_amd_pointer_info(const void* ptr,
-                                          hsa_amd_pointer_info_t* info,
-                                          void* (*alloc)(size_t),
-                                          uint32_t* num_agents_accessible,
-                                          hsa_agent_t** accessible);
+hsa_status_t hsa_amd_pointer_info(const void *ptr, hsa_amd_pointer_info_t *info,
+                                  void *(*alloc)(size_t),
+                                  uint32_t *num_agents_accessible,
+                                  hsa_agent_t **accessible);
 
 typedef struct hsa_amd_profiling_dispatch_time_s {
   uint64_t start;
@@ -310,9 +309,10 @@ typedef struct {
   uint64_t value;
 } hsa_amd_svm_attribute_pair_t;
 
-hsa_status_t hsa_amd_svm_attributes_set(void *ptr, size_t size,
-                                        hsa_amd_svm_attribute_pair_t *attribute_list,
-                                        size_t attribute_count);
+hsa_status_t
+hsa_amd_svm_attributes_set(void *ptr, size_t size,
+                           hsa_amd_svm_attribute_pair_t *attribute_list,
+                           size_t attribute_count);
 
 #ifdef __cplusplus
 }
