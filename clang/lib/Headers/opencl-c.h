@@ -7285,7 +7285,7 @@ half4 __ovld fract(half4, half4 *);
 half8 __ovld fract(half8, half8 *);
 half16 __ovld fract(half16, half16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float __ovld fract(float, __global float *);
@@ -7346,7 +7346,7 @@ half4 __ovld fract(half4, __private half4 *);
 half8 __ovld fract(half8, __private half8 *);
 half16 __ovld fract(half16, __private half16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * Extract mantissa and exponent from x. For each
@@ -7377,7 +7377,7 @@ half4 __ovld frexp(half4, int4 *);
 half8 __ovld frexp(half8, int8 *);
 half16 __ovld frexp(half16, int16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float __ovld frexp(float, __global int *);
@@ -7438,7 +7438,7 @@ half4 __ovld frexp(half4, __private int4 *);
 half8 __ovld frexp(half8, __private int8 *);
 half16 __ovld frexp(half16, __private int16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * Compute the value of the square root of x^2 + y^2
@@ -7586,7 +7586,7 @@ half4 __ovld lgamma_r(half4, int4 *);
 half8 __ovld lgamma_r(half8, int8 *);
 half16 __ovld lgamma_r(half16, int16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float __ovld lgamma_r(float, __global int *);
@@ -7647,7 +7647,7 @@ half4 __ovld lgamma_r(half4, __private int4 *);
 half8 __ovld lgamma_r(half8, __private int8 *);
 half16 __ovld lgamma_r(half16, __private int16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * Compute natural logarithm.
@@ -7894,7 +7894,7 @@ half4 __ovld modf(half4, half4 *);
 half8 __ovld modf(half8, half8 *);
 half16 __ovld modf(half16, half16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float __ovld modf(float, __global float *);
@@ -7955,7 +7955,7 @@ half4 __ovld modf(half4, __private half4 *);
 half8 __ovld modf(half8, __private half8 *);
 half16 __ovld modf(half16, __private half16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * Returns a quiet NaN. The nancode may be placed
@@ -8156,7 +8156,7 @@ half4 __ovld remquo(half4, half4, int4 *);
 half8 __ovld remquo(half8, half8, int8 *);
 half16 __ovld remquo(half16, half16, int16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float __ovld remquo(float, float, __global int *);
@@ -8217,7 +8217,7 @@ half4 __ovld remquo(half4, half4, __private int4 *);
 half8 __ovld remquo(half8, half8, __private int8 *);
 half16 __ovld remquo(half16, half16, __private int16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 /**
  * Round to integral value (using round to nearest
  * even rounding mode) in floating-point format.
@@ -8381,7 +8381,7 @@ half4 __ovld sincos(half4, half4 *);
 half8 __ovld sincos(half8, half8 *);
 half16 __ovld sincos(half16, half16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float __ovld sincos(float, __global float *);
@@ -8442,7 +8442,7 @@ half4 __ovld sincos(half4, __private half4 *);
 half8 __ovld sincos(half8, __private half8 *);
 half16 __ovld sincos(half16, __private half16 *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * Compute hyperbolic sine.
@@ -11306,7 +11306,7 @@ half4 __ovld __purefn vload4(size_t, const half *);
 half8 __ovld __purefn vload8(size_t, const half *);
 half16 __ovld __purefn vload16(size_t, const half *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 char2 __ovld __purefn vload2(size_t, const __global char *);
@@ -11480,7 +11480,7 @@ half4 __ovld __purefn vload4(size_t, const __private half *);
 half8 __ovld __purefn vload8(size_t, const __private half *);
 half16 __ovld __purefn vload16(size_t, const __private half *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 #if defined(__opencl_c_generic_address_space)
 void __ovld vstore2(char2, size_t, char *);
@@ -11542,7 +11542,7 @@ void __ovld vstore4(half4, size_t, half *);
 void __ovld vstore8(half8, size_t, half *);
 void __ovld vstore16(half16, size_t, half *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 void __ovld vstore2(char2, size_t, __global char *);
@@ -11714,7 +11714,7 @@ void __ovld vstore4(half4, size_t, __private half *);
 void __ovld vstore8(half8, size_t, __private half *);
 void __ovld vstore16(half16, size_t, __private half *);
 #endif //cl_khr_fp16
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * Read sizeof (half) bytes of data from address
@@ -11727,13 +11727,13 @@ void __ovld vstore16(half16, size_t, __private half *);
 float __ovld __purefn vload_half(size_t, const __constant half *);
 #if defined(__opencl_c_generic_address_space)
 float __ovld __purefn vload_half(size_t, const half *);
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float __ovld __purefn vload_half(size_t, const __global half *);
 float __ovld __purefn vload_half(size_t, const __local half *);
 float __ovld __purefn vload_half(size_t, const __private half *);
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * Read sizeof (halfn) bytes of data from address
@@ -11754,7 +11754,7 @@ float3 __ovld __purefn vload_half3(size_t, const half *);
 float4 __ovld __purefn vload_half4(size_t, const half *);
 float8 __ovld __purefn vload_half8(size_t, const half *);
 float16 __ovld __purefn vload_half16(size_t, const half *);
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float2 __ovld __purefn vload_half2(size_t, const __global half *);
@@ -11772,7 +11772,7 @@ float3 __ovld __purefn vload_half3(size_t, const __private half *);
 float4 __ovld __purefn vload_half4(size_t, const __private half *);
 float8 __ovld __purefn vload_half8(size_t, const __private half *);
 float16 __ovld __purefn vload_half16(size_t, const __private half *);
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * The float value given by data is first
@@ -11798,7 +11798,7 @@ void __ovld vstore_half_rtz(double, size_t, half *);
 void __ovld vstore_half_rtp(double, size_t, half *);
 void __ovld vstore_half_rtn(double, size_t, half *);
 #endif //cl_khr_fp64
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 void __ovld vstore_half(float, size_t, __global half *);
@@ -11833,7 +11833,7 @@ void __ovld vstore_half_rtz(double, size_t, __private half *);
 void __ovld vstore_half_rtp(double, size_t, __private half *);
 void __ovld vstore_half_rtn(double, size_t, __private half *);
 #endif //cl_khr_fp64
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * The floatn value given by data is converted to
@@ -11899,7 +11899,7 @@ void __ovld vstore_half4_rtn(double4, size_t, half *);
 void __ovld vstore_half8_rtn(double8, size_t, half *);
 void __ovld vstore_half16_rtn(double16, size_t, half *);
 #endif //cl_khr_fp64
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 void __ovld vstore_half2(float2, size_t, __global half *);
@@ -12054,7 +12054,7 @@ void __ovld vstore_half4_rtn(double4, size_t, __private half *);
 void __ovld vstore_half8_rtn(double8, size_t, __private half *);
 void __ovld vstore_half16_rtn(double16, size_t, __private half *);
 #endif //cl_khr_fp64
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * For n = 1, 2, 4, 8 and 16 read sizeof (halfn)
@@ -12080,7 +12080,7 @@ float3 __ovld __purefn vloada_half3(size_t, const half *);
 float4 __ovld __purefn vloada_half4(size_t, const half *);
 float8 __ovld __purefn vloada_half8(size_t, const half *);
 float16 __ovld __purefn vloada_half16(size_t, const half *);
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 float2 __ovld __purefn vloada_half2(size_t, const __global half *);
@@ -12098,7 +12098,7 @@ float3 __ovld __purefn vloada_half3(size_t, const __private half *);
 float4 __ovld __purefn vloada_half4(size_t, const __private half *);
 float8 __ovld __purefn vloada_half8(size_t, const __private half *);
 float16 __ovld __purefn vloada_half16(size_t, const __private half *);
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * The floatn value given by data is converted to
@@ -12178,7 +12178,7 @@ void __ovld vstorea_half4_rtn(double4, size_t, half *);
 void __ovld vstorea_half8_rtn(double8, size_t, half *);
 void __ovld vstorea_half16_rtn(double16, size_t, half *);
 #endif //cl_khr_fp64
-#endif //defined(__opencl_c_generic_address_space)
+#endif // defined(__opencl_c_generic_address_space)
 
 #if defined(__opencl_c_named_address_space_builtins)
 void __ovld vstorea_half2(float2, size_t, __global half *);
@@ -12362,7 +12362,7 @@ void __ovld vstorea_half4_rtn(double4, size_t, __private half *);
 void __ovld vstorea_half8_rtn(double8, size_t, __private half *);
 void __ovld vstorea_half16_rtn(double16, size_t, __private half *);
 #endif //cl_khr_fp64
-#endif //defined(__opencl_c_named_address_space_builtins)
+#endif // defined(__opencl_c_named_address_space_builtins)
 
 /**
  * Downstream: scalar vloada_half and vstorea_half*. They are not part of the
@@ -16423,78 +16423,78 @@ long    __ovld __conv sub_group_broadcast(long , uint sub_group_local_id);
 ulong   __ovld __conv sub_group_broadcast(ulong, uint sub_group_local_id);
 float   __ovld __conv sub_group_broadcast(float, uint sub_group_local_id);
 
-int     __ovld __conv sub_group_reduce_add(int  );
-uint    __ovld __conv sub_group_reduce_add(uint );
-long    __ovld __conv sub_group_reduce_add(long );
-ulong   __ovld __conv sub_group_reduce_add(ulong);
-float   __ovld __conv sub_group_reduce_add(float);
-int     __ovld __conv sub_group_reduce_min(int  );
-uint    __ovld __conv sub_group_reduce_min(uint );
-long    __ovld __conv sub_group_reduce_min(long );
-ulong   __ovld __conv sub_group_reduce_min(ulong);
-float   __ovld __conv sub_group_reduce_min(float);
-int     __ovld __conv sub_group_reduce_max(int  );
-uint    __ovld __conv sub_group_reduce_max(uint );
-long    __ovld __conv sub_group_reduce_max(long );
-ulong   __ovld __conv sub_group_reduce_max(ulong);
-float   __ovld __conv sub_group_reduce_max(float);
+int __ovld __conv sub_group_reduce_add(int);
+uint __ovld __conv sub_group_reduce_add(uint);
+long __ovld __conv sub_group_reduce_add(long);
+ulong __ovld __conv sub_group_reduce_add(ulong);
+float __ovld __conv sub_group_reduce_add(float);
+int __ovld __conv sub_group_reduce_min(int);
+uint __ovld __conv sub_group_reduce_min(uint);
+long __ovld __conv sub_group_reduce_min(long);
+ulong __ovld __conv sub_group_reduce_min(ulong);
+float __ovld __conv sub_group_reduce_min(float);
+int __ovld __conv sub_group_reduce_max(int);
+uint __ovld __conv sub_group_reduce_max(uint);
+long __ovld __conv sub_group_reduce_max(long);
+ulong __ovld __conv sub_group_reduce_max(ulong);
+float __ovld __conv sub_group_reduce_max(float);
 
-int     __ovld __conv sub_group_scan_exclusive_add(int  );
-uint    __ovld __conv sub_group_scan_exclusive_add(uint );
-long    __ovld __conv sub_group_scan_exclusive_add(long );
-ulong   __ovld __conv sub_group_scan_exclusive_add(ulong);
-float   __ovld __conv sub_group_scan_exclusive_add(float);
-int     __ovld __conv sub_group_scan_exclusive_min(int  );
-uint    __ovld __conv sub_group_scan_exclusive_min(uint );
-long    __ovld __conv sub_group_scan_exclusive_min(long );
-ulong   __ovld __conv sub_group_scan_exclusive_min(ulong);
-float   __ovld __conv sub_group_scan_exclusive_min(float);
-int     __ovld __conv sub_group_scan_exclusive_max(int  );
-uint    __ovld __conv sub_group_scan_exclusive_max(uint );
-long    __ovld __conv sub_group_scan_exclusive_max(long );
-ulong   __ovld __conv sub_group_scan_exclusive_max(ulong);
-float   __ovld __conv sub_group_scan_exclusive_max(float);
+int __ovld __conv sub_group_scan_exclusive_add(int);
+uint __ovld __conv sub_group_scan_exclusive_add(uint);
+long __ovld __conv sub_group_scan_exclusive_add(long);
+ulong __ovld __conv sub_group_scan_exclusive_add(ulong);
+float __ovld __conv sub_group_scan_exclusive_add(float);
+int __ovld __conv sub_group_scan_exclusive_min(int);
+uint __ovld __conv sub_group_scan_exclusive_min(uint);
+long __ovld __conv sub_group_scan_exclusive_min(long);
+ulong __ovld __conv sub_group_scan_exclusive_min(ulong);
+float __ovld __conv sub_group_scan_exclusive_min(float);
+int __ovld __conv sub_group_scan_exclusive_max(int);
+uint __ovld __conv sub_group_scan_exclusive_max(uint);
+long __ovld __conv sub_group_scan_exclusive_max(long);
+ulong __ovld __conv sub_group_scan_exclusive_max(ulong);
+float __ovld __conv sub_group_scan_exclusive_max(float);
 
-int     __ovld __conv sub_group_scan_inclusive_add(int  );
-uint    __ovld __conv sub_group_scan_inclusive_add(uint );
-long    __ovld __conv sub_group_scan_inclusive_add(long );
-ulong   __ovld __conv sub_group_scan_inclusive_add(ulong);
-float   __ovld __conv sub_group_scan_inclusive_add(float);
-int     __ovld __conv sub_group_scan_inclusive_min(int  );
-uint    __ovld __conv sub_group_scan_inclusive_min(uint );
-long    __ovld __conv sub_group_scan_inclusive_min(long );
-ulong   __ovld __conv sub_group_scan_inclusive_min(ulong);
-float   __ovld __conv sub_group_scan_inclusive_min(float);
-int     __ovld __conv sub_group_scan_inclusive_max(int  );
-uint    __ovld __conv sub_group_scan_inclusive_max(uint );
-long    __ovld __conv sub_group_scan_inclusive_max(long );
-ulong   __ovld __conv sub_group_scan_inclusive_max(ulong);
-float   __ovld __conv sub_group_scan_inclusive_max(float);
+int __ovld __conv sub_group_scan_inclusive_add(int);
+uint __ovld __conv sub_group_scan_inclusive_add(uint);
+long __ovld __conv sub_group_scan_inclusive_add(long);
+ulong __ovld __conv sub_group_scan_inclusive_add(ulong);
+float __ovld __conv sub_group_scan_inclusive_add(float);
+int __ovld __conv sub_group_scan_inclusive_min(int);
+uint __ovld __conv sub_group_scan_inclusive_min(uint);
+long __ovld __conv sub_group_scan_inclusive_min(long);
+ulong __ovld __conv sub_group_scan_inclusive_min(ulong);
+float __ovld __conv sub_group_scan_inclusive_min(float);
+int __ovld __conv sub_group_scan_inclusive_max(int);
+uint __ovld __conv sub_group_scan_inclusive_max(uint);
+long __ovld __conv sub_group_scan_inclusive_max(long);
+ulong __ovld __conv sub_group_scan_inclusive_max(ulong);
+float __ovld __conv sub_group_scan_inclusive_max(float);
 
 #ifdef cl_khr_fp16
 half    __ovld __conv sub_group_broadcast(half, uint sub_group_local_id);
-half    __ovld __conv sub_group_reduce_add(half);
-half    __ovld __conv sub_group_reduce_min(half);
-half    __ovld __conv sub_group_reduce_max(half);
-half    __ovld __conv sub_group_scan_exclusive_add(half);
-half    __ovld __conv sub_group_scan_exclusive_min(half);
-half    __ovld __conv sub_group_scan_exclusive_max(half);
-half    __ovld __conv sub_group_scan_inclusive_add(half);
-half    __ovld __conv sub_group_scan_inclusive_min(half);
-half    __ovld __conv sub_group_scan_inclusive_max(half);
+half __ovld __conv sub_group_reduce_add(half);
+half __ovld __conv sub_group_reduce_min(half);
+half __ovld __conv sub_group_reduce_max(half);
+half __ovld __conv sub_group_scan_exclusive_add(half);
+half __ovld __conv sub_group_scan_exclusive_min(half);
+half __ovld __conv sub_group_scan_exclusive_max(half);
+half __ovld __conv sub_group_scan_inclusive_add(half);
+half __ovld __conv sub_group_scan_inclusive_min(half);
+half __ovld __conv sub_group_scan_inclusive_max(half);
 #endif //cl_khr_fp16
 
 #ifdef cl_khr_fp64
 double  __ovld __conv sub_group_broadcast(double, uint sub_group_local_id);
-double  __ovld __conv sub_group_reduce_add(double);
-double  __ovld __conv sub_group_reduce_min(double);
-double  __ovld __conv sub_group_reduce_max(double);
-double  __ovld __conv sub_group_scan_exclusive_add(double);
-double  __ovld __conv sub_group_scan_exclusive_min(double);
-double  __ovld __conv sub_group_scan_exclusive_max(double);
-double  __ovld __conv sub_group_scan_inclusive_add(double);
-double  __ovld __conv sub_group_scan_inclusive_min(double);
-double  __ovld __conv sub_group_scan_inclusive_max(double);
+double __ovld __conv sub_group_reduce_add(double);
+double __ovld __conv sub_group_reduce_min(double);
+double __ovld __conv sub_group_reduce_max(double);
+double __ovld __conv sub_group_scan_exclusive_add(double);
+double __ovld __conv sub_group_scan_exclusive_min(double);
+double __ovld __conv sub_group_scan_exclusive_max(double);
+double __ovld __conv sub_group_scan_inclusive_add(double);
+double __ovld __conv sub_group_scan_inclusive_min(double);
+double __ovld __conv sub_group_scan_inclusive_max(double);
 #endif //cl_khr_fp64
 
 #endif // __opencl_subgroup_builtins
