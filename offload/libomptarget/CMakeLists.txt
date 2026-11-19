@@ -41,8 +41,8 @@ target_include_directories(omptarget PRIVATE
   ${LIBOMPACCSUPPORT_INCLUDE_DIR}
   ${LIBOMPTARGET_INCLUDE_DIR}
   # Downstream: GenericProfiler.h for the OMPT profiler.
-  ${CMAKE_CURRENT_SOURCE_DIR}/../plugins-nextgen/common/include
-  ${CMAKE_CURRENT_BINARY_DIR}/../plugins-nextgen/common/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../liboffload/plugins/common/include
+  ${CMAKE_CURRENT_BINARY_DIR}/../liboffload/plugins/common/include
 )
 
 if(LLVM_HAVE_LINK_VERSION_SCRIPT)
