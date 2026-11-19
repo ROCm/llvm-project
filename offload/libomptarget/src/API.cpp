@@ -355,27 +355,9 @@ EXTERN int omp_target_memcpy(void *Dst, const void *Src, size_t Length,
     if (!DstDeviceOrErr)
       FATAL_MESSAGE(DstDevice, "%s",
                     toString(DstDeviceOrErr.takeError()).c_str());
-    {
-      AsyncInfoTy AsyncInfo(*SrcDeviceOrErr);
-      Rc = SrcDeviceOrErr->dataExchange(SrcAddr, *DstDeviceOrErr, DstAddr,
-                                        Length, AsyncInfo);
-    }
-
-    // Downstream: if the direct copy fails, e.g., because the devices have no
-    // peer access, copy through a host buffer instead.
-    // The copies use queues, so that OMPT device tracing records them.
-    if (Rc != OFFLOAD_SUCCESS) {
-      void *Buffer = malloc(Length);
-      {
-        AsyncInfoTy AsyncInfo(*SrcDeviceOrErr);
-        Rc = SrcDeviceOrErr->retrieveData(Buffer, SrcAddr, Length, AsyncInfo);
-      }
-      if (Rc == OFFLOAD_SUCCESS) {
-        AsyncInfoTy AsyncInfo(*DstDeviceOrErr);
-        Rc = DstDeviceOrErr->submitData(DstAddr, Buffer, Length, AsyncInfo);
-      }
-      free(Buffer);
-    }
+    AsyncInfoTy AsyncInfo(*SrcDeviceOrErr);
+    Rc = SrcDeviceOrErr->dataExchange(SrcAddr, *DstDeviceOrErr, DstAddr, Length,
+                                      AsyncInfo);
   }
 
   ODBG(ODT_Interface) << __func__ << " returns " << Rc;

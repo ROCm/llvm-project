@@ -117,8 +117,7 @@ void setHSATicksToTimeConstant() { TicksToTime = setTicksToTime(); }
 
 /// Forward declare
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 
 struct AMDGPUSignalTy;
@@ -175,8 +174,7 @@ getOrNullProfilerSpecificData(AsyncInfoWrapperTy &AsyncInfoWrapper) {
 }
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 /// Enable/disable async copy profiling.
@@ -212,8 +210,7 @@ static double getTimeOfDay() {
 }
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 
 /// Forward declarations for all specialized data structures.
@@ -882,8 +879,7 @@ private:
 /// generic kernel class.
 struct AMDGPUKernelTy : public GenericKernelTy {
   /// Create an AMDGPU kernel with a name and an execution mode.
-  AMDGPUKernelTy(StringRef Name, GenericGlobalHandlerTy &Handler)
-      : GenericKernelTy(Name) {}
+  AMDGPUKernelTy(StringRef Name) : GenericKernelTy(Name) {}
 
   /// Initialize the AMDGPU kernel.
   Error initImpl(GenericDeviceTy &Device, DeviceImageTy &Image) override {
@@ -1172,7 +1168,7 @@ private:
 
   /// Reference counter for tracking the concurrent use count. This is mainly
   /// used for knowing how many streams are using the signal.
-  RefCountTy<uint32_t> UseCount;
+  omp::target::RefCountTy<uint32_t> UseCount;
 };
 
 /// Classes for holding AMDGPU signals and managing signals.
@@ -2919,8 +2915,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         OMPX_APUPrefaultMemcopySize("LIBOMPTARGET_APU_PREFAULT_MEMCOPY_SIZE",
                                     1 * 1024 * 1024), // 1MB
         OMPX_DGPUMaps("OMPX_DGPU_MAPS", false),
-        OMPX_EnableDevice2DeviceMemAccess(
-            "OMPX_ENABLE_DEVICE_TO_DEVICE_MEM_ACCESS", false),
         AMDGPUStreamManager(*this, Agent), AMDGPUEventManager(*this),
         AMDGPUSignalManager(*this), Agent(Agent), HostDevice(HostDevice) {}
 
@@ -3001,9 +2995,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     // Load the grid values depending on the wavefront.
     if (WavefrontSize == 32)
-      GridValues = getAMDGPUGridValues<32>();
+      GridValues = llvm::omp::getAMDGPUGridValues<32>();
     else if (WavefrontSize == 64)
-      GridValues = getAMDGPUGridValues<64>();
+      GridValues = llvm::omp::getAMDGPUGridValues<64>();
     else
       return Plugin::error(ErrorCode::UNSUPPORTED,
                            "unexpected AMDGPU wavefront %d", WavefrontSize);
@@ -3365,7 +3359,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
                            "failed to allocate memory for AMDGPU kernel");
 
-    new (AMDGPUKernel) AMDGPUKernelTy(Name, Plugin.getGlobalHandler());
+    new (AMDGPUKernel) AMDGPUKernelTy(Name);
 
     return *AMDGPUKernel;
   }
@@ -4582,7 +4576,7 @@ private:
       return Plugin::success();
 
     // Allocate and construct the AMDGPU kernel.
-    AMDGPUKernelTy AMDGPUKernel(KernelName, Plugin.getGlobalHandler());
+    AMDGPUKernelTy AMDGPUKernel(KernelName);
     if (auto Err = AMDGPUKernel.init(*this, Image))
       return Err;
 
@@ -4777,11 +4771,6 @@ private:
   /// copy on APUs regardless of the setting of HSA_XNACK.
   BoolEnvar OMPX_DGPUMaps;
 
-  // Determines whether we call HSA API, upon device memory allocation,
-  // for making the memory acceccible from other agents.
-  // Default is disabled
-  BoolEnvar OMPX_EnableDevice2DeviceMemAccess;
-
   /// Stream manager for AMDGPU streams.
   AMDGPUStreamManagerTy AMDGPUStreamManager;
 
@@ -4915,7 +4904,7 @@ private:
       return Plugin::success();
     }
 
-    AMDGPUKernelTy DMInitKernel(KernelName, Plugin.getGlobalHandler());
+    AMDGPUKernelTy DMInitKernel(KernelName);
     if (auto Err = DMInitKernel.init(*this, Image)) {
       return Err;
     }
@@ -5938,8 +5927,7 @@ Expected<void *> AMDGPUDeviceTy::allocate(size_t Size, ol_alloc_type_t Kind,
     }
   }
 
-  if (Alloc && (Kind == OL_ALLOC_TYPE_HOST || Kind == OL_ALLOC_TYPE_MANAGED ||
-                OMPX_EnableDevice2DeviceMemAccess)) {
+  if (Alloc) {
     // Get a list of agents that can access this memory pool. Inherently
     // necessary for host or shared allocations Also enabled for device memory
     // to allow device to device memcpy
@@ -6149,20 +6137,19 @@ void setHSAQueueProfiling(void *Device, int Enable) {
 }
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #ifdef OMPT_SUPPORT
 /// Enable/disable kernel profiling for the given device.
 void setGlobalOmptKernelProfile(void *Device, int Enable) {
-  llvm::omp::target::plugin::setHSAQueueProfiling(Device, Enable);
+  llvm::offload::plugin::setHSAQueueProfiling(Device, Enable);
 }
 
 #endif
 
 extern "C" {
-llvm::omp::target::plugin::GenericPluginTy *createPlugin_amdgpu() {
-  return new llvm::omp::target::plugin::AMDGPUPluginTy();
+llvm::offload::plugin::GenericPluginTy *createPlugin_amdgpu() {
+  return new llvm::offload::plugin::AMDGPUPluginTy();
 }
 }

@@ -57,9 +57,9 @@ using namespace llvm::omp::target::debug;
 
 namespace llvm::offload::tmp {
 // Downstream: OMPT support.
-llvm::omp::target::plugin::GenericDeviceTy *
+llvm::offload::plugin::GenericDeviceTy *
 __ol_tgt_GetPluginDevice(ol_device_handle_t Device);
-llvm::omp::target::plugin::GenericProfilerTy *
+llvm::offload::plugin::GenericProfilerTy *
 __ol_tgt_GetProfiler(ol_device_handle_t Device);
 } // namespace llvm::offload::tmp
 
