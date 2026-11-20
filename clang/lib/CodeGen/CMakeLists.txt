@@ -164,6 +164,17 @@ add_clang_library(clangCodeGen
   TrapReasonBuilder.cpp
   VarBypassDetector.cpp
 
+  # Avoid reusing LLVMCodeGen's PCH: it transitively includes
+  # llvm/CodeGen/ScheduleDAGInstrs.h, which forward-declares a
+  # struct CodeGenOptions in namespace llvm. Combined with this
+  # library's `using namespace clang; using namespace llvm;`,
+  # that makes the bare name CodeGenOptions ambiguous against
+  # clang::CodeGenOptions (MSVC C2872). Not giving clangCodeGen
+  # its own PCH here on purpose: an earlier attempt (upstream
+  # #206018) caused a Windows OOM (std::bad_alloc) and was
+  # reverted in d9b770da7778.
+  DISABLE_PCH_REUSE
+
   DEPENDS
   vt_gen
   intrinsics_gen
