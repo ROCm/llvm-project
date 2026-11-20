@@ -53,6 +53,9 @@ F(TX##N x, TY##N y) \
     return (TX##N) ( SLST##N(F,TX) ); \
 }
 
+#define SWRAPTN_EXT(N, F, TX, TY)                                              \
+    ATTR TX##N C(__, F)(TX##N x, TY##N y) { return (TX##N)(SLST##N(F, TX)); }
+
 #define SWRAPSTN(N,F,TX,TY) \
 ATTR TX##N \
 F(TX##N x, TY y) \
@@ -82,6 +85,9 @@ F(TX x, TY y) \
     return SNAME(F,TX)(x, y); \
 }
 
+#define WRAPT1_EXT(F, TX, TY)                                                  \
+    ATTR TX C(__, F)(TX x, TY y) { return SNAME(F, TX)(x, y); }
+
 #define WRAPT2(F,TX,TY) \
 ATTR TX##2 \
 F(TX##2 x, TY##2 y) \
@@ -103,6 +109,14 @@ F(TX##2 x, TY y) \
     SWRAPTN(3,F,TX,TY) \
     SWRAPTN(2,F,TX,TY) \
     WRAPT1(F,TX,TY)
+
+#define SWRAPT_EXT(F, TX, TY)                                                  \
+    SWRAPTN_EXT(16, F, TX, TY)                                                 \
+    SWRAPTN_EXT(8, F, TX, TY)                                                  \
+    SWRAPTN_EXT(4, F, TX, TY)                                                  \
+    SWRAPTN_EXT(3, F, TX, TY)                                                  \
+    SWRAPTN_EXT(2, F, TX, TY)                                                  \
+    WRAPT1_EXT(F, TX, TY)
 
 #define SWRAPST(F,TX,TY) \
     SWRAPTN(16,F,TX,TY) \
@@ -161,6 +175,9 @@ PWRAPT(pown,half,int)
 SWRAPT(rootn,float,int)
 SWRAPT(rootn,double,int)
 PWRAPT(rootn,half,int)
+
+SWRAPT_EXT(pown_fast, float, int)
+SWRAPT_EXT(rootn_fast, float, int)
 
 #define WRAP_ELEMENTWISE_TYPE(F, T, N, B)                                      \
     ATTR T##N F(T##N x, int##N y) { return B(x, y); }                          \
