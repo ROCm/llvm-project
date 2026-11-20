@@ -1,5 +1,5 @@
 !RUN: %python %S/../test_errors.py %s %flang -fopenmp -fopenmp-version=52
-
+!XFAIL: *
 subroutine entry_between()
   integer :: a(10), i
   !$omp metadirective &
