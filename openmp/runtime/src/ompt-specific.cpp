@@ -16,9 +16,6 @@
 
 #include "kmp.h"
 #include "ompt-specific.h"
-#if OMPD_SUPPORT
-#include "ompd-specific.h"
-#endif
 
 #if KMP_OS_UNIX
 #include <dlfcn.h>
