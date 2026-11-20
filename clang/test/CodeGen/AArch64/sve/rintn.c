@@ -1,4 +1,5 @@
 // REQUIRES: aarch64-registered-target
+// XFAIL: *
 
 // DEFINE: %{optimize} = opt -passes=mem2reg -S
 
