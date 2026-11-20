@@ -24,7 +24,9 @@ int main() {
 
 // Parallel region 1
 #pragma omp parallel
-  { ompd_tool_test(0); }
+  {
+    ompd_tool_test(0);
+  }
 
   return 0;
 }

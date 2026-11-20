@@ -29,7 +29,9 @@ int main() {
   omp_set_max_active_levels(10);
 
 #pragma omp parallel sections
-  { f(4); }
+  {
+    f(4);
+  }
 
   return 0;
 }
