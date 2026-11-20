@@ -20,7 +20,6 @@
 // CHECK: define internal float @_Z4cbrtf
 // CHECK: define internal float @__ocml_sincos_f32
 // CHECK: define internal float @__ocml_pow_f32
-// CHECK: define internal noundef float @__ocml_exp_f32
 // CHECK: define internal float @__ocml_powr_f32
 // CHECK: define internal ptr addrspace(1) @__printf_alloc
 

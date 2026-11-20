@@ -7,6 +7,10 @@
 
 #include "mathD.h"
 
+#if !defined EXTRA_ACCURACY
+#define EXTRA_ACCURACY
+#endif
+
 CONSTATTR double
 MATH_MANGLE(rcbrt)(double x)
 {
@@ -21,8 +25,14 @@ MATH_MANGLE(rcbrt)(double x)
     //  = c + c*t/(3 - 2t) where t = 1 - a c^3
     // use t/(3 - 2t) ~ t/3 + 2 t^2 / 9 + 4 t^3 / 27 ...
     // compute t with extra precision for better accuracy
+#if defined EXTRA_ACCURACY
+    double p = c * c;
+    double w = c * a;
+    double t = MATH_MAD(-p, MATH_MAD(c, a, -w), MATH_MAD(-MATH_MAD(c, c, -p), w, MATH_MAD(-p, w, 1.0)));
+#else
     double c3 = c * c * c;
     double t = MATH_MAD(-a, c3, 1.0);
+#endif
     c = MATH_MAD(c, t*MATH_MAD(t, 0x1.c71c71c71c8b2p-3, 0x1.5555555555685p-2), c);
 
     c = BUILTIN_FLDEXP_F64(c, -e);

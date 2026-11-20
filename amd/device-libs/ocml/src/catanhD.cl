@@ -11,6 +11,7 @@
 #include "ep.h"
 
 extern CONSTATTR double MATH_PRIVATE(lnep)(double2 a, int ea);
+extern CONSTATTR double MATH_PRIVATE(atan2ep)(double2 y, double2 x);
 
 CONSTATTR double2
 MATH_MANGLE(catanh)(double2 z)
@@ -24,7 +25,7 @@ MATH_MANGLE(catanh)(double2 z)
         double2 opx = add(1.0, x);
         double2 y2 = sqr(y);
         double2 b = sub(mul(omx, opx), y2);
-        ri = 0.5 * MATH_MANGLE(atan2)(2.0 * y, b.hi);
+        ri = 0.5 * MATH_PRIVATE(atan2ep)(con(2.0 * y, 0.0), b);
 
         double2 a;
         int ea = 0;
@@ -44,14 +45,17 @@ MATH_MANGLE(catanh)(double2 z)
         int e = BUILTIN_FREXP_EXP_F64(BUILTIN_MAX_F64(x, y));
         x = BUILTIN_FLDEXP_F64(x, -e);
         y = BUILTIN_FLDEXP_F64(y, -e);
-        rr = BUILTIN_FLDEXP_F64(MATH_DIV(x, MATH_MAD(x, x, y*y)), -e);
+        // x / (x^2 + y^2) including the rounding error of y*y
+        double y2 = y * y;
+        double d = BUILTIN_FMA_F64(x, x, y2);
+        rr = BUILTIN_FLDEXP_F64(divh(x, con(d, BUILTIN_FMA_F64(y, y, -y2))), -e);
         ri = 0x1.921fb54442d18p+0;
     }
 
     if (!FINITE_ONLY_OPT()) {
         rr = ((x == 1.0) & (y == 0.0)) ? PINF_F64  : rr;
         rr = x == 0.0 ? 0.0 : rr;
-        rr = BUILTIN_ISINF_F64(x) ? 0.0 : rr;
+        rr = (BUILTIN_ISINF_F64(x) | BUILTIN_ISINF_F64(y)) ? 0.0 : rr;
         rr = (BUILTIN_ISNAN_F64(x) & BUILTIN_ISINF_F64(y)) ? 0.0 : rr;
         ri = (BUILTIN_ISNAN_F64(x) & BUILTIN_ISFINITE_F64(y)) ? QNAN_F64 : ri;
         ri = BUILTIN_ISNAN_F64(y) ? y : ri;

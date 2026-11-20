@@ -7,6 +7,13 @@
 
 #include "mathD.h"
 
+#if defined EXTRA_ACCURACY
+#define DOUBLE_SPECIALIZATION
+#include "ep.h"
+
+extern CONSTATTR double MATH_PRIVATE(expep)(double2);
+#endif
+
 CONSTATTR double
 MATH_MANGLE(erf)(double x)
 {
@@ -29,8 +36,15 @@ MATH_MANGLE(erf)(double x)
                          -0x1.2cb68c047288ap-14, -0x1.038ff7bbcce25p-11, 0x1.a9466ae1babaep-10,
                          -0x1.58be1e65a6063p-13, -0x1.39bc16738ee3ap-6, 0x1.a4fbc28146b69p-4,
                          0x1.45f2da69750c4p-1, 0x1.06ebb919fcca8p-3);
+#if defined EXTRA_ACCURACY
+        // ax + ax*p as hi + lo (ax - ph is exact near 1, where it matters)
+        double ph = BUILTIN_FMA_F64(ax, p, ax);
+        double pl = BUILTIN_FMA_F64(ax, p, ax - ph);
+        ret = 1.0 - MATH_PRIVATE(expep)(con(-ph, -pl));
+#else
         p = MATH_MAD(ax, p, ax);
         ret = 1.0 - MATH_MANGLE(exp)(-p);
+#endif
     }
 
     ret = BUILTIN_COPYSIGN_F64(ret, x);
