@@ -71,7 +71,10 @@ MATH_MANGLE(j0)(float x)
         }
 
         x = x - ch - cl;
-        ret = PE8(x, p[8], p[7], p[6], p[5], p[4], p[3], p[2], p[1], p[0]);
+        float s = PE6(x, p[8], p[7], p[6], p[5], p[4], p[3], p[2]);
+        float rh = BUILTIN_FMA_F32(x, s, p[1]);
+        float rl = BUILTIN_FMA_F32(x, s, p[1] - rh);
+        ret = BUILTIN_FMA_F32(x, rl, BUILTIN_FMA_F32(x, rh, p[0]));
     } else {
         float r = MATH_RCP(x);
         float r2 = r*r;

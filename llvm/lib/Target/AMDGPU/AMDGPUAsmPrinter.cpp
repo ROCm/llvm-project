@@ -475,8 +475,38 @@ const AMDGPUMCExpr *createOccupancy(unsigned InitOcc, const MCExpr *NumSGPRs,
                               Ctx);
 }
 
+// Diagnoses an "amdgpu-waves-per-eu" request that the final occupancy does not
+// meet. Returns true if a diagnostic was emitted.
+static bool diagnoseUnmetWavesPerEU(const Function &F,
+                                    const SIMachineFunctionInfo &MFI,
+                                    uint64_t Occupancy) {
+  const auto [MinWEU, MaxWEU] =
+      AMDGPU::getIntegerPairAttribute(F, "amdgpu-waves-per-eu", {0, 0}, true);
+  std::string Desired;
+  if (Occupancy < MinWEU) {
+    Desired = std::to_string(MinWEU);
+  } else if (MaxWEU != 0 && Occupancy > MaxWEU &&
+             MFI.getMaxWavesPerEU() > MaxWEU) {
+    // The requested maximum was not applied: a request whose minimum is below
+    // what the workgroup size requires is ignored in favor of the default
+    // range. An applied maximum always caps the effective maximum, so this
+    // does not fire when the occupancy merely exceeds a requested maximum that
+    // register usage cannot enforce.
+    Desired = "at most " + std::to_string(MaxWEU);
+  } else {
+    return false;
+  }
+  DiagnosticInfoOptimizationFailure Diag(
+      F, F.getSubprogram(),
+      "failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '" +
+          F.getName() + "': desired occupancy was " + Desired +
+          ", final occupancy is " + Twine(Occupancy));
+  F.getContext().diagnose(Diag);
+  return true;
+}
+
 void AMDGPUAsmPrinter::validateMCResourceInfo(Function &F) {
-  if (F.isDeclaration() || !AMDGPU::isModuleEntryFunctionCC(F.getCallingConv()))
+  if (F.isDeclaration())
     return;
 
   using RIK = MCResourceInfo::ResourceInfoKind;
@@ -491,6 +521,44 @@ void AMDGPUAsmPrinter::validateMCResourceInfo(Function &F) {
     }
     return false;
   };
+
+  // Register allocation normally respects the ABI register budget. Final
+  // resource accounting can still exceed it when the IR names fixed physical
+  // registers, e.g. inline asm clobbers. Check the resolved per-function
+  // resource symbols here so object-linking metadata is not emitted for a
+  // function that cannot satisfy its ABI occupancy.
+  if (AMDGPUTargetMachine::EnableObjectLinking) {
+    auto GetResolvedValue = [&](RIK Kind, uint64_t &Value) {
+      MCSymbol *Sym = RI.getSymbol(FnSym->getName(), Kind, OutContext);
+      return Sym->isVariable() &&
+             TryGetMCExprValue(Sym->getVariableValue(), Value);
+    };
+
+    auto CheckBudget = [&](uint64_t Used, unsigned Budget, const char *What) {
+      if (Used <= Budget)
+        return false;
+      F.getContext().diagnose(DiagnosticInfoResourceLimit(
+          F, What, Used, Budget, DS_Error, DK_ResourceLimit));
+      return true;
+    };
+
+    // Architected and accumulator VGPRs share a single budget, so they have to
+    // be checked together rather than one bank at a time.
+    uint64_t NumVgpr = 0, NumAgpr = 0, NumSgpr = 0;
+    if (GetResolvedValue(RIK::RIK_NumVGPR, NumVgpr) &&
+        GetResolvedValue(RIK::RIK_NumAGPR, NumAgpr) &&
+        CheckBudget(getTotalNumVGPRs(STM.hasGFX90AInsts(), NumAgpr, NumVgpr),
+                    STM.getMaxNumVGPRs(F), "VGPRs under object-linking ABI"))
+      return;
+
+    if (GetResolvedValue(RIK::RIK_NumSGPR, NumSgpr) &&
+        CheckBudget(NumSgpr, STM.getMaxNumSGPRs(F),
+                    "SGPRs under object-linking ABI"))
+      return;
+  }
+
+  if (!AMDGPU::isModuleEntryFunctionCC(F.getCallingConv()))
+    return;
 
   const uint64_t MaxScratchPerWorkitem =
       STM.getMaxWaveScratchSize() / STM.getWavefrontSize();
@@ -579,20 +647,9 @@ void AMDGPUAsmPrinter::validateMCResourceInfo(Function &F) {
           MCConstantExpr::create(NumVGPRsForWavesPerEU, OutContext),
           MFI.getDynamicVGPRBlockSize(), STM, OutContext);
       uint64_t Occupancy;
-
-      const auto [MinWEU, MaxWEU] = AMDGPU::getIntegerPairAttribute(
-          F, "amdgpu-waves-per-eu", {0, 0}, true);
-
-      if (TryGetMCExprValue(OccupancyExpr, Occupancy) && Occupancy < MinWEU) {
-        DiagnosticInfoOptimizationFailure Diag(
-            F, F.getSubprogram(),
-            "failed to meet occupancy target given by 'amdgpu-waves-per-eu' in "
-            "'" +
-                F.getName() + "': desired occupancy was " + Twine(MinWEU) +
-                ", final occupancy is " + Twine(Occupancy));
-        F.getContext().diagnose(Diag);
+      if (TryGetMCExprValue(OccupancyExpr, Occupancy) &&
+          diagnoseUnmetWavesPerEU(F, MFI, Occupancy))
         return;
-      }
     }
   }
 }
@@ -748,29 +805,24 @@ bool AMDGPUAsmPrinter::doFinalization(Module &M) {
   // LDS/named-barrier use edges, indirect calls, and address-taken type IDs).
   emitAMDGPUInfo(M);
 
-  // Assign expressions which can only be resolved when all other functions are
-  // known.
-  RI.finalize(OutContext);
-
-  // Switch section and emit all GPR maximums within the processed module.
-  OutStreamer->pushSection();
-  MCSectionELF *MaxGPRSection =
-      OutContext.getELFSection(".AMDGPU.gpr_maximums", ELF::SHT_PROGBITS, 0);
-  OutStreamer->switchSection(MaxGPRSection);
-  getTargetStreamer()->EmitMCResourceMaximums(
-      RI.getMaxVGPRSymbol(OutContext), RI.getMaxAGPRSymbol(OutContext),
-      RI.getMaxSGPRSymbol(OutContext), RI.getMaxNamedBarrierSymbol(OutContext));
-  OutStreamer->popSection();
-
-  // In the object-linking pipeline per-function resource MCExprs reference
-  // external callee symbols that cannot be evaluated here, so cross-TU limit
-  // checks would silently no-op for every non-leaf function. Defer resource
-  // sanity checking to the linker, which re-validates against the aggregated
-  // call graph in the combined .amdgpu.info metadata.
+  // Finalize non-object-linking resource propagation and emit the
+  // `amdgpu.max_num_*` fallback symbols.
   if (!AMDGPUTargetMachine::EnableObjectLinking) {
-    for (Function &F : M.functions())
-      validateMCResourceInfo(F);
+    RI.finalize(OutContext);
+
+    OutStreamer->pushSection();
+    MCSectionELF *MaxGPRSection =
+        OutContext.getELFSection(".AMDGPU.gpr_maximums", ELF::SHT_PROGBITS, 0);
+    OutStreamer->switchSection(MaxGPRSection);
+    getTargetStreamer()->EmitMCResourceMaximums(
+        RI.getMaxVGPRSymbol(OutContext), RI.getMaxAGPRSymbol(OutContext),
+        RI.getMaxSGPRSymbol(OutContext),
+        RI.getMaxNamedBarrierSymbol(OutContext));
+    OutStreamer->popSection();
   }
+
+  for (Function &F : M.functions())
+    validateMCResourceInfo(F);
 
   RI.reset();
 
@@ -933,11 +985,16 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   if (AMDGPUTargetMachine::EnableObjectLinking) {
     const AMDGPUResourceUsageAnalysisWrapperPass::FunctionResourceInfo &RU =
         *ResourceUsage;
+    uint32_t Occupancy = static_cast<uint32_t>(
+        MF.getInfo<SIMachineFunctionInfo>()->getMinWavesPerEU());
     FunctionInfos.push_back(
         {/*NumSGPR=*/static_cast<uint32_t>(RU.NumExplicitSGPR),
          /*NumArchVGPR=*/static_cast<uint32_t>(RU.NumVGPR),
          /*NumAccVGPR=*/static_cast<uint32_t>(RU.NumAGPR),
          /*PrivateSegmentSize=*/static_cast<uint32_t>(RU.PrivateSegmentSize),
+         /*Occupancy=*/Occupancy,
+         /*UsesFullSIMDMode=*/AMDGPU::isFullSIMDMode(STM),
+         /*UsesWave32=*/STM.getWavefrontSize() == 32,
          /*UsesVCC=*/RU.UsesVCC,
          /*UsesFlatScratch=*/RU.UsesFlatScratch,
          /*HasDynStack=*/RU.HasDynamicallySizedStack,
@@ -1559,18 +1616,9 @@ void AMDGPUAsmPrinter::getSIProgramInfo(SIProgramInfo &ProgInfo,
       ProgInfo.NumSGPRsForWavesPerEU, ProgInfo.NumVGPRsForWavesPerEU,
       MFI->getDynamicVGPRBlockSize(), STM, Ctx);
 
-  const auto [MinWEU, MaxWEU] =
-      AMDGPU::getIntegerPairAttribute(F, "amdgpu-waves-per-eu", {0, 0}, true);
   uint64_t Occupancy;
-  if (TryGetMCExprValue(ProgInfo.Occupancy, Occupancy) && Occupancy < MinWEU) {
-    DiagnosticInfoOptimizationFailure Diag(
-        F, F.getSubprogram(),
-        "failed to meet occupancy target given by 'amdgpu-waves-per-eu' in "
-        "'" +
-            F.getName() + "': desired occupancy was " + Twine(MinWEU) +
-            ", final occupancy is " + Twine(Occupancy));
-    F.getContext().diagnose(Diag);
-  }
+  if (TryGetMCExprValue(ProgInfo.Occupancy, Occupancy))
+    diagnoseUnmetWavesPerEU(F, *MFI, Occupancy);
 }
 
 static unsigned getRsrcReg(CallingConv::ID CallConv) {
@@ -1773,6 +1821,8 @@ void AMDGPUAsmPrinter::EmitPALMetadata(
                                   MCConstantExpr::create(16, Ctx), Ctx),
       Ctx);
 
+  MD->setBackendStackSize(CC, CurrentProgramInfo.ScratchSize);
+
   if (MF.getFunction().getCallingConv() == CallingConv::AMDGPU_PS) {
     unsigned ExtraLDSSize = STM.getGeneration() >= AMDGPUSubtarget::GFX11
                                 ? divideCeil(CurrentProgramInfo.LDSBlocks, 2)
@@ -1822,7 +1872,8 @@ void AMDGPUAsmPrinter::emitPALFunctionMetadata(const MachineFunction &MF) {
   auto *MD = getTargetStreamer()->getPALMetadata();
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   StringRef FnName = MF.getFunction().getName();
-  MD->setFunctionScratchSize(FnName, MFI.getStackSize());
+  MD->setFunctionStackFrameSize(FnName, MFI.getStackSize());
+  MD->setFunctionBackendStackSize(FnName, CurrentProgramInfo.ScratchSize);
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   MCContext &Ctx = MF.getContext();
 

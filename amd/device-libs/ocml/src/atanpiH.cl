@@ -8,25 +8,25 @@
 
 #include "mathH.h"
 
-extern CONSTATTR half MATH_PRIVATE(atanpired)(half);
-
 CONSTATTR UGEN(atanpi)
 
 CONSTATTR half
 MATH_MANGLE(atanpi)(half x)
 {
-    half v = BUILTIN_ABS_F16(x);
-    bool g = v > 1.0h;
+    // Evaluate in float so that only the final conversion rounds to half
+    float v = BUILTIN_ABS_F32((float)x);
+    bool g = v > 1.0f;
 
-    half vi = MATH_FAST_RCP(v);
+    float vi = BUILTIN_AMDGPU_RCP_F32(v);
     v = g ? vi : v;
 
-    half a = MATH_PRIVATE(atanpired)(v);
+    float vv = v * v;
+    float a = v * BUILTIN_FMA_F32(vv, BUILTIN_FMA_F32(vv, BUILTIN_FMA_F32(vv, BUILTIN_FMA_F32(vv, 0x1.f1ca04p-8f, -0x1.df6742p-6f), 0x1.e2f692p-5f), -0x1.b07856p-4f), 0x1.45f086p-2f);
 
-    half y = 0.5h - a;
+    float y = 0.5f - a;
     a = g ? y : a;
 
-    return BUILTIN_COPYSIGN_F16(a, x);
+    return BUILTIN_COPYSIGN_F16((half)a, x);
 }
 
 

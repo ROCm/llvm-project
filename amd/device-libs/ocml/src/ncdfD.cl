@@ -7,7 +7,13 @@
 
 #include "mathD.h"
 
+#define DOUBLE_SPECIALIZATION
+#include "ep.h"
+
 #if !defined EXTRA_ACCURACY
+CONSTATTR extern double2 MATH_PRIVATE(erfcxep)(double);
+extern CONSTATTR double MATH_PRIVATE(expep)(double2);
+
 
 CONSTATTR double
 MATH_MANGLE(ncdf)(double x)
@@ -20,10 +26,16 @@ MATH_MANGLE(ncdf)(double x)
     double tlo = MATH_MAD(clo, x, MATH_MAD(chi, x, -thi));
     double yhi = thi + tlo;
     double ylo = tlo - (yhi - thi);
-    double r = MATH_MANGLE(erfc)(yhi);
-    double dr = -2.0 * yhi * r;
-    dr = x >= -1.0 ? 0.0f : dr;
-    r = MATH_MAD(ylo, dr, r);
+    // erfc(y) = exp(-y^2) erfcx(|y|) with ylo folded into y^2, and into
+    // erfcx through erfcx'(a) = 2a erfcx(a) - 2/sqrt(pi) (for yhi > 0, where it matters)
+    double sh = -yhi * yhi;
+    double sl = MATH_MAD(-2.0 * yhi, ylo, MATH_MAD(-yhi, yhi, -sh));
+    double e = MATH_PRIVATE(expep)(con(sh, sl));
+    double ay = BUILTIN_ABS_F64(yhi);
+    double2 q = MATH_PRIVATE(erfcxep)(ay);
+    double ql = BUILTIN_FMA_F64(ylo, BUILTIN_FMA_F64(2.0 * ay, q.hi, -0x1.20dd750429b6dp+0), q.lo);
+    double r = BUILTIN_FMA_F64(e, q.hi, e * ql);
+    r = yhi < 0.0 ? 2.0 - r : r;
     return 0.5 * r;
 }
 

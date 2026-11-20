@@ -2050,6 +2050,10 @@ supported for the `amdgcn` target.
   `alloca` is not visible while in a called function. Attempting to dereference
   a pointer to such memory in a called function is undefined behavior.
 
+  Pointers can be cast to and from the generic address space, which uses a
+  {ref}`synthetic aperture<amdgpu-synthetic-apertures>`; a generic pointer
+  obtained this way cannot be dereferenced.
+
 **Barrier**
 
 : This address space represents barrier IDs (introduced in GFX12) as addresses.
@@ -2105,6 +2109,10 @@ The following synthetic apertures are defined:
   - 1
   - `0x00000001`
   - Barrier
+* - VGPR
+  - 3
+  - `0x00000003`
+  - VGPR
 :::
 
 Converting a pointer to generic (64 bits) using synthetic apertures is done as follows:
@@ -2573,9 +2581,9 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
     - 0x0010: All VMEM instructions may be scheduled across sched_barrier.
       This includes LDSDMA instructions.
     - 0x0020: VMEM read instructions may be scheduled across sched_barrier.
-      This does not include LDSDMA loads, even though they also read from global memory; only loads targeting VGPRs are classified as VMEM read.
+      This does not include global or buffer loads to LDS, even though they also read from global memory; only loads targeting VGPRs are classified as VMEM read.
     - 0x0040: VMEM write instructions may be scheduled across sched_barrier.
-      This does not include LDSDMA stores, even though they also write to global memory; only stores sourcing from VGPRs are classified as VMEM write.
+      This does not include global stores from LDS, even though they also write to global memory; only stores sourcing from VGPRs are classified as VMEM write.
     - 0x0080: All DS instructions may be scheduled across sched_barrier.
       This includes LDSDMA instructions.
     - 0x0100: All DS read instructions may be scheduled across sched_barrier.
@@ -3303,6 +3311,18 @@ The field indicates how much data is fetched on a cache miss. It is only support
 on GFX13. GFX13 only honors it for load and atomic operations. GFX13 does not
 support a 32-byte fetch size so it treats CFS_32B the same as CFS_64B.
 
+(amdgpu_noclobber)=
+
+### '`amdgpu.noclobber`' Metadata
+
+Consider the writes that a `load` instruction L marked as `!amdgpu.noclobber`
+may see according to the {ref}`AMDGPU memory model<amdgpu-location-order>`.
+L returns `undef` if any of these writes does not happen-before the operation
+that dispatches the kernel executing L.
+
+This metadata can allow the AMDGPU compiler backend to emit scalar instead of
+vector load instructions.
+
 ## LLVM IR Attributes
 
 The AMDGPU backend supports the following LLVM IR attributes.
@@ -3695,7 +3715,8 @@ on the register budget. Callers and callees rely on this floor without seeing
 each other's register usage. It is not the occupancy the function achieves: a
 function may use fewer registers than the cap and therefore achieve a higher
 occupancy. For example, the ABI occupancy may be 4 even when the function
-achieves an occupancy of 10.
+achieves an occupancy of 10. `.amdgpu_occupancy` records this floor; see
+{ref}`amdgpu-assembler-directive-amdgpu-info`.
 
 A caller with ABI occupancy `N` can call a callee only when the callee's ABI
 occupancy is at least `N`. A lower ABI occupancy raises the callee's register
@@ -4427,11 +4448,10 @@ if needed.
 
 `.amdgpu.info`
 
-: Per-function metadata for AMDGPU object linking, emitted only in relocatable
-  code objects when object linking is enabled
-  (`-amdgpu-enable-object-linking`). The linker uses this section to
-  propagate resource usage (registers, stack, LDS) and resolve call graph
-  dependencies across translation units.
+: Per-function metadata emitted only in relocatable code objects when object
+  linking is enabled. The linker uses this section to propagate resource usage
+  (registers, stack, LDS) and resolve call graph dependencies across
+  translation units.
 
   Each entry uses a tagged, length-prefixed binary encoding:
 
@@ -4481,6 +4501,9 @@ if needed.
   * - 10
     - `INFO_TYPEID`
     - u32 strtab offset; function type-ID
+  * - 11
+    - `INFO_OCCUPANCY`
+    - u32; ABI occupancy
   :::
 
   :::{list-table} AMDGPU Info Function Flags (`INFO_FLAGS`)
@@ -4499,6 +4522,12 @@ if needed.
   * - 0x4
     - `FUNC_HAS_DYN_STACK`
     - Function has dynamic stack allocation
+  * - 0x8
+    - `FUNC_FULL_SIMD_MODE`
+    - Function uses full SIMD execution mode
+  * - 0x10
+    - `FUNC_WAVE32`
+    - Function uses wave32; otherwise wave64
   :::
 
   Symbol references (`INFO_FUNC`, `INFO_USE`, `INFO_CALL`) generate
@@ -7160,7 +7189,7 @@ The memory space properties are:
   - private
   - scratch
   - 32
-  - 0x00000000
+  - 0xFFFFFFFF
 * - Local
   - group
   - LDS
@@ -16717,6 +16746,12 @@ within a map that has been added by the same *vendor-name*.
   - integer
   -
   - Scratch memory size in bytes.
+* - ".backend_stack_size"
+  - integer
+  -
+  - Amount of stack size in bytes used by the shader, including the stack used by its known callees.
+    Chain callees are excluded, since they reuse the caller's stack frame.
+    Indirect calls and recursion do not contribute.
 * - ".lds_size"
   - integer
   -
@@ -16829,7 +16864,12 @@ within a map that has been added by the same *vendor-name*.
   - Number of SGPRs used by the shader.
 * - ".stack_frame_size_in_bytes"
   - integer
-  - Amount of stack size used by the shader.
+  - Amount of stack size used by the shader itself, not including the stack used by any of its callees.
+* - ".backend_stack_size"
+  - integer
+  - Amount of stack size in bytes used by the shader, including the stack used by its known callees.
+    Chain callees are excluded, since they reuse the caller's stack frame.
+    Indirect calls and recursion do not contribute.
 * - ".shader_subtype"
   - string
   - Shader subtype/kind.
@@ -17998,6 +18038,8 @@ The following sub-directives may appear inside the block:
   - Accumulator VGPRs used (u32)
 * - `.amdgpu_private_segment_size` *n*
   - Private segment size in bytes (u32)
+* - `.amdgpu_occupancy` *value*
+  - ABI occupancy (u32). See {ref}`amdgpu-abi-occupancy` for more details.
 * - `.amdgpu_use` *symbol*
   - Resource dependency (LDS or barrier)
 * - `.amdgpu_call` *symbol*
@@ -18017,6 +18059,7 @@ Example:
   .amdgpu_num_vgpr 32
   .amdgpu_num_agpr 0
   .amdgpu_private_segment_size 0
+  .amdgpu_occupancy 4
   .amdgpu_use lds_var
   .amdgpu_call helper
   .amdgpu_indirect_call "vi"

@@ -26,20 +26,20 @@ MATH_MANGLE(asin)(half x)
     // together with the above polynomial approximation, and
     // reconstruct the terms carefully.
 
-    half ax = BUILTIN_ABS_F16(x);
-    half r;
+    // Evaluate in float so that only the final conversion rounds to half
+    float fx = (float)x;
+    float ax = BUILTIN_ABS_F32(fx);
+    float tx = BUILTIN_FMA_F32(ax, -0.5f, 0.5f);
+    float x2 = ax * ax;
+    float r = ax >= 0.5f ? tx : x2;
 
-    if (ax <= 0.5h) {
-        half s = x * x;
-        half p = s * MATH_MAD(s, 0x1.828p-4h, 0x1.52p-3h);
-        r = MATH_MAD(ax, p, ax);
-    } else {
-        float s = BUILTIN_MAD_F32((float)ax, -0.5f, 0.5f);
-        float t = BUILTIN_AMDGPU_SQRT_F32(s);
-        float p = BUILTIN_MAD_F32(t, BUILTIN_MAD_F32(s, -0x1.82675ap-2f, -0x1.ff9f6p+0f), 0x1.921fb6p+0f);
-        r = (half)p;
-    }
+    float u = r * BUILTIN_FMA_F32(r, 0x1.823f5p-4f, 0x1.5209cep-3f);
 
-    return BUILTIN_COPYSIGN_F16(r, x);
+    float s = BUILTIN_AMDGPU_SQRT_F32(r);
+    float ret = BUILTIN_FMA_F32(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -2.0f*BUILTIN_FMA_F32(s, u, s));
+    float xux = BUILTIN_FMA_F32(ax, u, ax);
+    ret = ax < 0.5f ? xux : ret;
+
+    return BUILTIN_COPYSIGN_F16((half)ret, x);
 }
 

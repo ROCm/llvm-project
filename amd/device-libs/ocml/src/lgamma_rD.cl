@@ -7,6 +7,11 @@
 
 #include "mathD.h"
 
+#define DOUBLE_SPECIALIZATION
+#include "ep.h"
+
+extern CONSTATTR double2 MATH_PRIVATE(epln)(double);
+
 // This lgamma routine began with Sun's lgamma code from netlib.
 // Their original copyright notice follows.
 /* @(#)e_lgamma_r.c 1.3 95/01/18 */
@@ -95,7 +100,8 @@ struct ret_t {
     int sign;
 };
 
-static struct ret_t
+// lgamma(x) for x > 0, as an unnormalized hi + lo
+static double2
 lgamma_pos(double x)
 {
     const double a0  =  7.72156649015328655494e-02;
@@ -159,23 +165,16 @@ lgamma_pos(double x)
     const double w4  = -5.95187557450339963135e-04;
     const double w5  =  8.36339918996282139126e-04;
     const double w6  = -1.63092934096575273989e-03;
-    const double z1  = -0x1.2788cfc6fb619p-1;
-    const double z2  =  0x1.a51a6625307d3p-1;
-    const double z3  = -0x1.9a4d55beab2d7p-2;
-    const double z4  =  0x1.151322ac7d848p-2;
-    const double z5  = -0x1.a8b9c17aa6149p-3;
 
-    double ret;
+    // every branch needs log of one argument: x, or z in [2,8)
+    double la = x;
+    double ah = 0.0, al = 0.0, zl = 0.0, w = 0.0;
 
-    if (x < 0x1.0p-8) {
-        ret = PE5(x, z5, z4, z3, z2, z1, -MATH_MANGLE(log)(x));
-    } else if (x < 2.0) {
+    if (x < 2.0) {
         int i;
         bool c;
         double y, t;
         if (x <= 0x1.cccccp-1) { // x < 0.9 : lgamma(x) = lgamma(x+1)-log(x)
-            ret = -MATH_MANGLE(log)(x);
-
             y = 1.0 - x;
             i = 0;
 
@@ -188,8 +187,6 @@ lgamma_pos(double x)
             y = c ? x : y;
             i = c ? 2 : i;
         } else {
-            ret = 0.0;
-
             y = 2.0 - x;
             i = 0;
 
@@ -211,7 +208,7 @@ lgamma_pos(double x)
             p1 = PE5(z, a10, a8, a6, a4, a2, a0);
             p2 = z * PE5(z, a11, a9, a7, a5, a3, a1);
             p = MATH_MAD(y, p1, p2);
-            ret += MATH_MAD(y, -0.5, p);
+            ah = MATH_MAD(y, -0.5, p);
             break;
         case 1:
             z = y*y;
@@ -220,12 +217,13 @@ lgamma_pos(double x)
             p2 = PE4(w, t13, t10, t7, t4, t1);
             p3 = PE4(w, t14, t11, t8, t5, t2);
             p = MATH_MAD(z, p1, -MATH_MAD(w, -MATH_MAD(y, p3,p2), tt));
-            ret += tf + p;
+            ah = tf + p;
+            al = p - (ah - tf);
             break;
         case 2:
             p1 = y * PE5(y, u5, u4, u3, u2, u1, u0);
             p2 = PE5(y, v5, v4, v3, v2, v1, 1.0);
-            ret += MATH_MAD(y, -0.5, MATH_DIV(p1, p2));
+            ah = MATH_MAD(y, -0.5, MATH_DIV(p1, p2));
             break;
         }
     } else if (x < 8.0) { // 2 < x < 8
@@ -233,39 +231,58 @@ lgamma_pos(double x)
         double y = x - (double)i;
         double p = y * PE6(y, s6, s5, s4, s3, s2, s1, s0);
         double q = PE6(y, r6, r5, r4, r3, r2, r1, 1.0);
-        ret = MATH_MAD(y, 0.5, MATH_DIV(p, q));
+        ah = MATH_MAD(y, 0.5, MATH_DIV(p, q));
 
-        double y2 = y + 2.0;
-        double y3 = y + 3.0;
-        double y4 = y + 4.0;
-        double y5 = y + 5.0;
-        double y6 = y + 6.0;
-
-        double z = 1.0;
-        z *= i > 2 ? y2 : 1.0;
-        z *= i > 3 ? y3 : 1.0;
-        z *= i > 4 ? y4 : 1.0;
-        z *= i > 5 ? y5 : 1.0;
-        z *= i > 6 ? y6 : 1.0;
-
-        ret += MATH_MANGLE(log)(z);
+        // z = (y + 2)...(y + i - 1) as la + zl
+        la = 1.0;
+        for (int k = 2; k < 7; ++k) {
+            double yk = i > k ? y + (double)k : 1.0;
+            double t = la * yk;
+            zl = BUILTIN_FMA_F64(zl, yk, BUILTIN_FMA_F64(la, yk, -t));
+            la = t;
+        }
     } else if (x < 0x1p+58) { // 8 <= x < 2^58
-        double z = MATH_RCP(x);
+        double z = MATH_FAST_RCP(x);
         double y = z*z;
-        double w = MATH_MAD(z, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, w6, w5), w4), w3), w2), w1), w0);
-        ret = MATH_MAD(x - 0.5, MATH_MANGLE(log)(x) - 1.0, w);
-    } else { // 2^58 <= x <= Inf
-        ret = MATH_MAD(x, MATH_MANGLE(log)(x), -x);
+        w = MATH_MAD(z, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, w6, w5), w4), w3), w2), w1), w0);
     }
 
-    ret = (x == 1.0 | x == 2.0) ? 0.0 : ret;
-    if (!FINITE_ONLY_OPT())
-        ret = BUILTIN_ISINF_F64(x) ? PINF_F64 : ret;
+    double2 l = MATH_PRIVATE(epln)(la);
 
-    struct ret_t result;
-    result.value = ret;
-    result.sign = 1;
-    return result;
+    double ret;
+    double retl;
+    if (x <= 0x1.cccccp-1) {
+        // -log(x) + ah as a TwoSum, since they partly cancel
+        double sh = ah - l.hi;
+        double sb = sh - ah;
+        retl = ((ah - (sh - sb)) - (l.hi + sb)) + (al - l.lo);
+        ret = sh;
+    } else if (x < 2.0) {
+        ret = ah;
+        retl = al;
+    } else if (x < 8.0) {
+        ret = l.hi;
+        retl = ah + BUILTIN_FMA_F64(zl, MATH_FAST_RCP(la), l.lo);
+    } else if (x < 0x1p+58) {
+        // (x - 0.5)(log(x) - 1) + w; log(x).hi - 1 is exact for x >= 8,
+        // and x*v, 0.5*v are exact in the fmas
+        double v = l.hi - 1.0;
+        ret = BUILTIN_FMA_F64(x, v, BUILTIN_FMA_F64(x - 0.5, l.lo, BUILTIN_FMA_F64(-0.5, v, w)));
+        retl = 0.0;
+    } else { // 2^58 <= x <= Inf
+        ret = BUILTIN_FMA_F64(x, l.hi, -x);
+        retl = 0.0;
+    }
+
+    bool z = (x == 1.0) | (x == 2.0);
+    ret = z ? 0.0 : ret;
+    retl = z ? 0.0 : retl;
+    if (!FINITE_ONLY_OPT()) {
+        ret = BUILTIN_ISINF_F64(x) ? PINF_F64 : ret;
+        retl = BUILTIN_ISINF_F64(x) ? 0.0 : retl;
+    }
+
+    return con(ret, retl);
 }
 
 // Negative-argument log|Gamma|.  Core [-21.5,-3] uses per-half certified
@@ -275,105 +292,82 @@ lgamma_pos(double x)
 
 #define LGAMMA_NEG_CELL_M_MAX 21
 
-// lgamma = u*S(u) - log1p(u*rd0), u = (x-x0hi)-x0lo, rd0 = 1/d0; near the pole
-// (r <= -0.5) switch to -log|(x+m)*rd0| so the singularity is carried by x+m.
-static double
-lgamma_neg_zeval(__constant double *c, int deg, double x,
-                 double x0hi, double x0lo, double rd0, double m)
+// lgamma = u*S(u) - log1p(u*rd0), u = (x-x0hi)-x0lo, rd0 + rd0l = 1/d0; near the
+// pole (r <= -0.5) the log argument is (x+m)*rd0 so the singularity is carried
+// by x+m.  This sets u*S as *th + *tl and the log argument as *la + *lal; the
+// caller takes the log.
+static void
+lgamma_neg_zprep(__constant double *c, int deg, double x,
+                 double x0hi, double x0lo, double rd0, double rd0l, double m,
+                 double *th, double *tl, double *la, double *lal)
 {
-    double u = (x - x0hi) - x0lo;
-    double S = 0.0;
-    for (int j = deg; j >= 0; --j)
+    // u + ue = (x - x0hi) - x0lo with x - x0hi exact (and either 0 or larger
+    // than x0lo); S = sh + sl with the last step split
+    double uh = x - x0hi;
+    double u = uh - x0lo;
+    double ue = (uh - u) - x0lo;
+    double S = c[deg];
+    for (int j = deg - 1; j >= 1; --j)
         S = MATH_MAD(S, u, c[j]);
-    double r = u * rd0;
-    double sing;
-    if (r > -0.5) {
-        sing = -MATH_MANGLE(log1p)(r);
+    double sh = BUILTIN_FMA_F64(S, u, c[0]);
+    double sl = BUILTIN_FMA_F64(S, u, c[0] - sh);
+    *th = u * sh;
+    *tl = BUILTIN_FMA_F64(u, sh, -*th) + BUILTIN_FMA_F64(u, sl, ue * sh);
+
+    double rh = u * rd0;
+    double rl = BUILTIN_FMA_F64(u, rd0, -rh) + BUILTIN_FMA_F64(u, rd0l, ue * rd0);
+    if (rh > -0.5) {
+        *la = 1.0 + rh;
+        *lal = ((1.0 - *la) + rh) + rl;
     } else {
         double v = x + m;
-        if (v == 0.0)
-            return PINF_F64;
-        sing = -MATH_MANGLE(log)(BUILTIN_ABS_F64(v * rd0));
+        *la = v * rd0;
+        *lal = BUILTIN_FMA_F64(v, rd0l, BUILTIN_FMA_F64(v, rd0, -*la));
     }
-    return MATH_MAD(u, S, sing);
 }
 
-// lgamma = u*Q(u), u = (x-x0hi)-x0lo : factors the zero exactly, no log term.
-static double
-lgamma_neg_zfeval(__constant double *c, int deg, double x,
-                  double x0hi, double x0lo)
-{
-    double u = (x - x0hi) - x0lo;
-    double Q = 0.0;
-    for (int j = deg; j >= 0; --j)
-        Q = MATH_MAD(Q, u, c[j]);
-    return u * Q;
-}
-
-// plain polynomial about c0 (the -2.5 valley in the (-3,-2) dead zone)
-static double
-lgamma_neg_deval(__constant double *c, int deg, double x, double c0)
-{
-    double t = x - c0;
-    double S = 0.0;
-    for (int j = deg; j >= 0; --j)
-        S = MATH_MAD(S, t, c[j]);
-    return S;
-}
-
-// (-3,-2) reflection-free 5-piece tiling
+// (-2.7,-2.47), between the two zeros of lgamma in (-3,-2):
+// lgamma = (x - za)(x - zb)*Q(x + 2.59375), with both zeros factored out exactly
 static double
 lgamma_neg_seg3(double x)
 {
-    const double zb_x0hi = -2.7476826467274127;
-    const double zb_x0lo =  9.055340329338315e-17;
-    const double za_x0hi = -2.4570247382208006;
-    const double za_x0lo = -3.7075610815513266e-17;
+    const double zah = -0x1.3a7fc9600f86cp+1;
+    const double zal = -0x1.55f64f98af8d0p-55;
+    const double zbh = -0x1.5fb410a1bd901p+1;
+    const double zbl =  0x1.a19a96d2e6f85p-54;
 
-    if (x <= -2.88) {
-        USE_TABLE(double, c, LGAMMA_NEG_S3_ZBP);
-        return lgamma_neg_zeval(c, 9, x, zb_x0hi, zb_x0lo, 0x1.fb4c32b1c7a37p+1, 3.0);
-    }
-    if (x <= -2.7) {
-        USE_TABLE(double, c, LGAMMA_NEG_S3_ZFB);
-        return lgamma_neg_zfeval(c, 23, x, zb_x0hi, zb_x0lo);
-    }
-    if (x < -2.47) {
-        USE_TABLE(double, c, LGAMMA_NEG_S3_DD);
-        return lgamma_neg_deval(c, 19, x, -2.5);
-    }
-    if (x < -2.36) {
-        USE_TABLE(double, c, LGAMMA_NEG_S3_ZFA);
-        return lgamma_neg_zfeval(c, 12, x, za_x0hi, za_x0lo);
-    }
-    USE_TABLE(double, c, LGAMMA_NEG_S3_ZAP);
-    return lgamma_neg_zeval(c, 16, x, za_x0hi, za_x0lo, -0x1.1812869d0ae27p+1, 2.0);
+    USE_TABLE(double, c, LGAMMA_NEG_S3_ZZ);
+    double t = x + 0x1.4cp+1;
+    double q = c[19];
+    for (int j = 18; j >= 1; --j)
+        q = MATH_MAD(q, t, c[j]);
+    // last step split, with the low part of the constant term
+    double qh = BUILTIN_FMA_F64(q, t, c[0]);
+    double ql = BUILTIN_FMA_F64(q, t, c[0] - qh) + c[20];
+
+    // (x - za)(x - zb) as ph + pl; x - zah and x - zbh are exact
+    double ua = x - zah;
+    double ub = x - zbh;
+    double ph = ua * ub;
+    double pl = BUILTIN_FMA_F64(ua, ub, -ph) - BUILTIN_FMA_F64(ua, zbl, zal * ub);
+    return BUILTIN_FMA_F64(ph, qh, BUILTIN_FMA_F64(ph, ql, pl * qh));
 }
 
 // reflection fallback (out-of-core regions); sign comes from parity elsewhere
 static double
-lgamma_neg_reflect(double x)
+lgamma_neg_reflect(double x, double2 lp)
 {
     const double pi = 3.14159265358979311600e+00;
     double t = MATH_MANGLE(sinpi)(x) * x;
     if (t == 0.0)
         return PINF_F64;
-    return MATH_MANGLE(log)(MATH_DIV(pi, BUILTIN_ABS_F64(t))) - lgamma_pos(-x).value;
+    return MATH_MANGLE(log)(MATH_DIV(pi, BUILTIN_ABS_F64(t))) - (lp.hi + lp.lo);
 }
 
 // (-1,0) recurrence lgamma(x) = lgamma(x+1) - log|x|; the shift lands in (0,1),
-// with the correction dropped below the small-x bound where -log|x| is exact.
-static double
-lgamma_neg_recur(double x)
-{
-    double r = -MATH_MANGLE(log)(-x);
-    if (x <= -0x1.0p-46)
-        r += lgamma_pos(x + 1.0).value;
-    return r;
-}
 
 static struct ret_t
-lgamma_neg(double x)
+lgamma_neg(double x, double2 lp)
 {
     double fl = BUILTIN_FLOOR_F64(x);
 
@@ -382,7 +376,15 @@ lgamma_neg(double x)
     double h = fl * 0.5;
     int s = (h == BUILTIN_FLOOR_F64(h)) ? 1 : -1;
 
-    double ret;
+    // Except for the reflection and the middle (-3,-2) pieces, the result is
+    // A - log(la + lal) with A = ah + al:
+    //   (-1,0):   lgamma(x+1) - log(-x)
+    //   [-2,-1):  lgamma(x+2) - log(x(x+1)); x + 1, x + 2 exact, no zeros here
+    //   zprep:    u*S(u) - log of its argument
+    bool z = true;
+    double ah = lp.hi, al = lp.lo, la = -x, lal = 0.0;
+
+    double ret = 0.0;
     if (x < -3.0) {
         double m = BUILTIN_ROUND_F64(-x); // nearest pole (FP; narrowed only at index)
         int idx = -1;
@@ -393,18 +395,41 @@ lgamma_neg(double x)
         if (idx >= 0) {
             USE_TABLE(double, zp, LGAMMA_NEG_ZP);
             __constant double *b = zp + idx * 22;
-            ret = lgamma_neg_zeval(b + 3, 18, x, b[0], b[1], b[2], m);
+            lgamma_neg_zprep(b + 3, 18, x, b[0], b[1], b[2], 0.0, m, &ah, &al, &la, &lal);
         } else {
-            ret = lgamma_neg_reflect(x);
+            ret = lgamma_neg_reflect(x, lp);
+            z = false;
         }
     } else if (x < -2.0) {
-        ret = lgamma_neg_seg3(x);
-    } else if (x > -1.0) {
-        ret = lgamma_neg_recur(x);
-    } else {
-        ret = lgamma_neg_reflect(x);
+        // (-3,-2): zb and the pole at -3, both zeros, za and the pole at -2
+        if (x <= -2.7) {
+            USE_TABLE(double, c, LGAMMA_NEG_S3_ZBP);
+            lgamma_neg_zprep(c, 15, x, -0x1.5fb410a1bd901p+1, 0x1.a19a96d2e6f85p-54,
+                             0x1.fb4c32b1c7a38p+1, -0x1.70217fb4df508p-53, 3.0, &ah, &al, &la, &lal);
+        } else if (x >= -2.47) {
+            USE_TABLE(double, c, LGAMMA_NEG_S3_ZAP);
+            lgamma_neg_zprep(c, 19, x, -0x1.3a7fc9600f86cp+1, -0x1.55f64f98af8d0p-55,
+                             -0x1.1812869d0ae27p+1, -0x1.a60f1aa4867d3p-54, 2.0, &ah, &al, &la, &lal);
+        } else {
+            ret = lgamma_neg_seg3(x);
+            z = false;
+        }
+    } else if (x <= -1.0) {
+        double x1 = x + 1.0;
+        la = x * x1;
+        lal = BUILTIN_FMA_F64(x, x1, -la);
     }
 
+    if (z) {
+        double2 l = MATH_PRIVATE(epln)(la);
+        double sh = ah - l.hi;
+        double sb = sh - ah;
+        // lal is 0 when la can be subnormal
+        double rla = MATH_FAST_RCP(BUILTIN_MAX_F64(la, 0x1.0p-1022));
+        ret = sh + (((ah - (sh - sb)) - (l.hi + sb)) + (al - BUILTIN_FMA_F64(lal, rla, l.lo)));
+    }
+
+    ret = (x == fl) ? PINF_F64 : ret;
     s = (x == fl) ? 0 : s;
 
     if (!FINITE_ONLY_OPT()) {
@@ -421,7 +446,14 @@ lgamma_neg(double x)
 CONSTATTR struct ret_t
 MATH_PRIVATE(lgamma_r_impl)(double x)
 {
-    return x > 0.0 ? lgamma_pos(x) : lgamma_neg(x);
+    // one lgamma_pos for all paths: x, or what the reflection (-x) and
+    // the (-1,0) and [-2,-1) recurrences (x + 1, x + 2) need
+    double px = x > 0.0 ? x : (x > -1.0 ? x + 1.0 : (x >= -2.0 ? x + 2.0 : -x));
+    double2 p = lgamma_pos(px);
+    struct ret_t pos;
+    pos.value = p.hi + p.lo;
+    pos.sign = 1;
+    return x > 0.0 ? pos : lgamma_neg(x, p);
 }
 
 

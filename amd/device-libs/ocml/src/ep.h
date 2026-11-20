@@ -354,6 +354,15 @@ div(T a, T2 b)
     return fadd(qhi, qlo);
 }
 
+// single word a / (b.hi + b.lo)
+static ATTR T
+divh(T a, T2 b)
+{
+    T r = RCP(b.hi);
+    T q = a * r;
+    return FMA(FMA(-q, b.lo, FMA(-q, b.hi, a)), r, q);
+}
+
 static ATTR T2
 fdiv(T2 a, T2 b)
 {

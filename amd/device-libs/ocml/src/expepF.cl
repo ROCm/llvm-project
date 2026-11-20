@@ -28,12 +28,16 @@ MATH_PRIVATE(expep)(float2 x)
     z = x.hi > 89.0f ? PINF_F32 : z;
     z = x.hi < -104.0f ? 0.0f : z;
 #else
-    float d = x.hi == 0x1.62e430p+6f ? 0x1.0p-17f : 0.0f;
-    x.hi -= d;
-    x.lo += d;
-    float z = MATH_MANGLE(exp)(x.hi);
-    float zz = BUILTIN_FMA_F32(z, x.lo, z);
-    z = BUILTIN_ISINF_F32(z) ? z : zz;
+    // 2^(ph + pl) with x.lo folded into the reduction
+    float ph = x.hi * 0x1.715476p+0f;
+    float pl = BUILTIN_FMA_F32(x.hi, 0x1.715476p+0f, -ph);
+    pl = BUILTIN_FMA_F32(x.hi, 0x1.4ae0c0p-26f, pl);
+    pl = BUILTIN_FMA_F32(x.lo, 0x1.715476p+0f, pl);
+    float n = BUILTIN_RINT_F32(ph);
+    float z = BUILTIN_FLDEXP_F32(BUILTIN_AMDGPU_EXP2_F32((ph - n) + pl), (int)n);
+
+    z = x.hi > 89.0f ? PINF_F32 : z;
+    z = x.hi < -104.0f ? 0.0f : z;
 #endif
 
     return z;

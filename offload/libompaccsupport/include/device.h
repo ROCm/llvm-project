@@ -121,10 +121,10 @@ struct DeviceGeometryPropsTy {
 
 struct PluginManager;
 // Downstream: OMPT profiler and the plugin device it times.
-namespace llvm::omp::target::plugin {
+namespace llvm::offload::plugin {
 struct GenericDeviceTy;
 class GenericProfilerTy;
-} // namespace llvm::omp::target::plugin
+} // namespace llvm::offload::plugin
 namespace llvm::omp::target::rr {
 struct RecordReplayTy;
 } // namespace llvm::omp::target::rr
@@ -340,13 +340,13 @@ struct DeviceTy {
   bool useAutoZeroCopy();
 
   /// The OMPT profiler of this device's plugin.
-  llvm::omp::target::plugin::GenericProfilerTy *getProfiler() const {
+  llvm::offload::plugin::GenericProfilerTy *getProfiler() const {
     return Profiler;
   }
 
   /// The plugin device, which OMPT uses as the ompt_device_t handle and the
   /// profiler as the timed device.
-  llvm::omp::target::plugin::GenericDeviceTy *getPluginDevice() const {
+  llvm::offload::plugin::GenericDeviceTy *getPluginDevice() const {
     return PluginDevice;
   }
   /// Ask the device whether the storage is accessible.
@@ -461,8 +461,8 @@ private:
   std::unique_ptr<RecordReplayTy> RecordReplay;
 
   /// Downstream: see getProfiler() and getPluginDevice().
-  llvm::omp::target::plugin::GenericProfilerTy *Profiler = nullptr;
-  llvm::omp::target::plugin::GenericDeviceTy *PluginDevice = nullptr;
+  llvm::offload::plugin::GenericProfilerTy *Profiler = nullptr;
+  llvm::offload::plugin::GenericDeviceTy *PluginDevice = nullptr;
 
   /// The backend of this device.
   ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;

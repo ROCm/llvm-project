@@ -19,7 +19,20 @@ MATH_MANGLE(atan2pi)(float y, float x)
     float v = BUILTIN_MIN_F32(ax, ay);
     float u = BUILTIN_MAX_F32(ax, ay);
 
+#if defined MORE_ACCURACY
+    // v / u with one Newton step on the mantissa quotient (MATH_DIV is 2.5 ulp)
+    int eu, ev;
+    float mu = BUILTIN_FREXP_F32(u, &eu);
+    float mv = BUILTIN_FREXP_F32(v, &ev);
+    float rc = BUILTIN_AMDGPU_RCP_F32(mu);
+    float q = mv * rc;
+    q = BUILTIN_FMA_F32(BUILTIN_FMA_F32(-q, mu, mv), rc, q);
+    float vbyu = BUILTIN_FLDEXP_F32(q, ev - eu);
+    if (!FINITE_ONLY_OPT())
+        vbyu = BUILTIN_ISINF_F32(u) ? 0.0f : vbyu;
+#else
     float vbyu = MATH_DIV(v, u);
+#endif
 
     float a = MATH_PRIVATE(atanpired)(vbyu);
 

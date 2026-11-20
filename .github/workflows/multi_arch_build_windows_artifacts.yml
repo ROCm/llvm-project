@@ -81,7 +81,11 @@ jobs:
         shell: bash
     env:
       STAGE_NAME: ${{ inputs.stage_name }}
+      # Inputs are env vars so ${{ }} is not expanded into run scripts.
       AMDGPU_FAMILIES: ${{ inputs.amdgpu_family }}
+      DIST_AMDGPU_FAMILIES: ${{ inputs.dist_amdgpu_families }}
+      ROCM_PACKAGE_VERSION: ${{ inputs.rocm_package_version }}
+      BUILD_VARIANT_CMAKE_PRESET: ${{ inputs.build_variant_cmake_preset }}
       BUILD_DIR: B:\build
       CCACHE_CONFIGPATH: ${{ github.workspace }}/.ccache/ccache.conf
       CACHE_DIR: ${{ github.workspace }}/.cache
@@ -168,7 +172,7 @@ jobs:
       - name: Setup ccache
         run: |
           python ./build_tools/setup_ccache.py \
-            --release-type "${{ inputs.release_type }}" \
+            --release-type "${RELEASE_TYPE}" \
             --dir "$(dirname $CCACHE_CONFIGPATH)" \
             --local-path "$CACHE_DIR/ccache" \
             --log-dir "${BUILD_DIR}/logs/ccache"
@@ -180,7 +184,7 @@ jobs:
           python build_tools/artifact_manager.py fetch \
             --run-id="${{ github.run_id }}" \
             --stage="${STAGE_NAME}" \
-            --amdgpu-families="${{ inputs.amdgpu_family }}" \
+            --amdgpu-families="${AMDGPU_FAMILIES}" \
             --output-dir="${BUILD_DIR}" \
             --bootstrap
 
@@ -209,8 +213,8 @@ jobs:
         run: |
           python build_tools/configure_stage.py \
             --stage=${STAGE_NAME} \
-            --amdgpu-families="${{ inputs.amdgpu_family }}" \
-            --dist-amdgpu-families="${{ inputs.dist_amdgpu_families }}" \
+            --amdgpu-families="${AMDGPU_FAMILIES}" \
+            --dist-amdgpu-families="${DIST_AMDGPU_FAMILIES}" \
             --gha-output
 
       - name: Install stage python deps
@@ -241,8 +245,8 @@ jobs:
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \
-            --preset=${{ inputs.build_variant_cmake_preset }} \
-            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
+            --preset="${BUILD_VARIANT_CMAKE_PRESET}" \
+            -DTHEROCK_PACKAGE_VERSION="${ROCM_PACKAGE_VERSION}" \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \
@@ -262,8 +266,8 @@ jobs:
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \
-            --preset=${{ inputs.build_variant_cmake_preset }} \
-            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
+            --preset="${BUILD_VARIANT_CMAKE_PRESET}" \
+            -DTHEROCK_PACKAGE_VERSION="${ROCM_PACKAGE_VERSION}" \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \

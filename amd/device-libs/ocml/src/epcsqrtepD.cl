@@ -22,11 +22,16 @@ MATH_PRIVATE(epcsqrtep)(double4 z)
     y = ldx(y, -e);
 
     double2 u = root2(fadd(root2(add(sqr(x), sqr(y))), absv(x)) * 0.5);
+
+    // When scaling down, use the unscaled y for v so that it cannot underflow
+    int f = e > 0 ? e : 0;
+    u = ldx(u, f/2);
+    y = e > 0 ? z.hi : y;
     double2 v = absv(fdiv(y, u) * 0.5);
     v = ((y.hi == 0.0) & (u.hi == 0.0)) ? y : v;
     bool b = x.hi >= 0.0;
     double2 s = b ? u : v;
     double2 t = csgn(b ? v : u, y);
-    return (double4)(ldx(s, e/2), ldx(t, e/2));
+    return (double4)(ldx(s, (e - f)/2), ldx(t, (e - f)/2));
 }
 

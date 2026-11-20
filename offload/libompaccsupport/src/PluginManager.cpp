@@ -78,9 +78,9 @@ void PluginManager::init() {
   ODBG(ODT_Init) << "RTLs loaded!";
 }
 
-void PluginManager::deinit() {
-  TIMESCOPE();
-  ODBG(ODT_Deinit) << "Unloading RTLs...";
+void PluginManager::deinitDevices() {
+  if (DevicesDeinitialized.exchange(true))
+    return;
 
   auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
   for (DeviceTy &Device : devices(ExclusiveDevicesAccessor)) {
@@ -99,7 +99,16 @@ void PluginManager::deinit() {
 #endif
 
   Platforms.clear();
+}
+
+void PluginManager::deinit() {
+  TIMESCOPE();
+  ODBG(ODT_Deinit) << "Unloading RTLs...";
+
+  deinitDevices();
+
   if (LibOffloadInitialized) {
+    LibOffloadInitialized = false;
     if (auto Err = olShutDown())
       REPORT() << "Failed to denitialize liboffload: " << Err->Details;
   }
@@ -777,16 +786,16 @@ Expected<DeviceTy &> PluginManager::getDevice(uint32_t DeviceNo) {
 
 #include "OmptProfiler.h"
 
-std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
+std::unique_ptr<llvm::offload::plugin::GenericProfilerTy>
 getProfilerToAttach() {
   return std::make_unique<llvm::omp::target::ompt::OmptProfilerTy>();
 }
 
 #else
 
-std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
+std::unique_ptr<llvm::offload::plugin::GenericProfilerTy>
 getProfilerToAttach() {
-  return std::make_unique<llvm::omp::target::plugin::GenericProfilerTy>();
+  return std::make_unique<llvm::offload::plugin::GenericProfilerTy>();
 }
 
 #endif
