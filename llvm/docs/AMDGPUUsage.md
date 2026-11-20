@@ -3808,6 +3808,41 @@ These configurations are not supported:
 
 The linker does not detect all unsupported configurations.
 
+(amdgpu-thinlto)=
+
+## ThinLTO
+
+:::{warning}
+ThinLTO is an experimental feature for AMDGPU.
+:::
+
+AMDGPU supports ThinLTO. Each translation unit is compiled into bitcode with a
+module summary. At link time, the thin link reads the summaries of all modules
+and selects the functions that each module imports from other modules. A
+ThinLTO backend then optimizes each module and compiles it into a relocatable
+object, and `ld.lld` links these objects with object linking (see
+{ref}`amdgpu-object-linking`).
+
+The thin link also propagates kernel attributes, such as
+`amdgpu-flat-work-group-size` and `amdgpu-waves-per-eu`, across modules. Each
+device function gets attribute values that are compatible with all kernels that
+can call it, directly or through other functions.
+
+### Limitations
+
+The limitations of object linking also apply to ThinLTO (see
+{ref}`amdgpu-object-linking-limitations`).
+
+There is no compatibility guarantee for ThinLTO bitcode at this time. All
+bitcode in a device link, including bitcode in static libraries, must be
+compiled by the same compiler that does the link.
+
+These configurations are not supported:
+
+- A device link that mixes ThinLTO bitcode and bitcode compiled for full LTO.
+- A device link that mixes ThinLTO bitcode and relocatable objects, for example
+  from a static library that was compiled without device LTO.
+
 (amdgpu-elf-code-object)=
 
 ## ELF Code Object
