@@ -3756,6 +3756,58 @@ range implied by the workgroup size and LDS, is rejected and leaves the floor
 and the register cap unchanged. The raised value is still the floor, not the
 occupancy the function achieves.
 
+(amdgpu-object-linking)=
+
+## Object Linking
+
+:::{warning}
+Object linking is an experimental feature.
+:::
+
+AMDGPU supports separate compilation with object linking. Each translation
+unit is compiled into a relocatable object, and `ld.lld` links the relocatable
+objects into one code object. Code in one object can call functions and use
+variables that are defined in other objects.
+
+The backend writes information about each function to the `.amdgpu.info`
+section of the relocatable object (see {ref}`amdgpu-info-section`). This
+information includes the resource usage of the function (registers, stack, and
+LDS), the functions that it calls, and the LDS and named barrier variables that
+it uses. LDS and named barrier variables are emitted as symbols.
+
+`ld.lld` uses this information to:
+
+- Assign LDS offsets and named barrier IDs.
+- Compute the resource usage of each kernel from all functions that the kernel
+  can call, in all objects.
+- Report an error for a call that does not follow the ABI rules, for example a
+  call between functions that use different wavefront sizes or incompatible ABI
+  occupancies (see {ref}`amdgpu-abi-occupancy`).
+
+### Enabling Object Linking
+
+The backend option `-amdgpu-enable-object-linking` enables object linking. It
+is off by default. Pass it to every compilation of the program. With LTO, also
+pass it to the code generation at link time, for example with
+`-plugin-opt=-amdgpu-enable-object-linking` for `ld.lld`.
+
+(amdgpu-object-linking-limitations)=
+
+### Limitations
+
+There is no ABI stability promise for object linking at this time. All
+relocatable objects in a device link must be compiled by the same compiler, and
+the link must use `ld.lld` from the same toolchain.
+
+These configurations are not supported:
+
+- A target OS other than `amdhsa`.
+- A device link that mixes relocatable objects compiled with object linking and
+  code compiled without object linking, for example bitcode compiled for full
+  LTO.
+
+The linker does not detect all unsupported configurations.
+
 (amdgpu-elf-code-object)=
 
 ## ELF Code Object
