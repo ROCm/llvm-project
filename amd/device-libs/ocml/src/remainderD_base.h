@@ -24,8 +24,10 @@ CONSTATTR double
 MATH_MANGLE(remainder)(double x, double y)
 #endif
 {
-    // How many bits of the quotient per iteration
-    const int bits = 26;
+    // How many bits of the quotient per iteration.  The rcp based estimate
+    // of q < 2^(bits+1) must be within 0.5 of the true quotient, and the fma
+    // makes the reduction exact.
+    const int bits = 48;
 
     double ax = BUILTIN_ABS_F64(x);
     double ay = BUILTIN_ABS_F64(y);
@@ -47,7 +49,7 @@ MATH_MANGLE(remainder)(double x, double y)
         ay = BUILTIN_FLDEXP_F64(my, 1);
 
         int nb = ex - ey;
-        double ayinv = MATH_RCP(ay);
+        double ayinv = MATH_FAST_RCP(ay);
 
 #if !defined(COMPILING_FMOD)
         int qacc = 0;
@@ -60,9 +62,10 @@ MATH_MANGLE(remainder)(double x, double y)
             double axp = ax + ay;
             ax = clt ? axp : ax;
 #if defined(COMPILING_REMQUO)
-            int iq = (int)q;
+            int iq = AS_INT2(q + 0x1.0p+52).lo;
             iq -= clt;
-            qacc = (qacc << bits) | iq;
+            // Only the low 7 bits of qacc are used and bits > 7
+            qacc = iq;
 #endif
             ax = BUILTIN_FLDEXP_F64(ax, bits);
             nb -= bits;
@@ -78,10 +81,10 @@ MATH_MANGLE(remainder)(double x, double y)
             double axp = ax + ay;
             ax = clt ? axp : ax;
 #if !defined(COMPILING_FMOD)
-            int iq = (int)q;
+            int iq = AS_INT2(q + 0x1.0p+52).lo;
             iq -= clt;
 #if defined(COMPILING_REMQUO)
-            qacc = (qacc << (nb+1)) | iq;
+            qacc = (qacc << BUILTIN_MIN_S32(nb+1, 31)) | iq;
 #else
             qacc = iq;
 #endif

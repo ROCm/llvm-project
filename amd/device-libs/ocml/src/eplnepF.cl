@@ -18,7 +18,22 @@ MATH_PRIVATE(eplnep)(float2 a, int ea)
     float mh = BUILTIN_FLDEXP_F32(a.hi, -ehi);
     int e = ehi - (mh < (2.0f / 3.0f) ? 1 : 0);
     float2 m = ldx(a, -e);
+#ifdef EXTRA_ACCURACY
     float2 x = div(fadd(-1.0f, m), fadd(1.0f, m));
+#else
+    // x = (m - 1)/(m + 1): m.hi - 1 is exact, and 1 + m.hi is a Fast2Sum since
+    // 1 has the larger (or equal) exponent
+    float dh = 1.0f + m.hi;
+    float dl = ((1.0f - dh) + m.hi) + m.lo;
+    float nh = m.hi - 1.0f;
+    float rc = MATH_FAST_RCP(dh);
+    float q = (nh + m.lo) * rc;
+    // q*dh exactly, so that the residual is accurate even when m.lo is
+    // comparable to m.hi - 1
+    float ph = q * dh;
+    float pl = BUILTIN_FMA_F32(q, dh, -ph);
+    float2 x = fadd(q, BUILTIN_FMA_F32(-q, dl, ((nh - ph) + m.lo) - pl) * rc);
+#endif
     float2 s = sqr(x);
     float sh = s.hi;
 

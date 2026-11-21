@@ -1,5 +1,4 @@
 ; REQUIRES: aarch64-registered-target
-
 ; RUN: llvm-as %s -o %t0.bc
 ; RUN: llvm-as %S/Inputs/ipa.ll -o %t1.bc
 ; RUN: llvm-link -disable-lazy-loading %t0.bc %t1.bc -o %t.combined.bc
@@ -724,24 +723,24 @@ entry:
 ; INDEX-LABEL: = blockcount:
 
 ; INDEX-LABEL: ^0 = module:
-; INDEX-DAG: guid: [[ReturnDependent]], {{.*}}, funcFlags: ({{.*}}))))
+; INDEX-DAG: guid: [[ReturnDependent]], {{.*}}, funcFlags: ({{.*}}), callTypeId: {{[0-9]+}})))
 ; INDEX-DAG: guid: [[Rec0]], {{.*}}, params: ((param: 0, offset: [2, 5])))))
 ; INDEX-DAG: guid: [[Rec2]], {{.*}}, params: ((param: 0, offset: [-2, 1])))))
 ; INDEX-DAG: guid: [[Write4]], {{.*}}, params: ((param: 0, offset: [0, 3])))))
 ; INDEX-DAG: guid: [[Write1SameModule]], {{.*}}, params: ((param: 0, offset: [0, 0])))))
 ; INDEX-DAG: guid: [[Write8]], {{.*}}, params: ((param: 0, offset: [0, 7])))))
 ; INDEX-DAG: guid: [[Write4_2]], {{.*}}, params: ((param: 0, offset: [0, 3]), (param: 1, offset: [0, 3])))))
-; INDEX-DAG: guid: [[RecursiveWithOffset]], {{.*}}, calls: ((callee: ^{{[0-9]+}}, tail: 1)))))
-; INDEX-DAG: guid: [[Weak]], {{.*}}, funcFlags: ({{.*}}))))
+; INDEX-DAG: guid: [[RecursiveWithOffset]], {{.*}}, calls: ((callee: ^{{[0-9]+}}, tail: 1)), callTypeId: {{[0-9]+}})))
+; INDEX-DAG: guid: [[Weak]], {{.*}}, funcFlags: ({{.*}}), callTypeId: {{[0-9]+}})))
 ; INDEX-DAG: guid: [[Write1Private]], {{.*}}, params: ((param: 0, offset: [-1, -1])))))
 ; INDEX-DAG: guid: [[InterposableWrite1]], {{.*}}, params: ((param: 0, offset: [0, 0])))))
 ; INDEX-DAG: guid: [[Private]], {{.*}}, params: ((param: 0, offset: [-1, -1])))))
 ; INDEX-DAG: guid: [[Rec1]], {{.*}}, params: ((param: 0, offset: [3, 6])))))
 ; INDEX-DAG: guid: [[RecursiveNoOffset]], {{.*}}, params: ((param: 2, offset: [0, 3])))))
-; INDEX-DAG: guid: [[Write1Weak]], {{.*}}, calls: ((callee: ^{{[0-9]+}})))))
+; INDEX-DAG: guid: [[Write1Weak]], {{.*}}, calls: ((callee: ^{{[0-9]+}})), callTypeId: {{[0-9]+}})))
 ; INDEX-DAG: guid: [[Write1]], {{.*}}, params: ((param: 0, offset: [0, 0])))))
-; INDEX-DAG: guid: [[PreemptableWrite1]], {{.*}}, funcFlags: ({{.*}}))))
-; INDEX-DAG: guid: [[WriteAndReturn8]], {{.*}}, funcFlags: ({{.*}}))))
+; INDEX-DAG: guid: [[PreemptableWrite1]], {{.*}}, funcFlags: ({{.*}}), callTypeId: {{[0-9]+}})))
+; INDEX-DAG: guid: [[WriteAndReturn8]], {{.*}}, funcFlags: ({{.*}}), callTypeId: {{[0-9]+}})))
 ; INDEX-DAG: guid: [[Write1DiffModule]], {{.*}}, funcFlags: ({{.*}}))))
-; INDEX-DAG: guid: [[ReturnAlloca]], {{.*}}, insts: 2)))
+; INDEX-DAG: guid: [[ReturnAlloca]], {{.*}}, insts: 2, callTypeId: {{[0-9]+}})))
 ; INDEX-LABEL: blockcount:

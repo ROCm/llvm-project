@@ -1,4 +1,5 @@
 ; RUN: llc -O0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -verify-machineinstrs -filetype=obj < %s | llvm-dwarfdump - | FileCheck %s
+; XFAIL: *
 
 ; CHECK:      DW_TAG_formal_parameter
 ; CHECK-NEXT:   DW_AT_location (

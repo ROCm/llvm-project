@@ -71,14 +71,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Store LLVM and SPIRV refs into file
+        env:
+          LLVM_UPSTREAM_REF: ${{ github.event.inputs.LLVM_UPSTREAM_REF }}
+          SPIRV_REF: ${{ github.event.inputs.SPIRV_REF }}
+        # Build workflows `source` this file, so values are shell-quoted.
         run: |
-          cat > ${{ github.run_id }}_PR_params.env <<'EOF'
-          LLVM_UPSTREAM_REF=${{ github.event.inputs.LLVM_UPSTREAM_REF }}
-          SPIRV_REF=${{ github.event.inputs.SPIRV_REF }}
-          EOF
+          printf 'LLVM_UPSTREAM_REF=%q\nSPIRV_REF=%q\n' \
+            "$LLVM_UPSTREAM_REF" "$SPIRV_REF" > ${{ github.run_id }}_PR_params.env
 
       - name: Upload stored file of PR URls
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: multiple-pr-build-params
           path: ${{ github.run_id }}_PR_params.env

@@ -19,7 +19,20 @@ MATH_MANGLE(asinh)(float x)
     bool b = y >= 0x1.0p+64f;
     float s = b ? 0x1.0p-64f : 1.0f;
     float sy = y * s;
-    float2 a = add(sy, root2(add(sqr(sy), s*s)));
+    float s2 = s * s;
+
+    // h = sy^2 + s^2 = hh + hl
+    float pp = sy * sy;
+    float pl = BUILTIN_FMA_F32(sy, sy, -pp);
+    float hh = pp + s2;
+    float hb = hh - pp;
+    float hl = ((pp - (hh - hb)) + (s2 - hb)) + pl;
+
+    // a = sy + sqrt(h), where sqrt(h) >= sy
+    float rh = MATH_FAST_SQRT(hh);
+    float rl = (BUILTIN_FMA_F32(-rh, rh, hh) + hl) * (0.5f * MATH_FAST_RCP(rh));
+    float ah = rh + sy;
+    float2 a = con(ah, ((rh - ah) + sy) + rl);
     float z = MATH_PRIVATE(lnep)(a, b ? 64 : 0);
 
     z = y < 0x1.0p-12f ? y : z;

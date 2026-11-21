@@ -33,7 +33,21 @@ MATH_MANGLE(asin)(float x)
                         0x1.555558p-3f);
 
     float s = MATH_FAST_SQRT(r);
-    float ret = MATH_MAD(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -2.0f*MATH_MAD(s, u, s));
+#if defined EXTRA_ACCURACY
+    // s + sl = sqrt(r)
+    float sl = BUILTIN_FMA_F32(-s, s, r) * (0.5f * BUILTIN_AMDGPU_RSQRT_F32(r));
+    sl = r == 0.0f ? 0.0f : sl;
+
+    // pi/2 - 2*(s + sl + s*u) with a single final rounding
+    const float piby2_h = 0x1.921fb6p+0f;
+    const float piby2_l = -0x1.777a5cp-25f;
+    float w = MATH_MAD(s, u, sl);
+    float d = BUILTIN_FMA_F32(-2.0f, s, piby2_h);
+    float de = BUILTIN_FMA_F32(-2.0f, s, piby2_h - d);
+    float ret = d + BUILTIN_FMA_F32(-2.0f, w, de + piby2_l);
+#else
+    float ret = BUILTIN_FMA_F32(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -2.0f*MATH_MAD(s, u, s));
+#endif
 
     float xux = MATH_MAD(ax, u, ax);
     ret = ax < 0.5f ? xux : ret;

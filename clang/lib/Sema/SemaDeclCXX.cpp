@@ -3003,6 +3003,14 @@ bool Sema::AttachBaseSpecifiers(CXXRecordDecl *Class,
   // Copy non-redundant base specifiers into permanent storage.
   unsigned NumGoodBases = 0;
   bool Invalid = false;
+
+  if (getLangOpts().HLSL && Bases.size() > 1) {
+    Diag(Bases[1]->getBeginLoc(), diag::err_hlsl_mult_inheritance);
+    // To prevent producing error messages about the additional base classes
+    Bases = Bases.take_front();
+    Invalid = true;
+  }
+
   for (unsigned idx = 0; idx < Bases.size(); ++idx) {
     QualType NewBaseType
       = Context.getCanonicalType(Bases[idx]->getType());
@@ -3411,8 +3419,7 @@ static bool InitializationHasSideEffects(const FieldDecl &FD) {
   const Type *T = FD.getType()->getBaseElementTypeUnsafe();
   // FIXME: Destruction of ObjC lifetime types has side-effects.
   if (const CXXRecordDecl *RD = T->getAsCXXRecordDecl())
-    return !RD->isCompleteDefinition() ||
-           !RD->hasTrivialDefaultConstructor() ||
+    return !RD->isCompleteDefinition() || !RD->hasTrivialDefaultConstructor() ||
            !RD->hasTrivialDestructor();
   return false;
 }

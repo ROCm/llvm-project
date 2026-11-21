@@ -225,6 +225,45 @@ unsigned getAMDHSACodeObjectVersion(const Module &M) {
   return getDefaultAMDHSACodeObjectVersion();
 }
 
+unsigned getAMDGPUABIWavesPerEU(const Module &M) {
+  if (auto *Val = mdconst::extract_or_null<ConstantInt>(
+          M.getModuleFlag("amdgpu_abi_waves_per_eu")))
+    return Val->getZExtValue();
+
+  return 0;
+}
+
+static void appendTypeEncoding(std::string &Enc, Type *Ty, const DataLayout &DL,
+                               bool IsReturnType) {
+  if (Ty->isVoidTy()) {
+    Enc += 'v';
+    return;
+  }
+  uint64_t Bits = DL.getTypeSizeInBits(Ty);
+  // Zero-sized non-void types (e.g. `{}` or `[0 x i8]`) consume no ABI
+  // registers. For returns, emit the same no-result marker as void so the
+  // parameter encoding still has an explicit return-type prefix.
+  if (Bits == 0) {
+    if (IsReturnType)
+      Enc += 'v';
+    return;
+  }
+  if (Bits <= 32)
+    Enc += 'i';
+  else if (Bits <= 64)
+    Enc += 'l';
+  else
+    Enc.append(divideCeil(Bits, 32), 'i');
+}
+
+std::string getFunctionTypeId(const FunctionType *FTy, const DataLayout &DL) {
+  std::string Enc;
+  appendTypeEncoding(Enc, FTy->getReturnType(), DL, /*IsReturnType=*/true);
+  for (Type *ParamTy : FTy->params())
+    appendTypeEncoding(Enc, ParamTy, DL, /*IsReturnType=*/false);
+  return Enc;
+}
+
 unsigned getDefaultAMDHSACodeObjectVersion() {
   return DefaultAMDHSACodeObjectVersion;
 }
@@ -484,8 +523,15 @@ struct VOP3PHasNoOpSelHiInfo {
 #define GET_getMFMA_F8F6F4_WithSize_IMPL
 #define GET_isMFMA_F8F6F4Table_IMPL
 #define GET_isCvtScaleF32_F32F16ToF8F4Table_IMPL
+#define GET_VLdStIdxOpcodeInfoTable_IMPL
 
 #include "AMDGPUGenSearchableTables.inc"
+
+const VLdStIdxOpcodeInfo *
+getVLdStIdxOpcodeInfoByKey(unsigned BitWidth, bool IsStore, bool IsGPRIdx) {
+  assert(isUInt<16>(BitWidth) && "the table's key is 16 bits");
+  return getVLdStIdxOpcodeInfoByKeyImpl(BitWidth, IsStore, IsGPRIdx);
+}
 
 int getMTBUFBaseOpcode(unsigned Opc) {
   const MTBUFInfo *Info = getMTBUFInfoFromOpcode(Opc);
