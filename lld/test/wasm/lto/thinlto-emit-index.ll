@@ -1,5 +1,4 @@
 ;; Copied from ELF/lto/thinlto-index-only.ll
-; XFAIL: *
 ;; First ensure that the ThinLTO handling in lld handles
 ;; bitcode without summary sections gracefully and generates index file.
 ; RUN: rm -rf %t && mkdir %t && cd %t
@@ -90,6 +89,7 @@
 ; BACKEND2-NEXT: <VERSION
 ; BACKEND2-NEXT: <FLAGS
 ; BACKEND2-NEXT: <VALUE_GUID {{.*}} op0=1 op1=3060885059 op2=1207956914
+; BACKEND2-NEXT: <CALL_TYPE_IDS
 ; BACKEND2-NEXT: <COMBINED
 ; BACKEND2-NEXT: </GLOBALVAL_SUMMARY_BLOCK
 
