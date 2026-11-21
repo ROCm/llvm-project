@@ -124,6 +124,7 @@ endif()
 
 if(CLANG_ENABLE_CIR)
   list(APPEND CLANG_TEST_DEPS
+    cir-offload-merge
     cir-opt
     cir-translate
     llvm-strings
@@ -284,6 +285,7 @@ if(CLANG_ENABLE_CIR)
   # directly by tests under clang/test/CIR.
   set(CLANG_CIR_TEST_DEPS
     clang
+    cir-offload-merge
     cir-opt
     cir-translate
     )
