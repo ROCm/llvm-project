@@ -285,9 +285,11 @@ jobs:
 
       - name: Post Build Upload
         if: always()
+        env:
+          ARTIFACT_GROUP: ${{ inputs.artifact_group }}
         run: |
           python3 build_tools/github_actions/post_build_upload.py \
             --run-id ${{ github.run_id }} \
-            --artifact-group "${{ inputs.artifact_group }}" \
+            --artifact-group "${ARTIFACT_GROUP}" \
             --build-dir build \
             --upload

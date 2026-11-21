@@ -104,6 +104,10 @@ jobs:
       pkg_type: ${{ steps.derive.outputs.pkg_type }}
       gfx_arch: ${{ steps.derive.outputs.gfx_arch }}
       container_image: ${{ steps.derive.outputs.container_image }}
+    env:
+      # Inputs are env vars so ${{ }} is not expanded into run scripts.
+      OS_PROFILE: ${{ inputs.os_profile }}
+      ARTIFACT_GROUP: ${{ inputs.artifact_group }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -114,15 +118,15 @@ jobs:
       - name: Derive package type, GPU architecture, and container image
         id: derive
         run: |
-          case "${{ inputs.os_profile }}" in
+          case "${OS_PROFILE}" in
             ubuntu*|debian*) PKG_TYPE="deb" ;;
             *) PKG_TYPE="rpm" ;;
           esac
           echo "pkg_type=${PKG_TYPE}" >> $GITHUB_OUTPUT
           python build_tools/packaging/linux/get_url_repo_params.py extract-gfx-arch \
-            --artifact-group "${{ inputs.artifact_group }}"
+            --artifact-group "${ARTIFACT_GROUP}"
           python build_tools/packaging/linux/get_url_repo_params.py get-container-image \
-            --os-profile "${{ inputs.os_profile }}"
+            --os-profile "${OS_PROFILE}"
 
   test_native_linux_packages_install:
     name: Test Native Linux Packages Installation - ${{ inputs.os_profile }}
@@ -164,7 +168,7 @@ jobs:
               echo "Extra OS packages for --test-type full/comprehensive (e.g. rdhc): pciutils, kmod, apt-utils"
               sudo apt install -y pciutils kmod apt-utils
             fi
-          elif [[ "${{ inputs.os_profile }}" == sles* ]]; then
+          elif [[ "${OS_PROFILE}" == sles* ]]; then
             # SLES prerequisites (uses BCI base - zypper)
             zypper refresh
             zypper install -y \
@@ -201,7 +205,7 @@ jobs:
       - name: Setup Python and install runtime
         run: |
           bash build_tools/packaging/linux/setup_python_cmd.sh \
-            --os-profile "${{ inputs.os_profile }}" \
+            --os-profile "${OS_PROFILE}" \
             --install-runtime \
             --output-format github
 
@@ -215,5 +219,5 @@ jobs:
 
       - name: Package Installation Test
         run: |
-          echo "TEST - OS:${{ inputs.os_profile }} REPO:${{ env.REPO_URL }} Arch:${{ env.GFX_ARCH }} Type:${{ env.RELEASE_TYPE }}"
+          echo "TEST - OS:${OS_PROFILE} REPO:${{ env.REPO_URL }} Arch:${{ env.GFX_ARCH }} Type:${{ env.RELEASE_TYPE }}"
           $PYTHON_CMD -m pytest build_tools/packaging/linux/native_linux_package_install_test.py -vv --tb=long -s
