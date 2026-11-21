@@ -12,11 +12,9 @@ CONSTATTR BGEN(scalb)
 CONSTATTR half
 MATH_MANGLE(scalb)(half x, half y)
 {
-    half t = BUILTIN_MIN_F16(BUILTIN_MAX_F16(y, -0x1.0p+6h), 0x1.0p+6h);
-    half n = BUILTIN_FLOOR_F16(t);
-    half f = t - n;
-    half ret = BUILTIN_FLDEXP_F16(x, (int)n);
-    ret = f == 0.0h ? ret : ret * MATH_MANGLE(exp2)(f);
+    // Evaluate in float so that only the final conversion rounds to half
+    float t = BUILTIN_MIN_F32(BUILTIN_MAX_F32((float)y, -0x1.0p+6f), 0x1.0p+6f);
+    half ret = (half)((float)x * BUILTIN_AMDGPU_EXP2_F32(t));
 
     if (!FINITE_ONLY_OPT()) {
         ret = BUILTIN_ISUNORDERED_F16(x, y) ? QNAN_F16 : ret;

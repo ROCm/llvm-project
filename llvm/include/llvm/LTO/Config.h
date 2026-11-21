@@ -55,11 +55,12 @@ struct Config {
   TargetOptions Options;
   std::vector<std::string> MAttrs;
   std::vector<std::string> MllvmArgs;
-  // LTO will register both lists of plugins, but
-  // if an LTO client has already loaded a set of plugins,
-  // they should register them via LoadedPassPlugins.
-  // LoadedPassPlugins is currently used by distributed thin-lto.
+  // Pass-plugins already loaded by the client. LTO does not take ownership, so
+  // they must outlive the lto::LTO object.
   std::vector<llvm::PassPlugin *> LoadedPassPlugins;
+  // Plugins that are passed by filename are loaded in lto::LTO::run(). Clients
+  // that call lto::backend(), lto::thinBackend() or lto::opt() directly must
+  // use LoadedPassPlugins.
   std::vector<std::string> PassPluginFilenames;
   std::function<void(PassBuilder &)> PassBuilderCallback;
   std::optional<Reloc::Model> RelocModel = Reloc::PIC_;
@@ -261,6 +262,12 @@ struct Config {
   /// PostOptModuleHook, but for parallel code generation it is called after
   /// splitting the module.
   ModuleHookFn PreCodeGenModuleHook;
+
+  /// This hook is called in the ThinLTO backend after finalization and import,
+  /// but before optimization. Unlike ModuleHookFn, it takes a mutable Module
+  /// reference, allowing targets to apply cross-TU propagated attributes.
+  using MutableModuleHookFn = std::function<void(unsigned Task, Module &)>;
+  MutableModuleHookFn ApplyThinLTOAttributes;
 
   /// A combined index hook is called after all per-module indexes have been
   /// combined (ThinLTO-specific). It can be used to implement -save-temps for

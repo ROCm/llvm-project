@@ -937,6 +937,9 @@ void AMDGPUToolChain::addClangTargetOptions(
     }
   }
 
+  if (shouldUseAMDGPUObjectLinking(*this, DriverArgs, DeviceOffloadingKind))
+    CC1Args.append({"-mllvm", "-amdgpu-enable-object-linking"});
+
   DriverArgs.AddLastArg(CC1Args, options::OPT_gpu_max_threads_per_block_EQ);
 
   // Default to "hidden" visibility, as object level linking will not be
@@ -1417,11 +1420,13 @@ SanitizerMask AMDGPUToolChain::getSupportedSanitizers(
       ToolChain::getSupportedSanitizers(BA, DeviceOffloadKind);
 
   // Address sanitizer is potentially supported, but depends on the exact target
-  // arch xnack support.
-  if (!BA || isXnackAvailable(getTriple(), BA.ArchName))
+  // arch XNACK support; for SPIR-V, the availability of XNACK is known at
+  // finalisation time.
+  if (!BA ||
+      (isXnackAvailable(getTriple(), BA.ArchName) || getTriple().isSPIRV()))
     SupportedMask |= SanitizerKind::Address;
   // Watchpoint probes do not require xnack, but the runtime requires HSA.
-  if (getTriple().isAMDGCN() && getTriple().getOS() == llvm::Triple::AMDHSA)
+  if (getTriple().getOS() == llvm::Triple::AMDHSA)
     SupportedMask |= SanitizerKind::Concurrency;
 
   // The device sanitizer is supported on all HSA devices.
@@ -1433,6 +1438,8 @@ SanitizerMask AMDGPUToolChain::getSupportedSanitizers(
 
 StringRef AMDGPUToolChain::getSanitizerRequirement(SanitizerMask Kinds,
                                                    BoundArch BA) const {
+  if (getTriple().isSPIRV())
+    return {};
   // Address sanitizer requires xnack+ feature
   if ((Kinds & SanitizerKind::Address) && BA &&
       !isXnackAvailable(getTriple(), BA.ArchName)) {

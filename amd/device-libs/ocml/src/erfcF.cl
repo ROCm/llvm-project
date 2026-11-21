@@ -7,8 +7,12 @@
 
 #include "mathF.h"
 
+#define FLOAT_SPECIALIZATION
+#include "ep.h"
+
 #if !defined EXTRA_ACCURACY
-CONSTATTR extern float MATH_PRIVATE(erfcx)(float);
+CONSTATTR extern float2 MATH_PRIVATE(erfcxep)(float);
+extern CONSTATTR float MATH_PRIVATE(expep)(float2);
 
 CONSTATTR float
 MATH_MANGLE(erfc)(float x)
@@ -16,9 +20,10 @@ MATH_MANGLE(erfc)(float x)
     float ax = BUILTIN_ABS_F32(x);
     float x2h = -x*x;
     float x2l = BUILTIN_FMA_F32(-x, x, -x2h);
-    float e = MATH_MANGLE(exp)(x2h);
-    e = BUILTIN_FMA_F32(e, x2l, e);
-    float ret = e * MATH_PRIVATE(erfcx)(ax);
+    // the low part of erfcx goes into the exp argument as a relative
+    // correction, so no low-order product can be flushed under DAZ
+    float2 q = MATH_PRIVATE(erfcxep)(ax);
+    float ret = MATH_PRIVATE(expep)(con(x2h, BUILTIN_FMA_F32(q.lo, MATH_FAST_RCP(q.hi), x2l))) * q.hi;
     ret = ax > 0x1.41bbf8p+3f ? 0.0f : ret;
     float nret = 2.0f - ret;
     return x < 0.0f ? nret : ret;

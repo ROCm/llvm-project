@@ -34,10 +34,10 @@ MATH_MANGLE(asinpi)(double x)
     double y2 = y * y;
     double r = transform ? rt : y2;
 
-    double u = r * PE11(r, 0x1.547a51d41fb0bp-7, -0x1.6a3fb0718a8f7p-8, 0x1.a7b91f7177ee8p-8, 0x1.035d3435b8ad8p-9,
-                         0x1.ff0549b4e0449p-9, 0x1.21604ae288f96p-8, 0x1.6a2b36f9aec49p-8,
-                         0x1.d2b076c914f04p-8, 0x1.3ce53861f8f1fp-7, 0x1.d1a4529a30a69p-7,
-                         0x1.8723a1d61d2e9p-6, 0x1.b2995e7b7af0fp-5);
+    double u = PE12(r, 0x1.4ec5bf9642e32p-7, -0x1.586f90fb93cfep-8, 0x1.9b7d273c35116p-8, 0x1.0d15d60b04579p-9,
+                       0x1.fc8cc693d7332p-9, 0x1.2195fc3a46e55p-8, 0x1.6a250ac354707p-8,
+                       0x1.d2b0f0dd5e719p-8, 0x1.3ce5354d7daa4p-7, 0x1.d1a452b2c77c8p-7,
+                       0x1.8723a1d5e63b4p-6, 0x1.b2995e7b7b29ep-5, -0x1.176f5c1ab9f63p-56);
 
     const double piinv = 0x1.45f306dc9c883p-2;
     double v = MATH_MAD(y, piinv, y*u);

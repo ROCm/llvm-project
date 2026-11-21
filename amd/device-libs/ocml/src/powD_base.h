@@ -13,6 +13,16 @@ extern CONSTATTR double MATH_PRIVATE(expep)(double2);
 #define DOUBLE_SPECIALIZATION
 #include "ep.h"
 
+static double
+expylnx_core(double ax, double y)
+{
+    double2 l = MATH_PRIVATE(epln)(ax);
+    // y*l, left unnormalized since expep only needs the sum
+    double ph = y * l.hi;
+    double pl = BUILTIN_FMA_F64(y, l.lo, BUILTIN_FMA_F64(y, l.hi, -ph));
+    return MATH_PRIVATE(expep)(con(ph, pl));
+}
+
 static bool is_integer(double ay)
 {
     return BUILTIN_TRUNC_F64(ay) == ay;
@@ -37,24 +47,20 @@ MATH_MANGLE(pow)(double x, double y)
     if (y == 0.0)
         x = 1.0;
 
-    double ax = BUILTIN_ABS_F64(x);
-    double expylnx = MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
+    // |y| >= 2^100 gives the same results as y = +-inf, including
+    // pow(-1, +-inf) = 1, so infinite y needs no special case
+    double yc = BUILTIN_MAX_F64(BUILTIN_MIN_F64(y, 0x1.0p+100), -0x1.0p+100);
 
-    bool is_odd_y = is_odd_integer(y);
+    double ax = BUILTIN_ABS_F64(x);
+    double expylnx = expylnx_core(ax, yc);
+
+    bool is_odd_y = is_odd_integer(yc);
 
     double ret = BUILTIN_COPYSIGN_F64(expylnx, is_odd_y ? x : 1.0);
 
     // Now all the edge cases
-    if (x < 0.0 && !is_integer(y))
+    if (x < 0.0 && !is_integer(yc))
         ret = QNAN_F64;
-
-    double ay = BUILTIN_ABS_F64(y);
-    if (BUILTIN_ISINF_F64(ay)) {
-        // FIXME: Missing backend optimization to save on
-        // materialization cost of mixed sign constant infinities.
-        bool y_is_neg_inf = y != ay;
-        ret = ax == 1.0 ? ax : ((ax < 1.0) ^ y_is_neg_inf ? 0.0 : ay);
-    }
 
     if (BUILTIN_ISINF_F64(ax) || x == 0.0)
         ret = BUILTIN_COPYSIGN_F64((x == 0.0) ^ (y < 0.0) ? 0.0 : PINF_F64,
@@ -75,7 +81,7 @@ MATH_MANGLE(powr)(double x, double y)
     if (x < 0.0)
       x = QNAN_F64;
 
-    double ret = MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(x)));
+    double ret = expylnx_core(x, y);
 
     // Now all the edge cases
     double iz = y < 0.0 ? PINF_F64 : 0.0;
@@ -86,9 +92,6 @@ MATH_MANGLE(powr)(double x, double y)
 
     if (x == PINF_F64 && y != 0.0)
         ret = zi;
-
-    if (BUILTIN_ISINF_F64(y) && x != 1.0)
-        ret = x < 1.0 ? iz : zi;
 
     if (y == 0.0)
         ret = x == 0.0 || BUILTIN_ISINF_F64(x) ? QNAN_F64 : 1.0;
@@ -107,10 +110,8 @@ MATH_MANGLE(pown)(double x, int ny)
     if (ny == 0)
         x = 1.0;
 
-    double y = (double) ny;
-
     double ax = BUILTIN_ABS_F64(x);
-    double expylnx = MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
+    double expylnx = expylnx_core(ax, (double)ny);
 
     bool is_odd_y = ny & 1;
 
@@ -129,10 +130,15 @@ MATH_MANGLE(pown)(double x, int ny)
 CONSTATTR double
 MATH_MANGLE(rootn)(double x, int ny)
 {
-    double2 y = rcp((double)ny);
+    double y = (double)ny;
+    double qh = MATH_FAST_RCP(y);
+    double ql = qh * BUILTIN_FMA_F64(-qh, y, 1.0);
 
     double ax = BUILTIN_ABS_F64(x);
-    double expylnx = MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
+    double2 l = MATH_PRIVATE(epln)(ax);
+    double ph = qh * l.hi;
+    double pl = BUILTIN_FMA_F64(qh, l.lo, BUILTIN_FMA_F64(ql, l.hi, BUILTIN_FMA_F64(qh, l.hi, -ph)));
+    double expylnx = MATH_PRIVATE(expep)(con(ph, pl));
 
     bool is_odd_y = ny & 1;
 

@@ -27,21 +27,23 @@ MATH_MANGLE(acos)(half x)
     // together with the above rational approximation, and
     // reconstruct the terms carefully.
 
-    half ax = BUILTIN_ABS_F16(x);
+    // Evaluate in float so that only the final conversion rounds to half
+    float fx = (float)x;
+    float ax = BUILTIN_ABS_F32(fx);
 
-    half rt = MATH_MAD(-0.5h, ax, 0.5h);
-    half x2 = ax * ax;
-    half r = ax > 0.5h ? rt : x2;
+    float rt = BUILTIN_FMA_F32(-0.5f, ax, 0.5f);
+    float x2 = ax * ax;
+    float r = ax > 0.5f ? rt : x2;
 
-    half u = r * MATH_MAD(r, 0x1.828p-4h, 0x1.52p-3h);
+    float u = r * BUILTIN_FMA_F32(r, 0x1.823f5p-4f, 0x1.5209cep-3f);
 
-    half s = MATH_FAST_SQRT(r);
-    half ztp = 2.0h * MATH_MAD(s, u, s);
-    half ztn = MATH_MAD(0x1.ea8p+0h, 0x1.a3cp+0h, -ztp);
-    half zt =  x < 0.0h ? ztn : ztp;
-    half z = MATH_MAD(0x1.ea8p-1h, 0x1.a3cp+0h, -MATH_MAD(x, u, x));
-    z = ax > 0.5h ? zt : z;
+    float s = BUILTIN_AMDGPU_SQRT_F32(r);
+    float ztp = 2.0f * BUILTIN_FMA_F32(s, u, s);
+    float ztn = BUILTIN_FMA_F32(0x1.ddcb02p+0f, 0x1.aee9d6p+0f, -ztp);
+    float zt =  fx < 0.0f ? ztn : ztp;
+    float z = BUILTIN_FMA_F32(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -BUILTIN_FMA_F32(fx, u, fx));
+    z = ax > 0.5f ? zt : z;
 
-    return z;
+    return (half)z;
 }
 

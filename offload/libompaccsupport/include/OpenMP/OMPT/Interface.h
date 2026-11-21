@@ -488,8 +488,9 @@ template <typename FunctionPairTy, typename AsyncInfoTy, typename... ArgsTy>
 class TracerInterfaceRAII {
 public:
   TracerInterfaceRAII(FunctionPairTy Callbacks, AsyncInfoTy &AsyncInfo,
-                      plugin::GenericProfilerTy *Prof, int TracedDeviceId,
-                      ompt_callbacks_t EventType, ArgsTy... Args)
+                      offload::plugin::GenericProfilerTy *Prof,
+                      int TracedDeviceId, ompt_callbacks_t EventType,
+                      ArgsTy... Args)
       : Arguments(Args...), beginFunction(std::get<0>(Callbacks)) {
     __tgt_async_info *AI = AsyncInfo;
     // Transfers without a queue are synchronous and are not traced.

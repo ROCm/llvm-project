@@ -7,6 +7,10 @@
 
 #include "mathD.h"
 
+#if defined EXTRA_ACCURACY
+extern CONSTATTR double2 MATH_PRIVATE(epln)(double);
+#endif
+
 CONSTATTR double
 MATH_MANGLE(erfcinv)(double y)
 {
@@ -15,56 +19,118 @@ MATH_MANGLE(erfcinv)(double y)
     if (y > 0.625) {
         ret = MATH_MANGLE(erfinv)(1.0 - y);
     } else if (y > 0x1.0p-10) {
-        double t = -MATH_MANGLE(log)(y * (2.0 - y)) - 3.125;
+#if defined EXTRA_ACCURACY
+        // w + wl = -log(y*(2 - y)) with y*(2 - y) = uh + ul exact
+        double uh = BUILTIN_FMA_F64(-y, y, 2.0 * y);
+        double ul = BUILTIN_FMA_F64(-y, y, 2.0 * y - uh);
+        double2 lu = MATH_PRIVATE(epln)(uh);
+        double wl = -BUILTIN_FMA_F64(ul, BUILTIN_AMDGPU_RCP_F64(uh), lu.lo);
+        double w = wl - lu.hi;
+        wl = wl - (w + lu.hi);
+        double t = w - 3.125;
+        double tb = t - w;
+        double tl = ((w - (t - tb)) + (-3.125 - tb)) + wl;
+#else
+        double t = -MATH_MANGLE(log)(BUILTIN_FMA_F64(-y, y, 2.0 * y)) - 3.125;
+#endif
+        double q, c0h, c0l;
+        q = PE23(t, -0x1.c081a851e46b5p-72, 0x1.f2206a6bc0822p-69, 0x1.82bfff793ab7dp-66,
+                 -0x1.a0511c81fe07ep-62, 0x1.62209c1adf1fbp-61, 0x1.204fc34a87219p-56,
+                 -0x1.199060eb1148ep-53, -0x1.796454a496497p-55, 0x1.d5eb5a2d19887p-48,
+                 -0x1.685bf01812e43p-45, -0x1.6b8b52692bd9ep-44, 0x1.723470b4b5892p-39,
+                 -0x1.c8a670cae9079p-37, -0x1.dc3ec9519f46ep-35, 0x1.20f542fbfaafep-30,
+                 -0x1.1a9eb220c5558p-28, -0x1.f36cee9443884p-26, 0x1.c6b4f891cd3fap-22,
+                 -0x1.6e8a53c8dfd7p-20, -0x1.d1d1f7ca41c0ap-17, 0x1.879c2a20b022ep-13,
+                 -0x1.8457694835449p-11, -0x1.8b6c33114ea59p-8, 0x1.ebd80d9b13dfap-3);
+        c0h = 0x1.a755e7c99ae86p+0;
+        c0l = -0x1.a02ef3976ece7p-59;
+        double ph = BUILTIN_FMA_F64(t, q, c0h);
+#if defined EXTRA_ACCURACY
+        double pl = BUILTIN_FMA_F64(tl, q, BUILTIN_FMA_F64(t, q, c0h - ph) + c0l);
+#else
+        double pl = BUILTIN_FMA_F64(t, q, c0h - ph) + c0l;
+#endif
 
-        ret = PE22(t, 0x1.1267a785a1166p-69, -0x1.a6581051dd484p-63, 0x1.2b2956fc047a4p-60,
-                    0x1.ad835aed5cc07p-57, -0x1.25e0612eae68fp-53, 0x1.a0cab63f02a91p-57,
-                    0x1.d9227af501adbp-48, -0x1.6c3ad559a9b4ep-45, -0x1.6cafa36036318p-44,
-                    0x1.72879641e158fp-39, -0x1.c89d755f7fff8p-37, -0x1.dc51171ddae3ap-35,
-                    0x1.20f512744ae65p-30, -0x1.1a9e5f4bcfcd8p-28, -0x1.f36ce926b83e8p-26,
-                    0x1.c6b4f6c7cfa1ep-22, -0x1.6e8a53e0c2026p-20, -0x1.d1d1f7bf4570bp-17,
-                    0x1.879c2a20cc3e2p-13, -0x1.8457694844d14p-11, -0x1.8b6c33114edadp-8,
-                    0x1.ebd80d9b13e14p-3, 0x1.a755e7c99ae86p+0);
-        ret = BUILTIN_FMA_F64(-y, ret, ret);
+        // (ph + pl) * (1 - y) with 1 - y = x + xl exact
+        double x = 1.0 - y;
+        double xl = (1.0 - x) - y;
+        ret = BUILTIN_FMA_F64(ph, x, BUILTIN_FMA_F64(ph, xl, pl * x));
     } else {
-        double s = MATH_SQRT(-MATH_MANGLE(log)(y));
-        double t = MATH_RCP(s);
+        // s + sl = sqrt(-log(y))
+#if defined EXTRA_ACCURACY
+        double2 lv = MATH_PRIVATE(epln)(y);
+        double l = -lv.hi;
+#else
+        double l = -MATH_MANGLE(log)(y);
+#endif
+        double s = MATH_FAST_SQRT(l);
+        double r = MATH_FAST_RCP(s);
+#if defined EXTRA_ACCURACY
+        double sl = (BUILTIN_FMA_F64(-s, s, l) - lv.lo) * (0.5 * r);
+#else
+        double sl = BUILTIN_FMA_F64(-s, s, l) * (0.5 * r);
+#endif
 
+        double t, q, c0h, c0l;
         if (y > 0x1.0p-19) {
-            ret = PE11(t, 0x1.8b3cfc98a5212p+4, -0x1.907bcdab54a4ep+6, 0x1.7659cf8216d7dp+7, -0x1.ac222777f664dp+7,
-                        0x1.4f2f8e33151acp+7, -0x1.7d7d1eb301c4cp+6, 0x1.48e630c1c77e7p+5,
-                        -0x1.c63e7d0e327f6p+3, 0x1.225b286aeb0dfp+2, -0x1.82a4acc22b05dp+0,
-                        -0x1.0a88271680e57p-5, 0x1.001f6acebb122p+0);
+            t = r - 0.328125;
+            q = PE11(t, -0x1.c59f7db0f1854p+5, 0x1.85a184a298cb7p+4, -0x1.4ff9b26084f9cp+3, 0x1.3bcfb21042fa7p+2,
+                     -0x1.33ef20786960dp+1, 0x1.33fdb1e6e0874p+0, -0x1.4474c28014196p-1,
+                     0x1.bd1f090338119p-2, -0x1.c7dcc5a99319bp-2, 0x1.bb810bcd5fc2ep-2,
+                     -0x1.3aa2f6087af93p-3, -0x1.a2bef2f8bdc22p-2);
+            c0h = 0x1.d0696b8788649p-1;
+            c0l = -0x1.e0ffcbd3ee3cp-56;
         } else if (y > 0x1.0p-40) {
-            ret = PE11(t, 0x1.0fdcb40bf066dp+9, -0x1.870ddeaa832dbp+10, 0x1.035c39e0428c4p+11,
-                        -0x1.a4d3c54a3ec14p+10, 0x1.d382aee6efae8p+9, -0x1.79f9e26565bc1p+8,
-                        0x1.d00e058ce9abap+6, -0x1.c7d1e01821eb3p+4, 0x1.9d930ba7a3111p+2,
-                        -0x1.af47941dd2baap+0, -0x1.787ecc823998bp-6, 0x1.000fae5fb73e3p+0);
+            t = r - 0.234375;
+            q = PE11(t, -0x1.b9477d77c8165p+10, 0x1.faed9d3ad438ap+8, -0x1.3222534599734p+7, 0x1.9d1b4d6d5d82dp+5,
+                     -0x1.235913abba3d6p+4, 0x1.b0b0c1132c501p+2, -0x1.548dc228381fep+1,
+                     0x1.33ef4971d1b8cp+0, -0x1.92e5cb04e32aep-1, 0x1.4e802fc193627p-1,
+                     -0x1.36c33e36c82ap-2, -0x1.77d83eb8b6015p-2);
+            c0h = 0x1.e3259f8209489p-1;
+            c0l = 0x1.5e97ae4ce0cabp-56;
         } else if (y > 0x1.0p-82) {
-            ret = PE11(t, 0x1.c9e5b8e31c18ep+13, -0x1.c866153b1bce6p+14, 0x1.a386b3b4fb25cp+14,
-                        -0x1.d7bf378e7b5fbp+13, 0x1.6b416de0a7a75p+12, -0x1.9757c1cf44e90p+10,
-                        0x1.5b56ededbaa8cp+8, -0x1.da79924b4d155p+5, 0x1.2ba25315d612bp+3,
-                        -0x1.de5808fbd786dp+0, -0x1.04e014b9fc507p-6, 0x1.000788df1c89fp+0);
+            t = r - 0.15625;
+            q = PE11(t, -0x1.0c1f442278f75p+16, 0x1.24be0d4d7224fp+14, -0x1.eff29712633c2p+11,
+                     0x1.b7471d0162ed5p+9, -0x1.9c9375555b779p+7, 0x1.9d02abdad4904p+5,
+                     -0x1.bf76fe4508bedp+3, 0x1.0fac965cbd2a2p+2, -0x1.b1026a5a2e6fp+0,
+                     0x1.02e37b0b352dfp+0, -0x1.f90df1558b796p-2, -0x1.3935b2aff4acfp-2);
+            c0h = 0x1.f0b40dbff82ffp-1;
+            c0l = -0x1.d29441e53a542p-55;
         } else if (y > 0x1.0p-200) {
-            ret = PE11(t, 0x1.ff518aae00301p+18, -0x1.5781ef98c6aa9p+19, 0x1.a9511b21c7715p+18,
-                        -0x1.41d8f1455b21ep+17, 0x1.4d4a3d4025a4cp+15, -0x1.f640fe7077996p+12,
-                        0x1.1faf674f42181p+10, -0x1.080c5cd81d791p+7, 0x1.c0ae370098ef4p+3,
-                        -0x1.08ebd67dc005ap+1, -0x1.5cf3329e72289p-7, 0x1.00035e75f27e2p+0);
+            t = r - 0.109375;
+            q = PE11(t, -0x1.bde3050f6e4e2p+21, 0x1.e2c765a3ccd5dp+18, -0x1.0764a8e971d02p+16,
+                     0x1.4b916e1aa02bbp+13, -0x1.b50913e98cbep+10, 0x1.325f47e1f2525p+8,
+                     -0x1.d4bca84843f14p+5, 0x1.94e4ce076da0ep+3, -0x1.b87eedb6ed708p+1,
+                     0x1.7684aebf737dfp+0, -0x1.53ae8caecb32ep-1, -0x1.0231180c78714p-2);
+            c0h = 0x1.f76e64bb14646p-1;
+            c0l = -0x1.2b0fb6d1afac4p-55;
         } else if (y > 0x1.0p-400) {
-            ret = PE10(t, -0x1.d554f00bf9d81p+20, 0x1.8456711ff3627p+20, -0x1.26c90acc5daafp+19,
-                        0x1.106501cdef815p+17, -0x1.57a4c95601c04p+14, 0x1.3ca627cbaede6p+11,
-                        -0x1.c716e091922fbp+7, 0x1.292f8f6e8bc75p+4, -0x1.1b469c212bd5fp+1,
-                        -0x1.04977fb6d0462p-7, 0x1.0001dc9f52f8ap+0);
+            t = r - 0.0703125;
+            q = PE10(t, 0x1.2860ad0ff2135p+24, -0x1.22a52f8456c4cp+21, 0x1.cc2dfe97087fbp+17,
+                     -0x1.81f01efd69766p+14, 0x1.5bb96b87fde21p+11, -0x1.56b95e3e4de61p+8,
+                     0x1.808a21714cfb6p+5, -0x1.0c50a148dce76p+3, 0x1.26b4f740670ddp+1,
+                     -0x1.c0edaa6026a45p-1, -0x1.8a72fac61e123p-3);
+            c0h = 0x1.fbe7ffca9c0c9p-1;
+            c0l = 0x1.c707ec455359p-55;
         } else if (y > 0x1.0p-900) {
-            ret = PE10(t, -0x1.21913925f3a73p+25, 0x1.4aa2fba282b9bp+24, -0x1.5a2a3f9742896p+22,
-                        0x1.b8ee3895772e8p+19, -0x1.7f2ce0b036be4p+16, 0x1.e62ab1bcbb738p+12,
-                        -0x1.e0ed2965d2a06p+8, 0x1.b0c16705263e5p+4, -0x1.334f9a732ecc7p+1,
-                        -0x1.65f60412f9578p-8, 0x1.0000e0bda43b5p+0);
+            t = r - 0.05078125;
+            q = PE10(t, 0x1.099a249ae8169p+29, -0x1.fb4ff1238e6d7p+24, 0x1.13d3f77242f5ap+21,
+                     -0x1.533901352a5a4p+17, 0x1.b9d6055513eccp+13, -0x1.3a6eaced9f88cp+10,
+                     0x1.fef11e7aae393p+6, -0x1.023fb37c47b95p+4, 0x1.9b12adaeedf14p+1,
+                     -0x1.0913b001f4c6ap+0, -0x1.3e4f487c845c2p-3);
+            c0h = 0x1.fda6ca6b8e078p-1;
+            c0l = -0x1.f0fc436306cdbp-56;
         } else {
-            ret = PE6(t, -0x1.e3d70f1fdc7bep+11, 0x1.28d9acd5b9596p+10, -0x1.554c1ce591414p+7, 0x1.15b1e5a1fe7f5p+4,
-                        -0x1.1aa8e6f616c69p+1, -0x1.f6803b3b4d6ccp-8, 0x1.00019ac5bed2ap+0);
+            t = r - 0.0390625;
+            q = PE6(t, 0x1.c27bbcb5cea49p+15, -0x1.bf83c0cf778d3p+11, 0x1.188a1602b846fp+8, -0x1.b54133d9b6b69p+4,
+                    0x1.0c8d4beba8ee6p+2, -0x1.2a05f5d53d425p+0, -0x1.09a814c42a666p-3);
+            c0h = 0x1.fe8229ca19f5ep-1;
+            c0l = 0x1.80c711fb5662dp-55;
         }
-        ret = s * ret;
+
+        double ph = BUILTIN_FMA_F64(t, q, c0h);
+        double pl = BUILTIN_FMA_F64(t, q, c0h - ph) + c0l;
+        ret = BUILTIN_FMA_F64(s, ph, BUILTIN_FMA_F64(s, pl, sl * ph));
     }
 
     if (!FINITE_ONLY_OPT()) {

@@ -16,7 +16,23 @@ MATH_MANGLE(rhypot)(float x, float y)
     int e = BUILTIN_FREXP_EXP_F32(t);
     a = BUILTIN_FLDEXP_F32(a, -e);
     b = BUILTIN_FLDEXP_F32(b, -e);
+#if defined EXTRA_ACCURACY
+    float b2 = b * b;
+    float d2 = BUILTIN_FMA_F32(a, a, b2);
+    float z = BUILTIN_AMDGPU_RSQRT_F32(d2);
+
+    // One Newton step, with the residual 1 - (d2 + b2l)*z^2 including the
+    // error of d2*z and the rounding error of b*b
+    float p = d2 * z;
+    float u = BUILTIN_FMA_F32(-p, z, 1.0f);
+    u = BUILTIN_FMA_F32(-BUILTIN_FMA_F32(d2, z, -p), z, u);
+    u = BUILTIN_FMA_F32(-BUILTIN_FMA_F32(b, b, -b2), z*z, u);
+    float zr = BUILTIN_FMA_F32(0.5f*z, u, z);
+    z = t == 0.0f ? z : zr;
+    float ret = BUILTIN_FLDEXP_F32(z, -e);
+#else
     float ret = BUILTIN_FLDEXP_F32(BUILTIN_AMDGPU_RSQRT_F32(MATH_MAD(a, a, b*b)), -e);
+#endif
 
     if (!FINITE_ONLY_OPT()) {
         ret = (BUILTIN_ISINF_F32(x) |
