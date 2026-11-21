@@ -15,7 +15,29 @@
 // RUN: grep '\-fcolor-diagnostics' spirv-flags.txt
 // RUN: grep '\-O3' spirv-flags.txt
 
+// COM: -O3 records the -vectorize-loops/-vectorize-slp cc1 flags in
+// COM: @llvm.cmdline. They must be extracted as well: Comgr forwards the
+// COM: extracted flags with -Xclang, so the driver never sees -O3 and cannot
+// COM: re-derive them.
+// RUN: grep '\-vectorize-loops' spirv-flags.txt
+// RUN: grep '\-vectorize-slp' spirv-flags.txt
+
 // RUN: rm spirv-flags.txt
+
+// COM: Generate a SPIR-V file with vectorization explicitly disabled
+// RUN: %clang -x hip --offload-arch=amdgcnspirv -nogpulib -nogpuinc \
+// RUN:    --no-gpu-bundle-output --offload-device-only -O3 %s -o %t.novec.spv \
+// RUN:    -fno-vectorize -fno-slp-vectorize
+
+// COM: Compile SPIR-V source to a relocatable
+// RUN: AMD_COMGR_EMIT_VERBOSE_LOGS=1 AMD_COMGR_REDIRECT_LOGS=novec-flags.txt \
+// RUN:   spirv-to-reloc %t.novec.spv %t.novec.o
+
+// COM: Check that vectorization is not re-enabled behind the user's back
+// RUN: not grep '\-vectorize-loops' novec-flags.txt
+// RUN: not grep '\-vectorize-slp' novec-flags.txt
+
+// RUN: rm novec-flags.txt
 
 #include <cstdlib>
 
