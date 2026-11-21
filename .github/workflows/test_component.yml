@@ -230,8 +230,8 @@ jobs:
           python ./build_tools/github_actions/reproduce_test_failure.py \
             --run-id "${{ env.ARTIFACT_RUN_ID }}" \
             --repository "${{ github.repository }}" \
-            --amdgpu-family "${{ inputs.amdgpu_families }}" \
-            --amdgpu-targets "${{ inputs.amdgpu_targets }}" \
+            --amdgpu-family "${AMDGPU_FAMILIES}" \
+            --amdgpu-targets "${AMDGPU_TARGETS}" \
             --test-script "${{ fromJSON(inputs.component).test_script }}" \
             --shard-index "${{ matrix.shard }}" \
             --total-shards "${{ fromJSON(inputs.component).total_shards }}" \
