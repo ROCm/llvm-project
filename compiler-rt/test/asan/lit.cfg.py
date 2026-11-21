@@ -379,3 +379,15 @@ def configure_rocm(config, test_rocm_path):
 test_rocm_path = os.environ.get('ASAN_TEST_ROCM','null')
 if config.support_amd_offload_tests == 'true':
     configure_rocm(config, test_rocm_path)
+
+# asan_interface.inc lists the __asan_hsa_* exports under SANITIZER_AMDHSA,
+# which sanitizer_platform.h defines for 64-bit Linux runtimes.
+if (
+    config.target_os == "Linux"
+    and not config.android
+    and config.target_arch
+    in ["x86_64", "aarch64", "ppc64", "ppc64le", "s390x", "riscv64", "loongarch64"]
+):
+    config.substitutions.append(("%amdhsa_defines", "-DSANITIZER_AMDHSA=1"))
+else:
+    config.substitutions.append(("%amdhsa_defines", ""))

@@ -21,27 +21,7 @@
 
 namespace __sanitizer {
 
-struct HsaFunctions {
-  // -------------- Memory Allocate/Deallocate Functions ----------------
-  hsa_status_t (*memory_pool_allocate)(hsa_amd_memory_pool_t memory_pool,
-                                       size_t size, uint32_t flags, void** ptr);
-  hsa_status_t (*memory_pool_free)(void* ptr);
-  hsa_status_t (*pointer_info)(void* ptr, hsa_amd_pointer_info_t* info,
-                               void* (*alloc)(size_t),
-                               uint32_t* num_agents_accessible,
-                               hsa_agent_t** accessible);
-  hsa_status_t (*vmem_address_reserve_align)(void** ptr, size_t size,
-                                             uint64_t address,
-                                             uint64_t alignment,
-                                             uint64_t flags);
-  hsa_status_t (*vmem_address_free)(void* ptr, size_t size);
-
-  // ----------------- System Event Register Function -------------------
-  hsa_status_t (*register_system_event_handler)(
-      hsa_amd_system_event_callback_t callback, void* data);
-};
-
-static HsaFunctions hsa_amd;
+static AmdHsaDeviceAllocator::HsaFunctions hsa_amd;
 
 // ROCr handle
 static void* hsa_runtime_handle = nullptr;
@@ -123,7 +103,7 @@ static int FindLoadedHsaRuntime(struct dl_phdr_info* info, size_t, void* arg) {
 // found via another object's RUNPATH, which neither RTLD_NEXT nor a name-based
 // dlopen from this runtime can see. dlsym() on this handle returns ROCr's own
 // definitions, never the sanitizer interceptors.
-void* GetHsaRuntimeHandle() {
+void* GetHsaRuntimeHandle(bool allow_dlopen) {
   SpinMutexLock l(&hsa_runtime_handle_mu);
   if (hsa_runtime_handle)
     return hsa_runtime_handle;
@@ -141,7 +121,7 @@ void* GetHsaRuntimeHandle() {
     }
   }
 
-  if (!hsa_runtime_handle) {
+  if (!hsa_runtime_handle && allow_dlopen) {
     if (!path || !path[0])
       path = kDefaultHsaRuntimePath;
     hsa_runtime_handle = dlopen(path, RTLD_NOW);
@@ -152,6 +132,12 @@ void* GetHsaRuntimeHandle() {
     }
   }
   return hsa_runtime_handle;
+}
+
+void AmdHsaDeviceAllocator::SetFunctions(const HsaFunctions& fns) {
+  SpinMutexLock l(&hsa_runtime_init_mu);
+  hsa_amd = fns;
+  atomic_store(&hsa_amd_symbols_loaded, 1, memory_order_release);
 }
 
 // Init(false): no-op during __asan_init (no dlopen, no dlsym).
