@@ -3252,7 +3252,7 @@ struct SelectCommonElementwiseOp : public OpRewritePattern<arith::SelectOp> {
       auto [it, inserted] = selected.try_emplace(std::make_pair(a, b));
       if (inserted) {
         auto select = arith::SelectOp::create(rewriter, op.getLoc(),
-                                             op.getCondition(), a, b);
+                                              op.getCondition(), a, b);
         it->second = select;
         createdSelects.push_back(select);
       }
