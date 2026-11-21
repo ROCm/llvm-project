@@ -40,6 +40,9 @@ set(LLVM_TARGETS_TO_BUILD "Native;AMDGPU;SPIRV" CACHE STRING "")
 if(CMAKE_HOST_WIN32)
   set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld" CACHE STRING "")
   set(_ROCM_HOST_RUNTIMES "compiler-rt")
+  # MLIR is not an enabled project here. ClangIR would pull it in as a
+  # dependency-only project whose targets are not exported with Clang.
+  set(CLANG_ENABLE_CIR OFF CACHE BOOL "")
 else()
   set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;mlir;flang;lld" CACHE STRING "")
   set(_ROCM_HOST_RUNTIMES "compiler-rt;libunwind;libcxx;libcxxabi;openmp;offload;flang-rt")
