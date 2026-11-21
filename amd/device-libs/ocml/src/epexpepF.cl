@@ -17,7 +17,7 @@ MATH_PRIVATE(epexpep)(float2 x)
     float2 t = fsub(fsub(fadd(MATH_MAD(fn, -0x1.62e400p-1f, x.hi), x.lo), fn*0x1.7f7800p-20f), fn*0x1.473de6p-34f);
 
     float th = t.hi;
-    float p = PE4(th, 0x1.6850e4p-10f, 0x1.123bccp-7f, 0x1.555b98p-5f, 0x1.55548ep-3f, 0x1.fffff8p-2f);
+    float p = PE5(th, 0x1.9e0bfp-13f, 0x1.6d4368p-10f, 0x1.111306p-7f, 0x1.5554fp-5f, 0x1.555554p-3f, 0x1.0p-1f);
 
     float2 r = fadd(1.0f, fadd(t, mul(sqr(t), p)));
 

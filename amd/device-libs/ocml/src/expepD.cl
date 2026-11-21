@@ -30,9 +30,18 @@ MATH_PRIVATE(expep)(double2 x)
     z = x.hi > 710.0 ? PINF_F64 : z;
     z = x.hi < -745.0 ? 0.0 : z;
 #else
-    double z = MATH_MANGLE(exp)(x.hi);
-    double zz = MATH_MAD(z, x.lo, z);
-    z = BUILTIN_ISINF_F64(z)? z : zz;
+    // exp with x.lo folded into the reduced argument
+    double dn = BUILTIN_RINT_F64(x.hi * 0x1.71547652b82fep+0);
+    double t = MATH_MAD(-dn, 0x1.62e42fefa39efp-1, x.hi) + MATH_MAD(-dn, 0x1.abc9e3b39803fp-56, x.lo);
+
+    double p = PE11(t, 0x1.ade156a5dcb37p-26, 0x1.28af3fca7ab0cp-22, 0x1.71dee623fde64p-19, 0x1.a01997c89e6b0p-16,
+                     0x1.a01a014761f6ep-13, 0x1.6c16c1852b7b0p-10, 0x1.1111111122322p-7,
+                     0x1.55555555502a1p-5, 0x1.5555555555511p-3, 0x1.000000000000bp-1, 1.0, 1.0);
+
+    double z = BUILTIN_FLDEXP_F64(p, (int)dn);
+
+    z = x.hi > 1024.0 ? PINF_F64 : z;
+    z = x.hi < -1075.0 ? 0.0 : z;
 #endif
 
     return z;

@@ -71,9 +71,12 @@ MATH_MANGLE(j0)(double x)
         }
 
         x = x - ch - cl;
-        ret = PE14(x, p[14], p[13], p[12], p[11], p[10], p[9], p[8], p[7], p[6], p[5], p[4], p[3], p[2], p[1],
-                    p[0]);
-              
+        double s = PE12(x, p[14], p[13], p[12], p[11], p[10], p[9], p[8], p[7], p[6], p[5], p[4], p[3], p[2]);
+        double rh = MATH_MAD(x, s, p[1]);
+        double d = p[1] - rh;
+        double rl = MATH_MAD(x, s, d) + (p[1] - (d + rh));
+        bool z = p[0] == 0.0;
+        ret = MATH_MAD(x, z ? rh : rl, MATH_MAD(x, z ? rl : rh, p[0]));
     } else {
         double r = MATH_RCP(x);
         double r2 = r*r;

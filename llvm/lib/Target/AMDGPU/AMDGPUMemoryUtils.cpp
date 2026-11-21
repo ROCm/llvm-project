@@ -20,6 +20,8 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/MemoryModelRelaxationAnnotations.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/ReplaceConstant.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/AtomicOrdering.h"
@@ -134,6 +136,23 @@ bool isLDSVariableToLower(const GlobalVariable &GV) {
     return false;
   }
   return true;
+}
+
+void externalizeLDSGlobalForObjectLinking(GlobalVariable &GV) {
+  assert(GV.getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS ||
+         GV.getAddressSpace() == AMDGPUAS::BARRIER);
+  GV.setInitializer(nullptr);
+  GV.setLinkage(GlobalValue::ExternalLinkage);
+  GV.setComdat(nullptr);
+}
+
+void recordLDSUseForObjectLinking(Function &F, GlobalVariable &GV) {
+  assert(F.getParent() == GV.getParent());
+  externalizeLDSGlobalForObjectLinking(GV);
+  NamedMDNode *LDSMD =
+      F.getParent()->getOrInsertNamedMetadata("amdgpu.lds.uses");
+  LDSMD->addOperand(MDNode::get(
+      F.getContext(), {ValueAsMetadata::get(&F), ValueAsMetadata::get(&GV)}));
 }
 
 bool eliminateGVConstantExprUsesFromAllInstructions(
@@ -414,8 +433,14 @@ bool isReallyAClobber(const Value *Ptr, MemoryDef *Def, AAResults *AA) {
     return !AA->isNoAlias(I->getPointerOperand(), Ptr);
   };
 
-  if (const auto *F = dyn_cast<FenceInst>(DefInst))
-    return isAcquireOrStronger(F->getOrdering());
+  if (const auto *F = dyn_cast<FenceInst>(DefInst)) {
+    if (!isAcquireOrStronger(F->getOrdering()))
+      return false;
+    SIAtomicAddrSpace AccessedAS =
+        toSIAtomicAddrSpace(Ptr->getType()->getPointerAddressSpace());
+    return (AccessedAS & getSynchronizeAddrSpace(*F)) !=
+           SIAtomicAddrSpace::NONE;
+  }
 
   if (const auto *I = dyn_cast<AtomicRMWInst>(DefInst))
     return isAcquireOrStronger(I->getOrdering()) || MayAlias(I);
@@ -423,6 +448,7 @@ bool isReallyAClobber(const Value *Ptr, MemoryDef *Def, AAResults *AA) {
   if (const auto *I = dyn_cast<AtomicCmpXchgInst>(DefInst))
     return isAcquireOrStronger(I->getMergedOrdering()) || MayAlias(I);
 
+  // TODO This is pessimistic for one-as load-acquires from a different AS.
   if (const auto *I = dyn_cast<LoadInst>(DefInst))
     return isAcquireOrStronger(I->getOrdering());
 

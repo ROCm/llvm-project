@@ -10,6 +10,8 @@
 #define DOUBLE_SPECIALIZATION
 #include "ep.h"
 
+extern CONSTATTR double2 MATH_PRIVATE(epexpep)(double2 x);
+
 double
 MATH_MANGLE(i0)(double x)
 {
@@ -32,7 +34,7 @@ MATH_MANGLE(i0)(double x)
         p = fadd(mul(p, t), 0x1.0000000000000p+0);
         ret = fadd(mul(t, p), 1.0).hi;
     } else {
-        double t = MATH_RCP(x);
+        double t = MATH_FAST_RCP(x);
         double ph = PE18(t, 0x1.cc967bacb549dp+49, -0x1.5ba7722975981p+50, 0x1.df0f836763276p+49,
                           -0x1.9042a430f3f43p+48, 0x1.c630541c4f568p+46, -0x1.7366be5a9784fp+44,
                           0x1.c5669a48f574ep+41, -0x1.a664cac47f0eap+38, 0x1.308250566988cp+35,
@@ -44,10 +46,16 @@ MATH_MANGLE(i0)(double x)
         p = fadd(mul(p, t), 0x1.cb94db8d452d5p-6);
         p = fadd(mul(p, t), 0x1.9884533daea3dp-5);
         p = fadd(mul(p, t), 0x1.9884533d4362fp-2);
-        double xs = x - 709.0;
-        double e1 = MATH_MANGLE(exp)(x > 709.0 ? xs : x);
-        double e2 = x > 709.0 ? 0x1.d422d2be5dc9bp+1022 : 1.0;
-        ret = omul(omul(mul(p, MATH_MANGLE(rsqrt)(x)), e1), e2).hi;
+        // 1/sqrt(x) = r + rl
+        double r = MATH_MANGLE(rsqrt)(x);
+        double rt = x * r;
+        double e = BUILTIN_FMA_F64(-BUILTIN_FMA_F64(x, r, -rt), r, BUILTIN_FMA_F64(-rt, r, 1.0));
+        double2 rr = fadd(r, 0.5 * r * e);
+
+        // e^x * 2^-512 as a double-word
+        double2 ex = MATH_PRIVATE(epexpep)(sub(BUILTIN_MIN_F64(x, 0x1.0p+10), con(0x1.62e42fefa39efp+8, 0x1.abc9e3b39803fp-47)));
+        ret = BUILTIN_FLDEXP_F64(mul(mul(p, rr), ex).hi, 512);
+        ret = x > 0x1.0p+10 ? PINF_F64 : ret;
     }
 
     if  (!FINITE_ONLY_OPT()) {

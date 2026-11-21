@@ -8,8 +8,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef OPENMP_LIBOMPTARGET_PLUGINS_NEXTGEN_COMMON_PLUGININTERFACE_H
-#define OPENMP_LIBOMPTARGET_PLUGINS_NEXTGEN_COMMON_PLUGININTERFACE_H
+#ifndef OFFLOAD_PLUGIN_COMMON_PLUGININTERFACE_H
+#define OFFLOAD_PLUGIN_COMMON_PLUGININTERFACE_H
 
 #include <cstddef>
 #include <cstdint>
@@ -46,16 +46,14 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/Triple.h"
 
-extern std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
+extern std::unique_ptr<llvm::offload::plugin::GenericProfilerTy>
 getProfilerToAttach();
 
 using namespace llvm::offload::debug;
 using namespace llvm::omp::target::debug;
 
 namespace llvm {
-namespace omp {
-namespace target {
-
+namespace offload {
 namespace plugin {
 
 struct GenericPluginTy;
@@ -354,7 +352,7 @@ struct KernelLaunchArgsTy {
   uint32_t UserThreadLimit[3] = {0, 0, 0};
   /// Downstream: the kernel's execution mode, which the AMDGPU kernel trace
   /// prints. It is passed through olLaunchKernel's OMP_EXEC_MODE property.
-  OMPTgtExecModeFlags ExecMode = OMP_TGT_EXEC_MODE_BARE;
+  omp::OMPTgtExecModeFlags ExecMode = omp::OMP_TGT_EXEC_MODE_BARE;
   struct {
     uint64_t Cooperative : 1; // Was this kernel spawned as cooperative.
     uint64_t Unused : 63;
@@ -1838,8 +1836,7 @@ protected:
 };
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
-#endif // OPENMP_LIBOMPTARGET_PLUGINS_COMMON_PLUGININTERFACE_H
+#endif // OFFLOAD_PLUGIN_COMMON_PLUGININTERFACE_H

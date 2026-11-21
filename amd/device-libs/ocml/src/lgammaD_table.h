@@ -119,102 +119,72 @@ DECLARE_TABLE(double, LGAMMA_NEG_ZP, 37*22)
     0x1.88b8e93fd3b2fp+1,    0x1.9f26949dd4a3ap+0,    -0x1.79dd1195e2607p-12,    0x1.151205398a1ffp-1,    0x1.4c40b113e63c6p-18,    0x1.5b205091457fbp-2,    0x1.fd5393ba2de18p-10,    0x1.d6f278227dc8p-3,    0x1.4e461409dcd29p-3,    -0x1.71c4aa5c1229fp-1,    0x1.eb83bfef4eb3p+1,    -0x1.739da8367b7c4p+3,    0x1.a5a03ba7e353cp+4,    -0x1.4e3c9beb19299p+5,    0x1.691de9c7fe259p+5,    -0x1.d9bd96b3edbf8p+4,    0x1.27aff2214b389p+3,    0x0p+0,    0x0p+0
 END_TABLE()
 
-DECLARE_TABLE(double, LGAMMA_NEG_S3_ZBP, 10)
-    0x1.0642c54e02e46p+1,
-    0x1.b8b1c2fc7beccp+0,
-    0x1.4fc0d68074a33p-1,
-    0x1.e458cc261814ep-1,
-    0x1.985b67804f18p-1,
-    0x1.f8cda9fb53e91p-1,
-    0x1.f24bfb07e3518p-1,
-    0x1.f1ab2848d52b6p-1,
-    0x1.549fb7e07e002p-1,
-    0x1.1d4cc282a2107p-2
+// (-3,-2) pieces (lgamma_rD.cl): S(u) for u = x - zb on [-3,-2.7] and u = x - za
+// on [-2.47,-2] (lgamma = u*S(u) - log(1 + u/(z + m))), and Q(t), t = x + 2.59375,
+// on (-2.7,-2.47) (lgamma = (x - za)(x - zb)*Q(t), last entry is the low part of
+// Q's constant term).  Near-minimax relative to lgamma.
+DECLARE_TABLE(double, LGAMMA_NEG_S3_ZBP, 16)
+    0x1.0642c569a2171p+1,
+    0x1.b8b1cf1e8c74dp+0,
+    0x1.4fc33cdbd629bp-1,
+    0x1.e47cea59af70ep-1,
+    0x1.99c2aa49d7db7p-1,
+    0x1.0140cf79659e2p+0,
+    0x1.1108e07c1bdeap+0,
+    0x1.4d5ea09ee5938p+0,
+    0x1.81f2c22c4cc9p+0,
+    0x1.d7b1ba586f4bep+0,
+    0x1.1bf5b91116cc3p+1,
+    0x1.5bdf87bb92375p+1,
+    0x1.9bc9f99b009d5p+1,
+    0x1.b81006fa26f6bp+1,
+    0x1.620c01ec32535p+1,
+    0x1.2f6c5b393516fp+0
 END_TABLE()
 
-DECLARE_TABLE(double, LGAMMA_NEG_S3_ZAP, 17)
-    -0x1.584ced9c90da6p-1,
-    0x1.3b74ee0ed5072p+1,
-    -0x1.0a50cbfb7b661p+1,
-    0x1.7ee6c6759f38bp+1,
-    -0x1.0eb9354f1fe33p+2,
-    0x1.a21098888a148p+2,
-    -0x1.479d62fcfdfdcp+3,
-    0x1.05fa91a150e89p+4,
-    -0x1.a0ec1fe86345ap+4,
-    0x1.41ca8bdea2523p+5,
-    -0x1.ce673bbce409p+5,
-    0x1.2696355480711p+6,
-    -0x1.3b0aa94ff9484p+6,
-    0x1.09d4ae03861f6p+6,
-    -0x1.46e3d149a0286p+5,
-    0x1.01d4e00c12ff9p+4,
-    -0x1.84ec64835bb27p+1
+DECLARE_TABLE(double, LGAMMA_NEG_S3_ZAP, 20)
+    -0x1.584ced9e411dfp-1,
+    0x1.3b74ee31a1fdbp+1,
+    -0x1.0a50d12c232e9p+1,
+    0x1.7ee740767fb5p+1,
+    -0x1.0ebd1392d4061p+2,
+    0x1.a23eb4025282ap+2,
+    -0x1.486eda0c6e6b2p+3,
+    0x1.08e20432230adp+4,
+    -0x1.b14d0cce8ecdcp+4,
+    0x1.66ea3c6cf7ce7p+5,
+    -0x1.2b5c4c4307038p+6,
+    0x1.f2346d966e94ap+6,
+    -0x1.952a151dc215cp+7,
+    0x1.36c88183fc2ep+8,
+    -0x1.abfa2758db6b7p+8,
+    0x1.f2e5ce14fc03cp+8,
+    -0x1.cc8bc76bda44bp+8,
+    0x1.35bff1cc66515p+8,
+    -0x1.0a8ac33fe5798p+7,
+    0x1.b4f3dc69cbb21p+4
 END_TABLE()
 
-DECLARE_TABLE(double, LGAMMA_NEG_S3_ZFB, 24)
-    -0x1.ea12da904b18cp+0,
-    0x1.3267f3c265a5ap+3,
-    -0x1.4185ac30c8e5dp+4,
-    0x1.f504accc96cfcp+5,
-    -0x1.85884581870abp+7,
-    0x1.4373f7d679fbep+9,
-    -0x1.12239c23f0da3p+11,
-    0x1.dba652bf8e228p+12,
-    -0x1.a2d2386f0e1a4p+14,
-    0x1.7584e21898cd5p+16,
-    -0x1.50688013281b1p+18,
-    0x1.310318ea842ecp+20,
-    -0x1.19808674325ebp+22,
-    0x1.0ad53fd9351c6p+24,
-    -0x1.472d78d1d45fcp+25,
-    0x1.f98ac822b1251p+27,
-    -0x1.343e37ca39065p+32,
-    -0x1.8e43d9c03a8dep+35,
-    -0x1.0d3473887baacp+31,
-    0x1.a1ee662f4f50dp+42,
-    0x1.2eeda1bc5f8ep+46,
-    0x1.b39ae64c4c131p+48,
-    0x1.4a46a22492fdep+50,
-    0x1.b582a6721c173p+50
+DECLARE_TABLE(double, LGAMMA_NEG_S3_ZZ, 21)
+    0x1.640cd71a5f1fep+2,
+    -0x1.024b4928f6f8p+2,
+    0x1.9336f5a2619f7p+3,
+    -0x1.1f9c215b5404ap+4,
+    0x1.7567f8c588324p+5,
+    -0x1.5433be024e656p+6,
+    0x1.98923b33e3deap+7,
+    -0x1.a1cdd00df2ca8p+8,
+    0x1.e72da46663ba6p+9,
+    -0x1.084721075401ap+11,
+    0x1.31941db004d09p+12,
+    -0x1.5665c052d0e32p+13,
+    0x1.8c0160aaecb83p+14,
+    -0x1.c4a90304994e6p+15,
+    0x1.075f80e59cbc9p+17,
+    -0x1.2bed8dca5eec8p+18,
+    0x1.5122a7fa50b5cp+19,
+    -0x1.b8220289880a1p+20,
+    0x1.478065653251cp+22,
+    -0x1.15428055dc02cp+23,
+    -0x1.16bfb58fe6c0bp-52
 END_TABLE()
-
-DECLARE_TABLE(double, LGAMMA_NEG_S3_ZFA, 13)
-    0x1.83fe966af535ep+0,
-    0x1.36eebb002f54ap+2,
-    0x1.694a6058b1fb7p+0,
-    0x1.1718d7ca123b6p+3,
-    0x1.7339fd9301702p+2,
-    0x1.8d32fb348be14p+4,
-    0x1.809fda6553ae7p+4,
-    0x1.48d38b4ddb834p+6,
-    0x1.95edd60b6555dp+6,
-    0x1.179a34bc64b21p+8,
-    0x1.395ce913d0312p+9,
-    -0x1.0f2a6fceecd39p+8,
-    0x1.a4dcdd1f611e6p+12
-END_TABLE()
-
-DECLARE_TABLE(double, LGAMMA_NEG_S3_DD, 20)
-    -0x1.ccbf9f5ed0f15p-5,
-    0x1.1a68793defc15p+0,
-    0x1.3141822e16967p+2,
-    -0x1.27781d4b3c4aep-6,
-    0x1.03a9f1168f38dp+3,
-    -0x1.2914a528141bdp-11,
-    0x1.55d348c791939p+4,
-    -0x1.f620192b25bcfp-16,
-    0x1.000a74eeac5bap+6,
-    0x1.1a64deeec5b5fp-7,
-    0x1.99aa2847c9ac8p+7,
-    -0x1.b03bf8d24987ap+1,
-    0x1.26cdadac8c93p+9,
-    -0x1.4b93f146ba5bdp+10,
-    -0x1.33c3b5f156adcp+13,
-    -0x1.2a7fe426ddfacp+16,
-    -0x1.38bebdd6fe25p+18,
-    -0x1.c99f28adbc96cp+19,
-    -0x1.8630410830279p+20,
-    -0x1.4ba94d40511e5p+20
-END_TABLE()
-

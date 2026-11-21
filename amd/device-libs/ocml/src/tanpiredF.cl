@@ -13,14 +13,19 @@ MATH_PRIVATE(tanpired)(float x, int i)
 {
     float s = x * x;
 
-    float t = PE6(s, 0x1.7d2bd4p+16f, 0x1.a4d306p+12f, 0x1.435004p+11f, 0x1.4b6926p+9f, 0x1.451e22p+7f,
-                    0x1.467a9cp+5f, 0x1.4abb6ap+3f);
+    float t = PE6(s, 0x1.ebdc6cp+16f, 0x1.2649cp+7f, 0x1.8fbfcep+11f, 0x1.3cfa48p+9f, 0x1.4693p+7f,
+                    0x1.466758p+5f, 0x1.4abbdap+3f);
 
-    t = x * s * t;
-    t = MATH_MAD(x, 0x1.921fb6p+1f, t);
+    // th + tl = tan(pi*x)
+    float c = BUILTIN_FMA_F32(x * s, t, x * -0x1.777a5cp-24f);
+    float th = BUILTIN_FMA_F32(x, 0x1.921fb6p+1f, c);
+    float tl = BUILTIN_FMA_F32(x, 0x1.921fb6p+1f, -th) + c;
 
-    float tr = -MATH_RCP(t);
+    // -1/(th + tl)
+    float r = MATH_FAST_RCP(th);
+    float tr = -BUILTIN_FMA_F32(BUILTIN_FMA_F32(-r, tl, BUILTIN_FMA_F32(-r, th, 1.0f)), r, r);
+    tr = x == 0.0f ? -PINF_F32 : tr;
 
-    return i ? tr : t;
+    return i ? tr : th;
 }
 

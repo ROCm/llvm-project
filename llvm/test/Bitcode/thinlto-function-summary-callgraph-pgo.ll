@@ -18,6 +18,7 @@
 ; CHECK:       <GLOBALVAL_SUMMARY_BLOCK
 ; CHECK-NEXT:    <VERSION
 ; CHECK-NEXT:    <FLAGS
+; CHECK-NEXT:    <CALL_TYPE_IDS
 ; See if the call to func is registered, using the expected hotness type.
 ; CHECK-NEXT:    <PERMODULE_PROFILE {{.*}} op7=1 op8=2/>
 ; CHECK-NEXT:  </GLOBALVAL_SUMMARY_BLOCK>
@@ -29,7 +30,9 @@
 ; COMBINED-NEXT:    <FLAGS
 ; COMBINED-NEXT:    <VALUE_GUID {{.*}} op0=[[FUNCID:[0-9]+]] op1=1697143370 op2=1603531901/>
 ; COMBINED-NEXT:    <VALUE_GUID
+; COMBINED-NEXT:    <CALL_TYPE_IDS
 ; COMBINED-NEXT:    <COMBINED
+; COMBINED-NEXT:    <CALL_TYPE_IDS
 ; See if the call to func is registered, using the expected hotness type.
 ; op6=2 which is hotnessType::None.
 ; COMBINED-NEXT:    <COMBINED_PROFILE {{.*}} op9=[[FUNCID]] op10=2/>

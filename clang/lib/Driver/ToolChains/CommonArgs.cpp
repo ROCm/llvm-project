@@ -702,6 +702,9 @@ void tools::addLinkerCompressDebugSectionsOption(
 
 bool tools::useMachORelocatableDwarf(const llvm::Triple &T,
                                      unsigned DwarfVersion) {
+  // 32-bit ARM and x86 Mach-O use scattered relocations.
+  if (T.isARM() || T.isThumb() || T.getArch() == llvm::Triple::x86)
+    return false;
   return T.isOSBinFormatMachO() && DwarfVersion >= 5 &&
          !(T.isMacOSX() || T.isiOS() || T.isWatchOS() || T.isXROS() ||
            T.isDriverKit());
@@ -2937,6 +2940,36 @@ unsigned tools::getAMDGPUCodeObjectVersion(const Driver &D,
 bool tools::haveAMDGPUCodeObjectVersionArgument(
     const Driver &D, const llvm::opt::ArgList &Args) {
   return getAMDGPUCodeObjectArgument(D, Args) != nullptr;
+}
+
+bool tools::shouldUseAMDGPUObjectLinking(const ToolChain &TC,
+                                         const llvm::opt::ArgList &Args,
+                                         Action::OffloadKind Kind,
+                                         bool AssumeRDC) {
+  if (!TC.getTriple().isAMDGCN())
+    return false;
+
+  // Only HIP and CUDA device code can use object linking. Non-RDC device code
+  // is a complete program per translation unit, so it is never linked with
+  // other relocatable objects.
+  bool IsRDC = AssumeRDC;
+  switch (Kind) {
+  case Action::OFK_Cuda:
+  case Action::OFK_HIP:
+    IsRDC |= Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,
+                          /*Default=*/false);
+    break;
+  default:
+    return false;
+  }
+  if (!IsRDC)
+    return false;
+
+  // Full LTO compiles the whole device program as one module. Without LTO,
+  // or with ThinLTO, the backend emits relocatable objects that are linked
+  // with each other.
+  LTOKind LTOMode = TC.getLTOMode(Args, Kind);
+  return LTOMode == LTOK_None || LTOMode == LTOK_Thin;
 }
 
 void tools::addMachineOutlinerArgs(const Driver &D,

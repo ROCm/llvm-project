@@ -42,6 +42,12 @@ struct BackendConfig {
   /// Whether the plugin explains why no image is compatible (XNACK mode).
   bool ExplainsIncompatibleImages = false;
 
+  /// Default number of waves per compute unit for kernels with a scalar
+  /// cross-team reduction. If zero, such kernels are handled like
+  /// non-reduction kernels. Can be overridden by the user with
+  /// LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU.
+  uint32_t DefaultXTeamReductionWavesPerCU = 0;
+
   BackendConfig() = default;
   BackendConfig(const BackendConfig &) = default;
   BackendConfig(BackendConfig &&) = default;
