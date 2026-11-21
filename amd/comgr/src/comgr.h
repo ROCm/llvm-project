@@ -30,7 +30,8 @@ struct MetaDocument;
 /// string with the contents of @p Src, optionally updating @p Size with the
 /// length of the string (not including the null terminator).
 ///
-/// If @p Dest is non-null, it will first be freed.
+/// The previous value of @p Dest is freed only after the new value has been
+/// successfully allocated and copied.
 ///
 /// @p Src may contain null bytes.
 amd_comgr_status_t setCStr(char *&Dest, llvm::StringRef Src,
