@@ -25,6 +25,7 @@
 #include "llvm/IR/LLVMRemarkStreamer.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/IR/ThinLinkFnAttrs.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/LTO/LTO.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -852,11 +853,20 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
   updatePublicTypeTestCalls(Mod, CombinedIndex.withWholeProgramVisibility(),
                             CombinedIndex.withSpeculativeDevirt());
 
+  // Apply the results of the thin link. All kinds of ThinLTO backends run this
+  // code, so a distributed build gets the same results as an in-process build.
+  // It runs before the post-import hook, so a module that is saved there or
+  // later has the results. The paths above that only optimize or generate code
+  // (CodeGenOnly and -thinlto-assume-merged) take such a module.
+  if (Error Err = checkRequiredSummaryExtensions(CombinedIndex, ImportList,
+                                                 DefinedGlobals))
+    return Err;
+  if (Error Err =
+          applyThinLinkFnAttrs(Mod, CombinedIndex, ImportList, DefinedGlobals))
+    return Err;
+
   if (Conf.PostImportModuleHook && !Conf.PostImportModuleHook(Task, Mod))
     return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
-
-  if (Conf.ApplyThinLTOAttributes)
-    Conf.ApplyThinLTOAttributes(Task, Mod);
 
   return OptimizeAndCodegen(Mod, TM.get(), std::move(DiagnosticOutputFile));
 }
@@ -885,6 +895,70 @@ Expected<BitcodeModule> lto::findThinLTOModule(MemoryBufferRef MBRef) {
 
   return make_error<StringError>("Could not find module summary",
                                  inconvertibleErrorCode());
+}
+
+Error lto::checkRequiredSummaryExtensions(
+    const ModuleSummaryIndex &Index,
+    const FunctionImporter::ImportMapTy &ImportList,
+    const GVSummaryMapTy &DefinedGlobals) {
+  // The summaries that the backend uses, like in computeLTOCacheKey().
+  SmallVector<const GlobalValueSummary *> Used;
+  for (const auto &[GUID, S] : DefinedGlobals)
+    Used.push_back(S);
+  for (const auto &[FromModule, GUID, Kind] : ImportList) {
+    const GlobalValueSummary *S = Index.findSummaryInModule(GUID, FromModule);
+    if (!S)
+      continue;
+    Used.push_back(S);
+    if (const auto *AS = dyn_cast<AliasSummary>(S); AS && AS->hasAliasee())
+      Used.push_back(AS->getBaseObject());
+  }
+
+  for (const auto &[Key, Ext] : Index.extensions()) {
+    if (!Ext.isRequired() ||
+        (Ext.getName() == ThinLinkFnAttrs::ExtensionName &&
+         Ext.getVersion() == ThinLinkFnAttrs::ExtensionVersion) ||
+        none_of(Used,
+                [&](const GlobalValueSummary *S) { return Ext.getEntry(S); }))
+      continue;
+    return createStringError(Twine("the summary index needs the summary "
+                                   "extension '") +
+                             Ext.getName() + "' version " +
+                             Twine(Ext.getVersion()) +
+                             ", which this compiler does not apply");
+  }
+  return Error::success();
+}
+
+Error lto::applyThinLinkFnAttrs(Module &M, const ModuleSummaryIndex &Index,
+                                const FunctionImporter::ImportMapTy &ImportList,
+                                const GVSummaryMapTy &DefinedGlobals) {
+  if (!Index.getExtension(ThinLinkFnAttrs::ExtensionName,
+                          ThinLinkFnAttrs::ExtensionVersion))
+    return Error::success();
+
+  // The module that each imported function comes from.
+  DenseMap<GlobalValue::GUID, StringRef> ImportedFrom;
+  for (const auto &[FromModule, GUID, Kind] : ImportList)
+    if (Kind == GlobalValueSummary::Definition)
+      ImportedFrom[GUID] = FromModule;
+
+  for (Function &F : M) {
+    if (F.isDeclaration())
+      continue;
+    GlobalValue::GUID GUID = F.getGUIDOrFallback();
+    const GlobalValueSummary *S = DefinedGlobals.lookup(GUID);
+    if (!S)
+      if (auto It = ImportedFrom.find(GUID); It != ImportedFrom.end())
+        S = Index.findSummaryInModule(GUID, It->second);
+    if (!S)
+      continue;
+    Expected<ThinLinkFnAttrs> Attrs = ThinLinkFnAttrs::get(Index, *S);
+    if (!Attrs)
+      return Attrs.takeError();
+    Attrs->apply(F);
+  }
+  return Error::success();
 }
 
 bool lto::initImportList(const Module &M,

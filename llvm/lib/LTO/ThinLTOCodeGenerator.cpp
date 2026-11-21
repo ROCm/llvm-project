@@ -640,6 +640,14 @@ std::unique_ptr<ModuleSummaryIndex> ThinLTOCodeGenerator::linkCombinedIndex() {
       return nullptr;
     }
   }
+  // This code generator runs no thin-link passes and applies no summary
+  // extension, so it cannot use an index that needs one.
+  for (const auto &[Key, Ext] : CombinedIndex->extensions())
+    if (Ext.isRequired())
+      reportFatalUsageError(
+          Twine("the summary index needs the summary extension '") +
+          Ext.getName() + "' version " + Twine(Ext.getVersion()) +
+          ", which the legacy ThinLTO code generator does not apply");
   return CombinedIndex;
 }
 

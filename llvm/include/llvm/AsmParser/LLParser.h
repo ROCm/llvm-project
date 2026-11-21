@@ -414,6 +414,10 @@ namespace llvm {
     bool parseRequiredTypeAttr(AttrBuilder &B, lltok::Kind AttrToken,
                                Attribute::AttrKind AttrKind);
 
+    // Summary extensions.
+    bool parseSummaryExtension();
+    bool parseSummaryExtensionEntry(SummaryExtension &Ext);
+
     // Module Summary Index Parsing.
     bool skipModuleSummaryEntry();
     bool parseSummaryEntry();

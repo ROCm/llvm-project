@@ -29,7 +29,6 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
-#include "llvm/IR/CallingConv.h"
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
@@ -897,22 +896,21 @@ public:
 
   /// Call type IDs (see TargetTransformInfo::getCallTypeId), which are 64-bit
   /// hashes like GUIDs. An indirect call can reach a function only if both
-  /// have the same ID. Because these fields are not always needed we
-  /// only allocate space for them if necessary.
+  /// have the same ID. The summary builder gives each function summary this
+  /// data, also if all fields are empty.
   struct CallTypeIdInfo {
     /// The identifier of this function, or 0 if no indirect call can reach it
     /// (for example, a local function whose address is not taken, or a
     /// function whose calling convention does not permit calls).
     GlobalValue::GUID CallTypeId = 0;
 
-    /// The distinct identifiers of the indirect calls in this function.
+    /// The distinct identifiers of the indirect calls in this function. The
+    /// summary call graph (SummaryCallGraph) finds their possible targets.
     std::vector<GlobalValue::GUID> IndirectCallTypeIds;
 
-    /// The possible targets of the indirect calls: one list for each
-    /// identifier in IndirectCallTypeIds that has targets. This is not part of
-    /// the summary in bitcode. ModuleSummaryIndex::resolveIndirectCalls()
-    /// computes it in the combined index.
-    SmallVector<ArrayRef<ValueInfo>, 0> IndirectCallTargets;
+    /// True if this function has a call with an unknown callee that has no
+    /// call type ID: a call to inline assembly.
+    bool HasCallWithoutTypeId = false;
   };
 
   /// Flags specific to function summaries.
@@ -1220,77 +1218,29 @@ public:
     return {};
   }
 
-  /// Iterates over the possible targets of the indirect calls in a function,
-  /// as call edges.
-  class indirect_call_iterator
-      : public iterator_facade_base<indirect_call_iterator,
-                                    std::forward_iterator_tag, EdgeTy,
-                                    std::ptrdiff_t, const EdgeTy *, EdgeTy> {
-    ArrayRef<ArrayRef<ValueInfo>> Targets;
-    size_t List = 0;
-    size_t Pos = 0;
+  /// Returns true if the summary has call type IDs, also if they are all
+  /// empty. A summary without them comes from a producer that does not compute
+  /// them, for example an older compiler, or the summary of a function in
+  /// module assembly. The function can then have any call type ID, and so can
+  /// each of its calls with an unknown callee.
+  bool hasCallTypeIds() const { return CTIdInfo != nullptr; }
 
-    void skipEmptyLists() {
-      while (List < Targets.size() && Pos == Targets[List].size()) {
-        ++List;
-        Pos = 0;
-      }
-    }
-
-  public:
-    indirect_call_iterator() = default;
-    indirect_call_iterator(ArrayRef<ArrayRef<ValueInfo>> Targets, bool IsEnd)
-        : Targets(Targets), List(IsEnd ? Targets.size() : 0) {
-      skipEmptyLists();
-    }
-
-    EdgeTy operator*() const {
-      return {Targets[List][Pos],
-              CalleeInfo(CalleeInfo::HotnessType::Unknown, /*HasTC=*/false,
-                         /*HasIC=*/true)};
-    }
-
-    using iterator_facade_base::operator++;
-    indirect_call_iterator &operator++() {
-      ++Pos;
-      skipEmptyLists();
-      return *this;
-    }
-
-    bool operator==(const indirect_call_iterator &Other) const {
-      return List == Other.List && Pos == Other.Pos;
-    }
-  };
-
-  /// Returns the possible targets of the indirect calls in this function, as
-  /// call edges with HasIndirectCall set. Unlike the indirect call edges in
-  /// calls(), which come from profiles and !callees metadata, these are all
-  /// the address-taken functions with a matching call type identifier. The
-  /// range is empty until ModuleSummaryIndex::resolveIndirectCalls() runs.
-  iterator_range<indirect_call_iterator> indirect_calls() const {
-    ArrayRef<ArrayRef<ValueInfo>> Targets;
-    if (CTIdInfo)
-      Targets = CTIdInfo->IndirectCallTargets;
-    return {indirect_call_iterator(Targets, /*IsEnd=*/false),
-            indirect_call_iterator(Targets, /*IsEnd=*/true)};
+  /// Returns true if this function can have a call with an unknown callee
+  /// that is not an indirect call in indirectCallTypeIds(), for example a call
+  /// to inline assembly.
+  bool hasCallWithoutTypeId() const {
+    if (CTIdInfo && CTIdInfo->HasCallWithoutTypeId)
+      return true;
+    // The summary does not list the IDs of the unknown calls.
+    return FunFlags.HasUnknownCall &&
+           (!CTIdInfo || CTIdInfo->IndirectCallTypeIds.empty());
   }
 
-  /// Sets the possible targets of the indirect calls in this function. Used by
-  /// ModuleSummaryIndex::resolveIndirectCalls().
-  void setIndirectCallTargets(SmallVector<ArrayRef<ValueInfo>, 0> Targets) {
-    assert((CTIdInfo || Targets.empty()) &&
-           "Expected call type identifiers for indirect call targets");
-    if (CTIdInfo)
-      CTIdInfo->IndirectCallTargets = std::move(Targets);
-  }
+  const CallTypeIdInfo *getCallTypeIdInfo() const { return CTIdInfo.get(); }
 
   /// Sets the call type identifiers of this function and of its indirect
   /// calls.
   void setCallTypeIds(CallTypeIdInfo Info) {
-    if (!Info.CallTypeId && Info.IndirectCallTypeIds.empty()) {
-      CTIdInfo.reset();
-      return;
-    }
     CTIdInfo = std::make_unique<CallTypeIdInfo>(std::move(Info));
   }
 
@@ -1521,33 +1471,68 @@ struct TypeIdSummary {
   std::map<uint64_t, WholeProgramDevirtResolution> WPDRes;
 };
 
-/// Optional per-function AMDGPU information carried in the module summary.
+/// Data that a pass or a target attaches to the summaries of an index, under a
+/// name and a version. An entry holds integers and strings. Each entry belongs
+/// to one summary, that is, to the copy of a value in one module, like the
+/// other data of a summary. So the copies of a function in two modules (for
+/// example, a template instantiated in two translation units) can have
+/// different entries.
 ///
-/// Attribute presence is retained because an absent attribute can have a
-/// subtarget-dependent default and is not equivalent to an explicit value.
-struct AMDGPUFunctionSummary {
-  struct WavesPerEUInfo {
-    uint32_t Min = 0;
-    std::optional<uint32_t> Max;
+/// Only the users of an extension know what the integers and strings mean.
+/// Other code (bitcode, summary assembly, the per-backend index files, and the
+/// ThinLTO cache key) handles all extensions in the same way, so a new
+/// extension needs no change there.
+class SummaryExtension {
+public:
+  /// The data of one summary.
+  struct Entry {
+    SmallVector<uint64_t, 4> Ints;
+    SmallVector<std::string, 0> Strings;
 
-    bool operator==(const WavesPerEUInfo &Other) const {
-      return Min == Other.Min && Max == Other.Max;
+    bool operator==(const Entry &Other) const {
+      return Ints == Other.Ints && Strings == Other.Strings;
     }
   };
 
-  CallingConv::ID CC = CallingConv::C;
-  std::optional<std::pair<uint32_t, uint32_t>> FlatWorkGroupSize;
-  std::optional<WavesPerEUInfo> WavesPerEU;
-  std::optional<std::array<uint32_t, 3>> MaxNumWorkgroups;
+  SummaryExtension(StringRef Name, uint64_t Version, bool Required)
+      : Name(Name), Version(Version), Required(Required) {}
 
-  bool operator==(const AMDGPUFunctionSummary &Other) const {
-    return CC == Other.CC && FlatWorkGroupSize == Other.FlatWorkGroupSize &&
-           WavesPerEU == Other.WavesPerEU &&
-           MaxNumWorkgroups == Other.MaxNumWorkgroups;
+  StringRef getName() const { return Name; }
+
+  /// The version of the format of the entries. The users of the extension
+  /// define it.
+  uint64_t getVersion() const { return Version; }
+
+  /// Returns true if a ThinLTO backend must apply the data. A backend that
+  /// does not know a required extension must report an error.
+  bool isRequired() const { return Required; }
+  void setRequired(bool R) { Required = R; }
+
+  /// Returns the entry of the summary \p S, or null.
+  const Entry *getEntry(const GlobalValueSummary *S) const {
+    auto It = Entries.find(S);
+    return It == Entries.end() ? nullptr : &It->second;
   }
-};
 
-using AMDGPUSummaryMap = DenseMap<GlobalValue::GUID, AMDGPUFunctionSummary>;
+  /// Sets the entry of the summary \p S. \p S must be in the index that holds
+  /// this extension.
+  void setEntry(const GlobalValueSummary *S, Entry E) {
+    Entries[S] = std::move(E);
+  }
+
+  void eraseEntry(const GlobalValueSummary *S) { Entries.erase(S); }
+
+  bool empty() const { return Entries.empty(); }
+  size_t size() const { return Entries.size(); }
+
+private:
+  std::string Name;
+  uint64_t Version;
+  bool Required;
+  // Do not iterate over this map, as its order is not deterministic. Iterate
+  // over the summaries of the index instead.
+  DenseMap<const GlobalValueSummary *, Entry> Entries;
+};
 
 /// Encapsulate the names of CFI target functions. It interfaces with ThinLTO to
 /// determine efficiently which of the names need to be exported for a
@@ -1784,18 +1769,11 @@ private:
   // built via releaseTemporaryMemory.
   DenseMap<uint64_t, unsigned> StackIdToIndex;
 
-  // Optional AMDGPU per-function occupancy data, indexed by GUID.
-  // Populated during summary parsing and used by ThinLTO to propagate
-  // kernel occupancy constraints to device functions.
-  AMDGPUSummaryMap AMDGPUSummaries;
+  // The summary extensions, by name and version.
+  std::map<std::pair<std::string, uint64_t>, SummaryExtension> Extensions;
 
-  // The possible targets of indirect calls, for each call type identifier.
-  // The FunctionSummary::indirect_calls() ranges refer to these lists.
-  // Computed by resolveIndirectCalls().
-  DenseMap<GlobalValue::GUID, std::vector<ValueInfo>> IndirectCallTargets;
-
-  // True if resolveIndirectCalls() has run.
-  bool HasResolvedIndirectCalls = false;
+  // The root node of the call graph. See getCallGraphRoot().
+  std::unique_ptr<GlobalValueSummaryMapTy::value_type> CallGraphRoot;
 
   // YAML I/O support.
   friend yaml::MappingTraits<ModuleSummaryIndex>;
@@ -1848,22 +1826,34 @@ public:
 
   const std::vector<uint64_t> &stackIds() const { return StackIds; }
 
-  AMDGPUSummaryMap &getAMDGPUSummaries() { return AMDGPUSummaries; }
-  const AMDGPUSummaryMap &getAMDGPUSummaries() const { return AMDGPUSummaries; }
+  /// Returns the summary extension with \p Name and \p Version, or null.
+  /// Modules from different compilers can hold different versions of an
+  /// extension, so a user asks for the version that it knows.
+  SummaryExtension *getExtension(StringRef Name, uint64_t Version) {
+    auto It = Extensions.find({Name.str(), Version});
+    return It == Extensions.end() ? nullptr : &It->second;
+  }
+  const SummaryExtension *getExtension(StringRef Name, uint64_t Version) const {
+    return const_cast<ModuleSummaryIndex *>(this)->getExtension(Name, Version);
+  }
 
-  /// Computes FunctionSummary::indirect_calls() for every function summary. An
-  /// indirect call can reach every live function whose address can be taken
-  /// and whose call type identifier is equal to the identifier of the call.
-  /// The address can be taken if some summary references the function, or if
-  /// the function is in \p GUIDPreservedSymbols: the values that are visible
-  /// outside the summaries (for example to native objects). For an alias, the
-  /// target is its aliasee. Call it at the thin link, after all summaries are
-  /// in the index. A second call does nothing.
-  LLVM_ABI void
-  resolveIndirectCalls(const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols);
+  /// Returns the summary extension with \p Name and \p Version. Creates it if
+  /// it does not exist. Makes it required if \p Required is true.
+  SummaryExtension &getOrInsertExtension(StringRef Name, uint64_t Version,
+                                         bool Required) {
+    auto It =
+        Extensions.try_emplace({Name.str(), Version}, Name, Version, Required)
+            .first;
+    if (Required)
+      It->second.setRequired(true);
+    return It->second;
+  }
 
-  /// Returns true if resolveIndirectCalls() has run.
-  bool hasResolvedIndirectCalls() const { return HasResolvedIndirectCalls; }
+  /// Returns the summary extensions, in the order of their names and versions.
+  const std::map<std::pair<std::string, uint64_t>, SummaryExtension> &
+  extensions() const {
+    return Extensions;
+  }
 
   unsigned addOrGetStackIdIndex(uint64_t StackId) {
     auto Inserted = StackIdToIndex.insert({StackId, StackIds.size()});
@@ -1944,6 +1934,18 @@ public:
       Edges.push_back(std::make_pair(P.first, CalleeInfo{}));
     }
     return FunctionSummary::makeDummyFunctionSummary(std::move(Edges));
+  }
+
+  /// Returns the root node of the call graph: a dummy function whose callees
+  /// are the functions without callers. The index owns the node. Each call
+  /// computes it again, and frees the node of the previous call.
+  ValueInfo getCallGraphRoot() {
+    GlobalValueSummaryInfo Root(HaveGVs);
+    Root.addSummary(
+        std::make_unique<FunctionSummary>(calculateCallGraphRoot()));
+    CallGraphRoot = std::make_unique<GlobalValueSummaryMapTy::value_type>(
+        GlobalValue::GUID(0), std::move(Root));
+    return ValueInfo(HaveGVs, CallGraphRoot.get());
   }
 
   bool withGlobalValueDeadStripping() const {
@@ -2368,13 +2370,7 @@ template <> struct GraphTraits<ValueInfo> {
 template <>
 struct GraphTraits<ModuleSummaryIndex *> : public GraphTraits<ValueInfo> {
   static NodeRef getEntryNode(ModuleSummaryIndex *I) {
-    std::unique_ptr<GlobalValueSummary> Root =
-        std::make_unique<FunctionSummary>(I->calculateCallGraphRoot());
-    GlobalValueSummaryInfo G(I->haveGVs());
-    G.addSummary(std::move(Root));
-    static auto P =
-        GlobalValueSummaryMapTy::value_type(GlobalValue::GUID(0), std::move(G));
-    return ValueInfo(I->haveGVs(), &P);
+    return I->getCallGraphRoot();
   }
 };
 } // end namespace llvm

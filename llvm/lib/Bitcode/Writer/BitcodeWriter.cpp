@@ -4567,9 +4567,10 @@ static void writeFunctionTypeMetadataRecords(BitstreamWriter &Stream,
 
   SmallVector<uint64_t, 64> Record;
 
-  if (FS->callTypeId() || !FS->indirectCallTypeIds().empty()) {
-    Record.push_back(FS->callTypeId());
-    llvm::append_range(Record, FS->indirectCallTypeIds());
+  if (const FunctionSummary::CallTypeIdInfo *Info = FS->getCallTypeIdInfo()) {
+    Record.push_back(Info->CallTypeId);
+    Record.push_back(Info->HasCallWithoutTypeId ? 1 : 0);
+    llvm::append_range(Record, Info->IndirectCallTypeIds);
     Stream.EmitRecord(bitc::FS_CALL_TYPE_IDS, Record);
   }
 
@@ -4856,99 +4857,56 @@ static void writeFunctionHeapProfileRecords(
   }
 }
 
-/// Build an AMDGPUFunctionSummary from the IR attributes on \p F.
-static AMDGPUFunctionSummary buildAMDGPUFunctionSummary(const Function &F) {
-  AMDGPUFunctionSummary AFS;
-  AFS.CC = F.getCallingConv();
+namespace {
+/// A summary that a summary block holds: its value ID, and in a combined
+/// index, the ID of its module.
+struct WrittenSummary {
+  const GlobalValueSummary *S;
+  unsigned ValueId;
+  std::optional<uint64_t> ModuleId;
+};
+} // end anonymous namespace
 
-  Attribute A = F.getFnAttribute("amdgpu-flat-work-group-size");
-  if (A.isStringAttribute()) {
-    auto [MinS, MaxS] = A.getValueAsString().split(',');
-    uint32_t Min, Max;
-    if (!MinS.trim().getAsInteger(0, Min) && !MaxS.trim().getAsInteger(0, Max))
-      AFS.FlatWorkGroupSize = std::make_pair(Min, Max);
-  }
+/// Writes a SUMMARY_EXTENSION_BLOCK for each summary extension in \p Index
+/// that has entries for \p Summaries, the summaries that the summary block
+/// holds. The entries are in the order of \p Summaries.
+static void writeSummaryExtensions(BitstreamWriter &Stream,
+                                   StringTableBuilder &StrtabBuilder,
+                                   const ModuleSummaryIndex &Index,
+                                   ArrayRef<WrittenSummary> Summaries) {
+  SmallVector<uint64_t, 64> Record;
+  for (const auto &[Key, Ext] : Index.extensions()) {
+    SmallVector<
+        std::pair<const WrittenSummary *, const SummaryExtension::Entry *>>
+        Entries;
+    for (const WrittenSummary &WS : Summaries)
+      if (const SummaryExtension::Entry *E = Ext.getEntry(WS.S))
+        Entries.emplace_back(&WS, E);
+    if (Entries.empty())
+      continue;
 
-  A = F.getFnAttribute("amdgpu-waves-per-eu");
-  if (A.isStringAttribute()) {
-    auto [MinS, MaxS] = A.getValueAsString().split(',');
-    uint32_t Min;
-    if (!MinS.trim().getAsInteger(0, Min)) {
-      AMDGPUFunctionSummary::WavesPerEUInfo WavesPerEU{Min, std::nullopt};
-      uint32_t Max;
-      if (MaxS.trim().empty() || !MaxS.trim().getAsInteger(0, Max)) {
-        if (!MaxS.trim().empty())
-          WavesPerEU.Max = Max;
-        AFS.WavesPerEU = WavesPerEU;
+    Stream.EnterSubblock(bitc::SUMMARY_EXTENSION_BLOCK_ID, 3);
+    StringRef Name = Ext.getName();
+    Record.assign({StrtabBuilder.add(Name), Name.size(), Ext.getVersion(),
+                   Ext.isRequired() ? 1u : 0u});
+    Stream.EmitRecord(bitc::SUMMARY_EXT_HEADER, Record);
+    for (const auto &[WS, E] : Entries) {
+      Record.clear();
+      Record.push_back(WS->ValueId);
+      if (WS->ModuleId)
+        Record.push_back(*WS->ModuleId);
+      Record.push_back(E->Ints.size());
+      llvm::append_range(Record, E->Ints);
+      for (const std::string &Str : E->Strings) {
+        Record.push_back(StrtabBuilder.add(Str));
+        Record.push_back(Str.size());
       }
+      Stream.EmitRecord(WS->ModuleId ? bitc::SUMMARY_EXT_COMBINED_ENTRY
+                                     : bitc::SUMMARY_EXT_ENTRY,
+                        Record);
     }
+    Stream.ExitBlock();
   }
-
-  A = F.getFnAttribute("amdgpu-max-num-workgroups");
-  if (A.isStringAttribute()) {
-    SmallVector<StringRef, 3> Parts;
-    A.getValueAsString().split(Parts, ',');
-    if (Parts.size() == 3) {
-      uint32_t X, Y, Z;
-      if (!Parts[0].trim().getAsInteger(0, X) &&
-          !Parts[1].trim().getAsInteger(0, Y) &&
-          !Parts[2].trim().getAsInteger(0, Z))
-        AFS.MaxNumWorkgroups = std::array<uint32_t, 3>{X, Y, Z};
-    }
-  }
-
-  return AFS;
-}
-
-/// Emit an FS_AMDGPU_ENTRY record for a pre-built summary.
-static void writeAMDGPUSummaryRecord(BitstreamWriter &Stream,
-                                     const AMDGPUFunctionSummary &AFS) {
-  uint64_t Flags = 0;
-  uint32_t FlatWGSizeMin = 0;
-  uint32_t FlatWGSizeMax = 0;
-  uint32_t WavesPerEUMin = 0;
-  uint32_t WavesPerEUMax = 0;
-  uint32_t MaxNumWGX = 0;
-  uint32_t MaxNumWGY = 0;
-  uint32_t MaxNumWGZ = 0;
-
-  if (AFS.FlatWorkGroupSize) {
-    Flags |= bitc::AFS_HAS_FLAT_WORK_GROUP_SIZE;
-    FlatWGSizeMin = AFS.FlatWorkGroupSize->first;
-    FlatWGSizeMax = AFS.FlatWorkGroupSize->second;
-  }
-  if (AFS.WavesPerEU) {
-    Flags |= bitc::AFS_HAS_WAVES_PER_EU;
-    WavesPerEUMin = AFS.WavesPerEU->Min;
-    if (AFS.WavesPerEU->Max) {
-      Flags |= bitc::AFS_HAS_WAVES_PER_EU_MAX;
-      WavesPerEUMax = *AFS.WavesPerEU->Max;
-    }
-  }
-  if (AFS.MaxNumWorkgroups) {
-    Flags |= bitc::AFS_HAS_MAX_NUM_WORKGROUPS;
-    MaxNumWGX = (*AFS.MaxNumWorkgroups)[0];
-    MaxNumWGY = (*AFS.MaxNumWorkgroups)[1];
-    MaxNumWGZ = (*AFS.MaxNumWorkgroups)[2];
-  }
-
-  SmallVector<uint64_t> NameVals = {AFS.CC,        Flags,         FlatWGSizeMin,
-                                    FlatWGSizeMax, WavesPerEUMin, WavesPerEUMax,
-                                    MaxNumWGX,     MaxNumWGY,     MaxNumWGZ};
-  Stream.EmitRecord(bitc::FS_AMDGPU_ENTRY, NameVals);
-}
-
-/// Emit an FS_AMDGPU_ENTRY record for \p F if it is a kernel or carries
-/// explicit occupancy attributes on an amdgcn target.
-static void writeAMDGPUSummaryRecord(BitstreamWriter &Stream,
-                                     const Function &F) {
-  bool IsKernel = F.getCallingConv() == CallingConv::AMDGPU_KERNEL;
-  bool HasAttrs = F.hasFnAttribute("amdgpu-flat-work-group-size") ||
-                  F.hasFnAttribute("amdgpu-waves-per-eu") ||
-                  F.hasFnAttribute("amdgpu-max-num-workgroups");
-  if (!IsKernel && !HasAttrs)
-    return;
-  writeAMDGPUSummaryRecord(Stream, buildAMDGPUFunctionSummary(F));
 }
 
 // Helper to emit a single function summary record.
@@ -4986,11 +4944,6 @@ void ModuleBitcodeWriterBase::writePerModuleFunctionSummaryRecord(
   // Emit the finished record.
   Stream.EmitRecord(bitc::FS_PERMODULE_PROFILE, NameVals, FSCallsProfileAbbrev);
   NameVals.clear();
-
-  // Emit optional AMDGPU per-function information immediately after the
-  // corresponding function summary.
-  if (M.getTargetTriple().isAMDGCN())
-    writeAMDGPUSummaryRecord(Stream, F);
 
   writeFunctionHeapProfileRecords(
       Stream, FS, CallsiteAbbrev, AllocAbbrev, ContextIdAbbvId,
@@ -5305,6 +5258,21 @@ void ModuleBitcodeWriterBase::writePerModuleGlobalValueSummary() {
     Stream.EmitRecord(bitc::FS_TYPE_ID_METADATA, NameVals,
                       TypeIdCompatibleVtableAbbrev);
     NameVals.clear();
+  }
+
+  // The entries of the summary extensions belong to the summaries of the
+  // values of the module.
+  if (!Index->extensions().empty()) {
+    SmallVector<WrittenSummary> Summaries;
+    for (const GlobalValue &GV : M.global_values()) {
+      if (!GV.hasName())
+        continue;
+      ValueInfo VI = Index->getValueInfo(GV.getGUIDOrFallback());
+      if (VI && !VI.getSummaryList().empty())
+        Summaries.push_back({VI.getSummaryList().front().get(),
+                             VE.getValueID(&GV), std::nullopt});
+    }
+    writeSummaryExtensions(Stream, StrtabBuilder, *Index, Summaries);
   }
 
   if (Index->getBlockCount())
@@ -5636,11 +5604,6 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
                       FSCallsProfileAbbrev);
     NameVals.clear();
 
-    // Emit optional AMDGPU per-function occupancy record if present.
-    if (auto It = Index.getAMDGPUSummaries().find(I.first);
-        It != Index.getAMDGPUSummaries().end())
-      writeAMDGPUSummaryRecord(Stream, It->second);
-
     writeFunctionHeapProfileRecords(
         Stream, FS, CallsiteAbbrev, AllocAbbrev, /*ContextIdAbbvId*/ 0,
         /*PerModule*/ false,
@@ -5728,6 +5691,23 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
       Stream.EmitRecord(bitc::FS_TYPE_ID, NameVals);
       NameVals.clear();
     }
+  }
+
+  // The index of a distributed backend gets only the entries of the summaries
+  // that it holds.
+  if (!Index.extensions().empty()) {
+    SmallVector<WrittenSummary> Summaries;
+    forEachSummary([&](GVInfo I, bool IsAliasee) {
+      // The summary of an aliasee is written only if it is visited by itself.
+      // The summaries of all regular LTO modules have the module path "", so
+      // the value and the module do not identify one of them.
+      if (IsAliasee || I.second->modulePath().empty())
+        return;
+      assert(ModuleIdMap.count(I.second->modulePath()));
+      Summaries.push_back({I.second, *getValueId(I.first),
+                           ModuleIdMap[I.second->modulePath()]});
+    });
+    writeSummaryExtensions(Stream, StrtabBuilder, Index, Summaries);
   }
 
   if (Index.getBlockCount())

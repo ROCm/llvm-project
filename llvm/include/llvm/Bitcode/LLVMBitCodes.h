@@ -63,6 +63,9 @@ enum BlockIDs {
   SYMTAB_BLOCK_ID,
 
   SYNC_SCOPE_NAMES_BLOCK_ID,
+
+  // A summary extension. A sub-block of a summary block.
+  SUMMARY_EXTENSION_BLOCK_ID,
 };
 
 /// Identification block contains a string that describes the producer details,
@@ -348,24 +351,32 @@ enum GlobalValueSummarySymtabCodes {
   //  nummib x alloc type,
   //  numver x version]
   FS_COMBINED_ALLOC_INFO_NO_CONTEXT = 33,
-  // Optional AMDGPU per-function data, emitted after the corresponding
-  // function summary record.
-  // [calling_conv, flags, flat_wg_min, flat_wg_max, waves_min, waves_max,
-  //  max_wg_x, max_wg_y, max_wg_z]
-  FS_AMDGPU_ENTRY = 34,
+  // 34 is reserved: an older version of this compiler wrote AMDGPU data with
+  // it. The data is now in a summary extension.
   // Call type identifiers of a function, emitted before the corresponding
-  // function summary record: the identifier of the function (0 if none), then
-  // the distinct identifiers of its indirect calls.
-  // [call_type_id, n x indirect_call_type_id]
+  // function summary record: the identifier of the function (0 if none), the
+  // flags (bit 0: the function has a call without a call type ID, for example
+  // to inline assembly), then the distinct identifiers of its indirect calls.
+  // [call_type_id, flags, n x indirect_call_type_id]
   FS_CALL_TYPE_IDS = 35,
 };
 
-/// Flags for the FS_AMDGPU_ENTRY record.
-enum AMDGPUFunctionSummaryFlags {
-  AFS_HAS_FLAT_WORK_GROUP_SIZE = 1 << 0,
-  AFS_HAS_WAVES_PER_EU = 1 << 1,
-  AFS_HAS_WAVES_PER_EU_MAX = 1 << 2,
-  AFS_HAS_MAX_NUM_WORKGROUPS = 1 << 3,
+/// The records of a SUMMARY_EXTENSION_BLOCK, which holds the data of one
+/// summary extension. The strings are in the string table.
+enum SummaryExtensionCodes {
+  // HEADER: [strtab_offset, strtab_size, version, flags]
+  //   The name of the extension, and the version of its format. Flag bit 0 is
+  //   set if the extension is required.
+  SUMMARY_EXT_HEADER = 1,
+  // ENTRY: [valueid, n, n x int, m x (strtab_offset, strtab_size)]
+  //   In a per-module summary: the integers and the strings of the summary of
+  //   the value.
+  SUMMARY_EXT_ENTRY = 2,
+  // COMBINED_ENTRY: [valueid, modid, n, n x int,
+  //                  m x (strtab_offset, strtab_size)]
+  //   In a combined index: the integers and the strings of the summary of the
+  //   value in the module.
+  SUMMARY_EXT_COMBINED_ENTRY = 3,
 };
 
 enum MetadataCodes {

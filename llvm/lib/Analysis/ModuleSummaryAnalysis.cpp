@@ -302,6 +302,15 @@ static bool mustBeUnreachableFunction(const Function &F) {
   return isa<UnreachableInst>(F.getEntryBlock().getTerminator());
 }
 
+/// Returns true if \p Callee, a constant that is not a function, stands for a
+/// function: an ifunc or an alias of one, or a dso_local_equivalent or no_cfi
+/// value.
+static bool isFunctionConstant(const Value *Callee) {
+  if (const auto *GA = dyn_cast<GlobalAlias>(Callee))
+    Callee = GA->getAliaseeObject();
+  return isa_and_nonnull<GlobalIFunc, DSOLocalEquivalent, NoCFIValue>(Callee);
+}
+
 static void computeFunctionSummary(
     const AnalysisOptions &Opts, ModuleSummaryIndex &Index, const Module &M,
     const Function &F, BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI,
@@ -355,6 +364,7 @@ static void computeFunctionSummary(
   bool HasInlineAsmMaybeReferencingInternal = false;
   bool HasIndirBranchToBlockAddress = false;
   bool HasUnknownCall = false;
+  bool HasCallWithoutTypeId = false;
   bool MayThrow = false;
   for (const BasicBlock &BB : F) {
     // We don't allow inlining of function with indirect branch to blockaddress.
@@ -476,15 +486,22 @@ static void computeFunctionSummary(
         if (auto *GI = dyn_cast_if_present<GlobalIFunc>(CalledValue))
           if (GI->hasLocalLinkage())
             HasLocalIFuncCallOrRef = true;
-        // Skip inline assembly calls.
-        if (CI && CI->isInlineAsm())
+        // Skip inline assembly calls, which have no call type ID.
+        if (CB->isInlineAsm()) {
+          HasCallWithoutTypeId = true;
           continue;
+        }
+        // A call through a pointer can reach the functions with its call type
+        // ID. A call to another constant, for example an absolute address,
+        // runs code that the summaries do not know.
+        if (isa<Constant>(CalledValue) && !isFunctionConstant(CalledValue))
+          HasCallWithoutTypeId = true;
+        else
+          IndirectCallTypeIds.insert(
+              GetCallTypeId(CB->getFunctionType(), CB->getCallingConv()));
         // Skip direct calls.
         if (!CalledValue || isa<Constant>(CalledValue))
           continue;
-
-        IndirectCallTypeIds.insert(
-            GetCallTypeId(CB->getFunctionType(), CB->getCallingConv()));
 
         // Check if the instruction has a callees metadata. If so, add callees
         // to CallGraphEdges to reflect the references from the metadata, and
@@ -752,10 +769,15 @@ static void computeFunctionSummary(
     CallTypeIds.CallTypeId =
         GetCallTypeId(F.getFunctionType(), F.getCallingConv());
   CallTypeIds.IndirectCallTypeIds = IndirectCallTypeIds.takeVector();
+  CallTypeIds.HasCallWithoutTypeId = HasCallWithoutTypeId;
   FuncSummary->setCallTypeIds(std::move(CallTypeIds));
   if (NonRenamableLocal)
     CantBePromoted.insert(F.getGUID());
+  const FunctionSummary &Summary = *FuncSummary;
   Index.addGlobalValueSummary(F, std::move(FuncSummary));
+  // The target can store data about F for its passes at the thin link.
+  if (TTI)
+    TTI->addSummaryExtensionEntries(F, Summary, Index);
 }
 
 /// Find function pointers referenced within the given vtable initializer
@@ -1306,7 +1328,7 @@ bool llvm::mayHaveMemprofSummary(const CallBase *CB) {
              .enable_memprof_indirect_call_support)
       return false;
     // Skip inline assembly calls.
-    if (CI && CI->isInlineAsm())
+    if (CB->isInlineAsm())
       return false;
     // Skip direct calls via Constant.
     if (!CalledValue || isa<Constant>(CalledValue))

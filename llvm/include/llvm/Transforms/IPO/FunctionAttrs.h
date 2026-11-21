@@ -19,6 +19,7 @@
 #include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/Analysis/LazyCallGraph.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/IR/SummaryPassManager.h"
 #include "llvm/Support/Compiler.h"
 
 namespace llvm {
@@ -38,6 +39,14 @@ LLVM_ABI bool thinLTOPropagateFunctionAttrs(
     ModuleSummaryIndex &Index,
     function_ref<bool(GlobalValue::GUID, const GlobalValueSummary *)>
         isPrevailing);
+
+/// Propagates the function flags norecurse and nounwind over the summary call
+/// graph at the ThinLTO thin link. The backends apply them to the functions.
+struct ThinLinkFunctionAttrsPass
+    : RequiredPassInfoMixin<ThinLinkFunctionAttrsPass> {
+  LLVM_ABI PreservedAnalyses run(ModuleSummaryIndex &Index,
+                                 SummaryAnalysisManager &AM);
+};
 
 /// Computes function attributes in post-order over the call graph.
 ///

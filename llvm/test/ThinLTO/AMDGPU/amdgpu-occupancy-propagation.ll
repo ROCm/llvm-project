@@ -8,7 +8,7 @@
 ; RUN: llvm-lto2 run %t1.bc %t2.bc -o %t.o \
 ; RUN:   -r %t1.bc,kernel,px \
 ; RUN:   -r %t1.bc,device_func,l \
-; RUN:   -r %t2.bc,device_func,px \
+; RUN:   -r %t2.bc,device_func,p \
 ; RUN:   -save-temps
 ; RUN: llvm-dis %t.o.2.5.precodegen.bc -o - | FileCheck %s
 

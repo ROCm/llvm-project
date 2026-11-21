@@ -834,6 +834,37 @@ LOOP_PASS_WITH_PARAMS(
     parseLoopUnswitchOptions, "nontrivial;no-nontrivial;trivial;no-trivial")
 #undef LOOP_PASS_WITH_PARAMS
 
+#ifndef SUMMARY_ANALYSIS
+#define SUMMARY_ANALYSIS(NAME, CREATE_PASS)
+#endif
+SUMMARY_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
+SUMMARY_ANALYSIS("summary-address-taken", SummaryAddressTakenAnalysis())
+SUMMARY_ANALYSIS("summary-callgraph", SummaryCallGraphAnalysis())
+#undef SUMMARY_ANALYSIS
+
+#ifndef SUMMARY_PASS
+#define SUMMARY_PASS(NAME, CREATE_PASS)
+#endif
+SUMMARY_PASS("thinlink-function-attrs", ThinLinkFunctionAttrsPass())
+SUMMARY_PASS("thinlink-param-access",
+             ThinLinkParamAccessPass(&Context.getLibraryOptions()))
+#undef SUMMARY_PASS
+
+#ifndef SUMMARY_PASS_WITH_PARAMS
+#define SUMMARY_PASS_WITH_PARAMS(NAME, CLASS, CREATE_PASS, PARSER, PARAMS)
+#endif
+SUMMARY_PASS_WITH_PARAMS(
+    "print<summary-callgraph>", "SummaryCallGraphPrinterPass",
+    [](bool IncludeIndirectCalls) {
+      return SummaryCallGraphPrinterPass(errs(), IncludeIndirectCalls);
+    },
+    [](StringRef Params) {
+      return PassBuilder::parseSinglePassOption(Params, "indirect-calls",
+                                                "SummaryCallGraphPrinterPass");
+    },
+    "indirect-calls")
+#undef SUMMARY_PASS_WITH_PARAMS
+
 #ifdef MODULE_CALLBACK
 MODULE_CALLBACK("pipeline-start-callbacks", invokePipelineStartEPCallbacks)
 #endif

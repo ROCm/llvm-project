@@ -38,6 +38,7 @@
 #include "AMDGPUSplitModule.h"
 #include "AMDGPUTargetObjectFile.h"
 #include "AMDGPUTargetTransformInfo.h"
+#include "AMDGPUThinLinkPasses.h"
 #include "AMDGPUUnifyDivergentExitNodes.h"
 #include "AMDGPUWaitSGPRHazards.h"
 #include "GCNDPPCombine.h"
@@ -474,6 +475,10 @@ static bool useNoopPostScheduler(const AMDGPUOptions &CLOpts,
 }
 
 extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
+  // Let the ThinLTO thin link run the AMDGPU summary passes.
+  TargetRegistry::RegisterThinLinkPassBuilderCallback(
+      getTheGCNTarget(), registerAMDGPUThinLinkPasses);
+
   // Register the target
   RegisterTargetMachine<R600TargetMachine> X(getTheR600Target());
   RegisterTargetMachine<GCNTargetMachine> Y(getTheGCNTarget());

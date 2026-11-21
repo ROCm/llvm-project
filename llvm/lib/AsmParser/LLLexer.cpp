@@ -809,6 +809,14 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(catch);
   KEYWORD(filter);
 
+  // Summary extension keywords.
+  KEYWORD(extension);
+  KEYWORD(version);
+  KEYWORD(required);
+  KEYWORD(entries);
+  KEYWORD(ints);
+  KEYWORD(strings);
+
   // Summary index keywords.
   KEYWORD(path);
   KEYWORD(hash);
@@ -866,6 +874,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(typeCheckedLoadConstVCalls);
   KEYWORD(callTypeId);
   KEYWORD(indirectCallTypeIds);
+  KEYWORD(hasCallWithoutTypeId);
   KEYWORD(vFuncId);
   KEYWORD(offset);
   KEYWORD(args);

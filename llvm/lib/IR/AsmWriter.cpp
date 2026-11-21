@@ -3467,6 +3467,52 @@ void AssemblyWriter::printModuleSummaryIndex() {
     Out << ") ; guid = " << GUID << "\n";
   }
 
+  // Print the summary extensions. The entries are in the order of the
+  // summaries.
+  for (const auto &[Key, Ext] : TheIndex->extensions()) {
+    Out << "^" << NumSlots++ << " = extension: (name: \"";
+    printEscapedString(Ext.getName(), Out);
+    Out << "\", version: " << Ext.getVersion()
+        << ", required: " << (Ext.isRequired() ? 1 : 0);
+    ListSeparator EntrySep;
+    bool HasEntries = false;
+    for (const auto &GlobalList : SortedGVS) {
+      for (const auto &Summary : GlobalList.second.getSummaryList()) {
+        const SummaryExtension::Entry *E = Ext.getEntry(Summary.get());
+        if (!E)
+          continue;
+        if (!HasEntries) {
+          Out << ", entries: (";
+          HasEntries = true;
+        }
+        Out << EntrySep << "(gv: ^" << Machine.getGUIDSlot(GlobalList.first)
+            << ", module: ^"
+            << Machine.getModulePathSlot(Summary->modulePath());
+        if (!E->Ints.empty()) {
+          Out << ", ints: (";
+          ListSeparator IntSep;
+          for (uint64_t Int : E->Ints)
+            Out << IntSep << Int;
+          Out << ")";
+        }
+        if (!E->Strings.empty()) {
+          Out << ", strings: (";
+          ListSeparator StrSep;
+          for (const std::string &Str : E->Strings) {
+            Out << StrSep << "\"";
+            printEscapedString(Str, Out);
+            Out << "\"";
+          }
+          Out << ")";
+        }
+        Out << ")";
+      }
+    }
+    if (HasEntries)
+      Out << ")";
+    Out << ")\n";
+  }
+
   // Print the CFI function entries (the names of the functions with jump
   // table entries, with the GUIDs that ThinLTO uses for them).
   auto PrintCfiFunctions = [&](const CfiFunctionIndex &CfiIndex,
@@ -3766,15 +3812,18 @@ void AssemblyWriter::printFunctionSummary(const FunctionSummary *FS) {
   if (const auto *TIdInfo = FS->getTypeIdInfo())
     printTypeIdInfo(*TIdInfo);
 
-  if (FS->callTypeId())
-    Out << ", callTypeId: " << FS->callTypeId();
-
-  if (!FS->indirectCallTypeIds().empty()) {
-    Out << ", indirectCallTypeIds: (";
-    ListSeparator LS;
-    for (GlobalValue::GUID Id : FS->indirectCallTypeIds())
-      Out << LS << Id;
-    Out << ")";
+  // A summary without call type IDs has no callTypeId field.
+  if (const FunctionSummary::CallTypeIdInfo *Info = FS->getCallTypeIdInfo()) {
+    Out << ", callTypeId: " << Info->CallTypeId;
+    if (!Info->IndirectCallTypeIds.empty()) {
+      Out << ", indirectCallTypeIds: (";
+      ListSeparator LS;
+      for (GlobalValue::GUID Id : Info->IndirectCallTypeIds)
+        Out << LS << Id;
+      Out << ")";
+    }
+    if (Info->HasCallWithoutTypeId)
+      Out << ", hasCallWithoutTypeId: 1";
   }
 
   // The AllocationType identifiers capture the profiled context behavior

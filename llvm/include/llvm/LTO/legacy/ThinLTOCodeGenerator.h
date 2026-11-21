@@ -57,6 +57,10 @@ struct ThinLTOCodeGeneratorImpl::TargetMachineBuilder {
 /// compilation: the model is that the client adds modules to the generator and
 /// ask to perform the ThinLTO optimizations / codegen, and finally destroys the
 /// codegenerator.
+/// Unlike lto::LTO, it does not run the pipeline of summary passes at the thin
+/// link (see SummaryPassManager), so targets add no passes there, and it
+/// applies no summary extension. It reports an error for a summary index that
+/// needs one (see SummaryExtension::isRequired()).
 class ThinLTOCodeGenerator {
 public:
   /// The target machines and the LLVMContexts that run() creates read
