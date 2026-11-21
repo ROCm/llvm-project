@@ -11,15 +11,14 @@
 CONSTATTR half
 MATH_PRIVATE(tanpired)(half x, short i)
 {
-    half s = x * x;
+    // Evaluate in float so that only the final conversion rounds to half
+    float fx = (float)x;
+    float s = fx * fx;
+    float t = BUILTIN_FMA_F32(s, BUILTIN_FMA_F32(s, 0x1.769084p+12f, 0x1.768acep+8f), 0x1.59481p+7f);
+    t = fx * BUILTIN_FMA_F32(s, BUILTIN_FMA_F32(s, BUILTIN_FMA_F32(s, t, 0x1.4540a6p+5f), 0x1.4ac24p+3f), 0x1.921fbp+1f);
 
-    half t = PE2(s, 0x1.3d8p+8h, 0x1.fe4p+4h, 0x1.508p+3h);
+    float tr = -BUILTIN_AMDGPU_RCP_F32(t);
 
-    t = x * s * t;
-    t = MATH_MAD(x, 0x1.92p+1h, t);
-
-    half tr = -MATH_RCP(t);
-
-    return i ? tr : t;
+    return (half)(i ? tr : t);
 }
 

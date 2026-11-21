@@ -70,10 +70,14 @@ MATH_MANGLE(j1)(double x)
             }
         }
 
-        ax = ax - ch - cl;
+        double th = ax - ch;
+        ax = th - cl;
+        double tl = (th - ax) - cl;
 
-        ret = PE14(ax, p[14], p[13], p[12], p[11], p[10], p[9], p[8], p[7], p[6], p[5], p[4], p[3], p[2], p[1],
-                    p[0]);
+        double s = PE12(ax, p[14], p[13], p[12], p[11], p[10], p[9], p[8], p[7], p[6], p[5], p[4], p[3], p[2]);
+        double rh = MATH_MAD(ax, s, p[1]);
+        double rl = MATH_MAD(ax, s, p[1] - rh);
+        ret = MATH_MAD(ax, rh, MATH_MAD(ax, rl, MATH_MAD(tl, p[1], p[0])));
     } else {
         double r = MATH_RCP(ax);
         double r2 = r*r;

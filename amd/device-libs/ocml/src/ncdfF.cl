@@ -7,7 +7,13 @@
 
 #include "mathF.h"
 
+#define FLOAT_SPECIALIZATION
+#include "ep.h"
+
 #if !defined EXTRA_ACCURACY
+CONSTATTR extern float2 MATH_PRIVATE(erfcxep)(float);
+extern CONSTATTR float MATH_PRIVATE(expep)(float2);
+
 CONSTATTR float
 MATH_MANGLE(ncdf)(float x)
 {
@@ -19,10 +25,17 @@ MATH_MANGLE(ncdf)(float x)
     float tlo = BUILTIN_FMA_F32(clo, x, BUILTIN_FMA_F32(chi, x, -thi));
     float yhi = thi + tlo;
     float ylo = tlo - (yhi - thi);
-    float r = MATH_MANGLE(erfc)(yhi);
-    float dr = -2.0f * yhi * r;
-    dr = x >= -1.0f ? 0.0f : dr;
-    r = BUILTIN_FMA_F32(ylo, dr, r);
+    // erfc(y) = exp(-y^2) erfcx(|y|) with ylo folded into y^2, and into
+    // erfcx through erfcx'(a) = 2a erfcx(a) - 2/sqrt(pi) (for yhi > 0, where it matters)
+    float sh = -yhi * yhi;
+    float sl = BUILTIN_FMA_F32(-2.0f * yhi, ylo, BUILTIN_FMA_F32(-yhi, yhi, -sh));
+    // The low part of erfcx goes into the exp argument as a relative
+    // correction, so no low-order product can be flushed under DAZ
+    float ay = BUILTIN_ABS_F32(yhi);
+    float2 q = MATH_PRIVATE(erfcxep)(ay);
+    float ql = BUILTIN_FMA_F32(ylo, BUILTIN_FMA_F32(2.0f * ay, q.hi, -0x1.20dd76p+0f), q.lo);
+    float r = MATH_PRIVATE(expep)(con(sh, BUILTIN_FMA_F32(ql, MATH_FAST_RCP(q.hi), sl))) * q.hi;
+    r = yhi < 0.0f ? 2.0f - r : r;
     return 0.5f * r;
 }
 

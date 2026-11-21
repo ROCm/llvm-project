@@ -7,37 +7,70 @@
 
 #include "mathF.h"
 
+#if defined EXTRA_ACCURACY
+extern CONSTATTR float2 MATH_PRIVATE(epln)(float);
+#endif
+
 CONSTATTR float
 MATH_MANGLE(erfinv)(float x)
 {
     float ax = BUILTIN_ABS_F32(x);
-    float p;
+    float t, q, c0h, c0l;
+#if defined EXTRA_ACCURACY
+    float tl = 0.0f;
+#endif
 
     if (ax < 0.375f) {
-        float t = ax*ax;
-        p = PE6(t, 0x1.48b6cap-3f, -0x1.a2930ap-6f, 0x1.65b0b4p-4f, 0x1.5581aep-4f, 0x1.05aa56p-3f,
-                  0x1.db2748p-3f, 0x1.c5bf8ap-1f);
+        t = ax*ax;
+        q = PE4(t, 0x1.32a0eep-4f, 0x1.f3bb74p-5f, 0x1.63bf6ep-4f, 0x1.0536dap-3f, 0x1.db2a0cp-3f);
+        c0h = 0x1.c5bf8ap-1f;
+        c0l = -0x1.cf1306p-26f;
     } else {
-        float w;
-        if (HAVE_FAST_FMA32()) {
-            w = BUILTIN_FMA_F32(-ax, ax, 1.0f);
-        } else {
-            w = (1.0f - ax) * (1.0f + ax);
-        }
-        w = -MATH_MANGLE(log)(w);
+#if defined EXTRA_ACCURACY
+        // w + wl = -log(1 - ax^2) with 1 - ax^2 = uh + ul exact
+        float xx = ax * ax;
+        float uh = 1.0f - xx;
+        float ul = ((1.0f - uh) - xx) - BUILTIN_FMA_F32(ax, ax, -xx);
+        float2 lu = MATH_PRIVATE(epln)(uh);
+        float wl = -BUILTIN_FMA_F32(ul, BUILTIN_AMDGPU_RCP_F32(uh), lu.lo);
+        float w = wl - lu.hi;
+        wl = wl - (w + lu.hi);
+#else
+        float w = -MATH_MANGLE(log)(BUILTIN_FMA_F32(-ax, ax, 1.0f));
+#endif
 
         if (w < 5.0f) {
-            w = w - 2.5f;
-            p = PE8(w, 0x1.e2cb10p-26f, 0x1.70966cp-22f, -0x1.d8e6aep-19f, -0x1.26b582p-18f, 0x1.ca65b6p-13f,
-                      -0x1.48a810p-10f, -0x1.11c9dep-8f, 0x1.f91ec6p-3f, 0x1.805c5ep+0f);
+            t = w - 2.5f;
+#if defined EXTRA_ACCURACY
+            float tb = t - w;
+            tl = ((w - (t - tb)) + (-2.5f - tb)) + wl;
+#endif
+            q = PE8(t, -0x1.282984p-27f, 0x1.8a4eaep-26f, 0x1.f272ecp-22f, -0x1.d060c8p-19f, -0x1.4c986cp-18f,
+                       0x1.c9e226p-13f, -0x1.4866cp-10f, -0x1.11c4c8p-8f, 0x1.f91e8cp-3f);
+            c0h = 0x1.805c5ep+0f;
+            c0l = -0x1.aad56cp-25f;
         } else {
-            w = MATH_SQRT(w) - 3.0f;
-            p = PE8(w, -0x1.a3e136p-13f, 0x1.a76ad6p-14f, 0x1.61b8e4p-10f, -0x1.e17bcep-9f, 0x1.7824f6p-8f,
-                      -0x1.f38baep-8f, 0x1.354afcp-7f, 0x1.006db6p+0f, 0x1.6a9efcp+1f);
+#if defined EXTRA_ACCURACY
+            float s = MATH_SQRT(w);
+            t = (s - 3.0f) + (BUILTIN_FMA_F32(-s, s, w) + wl) * (0.5f * BUILTIN_AMDGPU_RSQRT_F32(w));
+#else
+            t = MATH_SQRT(w) - 3.0f;
+#endif
+            q = PE9(t, -0x1.bc1a2p-16f, 0x1.4d2574p-13f, -0x1.2894bap-12f, -0x1.ee74fep-14f, 0x1.839682p-10f,
+                       -0x1.d3a7eep-9f, 0x1.74b06cp-8f, -0x1.f4de9cp-8f, 0x1.3581aap-7f, 0x1.006dcap+0f);
+            c0h = 0x1.6a9efcp+1f;
+            c0l = -0x1.158234p-26f;
         }
     }
 
-    float ret = p*ax;
+    // ph + pl = c0 + t*q, then (ph + pl)*ax with one rounding
+    float ph = BUILTIN_FMA_F32(t, q, c0h);
+#if defined EXTRA_ACCURACY
+    float pl = BUILTIN_FMA_F32(tl, q, BUILTIN_FMA_F32(t, q, c0h - ph) + c0l);
+#else
+    float pl = BUILTIN_FMA_F32(t, q, c0h - ph) + c0l;
+#endif
+    float ret = BUILTIN_FMA_F32(ph, ax, pl * ax);
 
     if (!FINITE_ONLY_OPT()) {
         ret = ax > 1.0f ? QNAN_F32 : ret;

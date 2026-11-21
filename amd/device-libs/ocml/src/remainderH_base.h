@@ -22,8 +22,10 @@ CONSTATTR half
 MATH_MANGLE(remainder)(half x, half y)
 #endif
 {
-    // How many bits of the quotient per iteration
-    const int bits = 11;
+    // How many bits of the quotient per iteration.  With fma q*ay need not
+    // be exact, and 20 bits covers the half exponent range (ex - ey <= 39)
+    // in at most one iteration plus the final one.
+    const int bits = 20;
     float ax = (float)BUILTIN_ABS_F16(x);
     float ay = (float)BUILTIN_ABS_F16(y);
 
@@ -53,7 +55,7 @@ MATH_MANGLE(remainder)(half x, half y)
 
         while (nb > bits) {
             float q = BUILTIN_RINT_F32(ax * ayinv);
-            ax = BUILTIN_MAD_F32(-q, ay, ax);
+            ax = BUILTIN_FMA_F32(-q, ay, ax);
             int clt = ax < 0.0f;
             float axp = ax + ay;
             ax = clt ? axp : ax;
@@ -71,7 +73,7 @@ MATH_MANGLE(remainder)(half x, half y)
         // Final iteration
         {
             float q = BUILTIN_RINT_F32(ax * ayinv);
-            ax = BUILTIN_MAD_F32(-q, ay, ax);
+            ax = BUILTIN_FMA_F32(-q, ay, ax);
             int clt = ax < 0.0f;
             float axp = ax + ay;
             ax = clt ? axp : ax;

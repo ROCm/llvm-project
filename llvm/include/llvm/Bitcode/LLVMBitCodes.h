@@ -348,6 +348,24 @@ enum GlobalValueSummarySymtabCodes {
   //  nummib x alloc type,
   //  numver x version]
   FS_COMBINED_ALLOC_INFO_NO_CONTEXT = 33,
+  // Optional AMDGPU per-function data, emitted after the corresponding
+  // function summary record.
+  // [calling_conv, flags, flat_wg_min, flat_wg_max, waves_min, waves_max,
+  //  max_wg_x, max_wg_y, max_wg_z]
+  FS_AMDGPU_ENTRY = 34,
+  // Call type identifiers of a function, emitted before the corresponding
+  // function summary record: the identifier of the function (0 if none), then
+  // the distinct identifiers of its indirect calls.
+  // [call_type_id, n x indirect_call_type_id]
+  FS_CALL_TYPE_IDS = 35,
+};
+
+/// Flags for the FS_AMDGPU_ENTRY record.
+enum AMDGPUFunctionSummaryFlags {
+  AFS_HAS_FLAT_WORK_GROUP_SIZE = 1 << 0,
+  AFS_HAS_WAVES_PER_EU = 1 << 1,
+  AFS_HAS_WAVES_PER_EU_MAX = 1 << 2,
+  AFS_HAS_MAX_NUM_WORKGROUPS = 1 << 3,
 };
 
 enum MetadataCodes {

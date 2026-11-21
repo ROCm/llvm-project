@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef OFFLOAD_PLUGINS_NEXTGEN_COMMON_DEVICEOPTIONS_H
-#define OFFLOAD_PLUGINS_NEXTGEN_COMMON_DEVICEOPTIONS_H
+#ifndef OFFLOAD_PLUGIN_COMMON_DEVICEOPTIONS_H
+#define OFFLOAD_PLUGIN_COMMON_DEVICEOPTIONS_H
 
 #include "Shared/EnvironmentVar.h"
 
@@ -41,4 +41,4 @@ template <typename T> struct DeviceOptionTy {
 
 } // namespace llvm::offload::plugin
 
-#endif // OFFLOAD_PLUGINS_NEXTGEN_COMMON_DEVICEOPTIONS_H
+#endif // OFFLOAD_PLUGIN_COMMON_DEVICEOPTIONS_H
