@@ -90,14 +90,22 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Store LLVM, HIPIFY and SPIRV PR URLs into file
+        env:
+          LLVM_PR_URL: ${{ github.event.inputs.LLVM_PR_URL }}
+          LLVM_ROCm_PR_URL: ${{ github.event.inputs.LLVM_ROCm_PR_URL }}
+          SPIRV_PR_URL: ${{ github.event.inputs.SPIRV_PR_URL }}
+          HIPIFY_PR_URL: ${{ github.event.inputs.HIPIFY_PR_URL }}
+          LLVM_ASSERTIONS_MODE: ${{ github.event.inputs.enable_llvm_assertions }}
+        # The consumers `source` this file, so write each value with %q to keep
+        # it a single shell word.
         run: |
-          cat > ${{ github.run_id }}_PR_params.env <<'EOF'
-          LLVM_PR_URL=${{ github.event.inputs.LLVM_PR_URL }}
-          LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
-          SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
-          HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
-          LLVM_ASSERTIONS_MODE=${{ github.event.inputs.enable_llvm_assertions }}
-          EOF
+          {
+            printf 'LLVM_PR_URL=%q\n' "${LLVM_PR_URL}"
+            printf 'LLVM_ROCm_PR_URL=%q\n' "${LLVM_ROCm_PR_URL}"
+            printf 'SPIRV_PR_URL=%q\n' "${SPIRV_PR_URL}"
+            printf 'HIPIFY_PR_URL=%q\n' "${HIPIFY_PR_URL}"
+            printf 'LLVM_ASSERTIONS_MODE=%q\n' "${LLVM_ASSERTIONS_MODE}"
+          } > ${{ github.run_id }}_PR_params.env
 
       - name: Upload stored file of PR URls
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -68,6 +68,9 @@ jobs:
       ARTIFACTS_DIR: output/artifacts
       PACKAGE_DIST_DIR: output/packages
       RELEASE_TYPE: ${{ inputs.release_type }}
+      # Inputs are env vars so ${{ }} is not expanded into run scripts.
+      ROCM_VERSION: ${{ inputs.rocm_version }}
+      NATIVE_PACKAGE_TYPE: ${{ inputs.native_package_type }}
     steps:
       - name: Checking out repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -114,9 +117,9 @@ jobs:
           # KPACK_SPLIT_ARTIFACTS is auto-detected from therock_manifest.json.
           python ./build_tools/packaging/linux/build_package.py \
             --dest-dir "${{ env.PACKAGE_DIST_DIR }}" \
-            --rocm-version "${{ inputs.rocm_version }}" \
+            --rocm-version "${ROCM_VERSION}" \
             --artifacts-dir "${{ env.ARTIFACTS_DIR }}" \
-            --pkg-type "${{ inputs.native_package_type }}" \
+            --pkg-type "${NATIVE_PACKAGE_TYPE}" \
             --version-suffix "${{ env.ARTIFACT_RUN_ID }}"
 
       - name: Simulated install Test
@@ -125,7 +128,7 @@ jobs:
           python ./build_tools/packaging/linux/native_linux_package_install_test.py \
             --test-type simulate \
             --packages-dir "${{ env.PACKAGE_DIST_DIR }}" \
-            --pkg-type ${{ inputs.native_package_type }}
+            --pkg-type "${NATIVE_PACKAGE_TYPE}"
 
       - name: Configure AWS credentials for artifact uploads
         if: ${{ github.repository == 'ROCm/TheRock' }}
@@ -137,6 +140,6 @@ jobs:
         id: upload-packages
         run: |
           python ./build_tools/packaging/linux/upload_package_repo.py \
-            --pkg-type "${{ inputs.native_package_type }}" \
+            --pkg-type "${NATIVE_PACKAGE_TYPE}" \
             --run-id "${{ env.ARTIFACT_RUN_ID }}" \
             --package-dir "${{ env.PACKAGE_DIST_DIR }}"
