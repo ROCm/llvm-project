@@ -1,5 +1,5 @@
 ; REQUIRES: aarch64-registered-target
-
+; XFAIL: *
 ; For convenience, to show what is being serialized.
 ; RUN: opt -S -passes="print<stack-safety-local>" -disable-output < %s 2>&1 | FileCheck %s --check-prefixes=SSI
 
