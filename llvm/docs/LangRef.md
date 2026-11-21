@@ -1320,11 +1320,17 @@ that affect how values are passed to/from functions, like `zeroext`,
 additional optimization guarantees, like `noalias`, `nonnull` and
 `dereferenceable`.
 
-ABI attributes must be specified *both* at the function declaration/definition
-and call-site, otherwise the behavior may be undefined. ABI attributes cannot
-be safely dropped. Optimization attributes do not have to match between
-call-site and function: The intersection of their implied semantics applies.
-Optimization attributes can also be freely dropped.
+Optimization attributes do not have to match between call-site and function:
+The intersection of their implied semantics applies. Optimization attributes
+can also be freely dropped.
+
+ABI attributes should match between the function declaration/definition and the
+call-site, and generally cannot be safely dropped. Similar to a mismatch
+in function types, a mismatch in ABI attributes between caller and callee will
+often result in undefined behavior, but can be well-defined if the effective
+ABI after lowering is compatible. As this depends on target-specific lowering
+details that may change, the use of matching function types and ABI attributes
+is recommended.
 
 If an integer argument to a function is not marked signext/zeroext/noext, the
 kind of extension used is target-specific. Some targets depend for
@@ -1333,15 +1339,18 @@ correctness on the kind of extension to be explicitly specified.
 Currently, only the following parameter attributes are defined:
 
 `zeroext`
-:   This indicates to the code generator that the parameter or return
-    value should be zero-extended to the extent required by the target's
-    ABI by the caller (for a parameter) or the callee (for a return value).
+:   On a call-site argument or function return value, this indicates to the
+    code generator that the value should be zero-extended to the extent
+    required by the target's ABI. On a function argument or call-site return
+    value it indicates that the value is assumed to be zero-extended to that
+    extent, otherwise the behavior is undefined.
 
 `signext`
-:   This indicates to the code generator that the parameter or return
-    value should be sign-extended to the extent required by the target's
-    ABI (which is usually 32-bits) by the caller (for a parameter) or
-    the callee (for a return value).
+:   On a call-site argument or function return value, this indicates to the
+    code generator that the value should be sign-extended to the extent
+    required by the target's ABI. On a function argument or call-site return
+    value it indicates that the value is assumed to be sign-extended to that
+    extent, otherwise the behavior is undefined.
 
 `noext`
 :   This indicates to the code generator that the parameter or return
@@ -8287,6 +8296,24 @@ node has a single operand containing the name string:
 !1 = !{!"llvm.loop.vectorize.disable"}
 ```
 
+When `llvm.loop.vectorize.enable` is present, the Loop Vectorizer is also
+permitted to apply floating-point transforms that may change the computed
+result by default (equivalent to the behaviour of
+`#pragma clang loop vectorize(enable)`). This default can be overridden
+per-loop using `llvm.loop.vectorize.fp_unsafe.enable` /
+`llvm.loop.vectorize.fp_unsafe.disable` (see below).
+
+#### '`llvm.loop.vectorize.fp_unsafe.enable`' and '`llvm.loop.vectorize.fp_unsafe.disable`' Metadata
+
+This metadata gives the Loop Vectorizer an explicit per-loop instruction about
+whether floating-point transforms that may change the computed result are
+permitted. Each node has a single operand containing the name string:
+
+```llvm
+!0 = !{!"llvm.loop.vectorize.fp_unsafe.enable"}   ; allowed
+!1 = !{!"llvm.loop.vectorize.fp_unsafe.disable"}  ; suppressed
+```
+
 #### '`llvm.loop.vectorize.predicate.enable`' and '`llvm.loop.vectorize.predicate.disable`' Metadata
 
 This metadata selectively enables or disables creating predicated instructions
@@ -10128,7 +10155,7 @@ Each `Summary` format will depend on whether the global value is a
 If the global value is a function, the `Summary` entry will look like:
 
 ```text
-function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 2[, FuncFlags]?[, Calls]?[, TypeIdInfo]?[, Params]?[, Refs]?
+function: (module: ^0, flags: (linkage: external, notEligibleToImport: 0, live: 0, dsoLocal: 0), insts: 2[, FuncFlags]?[, Calls]?[, TypeIdInfo]?[, CallTypeIds]?[, Params]?[, Refs]?
 ```
 
 The `module` field includes the summary entry id for the module containing
@@ -10139,7 +10166,8 @@ to a local definition (the latter two are populated during the thin link).
 The `insts` field contains the number of IR instructions in the function.
 Finally, there are several optional fields: {ref}`FuncFlags<funcflags_summary>`,
 {ref}`Calls<calls_summary>`, {ref}`TypeIdInfo<typeidinfo_summary>`,
-{ref}`Params<params_summary>`, {ref}`Refs<refs_summary>`.
+{ref}`CallTypeIds<calltypeids_summary>`, {ref}`Params<params_summary>`,
+{ref}`Refs<refs_summary>`.
 
 (variable_summary)=
 
@@ -10355,6 +10383,31 @@ typeCheckedLoadConstVCalls: (ConstVCall[, ConstVCall]*)
 
 Where each ConstVCall has the format described for
 `TypeTestAssumeConstVCalls`.
+
+(calltypeids_summary)=
+
+#### CallTypeIds
+
+The optional `CallTypeIds` fields describe the signatures of the function and
+of its indirect calls with call type identifiers. They look like:
+
+```text
+callTypeId: 657395674655738670[, indirectCallTypeIds: (13568473337159563479[, 11966876714456557523]*)]?
+```
+
+Each identifier is the `GUID` of a string that describes a calling convention
+and a function type. By default, two signatures have the same identifier if
+they have the same calling convention and structurally equal function types,
+where identified structure types are compared by their elements. A target can
+use a less strict rule if its ABI lets calls with different IR signatures
+reach the same function.
+
+`callTypeId` is the identifier of the function. It is present only if an
+indirect call can reach the function: the calling convention of the function
+permits calls, and the function has non-local linkage or its address is taken.
+`indirectCallTypeIds` lists the distinct identifiers of the indirect calls in
+the function. An indirect call can reach a function only if both have the same
+identifier.
 
 (typeid_summary)=
 

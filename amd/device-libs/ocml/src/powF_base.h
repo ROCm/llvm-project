@@ -20,6 +20,17 @@ fast_expylnx(float x, float y)
     return BUILTIN_EXP2_F32(y * BUILTIN_LOG2_F32(ax));
 }
 
+// exp(y*ln(ax)) for y = yh + yl; the product is left unnormalized
+// since expep only needs the sum
+static float
+expylnx2(float ax, float yh, float yl)
+{
+    float2 l = MATH_PRIVATE(epln)(ax);
+    float ph = yh * l.hi;
+    float pl = BUILTIN_FMA_F32(yh, l.lo, BUILTIN_FMA_F32(yl, l.hi, BUILTIN_FMA_F32(yh, l.hi, -ph)));
+    return MATH_PRIVATE(expep)(con(ph, pl));
+}
+
 static float
 compute_expylnx_int(float x, int ny)
 {
@@ -29,7 +40,7 @@ compute_expylnx_int(float x, int ny)
     float ax = BUILTIN_ABS_F32(x);
     int nyh = ny & 0xffff0000;
     float2 y = fadd((float)nyh, (float)(ny - nyh));
-    return MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
+    return expylnx2(ax, y.hi, y.lo);
 }
 
 // root version of compute_expylnx_int
@@ -44,8 +55,9 @@ compute_exp_inverse_y_lnx_int(float x, int ny)
 
     int nyh = ny & 0xffff0000;
     float2 y = fadd((float)nyh, (float)(ny - nyh));
-    y = rcp(y);
-    return MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
+    float qh = MATH_FAST_RCP(y.hi);
+    float ql = qh * BUILTIN_FMA_F32(-qh, y.lo, BUILTIN_FMA_F32(-qh, y.hi, 1.0f));
+    return expylnx2(ax, qh, ql);
 }
 
 static float
@@ -55,7 +67,11 @@ compute_expylnx_float(float x, float y)
         return fast_expylnx(x, y);
 
     float ax = BUILTIN_ABS_F32(x);
-    return MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
+    float2 l = MATH_PRIVATE(epln)(ax);
+    // y*l, left unnormalized since expep only needs the sum
+    float ph = y * l.hi;
+    float pl = BUILTIN_FMA_F32(y, l.lo, BUILTIN_FMA_F32(y, l.hi, -ph));
+    return MATH_PRIVATE(expep)(con(ph, pl));
 }
 
 static bool is_integer(float ay)
@@ -76,7 +92,7 @@ static bool is_odd_integer(float ay) {
 
 CONSTATTR
 static float
-pow_fixup(float x, float y, float expylnx)
+pow_fixup(float x, float y, float yin, float expylnx)
 {
     float ax = BUILTIN_ABS_F32(x);
     bool is_odd_y = is_odd_integer(y);
@@ -87,19 +103,11 @@ pow_fixup(float x, float y, float expylnx)
     if (x < 0.0f && !is_integer(y))
         ret = QNAN_F32;
 
-    float ay = BUILTIN_ABS_F32(y);
-    if (BUILTIN_ISINF_F32(ay)) {
-        // FIXME: Missing backend optimization to save on
-        // materialization cost of mixed sign constant infinities.
-        bool y_is_neg_inf = y != ay;
-        ret = ax == 1.0f ? ax : ((ax < 1.0f) ^ y_is_neg_inf ? 0.0f : ay);
-    }
-
     if (BUILTIN_ISINF_F32(ax) || x == 0.0f)
         ret = BUILTIN_COPYSIGN_F32((x == 0.0f) ^ (y < 0.0f) ? 0.0f : PINF_F32,
                                    is_odd_y ? x : 0.0f);
 
-    if (BUILTIN_ISUNORDERED_F32(x, y))
+    if (BUILTIN_ISUNORDERED_F32(x, yin))
         ret = QNAN_F32;
 
     return ret;
@@ -113,9 +121,12 @@ MATH_MANGLE(pow)(float x, float y)
     if (y == 0.0f)
         x = 1.0f;
 
-    float expylnx = compute_expylnx_float(x, y);
+    // |y| >= 2^100 gives the same results as y = +-inf, including
+    // pow(-1, +-inf) = 1, so infinite y needs no special case
+    float yc = BUILTIN_CLAMP_F32(y, -0x1.0p+100f, 0x1.0p+100f);
+    float expylnx = compute_expylnx_float(x, yc);
 
-    return pow_fixup(x, y, expylnx);
+    return pow_fixup(x, yc, y, expylnx);
 }
 
 #elif defined(COMPILING_POWR)
@@ -135,9 +146,6 @@ powr_fixup(float x, float y, float expylnx)
 
     if (x == PINF_F32 && y != 0.0f)
         ret = zi;
-
-    if (BUILTIN_ISINF_F32(y) && x != 1.0f)
-        ret = x < 1.0f ? iz : zi;
 
     if (BUILTIN_ISUNORDERED_F32(x, y))
         ret = QNAN_F32;

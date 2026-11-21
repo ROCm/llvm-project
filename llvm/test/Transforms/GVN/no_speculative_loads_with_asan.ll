@@ -2,7 +2,7 @@
 ; RUN: opt -passes=gvn -S %s | FileCheck %s
 ; RUN: opt -passes='gvn<memoryssa>' -S %s | FileCheck %s
 target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
-declare noalias ptr @_Znam(i64) #1
+declare noalias ptr @_Znam(i64) allockind("alloc,uninitialized") allocsize(0)
 
 ; Load of %i8 is an out of bounds load, which is folded to poison, which allows
 ; us to elide the phi.

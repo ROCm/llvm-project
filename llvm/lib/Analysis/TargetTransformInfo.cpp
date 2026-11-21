@@ -808,6 +808,10 @@ InstructionCost TargetTransformInfo::getFPOpCost(Type *Ty) const {
   return Cost;
 }
 
+// Prefer constant folding to use IEEE by default, and ignore the
+// denormal_fpenv function attribute. Targets may override this to return DM
+// unmodified to match denormal_fpenv where possible when folding, or may
+// provide custom rules for specific input types / operations.
 InstructionCost TargetTransformInfo::getIntImmCodeSizeCost(unsigned Opcode,
                                                            unsigned Idx,
                                                            const APInt &Imm,
@@ -1499,6 +1503,11 @@ bool TargetTransformInfo::areTypesABICompatible(const Function *Caller,
                                                 const Function *Callee,
                                                 ArrayRef<Type *> Types) const {
   return TTIImpl->areTypesABICompatible(Caller, Callee, Types);
+}
+
+uint64_t TargetTransformInfo::getCallTypeId(FunctionType *FTy,
+                                            CallingConv::ID CC) const {
+  return TTIImpl->getCallTypeId(FTy, CC);
 }
 
 bool TargetTransformInfo::isIndexedLoadLegal(MemIndexedMode Mode,

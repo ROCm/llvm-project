@@ -69,8 +69,13 @@ MATH_MANGLE(j1)(float x)
             }
         }
 
-        ax = ax - ch - cl;
-        ret = PE8(ax, p[8], p[7], p[6], p[5], p[4], p[3], p[2], p[1], p[0]);
+        float th = ax - ch;
+        ax = th - cl;
+        float tl = (th - ax) - cl;
+        float s = PE6(ax, p[8], p[7], p[6], p[5], p[4], p[3], p[2]);
+        float rh = BUILTIN_FMA_F32(ax, s, p[1]);
+        float rl = BUILTIN_FMA_F32(ax, s, p[1] - rh);
+        ret = BUILTIN_FMA_F32(ax, rh, BUILTIN_FMA_F32(ax, rl, BUILTIN_FMA_F32(tl, p[1], p[0])));
     } else {
         float r = MATH_RCP(ax);
         float r2 = r*r;

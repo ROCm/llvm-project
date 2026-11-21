@@ -32,11 +32,31 @@ MATH_MANGLE(asinpi)(float x)
     float x2 = ax * ax;
     float r = ax >= 0.5f ? tx : x2;
 
-    float u = r * PE5(r, -0x1.3f1c6cp-8f, 0x1.2ac560p-6f, 0x1.80aab4p-8f, 0x1.e53378p-7f, 0x1.86680ap-6f,
-                        0x1.b29c5ap-5f);
+    float u = PE6(r, 0x1.8b01e4p-7f, 0x1.27336p-8f, 0x1.4cb3aap-7f, 0x1.d03062p-7f, 0x1.872ba8p-6f,
+                     0x1.b2994ep-5f, 0x1.bbf85p-27f);
 
     float s = MATH_FAST_SQRT(r);
-    float ret = MATH_MAD(-2.0f, MATH_MAD(s, u, piinv*s), 0.5f);
+#if defined EXTRA_ACCURACY
+    // s + sl = sqrt(r)
+    float sl = BUILTIN_FMA_F32(-s, s, r) * (0.5f * BUILTIN_AMDGPU_RSQRT_F32(r));
+    sl = r == 0.0f ? 0.0f : sl;
+
+    // p + pl = s * (1/pi + u)
+    float p = s * piinv;
+    float pl = BUILTIN_FMA_F32(s, piinv, -p);
+    pl = BUILTIN_FMA_F32(sl, piinv, pl);
+    pl = BUILTIN_FMA_F32(s, u, pl);
+
+    // 0.5 - 2*(p + pl) with a single final rounding
+    float d = BUILTIN_FMA_F32(-2.0f, p, 0.5f);
+    float de = BUILTIN_FMA_F32(-2.0f, p, 0.5f - d);
+    float ret = d + BUILTIN_FMA_F32(-2.0f, pl, de);
+#else
+    // p + pl = s * (1/pi + u)
+    float p = s * piinv;
+    float pl = BUILTIN_FMA_F32(s, u, BUILTIN_FMA_F32(s, piinv, -p));
+    float ret = BUILTIN_FMA_F32(-2.0f, pl, BUILTIN_FMA_F32(-2.0f, p, 0.5f));
+#endif
     float xux = MATH_MAD(piinv, ax, ax*u);
     ret = ax >= 0.5f ? ret : xux;
 

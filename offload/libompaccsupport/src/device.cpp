@@ -57,9 +57,9 @@ using namespace llvm::omp::target::debug;
 
 namespace llvm::offload::tmp {
 // Downstream: OMPT support.
-llvm::omp::target::plugin::GenericDeviceTy *
+llvm::offload::plugin::GenericDeviceTy *
 __ol_tgt_GetPluginDevice(ol_device_handle_t Device);
-llvm::omp::target::plugin::GenericProfilerTy *
+llvm::offload::plugin::GenericProfilerTy *
 __ol_tgt_GetProfiler(ol_device_handle_t Device);
 } // namespace llvm::offload::tmp
 
@@ -1252,11 +1252,9 @@ getXTeamReductionNumBlocks(const DeviceGeometryPropsTy &Props,
   static UInt32Envar OMPX_TeamsReductionWavesPerCU(
       "LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU", 0);
   uint64_t ScalarWavesPerCU = OMPX_TeamsReductionWavesPerCU.get();
-  // Scalar reductions with many iterations prefer more waves, ones with fewer
-  // iterations or more memory traffic prefer less waves. 16 waves were never
-  // far from the best.
-  if (!ScalarWavesPerCU && Props.Backend == OL_PLATFORM_BACKEND_AMDGPU)
-    ScalarWavesPerCU = 16;
+  if (!ScalarWavesPerCU)
+    ScalarWavesPerCU = llvm::omp::target::BackendConfig::get(Props.Backend)
+                           .DefaultXTeamReductionWavesPerCU;
   uint64_t NumCUs = Props.NumComputeUnits;
   if (!ScalarWavesPerCU || !NumCUs)
     return 0;
