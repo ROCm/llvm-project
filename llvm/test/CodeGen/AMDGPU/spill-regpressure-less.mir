@@ -87,20 +87,23 @@ body:             |
     ; GCN-NEXT: [[DEF66:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
     ; GCN-NEXT: INLINEASM &"", sideeffect attdialect, implicit [[DEF]], implicit [[DEF1]], implicit [[DEF2]], implicit [[DEF3]], implicit [[DEF4]], implicit [[DEF5]], implicit [[DEF6]], implicit [[DEF7]], implicit [[DEF8]], implicit [[DEF9]], implicit [[DEF10]], implicit [[DEF11]], implicit [[DEF12]], implicit [[DEF13]], implicit [[DEF14]], implicit [[DEF15]], implicit [[DEF16]], implicit [[DEF17]], implicit [[DEF18]], implicit [[DEF19]], implicit [[DEF20]], implicit [[DEF21]], implicit [[DEF22]], implicit [[DEF23]], implicit [[DEF24]], implicit [[DEF25]], implicit [[DEF26]], implicit [[DEF27]], implicit [[DEF28]], implicit [[DEF29]], implicit [[DEF30]], implicit [[DEF31]], implicit [[DEF32]], implicit [[DEF33]], implicit [[DEF34]], implicit [[DEF35]], implicit [[DEF36]], implicit [[DEF37]], implicit [[DEF38]], implicit [[DEF39]], implicit [[DEF40]], implicit [[DEF41]], implicit [[DEF42]], implicit [[DEF43]], implicit [[DEF44]], implicit [[DEF45]], implicit [[DEF46]], implicit [[DEF47]], implicit [[DEF48]], implicit [[DEF49]], implicit [[DEF50]], implicit [[DEF51]], implicit [[DEF52]], implicit [[DEF53]], implicit [[DEF54]], implicit [[DEF55]], implicit [[DEF56]], implicit [[DEF57]], implicit [[DEF58]], implicit [[DEF59]], implicit [[DEF60]], implicit [[DEF61]], implicit [[DEF62]], implicit [[DEF63]], implicit [[DEF64]], implicit [[DEF65]], implicit [[DEF66]]
     ; GCN-NEXT: KILL [[DEF]]
-    ; GCN-NEXT: KILL [[DEF1]]
+    ; GCN-NEXT: [[DEF67:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
+    ; GCN-NEXT: KILL [[DEF67]]
     ; GCN-NEXT: KILL [[DEF10]]
     ; GCN-NEXT: KILL [[DEF12]]
     ; GCN-NEXT: KILL [[DEF13]]
     ; GCN-NEXT: KILL [[DEF14]]
     ; GCN-NEXT: KILL [[DEF15]]
     ; GCN-NEXT: KILL [[DEF16]]
-    ; GCN-NEXT: [[DEF67:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
-    ; GCN-NEXT: KILL [[DEF17]]
     ; GCN-NEXT: [[DEF68:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
-    ; GCN-NEXT: [[DEF69:%[0-9]+]]:sgpr_128 = IMPLICIT_DEF
-    ; GCN-NEXT: INLINEASM &"", sideeffect attdialect, implicit [[DEF69]], implicit [[DEF23]], implicit [[DEF24]], implicit [[DEF25]], implicit [[DEF26]], implicit [[DEF27]], implicit [[DEF28]]
-    ; GCN-NEXT: KILL [[DEF2]]
-    ; GCN-NEXT: KILL [[DEF3]]
+    ; GCN-NEXT: KILL [[DEF17]]
+    ; GCN-NEXT: [[DEF69:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
+    ; GCN-NEXT: [[DEF70:%[0-9]+]]:sgpr_128 = IMPLICIT_DEF
+    ; GCN-NEXT: INLINEASM &"", sideeffect attdialect, implicit [[DEF70]], implicit [[DEF23]], implicit [[DEF24]], implicit [[DEF25]], implicit [[DEF26]], implicit [[DEF27]], implicit [[DEF28]]
+    ; GCN-NEXT: [[DEF71:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
+    ; GCN-NEXT: KILL [[DEF71]]
+    ; GCN-NEXT: [[DEF72:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
+    ; GCN-NEXT: KILL [[DEF72]]
     ; GCN-NEXT: KILL [[DEF4]]
     ; GCN-NEXT: KILL [[DEF5]]
     ; GCN-NEXT: KILL [[DEF6]]
@@ -109,19 +112,19 @@ body:             |
     ; GCN-NEXT: KILL [[DEF9]]
     ; GCN-NEXT: KILL [[DEF18]]
     ; GCN-NEXT: KILL [[DEF19]]
-    ; GCN-NEXT: [[DEF70:%[0-9]+]]:sgpr_128 = IMPLICIT_DEF
-    ; GCN-NEXT: INLINEASM &"", sideeffect attdialect, implicit [[DEF70]], implicit [[DEF2]], implicit [[DEF3]], implicit [[DEF4]], implicit [[DEF5]], implicit [[DEF6]], implicit [[DEF7]], implicit [[DEF8]], implicit [[DEF9]]
-    ; GCN-NEXT: KILL [[DEF69]], implicit-def %70, implicit-def %71, implicit-def %72, implicit-def %73, implicit-def %74, implicit-def %75, implicit-def %76, implicit-def %77
-    ; GCN-NEXT: [[DEF71:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
-    ; GCN-NEXT: [[DEF72:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
-    ; GCN-NEXT: KILL [[DEF20]]
-    ; GCN-NEXT: [[DEF73:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
-    ; GCN-NEXT: KILL [[DEF11]]
+    ; GCN-NEXT: [[DEF73:%[0-9]+]]:sgpr_128 = IMPLICIT_DEF
+    ; GCN-NEXT: INLINEASM &"", sideeffect attdialect, implicit [[DEF73]], implicit [[DEF71]], implicit [[DEF72]], implicit [[DEF4]], implicit [[DEF5]], implicit [[DEF6]], implicit [[DEF7]], implicit [[DEF8]], implicit [[DEF9]]
+    ; GCN-NEXT: KILL [[DEF70]], implicit-def %70, implicit-def %71, implicit-def %72, implicit-def %73, implicit-def %74, implicit-def %75, implicit-def %76, implicit-def %77
     ; GCN-NEXT: [[DEF74:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
-    ; GCN-NEXT: KILL [[DEF21]]
     ; GCN-NEXT: [[DEF75:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
-    ; GCN-NEXT: KILL [[DEF22]]
+    ; GCN-NEXT: KILL [[DEF20]]
     ; GCN-NEXT: [[DEF76:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
+    ; GCN-NEXT: KILL [[DEF11]]
+    ; GCN-NEXT: [[DEF77:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
+    ; GCN-NEXT: KILL [[DEF21]]
+    ; GCN-NEXT: [[DEF78:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
+    ; GCN-NEXT: KILL [[DEF22]]
+    ; GCN-NEXT: [[DEF79:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
     ; GCN-NEXT: KILL [[DEF23]]
     ; GCN-NEXT: KILL [[DEF24]]
     ; GCN-NEXT: KILL [[DEF25]]
@@ -166,15 +169,15 @@ body:             |
     ; GCN-NEXT: KILL [[DEF64]]
     ; GCN-NEXT: KILL [[DEF65]]
     ; GCN-NEXT: KILL [[DEF66]]
-    ; GCN-NEXT: KILL [[DEF67]]
     ; GCN-NEXT: KILL [[DEF68]]
-    ; GCN-NEXT: KILL [[DEF71]]
-    ; GCN-NEXT: KILL [[DEF72]]
-    ; GCN-NEXT: KILL [[DEF73]]
+    ; GCN-NEXT: KILL [[DEF69]]
     ; GCN-NEXT: KILL [[DEF74]]
     ; GCN-NEXT: KILL [[DEF75]]
     ; GCN-NEXT: KILL [[DEF76]]
-    ; GCN-NEXT: KILL [[DEF70]]
+    ; GCN-NEXT: KILL [[DEF77]]
+    ; GCN-NEXT: KILL [[DEF78]]
+    ; GCN-NEXT: KILL [[DEF79]]
+    ; GCN-NEXT: KILL [[DEF73]]
     ; GCN-NEXT: KILL %70
     ; GCN-NEXT: KILL %71
     ; GCN-NEXT: KILL %72
