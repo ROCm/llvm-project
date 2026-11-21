@@ -120,6 +120,8 @@ jobs:
       AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
       ARTIFACT_GROUP: ${{ inputs.artifact_group }}
       SUITE_LIST: ${{ inputs.suite_list }}
+      SHARD: ${{ inputs.shard }}
+      TOTAL_SHARDS: ${{ inputs.total_shards }}
     steps:
       - name: Fix Python shared library
         run: |
@@ -173,7 +175,7 @@ jobs:
           AMD_LOG_LEVEL: 4
         run: |
           set -x
-          echo "=== AOMP shard ${{ inputs.shard }}/${{ inputs.total_shards }}: SUITE_LIST=${SUITE_LIST} ==="          
+          echo "=== AOMP shard ${SHARD}/${TOTAL_SHARDS}: SUITE_LIST=${SUITE_LIST} ==="          
           git clone https://github.com/ROCm/aomp -b amd-staging --depth 1
           cd aomp/bin
           export AOMP=${OUTPUT_ARTIFACTS_DIR}/llvm
