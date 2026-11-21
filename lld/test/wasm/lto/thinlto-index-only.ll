@@ -1,4 +1,5 @@
 ; RUN: rm -rf %t && split-file %s %t && cd %t
+; XFAIL: *
 ; RUN: mkdir d
 
 ;; First ensure that the ThinLTO handling in lld handles

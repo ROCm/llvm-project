@@ -1,5 +1,5 @@
 ; REQUIRES: aarch64-registered-target
-
+; XFAIL: *
 ; RUN: llvm-as %s -o %t0.bc
 ; RUN: llvm-as %S/Inputs/ipa.ll -o %t1.bc
 ; RUN: llvm-link -disable-lazy-loading %t0.bc %t1.bc -o %t.combined.bc

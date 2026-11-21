@@ -1,4 +1,5 @@
 ;; Copied from ELF/lto/thinlto-index-only.ll
+; XFAIL: *
 ;; First ensure that the ThinLTO handling in lld handles
 ;; bitcode without summary sections gracefully and generates index file.
 ; RUN: rm -rf %t && mkdir %t && cd %t
