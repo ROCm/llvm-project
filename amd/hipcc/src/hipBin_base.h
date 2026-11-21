@@ -351,8 +351,8 @@ void HipBinBase::constructHipPath() {
     return;
   }
 
-  // Finally, fallback to the parent path (the standard ROCm install structure).
-  variables_.hipPathEnv_ = parent_path.string();
+  // Finally, fallback to the default hip path
+  variables_.hipPathEnv_ = HIPCC_DEFAULT_HIP_PATH;
 }
 
 
@@ -383,8 +383,8 @@ void HipBinBase::constructRoccmPath() {
     return;
   }
 
-  // Finally, fallback to the HIP path.
-  variables_.roccmPathEnv_ = getHipPath();
+  // Finally, fallback to the default ROCm path.
+  variables_.roccmPathEnv_ = HIPCC_DEFAULT_ROCM_PATH;
 }
 
 // reads the Hip Version
