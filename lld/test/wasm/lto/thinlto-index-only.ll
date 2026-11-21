@@ -1,5 +1,4 @@
 ; RUN: rm -rf %t && split-file %s %t && cd %t
-; XFAIL: *
 ; RUN: mkdir d
 
 ;; First ensure that the ThinLTO handling in lld handles
@@ -118,6 +117,7 @@
 ; BACKEND2-NEXT: <VERSION
 ; BACKEND2-NEXT: <FLAGS
 ; BACKEND2-NEXT: <VALUE_GUID {{.*}} op0=1 op1=3060885059 op2=1207956914
+; BACKEND2-NEXT: <CALL_TYPE_IDS
 ; BACKEND2-NEXT: <COMBINED
 ; BACKEND2-NEXT: </GLOBALVAL_SUMMARY_BLOCK
 
