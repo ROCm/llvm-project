@@ -29,6 +29,7 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/KnownBits.h"
+#include "llvm/Support/MD5.h"
 #include <optional>
 
 using namespace llvm;
@@ -56,7 +57,6 @@ static bool dependsOnLocalPhi(const Loop *L, const Value *Cond,
 
 AMDGPUTTIImpl::AMDGPUTTIImpl(const AMDGPUTargetMachine *TM, const Function &F)
     : BaseT(TM, F.getDataLayout()), CLOpts(TM->getCLOpts()),
-      TargetTriple(F.getParent()->getTargetTriple()),
       ST(static_cast<const GCNSubtarget *>(TM->getSubtargetImpl(F))),
       TLI(ST->getTargetLowering()) {}
 
@@ -1835,8 +1835,8 @@ bool GCNTTIImpl::isProfitableToSinkOperands(Instruction *I,
       continue;
     }
 
-    // Check for zero-cost multiple use InsertElement/ExtractElement
-    // instructions
+    // Check for zero-cost multiple use InsertElement instructions.
+    // ExtractElement never matches here because its result is a scalar.
     if (Instruction *OpInst = dyn_cast<Instruction>(Op.get())) {
       if (OpInst->getType()->isVectorTy() && OpInst->getNumOperands() > 1) {
         Instruction *VecOpInst = dyn_cast<Instruction>(OpInst->getOperand(0));
@@ -2066,6 +2066,14 @@ unsigned GCNTTIImpl::getCallerAllocaCost(const CallBase *CB,
       (Threshold * ArgAllocaSize->getFixedValue()) / AllocaSize);
 
   return AllocaThresholdBonus;
+}
+
+uint64_t GCNTTIImpl::getCallTypeId(FunctionType *FTy,
+                                   CallingConv::ID CC) const {
+  // Signatures match by the sizes of their types, not by their IR types. This
+  // is the same rule as for the type IDs in the .amdgpu.info section.
+  return MD5Hash("amdgpu.v1:cc" + utostr(CC) + ":" +
+                 AMDGPU::getFunctionTypeId(FTy, DL));
 }
 
 void GCNTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,

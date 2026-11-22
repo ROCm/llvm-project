@@ -1714,6 +1714,11 @@ void Clang::RenderTargetOptions(const llvm::Triple &EffectiveTriple,
   case llvm::Triple::ve:
     AddVETargetArgs(Args, CmdArgs);
     break;
+
+  case llvm::Triple::bpfel:
+  case llvm::Triple::bpfeb:
+    Args.AddAllArgs(CmdArgs, options::OPT_fbpf_no_enum_reloc_EQ);
+    break;
   }
 }
 
@@ -4011,7 +4016,6 @@ static void RenderOpenCLOptions(const ArgList &Args, ArgStringList &CmdArgs,
       options::OPT_cl_kernel_arg_info,
       options::OPT_cl_unsafe_math_optimizations,
       options::OPT_cl_fast_relaxed_math,
-      options::OPT_cl_mad_enable,
       options::OPT_cl_no_signed_zeros,
       options::OPT_cl_fp32_correctly_rounded_divide_sqrt,
       options::OPT_cl_uniform_work_group_size
@@ -4033,6 +4037,8 @@ static void RenderOpenCLOptions(const ArgList &Args, ArgStringList &CmdArgs,
   for (const auto &Arg : ForwardedArguments)
     if (const auto *A = Args.getLastArg(Arg))
       CmdArgs.push_back(Args.MakeArgString(A->getOption().getPrefixedName()));
+
+  Args.ClaimAllArgs(options::OPT_cl_mad_enable);
 
   // Only add the default headers if we are compiling OpenCL sources.
   if ((types::isOpenCL(InputType) ||
@@ -10165,7 +10171,9 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       else if (DeviceLTOMode == LTOK_Thin) {
         CmdArgs.push_back(Args.MakeArgString(
             "--device-compiler=" + TC->getTripleString() + "=-flto=thin"));
-        if (TC->getTriple().isAMDGPU()) {
+        // OpenMP does not use object linking, so each ThinLTO backend imports
+        // all functions and internalizes the symbols.
+        if (TC->getTriple().isAMDGPU() && Kind == Action::OFK_OpenMP) {
           CmdArgs.push_back(
               Args.MakeArgString("--device-linker=" + TC->getTripleString() +
                                  "=-plugin-opt=-force-import-all"));
@@ -10175,13 +10183,20 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
           CmdArgs.push_back(Args.MakeArgString(
               "--device-linker=" + TC->getTripleString() +
               "=-plugin-opt=-avail-extern-gv-in-addrspace-to-local=3"));
-          if (Kind == Action::OFK_OpenMP) {
-            CmdArgs.push_back(
-                Args.MakeArgString("--device-linker=" + TC->getTripleString() +
-                                   "=-plugin-opt=-amdgpu-internalize-symbols"));
-          }
+          CmdArgs.push_back(
+              Args.MakeArgString("--device-linker=" + TC->getTripleString() +
+                                 "=-plugin-opt=-amdgpu-internalize-symbols"));
         }
       }
+
+      // Except for the per-TU HIP non-RDC fat binary job (the same condition
+      // as SuppressHIPNoRDCVerbose), this job links relocatable device code,
+      // even if `-fgpu-rdc` is not on the link command line.
+      if (shouldUseAMDGPUObjectLinking(*TC, ToolChainArgs, Kind,
+                                       /*AssumeRDC=*/!SuppressHIPNoRDCVerbose))
+        CmdArgs.push_back(
+            Args.MakeArgString("--device-linker=" + TC->getTripleString() +
+                               "=-plugin-opt=-amdgpu-enable-object-linking"));
     }
   }
 

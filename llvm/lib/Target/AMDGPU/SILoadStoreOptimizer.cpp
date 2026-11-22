@@ -207,7 +207,6 @@ class SILoadStoreOptimizer {
   using MemInfoMap = DenseMap<MachineInstr *, MemAddress>;
 
 private:
-  MachineFunction *MF = nullptr;
   const GCNSubtarget *STM = nullptr;
   const SIInstrInfo *TII = nullptr;
   const SIRegisterInfo *TRI = nullptr;
@@ -2959,7 +2958,6 @@ bool SILoadStoreOptimizerLegacy::runOnMachineFunction(MachineFunction &MF) {
 }
 
 bool SILoadStoreOptimizer::run(MachineFunction &MF) {
-  this->MF = &MF;
   STM = &MF.getSubtarget<GCNSubtarget>();
   if (!STM->loadStoreOptEnabled())
     return false;

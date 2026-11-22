@@ -1434,7 +1434,11 @@ static void readConfigs(Ctx &ctx, opt::InputArgList &args) {
   ctx.arg.dependencyFile = args.getLastArgValue(OPT_dependency_file);
   ctx.arg.dependentLibraries =
       args.hasFlag(OPT_dependent_libraries, OPT_no_dependent_libraries, true);
+#ifdef NDEBUG
+  ctx.arg.disableVerify = true;
+#else
   ctx.arg.disableVerify = args.hasArg(OPT_disable_verify);
+#endif
   ctx.arg.discard = getDiscard(args);
   ctx.arg.dtltoDistributor = args.getLastArgValue(OPT_thinlto_distributor_eq);
   ctx.arg.dtltoDistributorArgs =
@@ -3498,6 +3502,16 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   // Apply symbol renames for --wrap and combine foo@v1 and foo@@v1.
   redirectSymbols(ctx, wrapped);
 
+  // Read target properties before creating the Target instance. Some targets
+  // use these properties to select their TargetInfo implementation.
+  readSecurityNotes(ctx);
+  setTarget(ctx);
+  ctx.arg.eflags = ctx.target->calcEFlags();
+
+  ctx.target->finalizeSymbols();
+  if (errCount(ctx))
+    return;
+
   // Replace common symbols with regular symbols.
   replaceCommonSymbols(ctx);
 
@@ -3544,16 +3558,6 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   if (!ctx.arg.dependencyFile.empty())
     writeDependencyFile(ctx);
 
-  // Read .note.gnu.property sections from input object files which
-  // contain a hint to tweak linker's and loader's behaviors.
-  readSecurityNotes(ctx);
-
-  // The Target instance handles target-specific stuff, such as applying
-  // relocations or writing a PLT section. It also contains target-dependent
-  // values such as a default image base address.
-  setTarget(ctx);
-
-  ctx.arg.eflags = ctx.target->calcEFlags();
   // maxPageSize (sometimes called abi page size) is the maximum page size that
   // the output can be run on. For example if the OS can use 4k or 64k page
   // sizes then maxPageSize must be 64k for the output to be useable on both.

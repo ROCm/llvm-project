@@ -41,7 +41,6 @@ class AMDGPUTTIImpl final : public BasicTTIImplBase<AMDGPUTTIImpl> {
   friend BaseT;
 
   const AMDGPUOptions &CLOpts;
-  Triple TargetTriple;
 
   const TargetSubtargetInfo *ST;
   const TargetLoweringBase *TLI;
@@ -278,6 +277,8 @@ public:
   unsigned adjustInliningThreshold(const CallBase *CB) const override;
   unsigned getCallerAllocaCost(const CallBase *CB,
                                const AllocaInst *AI) const override;
+
+  uint64_t getCallTypeId(FunctionType *FTy, CallingConv::ID CC) const override;
 
   int getInlinerVectorBonusPercent() const override {
     return InlinerVectorBonusPercent;
