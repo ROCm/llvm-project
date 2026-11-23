@@ -172,20 +172,39 @@ jobs:
 
       # CLR configure imports Python packages listed in TheRock requirements.txt
       # (cxxheaderparser today). The manylinux image does not install that file,
-      # so take the list from TheRock main and install it here.
-      - name: Checkout TheRock Python requirements
+      # so take the list from TheRock main and install it here. Also use
+      # TheRock's ROCm version when generating the rocm-core headers.
+      - name: Checkout TheRock build inputs
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/TheRock
           ref: main
           path: TheRock
-          sparse-checkout: requirements.txt
+          sparse-checkout: |
+            requirements.txt
+            version.json
           sparse-checkout-cone-mode: false
           fetch-depth: 1
           persist-credentials: false
 
       - name: Install TheRock Python requirements
         run: python3 -m pip install -r TheRock/requirements.txt
+
+      # libhipcxx's HIP headers include rocm-core/rocm_version.h.
+      - name: Configure, build and install rocm-core
+        run: |
+          ROCM_VERSION=$(python3 -c \
+            'import json; print(json.load(open("TheRock/version.json"))["rocm-version"])')
+          cmake -G Ninja -S rocm-systems/projects/rocm-core -B build-rocm-core \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DBUILD_SHARED_LIBS=ON \
+            -DDISABLE_CPACK=ON \
+            -DROCM_VERSION="$ROCM_VERSION"
+          cmake --build build-rocm-core
+          cmake --install build-rocm-core --prefix $PWD/$STAGING
 
       - name: Configure CLR (HIP runtime)
         run: |
