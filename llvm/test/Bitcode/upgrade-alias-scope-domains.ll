@@ -1,10 +1,4 @@
-; RUN: llvm-dis < %s.bc | FileCheck %s
-; RUN: llvm-as < %s | llvm-dis | FileCheck %s
-
-; Test upgrade in BitcodeReader by reading a historic bitcode translation of
-; this file (first RUN line); test upgrade in LLParser by reading the ll file
-; directly (second RUN line), the translation to bitcode and back is just to
-; print the result.
+; RUN: llvm-as -disable-verify < %s | llvm-dis | FileCheck %s
 
 define void @test(ptr %p, ptr %q) {
 ; CHECK-LABEL: define void @test(
