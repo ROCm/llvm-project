@@ -3,15 +3,7 @@
 # An important constraint of the build is that it only produces libraries
 # based on the ability of the host toolchain to target various platforms.
 
-cmake_minimum_required(VERSION 3.20.0)
-if("${CMAKE_VERSION}" VERSION_LESS "3.31.0")
-  message(WARNING
-    "Your CMake version is ${CMAKE_VERSION}. Starting with LLVM 24, the "
-    "minimum version of CMake required to build LLVM will become 3.31.0, and "
-    "using an older CMake will become an error. Please upgrade your CMake to "
-    "at least 3.31.0 now to avoid issues in the future.")
-endif()
-
+cmake_minimum_required(VERSION 3.31.0)
 set(LLVM_SUBPROJECT_TITLE "compiler-rt")
 
 if(NOT DEFINED LLVM_COMMON_CMAKE_UTILS)
@@ -515,12 +507,12 @@ if (NOT MSVC)
 endif()
 
 # Determine if we should restrict stack frame sizes.
-# Stack frames on PowerPC, Mips, SystemZ and in debug build can be much larger than
-# anticipated.
+# Stack frames on PowerPC, Mips, SystemZ, PA-RISC and in debug build can be
+# much larger than anticipated.
 # FIXME: Fix all sanitizers and add -Wframe-larger-than to
 # SANITIZER_COMMON_FLAGS
 if(COMPILER_RT_HAS_WFRAME_LARGER_THAN_FLAG AND NOT COMPILER_RT_DEBUG
-   AND NOT ${COMPILER_RT_DEFAULT_TARGET_ARCH} MATCHES "powerpc|mips|s390x")
+   AND NOT ${COMPILER_RT_DEFAULT_TARGET_ARCH} MATCHES "powerpc|mips|s390x|hppa")
   set(SANITIZER_LIMIT_FRAME_SIZE TRUE)
 else()
   set(SANITIZER_LIMIT_FRAME_SIZE FALSE)
@@ -536,10 +528,12 @@ endif()
 # in cflags during testing. This fixes the compiler/linker version mismatch
 # issue when running a clang built with a newer Xcode in an older Xcode
 set(COMPILER_RT_DARWIN_LINKER_VERSION)
-if (APPLE AND NOT CMAKE_LINKER MATCHES ".*lld.*")
+get_filename_component(CLANG_LINKER_NAME "${CMAKE_LINKER}" NAME)
+if (APPLE AND NOT CLANG_LINKER_NAME MATCHES "lld")
   get_darwin_linker_version(COMPILER_RT_DARWIN_LINKER_VERSION)
   message(STATUS "Host linker version: ${COMPILER_RT_DARWIN_LINKER_VERSION}")
 endif()
+unset(CLANG_LINKER_NAME)
 
 # Build sanitizer runtimes with debug info.
 if(MSVC)
@@ -565,26 +559,6 @@ elseif(COMPILER_RT_HAS_GLINE_TABLES_ONLY_FLAG AND NOT COMPILER_RT_DEBUG)
   list(APPEND SANITIZER_COMMON_CFLAGS -gline-tables-only)
 elseif(COMPILER_RT_HAS_G_FLAG)
   list(APPEND SANITIZER_COMMON_CFLAGS -g)
-endif()
-
-if(SANITIZER_AMDGPU)
-  list(APPEND SANITIZER_COMMON_CFLAGS -DSANITIZER_AMDHSA=1)
-  message(STATUS "Looking 'hsa' and 'amd_comgr' header")
-  find_path(HSA_INCLUDE NAMES hsa.h HINTS ${SANITIZER_HSA_INCLUDE_PATH} /opt/rocm/include PATH_SUFFIXES hsa)
-  if(NOT HSA_INCLUDE)
-    message(FATAL_ERROR "Required header 'hsa.h' not found in path ${HSA_INCLUDE}. Aborting SANITIZER_AMDGPU build")
-  endif()
-  message(STATUS "Found 'hsa.h' in ${HSA_INCLUDE}")
-  include_directories(${HSA_INCLUDE})
-  find_path(COMgr_INCLUDE NAMES amd_comgr.h.in HINTS ${SANITIZER_COMGR_INCLUDE_PATH} PATH_SUFFIXES amd_comgr)
-  if(NOT COMgr_INCLUDE)
-    find_path(COMgr_INCLUDE NAMES amd_comgr.h HINTS /opt/rocm/include PATH_SUFFIXES amd_comgr)
-    if(NOT COMgr_INCLUDE)
-      message(FATAL_ERROR "Required header 'amd_comgr.h/amd_comgr.h.in' not found in path ${COMgr_INCLUDE}. Aborting SANITIZER_AMDGPU build")
-    endif()
-  endif()
-  message(STATUS "Found 'amd_comgr.h.in/amd_comgr.h' in ${COMgr_INCLUDE}")
-  include_directories(${COMgr_INCLUDE})
 endif()
 
 if(LLVM_ENABLE_MODULES)

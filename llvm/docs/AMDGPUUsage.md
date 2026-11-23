@@ -1905,7 +1905,7 @@ supported for the `amdgcn` target.
   access is not supported except by flat and scratch instructions in
   GFX9-GFX11.
 
-  On targets without "Globally Accessible Scratch" (introduced in GFX125x), code that
+  On targets without "Globally Accessible Scratch" (introduced in GFX12.5), code that
   manipulates the stack values in other lanes of a wavefront, such as by
   `addrspacecast`-ing stack pointers to generic ones and taking offsets that reach other
   lanes or by explicitly constructing the scratch buffer descriptor, triggers undefined
@@ -2050,6 +2050,10 @@ supported for the `amdgcn` target.
   `alloca` is not visible while in a called function. Attempting to dereference
   a pointer to such memory in a called function is undefined behavior.
 
+  Pointers can be cast to and from the generic address space, which uses a
+  {ref}`synthetic aperture<amdgpu-synthetic-apertures>`; a generic pointer
+  obtained this way cannot be dereferenced.
+
 **Barrier**
 
 : This address space represents barrier IDs (introduced in GFX12) as addresses.
@@ -2105,6 +2109,10 @@ The following synthetic apertures are defined:
   - 1
   - `0x00000001`
   - Barrier
+* - VGPR
+  - 3
+  - `0x00000003`
+  - VGPR
 :::
 
 Converting a pointer to generic (64 bits) using synthetic apertures is done as follows:
@@ -2573,9 +2581,9 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
     - 0x0010: All VMEM instructions may be scheduled across sched_barrier.
       This includes LDSDMA instructions.
     - 0x0020: VMEM read instructions may be scheduled across sched_barrier.
-      This does not include LDSDMA loads, even though they also read from global memory; only loads targeting VGPRs are classified as VMEM read.
+      This does not include global or buffer loads to LDS, even though they also read from global memory; only loads targeting VGPRs are classified as VMEM read.
     - 0x0040: VMEM write instructions may be scheduled across sched_barrier.
-      This does not include LDSDMA stores, even though they also write to global memory; only stores sourcing from VGPRs are classified as VMEM write.
+      This does not include global stores from LDS, even though they also write to global memory; only stores sourcing from VGPRs are classified as VMEM write.
     - 0x0080: All DS instructions may be scheduled across sched_barrier.
       This includes LDSDMA instructions.
     - 0x0100: All DS read instructions may be scheduled across sched_barrier.
@@ -2669,10 +2677,10 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
     - `v_mov_b32 <dest> <old>`
     - `v_mov_b32 <dest> <src> <dpp_ctrl> <row_mask> <bank_mask> <bound_ctrl>`
 * - {ref}`llvm.prefetch <int_prefetch>`
-  - Implemented on gfx1250, ignored on earlier targets.
+  - Implemented on GFX12.5, ignored on earlier targets.
     First argument is flat, global, or constant address space pointer.
     Any other address space is not supported.
-    On gfx125x generates flat_prefetch_b8 or global_prefetch_b8 and brings data to GL2.
+    On GFX12.5, generates `flat_prefetch_b8` or `global_prefetch_b8` and brings data to GL2.
     Second argument is rw and currently ignored.
     Can be 0 or 1.
     Third argument is locality, 0-3.
@@ -3025,7 +3033,7 @@ Targets not covered in the table do not support these intrinsics.
 * - GFX Version
   - Target Restrictions
 * - GFX 12.5
-  - {ref}`amdgpu-amdhsa-memory-model-gfx125x-cooperative-atomics`
+  - {ref}`amdgpu-amdhsa-memory-model-gfx12_5-cooperative-atomics`
 :::
 
 If the intrinsic is used without meeting all of the above conditions, or the target-specific conditions,
@@ -3303,6 +3311,18 @@ The field indicates how much data is fetched on a cache miss. It is only support
 on GFX13. GFX13 only honors it for load and atomic operations. GFX13 does not
 support a 32-byte fetch size so it treats CFS_32B the same as CFS_64B.
 
+(amdgpu_noclobber)=
+
+### '`amdgpu.noclobber`' Metadata
+
+Consider the writes that a `load` instruction L marked as `!amdgpu.noclobber`
+may see according to the {ref}`AMDGPU memory model<amdgpu-location-order>`.
+L returns `undef` if any of these writes does not happen-before the operation
+that dispatches the kernel executing L.
+
+This metadata can allow the AMDGPU compiler backend to emit scalar instead of
+vector load instructions.
+
 ## LLVM IR Attributes
 
 The AMDGPU backend supports the following LLVM IR attributes.
@@ -3540,7 +3560,8 @@ The AMDGPU backend supports the following calling conventions:
     Values in scalar registers as well as v0-v7 are not preserved.
     Values in VGPRs starting at v8 are not preserved for the active lanes, but must be saved by the callee for inactive lanes when using WWM (a notable exception is when the llvm.amdgcn.init.whole.wave intrinsic is used in the function - in this case the backend assumes that there are no inactive lanes upon entry; any inactive lanes that need to be preserved must be explicitly present in the IR).
 
-    Chain functions receive a stack pointer from their caller (in s32), similar to `amdgpu_gfx` functions.
+    Chain functions receive a stack pointer from their caller (in s32), similar to `amdgpu_gfx` functions. This points to the bottom of the stack.
+    Referencing values on the caller's stack is undefined behaviour.
     If needed, the frame pointer is s33 and the base pointer is s34.
     Calls to `amdgpu_gfx` functions are allowed and behave like they do in `amdgpu_cs` functions.
 
@@ -3694,7 +3715,8 @@ on the register budget. Callers and callees rely on this floor without seeing
 each other's register usage. It is not the occupancy the function achieves: a
 function may use fewer registers than the cap and therefore achieve a higher
 occupancy. For example, the ABI occupancy may be 4 even when the function
-achieves an occupancy of 10.
+achieves an occupancy of 10. `.amdgpu_occupancy` records this floor; see
+{ref}`amdgpu-assembler-directive-amdgpu-info`.
 
 A caller with ABI occupancy `N` can call a callee only when the callee's ABI
 occupancy is at least `N`. A lower ABI occupancy raises the callee's register
@@ -3733,6 +3755,126 @@ accepts it. A request above the hardware maximum, or outside the occupancy
 range implied by the workgroup size and LDS, is rejected and leaves the floor
 and the register cap unchanged. The raised value is still the floor, not the
 occupancy the function achieves.
+
+(amdgpu-object-linking)=
+
+## Object Linking
+
+:::{warning}
+Object linking is an experimental feature.
+:::
+
+AMDGPU supports separate compilation with object linking. Each translation
+unit is compiled into a relocatable object, and `ld.lld` links the relocatable
+objects into one code object. Code in one object can call functions and use
+variables that are defined in other objects.
+
+The backend writes information about each function to the `.amdgpu.info`
+section of the relocatable object (see {ref}`amdgpu-info-section`). This
+information includes the resource usage of the function (registers, stack, and
+LDS), the functions that it calls, and the LDS and named barrier variables that
+it uses. LDS and named barrier variables are emitted as symbols.
+
+`ld.lld` uses this information to:
+
+- Assign LDS offsets and named barrier IDs.
+- Compute the resource usage of each kernel from all functions that the kernel
+  can call, in all objects.
+- Report an error for a call that does not follow the ABI rules, for example a
+  call between functions that use different wavefront sizes or incompatible ABI
+  occupancies (see {ref}`amdgpu-abi-occupancy`).
+
+### Enabling Object Linking
+
+The backend option `-amdgpu-enable-object-linking` enables object linking. It
+is off by default. Pass it to every compilation of the program. With LTO, also
+pass it to the code generation at link time, for example with
+`-plugin-opt=-amdgpu-enable-object-linking` for `ld.lld`.
+
+For HIP, the Clang driver enables object linking automatically for relocatable
+device code (RDC) when device LTO is ThinLTO or is disabled. The driver then
+passes `-amdgpu-enable-object-linking` to the device compilation and to the
+device link. There is no Clang option to enable or disable object linking.
+
+:::{list-table} Object Linking for HIP in the Clang Driver
+:name: amdgpu-object-linking-driver-table
+:header-rows: 1
+
+* - Mode
+  - Device LTO
+  - Object Linking
+* - Non-RDC (default)
+  - Any
+  - Off. Each translation unit is a complete device program.
+* - RDC (`-fgpu-rdc`)
+  - Full (default, `-foffload-lto`)
+  - Off. The device program is compiled as one module.
+* - RDC (`-fgpu-rdc`)
+  - ThinLTO (`-foffload-lto=thin`)
+  - On. Each ThinLTO backend emits a relocatable object.
+* - RDC (`-fgpu-rdc`)
+  - Disabled (`-fno-offload-lto`)
+  - On. Each device compilation emits a relocatable object.
+:::
+
+OpenMP offloading and SPIR-V device code do not use object linking.
+
+(amdgpu-object-linking-limitations)=
+
+### Limitations
+
+There is no ABI stability promise for object linking at this time. All
+relocatable objects in a device link must be compiled by the same compiler, and
+the link must use `ld.lld` from the same toolchain.
+
+These configurations are not supported:
+
+- A target OS other than `amdhsa`.
+- A device link that mixes relocatable objects compiled with object linking and
+  code compiled without object linking, for example bitcode compiled for full
+  LTO.
+
+The linker does not detect all unsupported configurations.
+
+(amdgpu-thinlto)=
+
+## ThinLTO
+
+:::{warning}
+ThinLTO is an experimental feature for AMDGPU.
+:::
+
+AMDGPU supports ThinLTO. Each translation unit is compiled into bitcode with a
+module summary. At link time, the thin link reads the summaries of all modules
+and selects the functions that each module imports from other modules. A
+ThinLTO backend then optimizes each module and compiles it into a relocatable
+object, and `ld.lld` links these objects with object linking (see
+{ref}`amdgpu-object-linking`).
+
+The thin link also propagates kernel attributes, such as
+`amdgpu-flat-work-group-size` and `amdgpu-waves-per-eu`, across modules. Each
+device function gets attribute values that are compatible with all kernels that
+can call it, directly or through other functions.
+
+For HIP, compile and link with `-fgpu-rdc -foffload-lto=thin`. The Clang
+driver then enables object linking for the device compilation and the device
+link. OpenMP offloading uses ThinLTO without object linking: each ThinLTO
+backend imports all functions that its module calls.
+
+### Limitations
+
+The limitations of object linking also apply to ThinLTO (see
+{ref}`amdgpu-object-linking-limitations`).
+
+There is no compatibility guarantee for ThinLTO bitcode at this time. All
+bitcode in a device link, including bitcode in static libraries, must be
+compiled by the same compiler that does the link.
+
+These configurations are not supported:
+
+- A device link that mixes ThinLTO bitcode and bitcode compiled for full LTO.
+- A device link that mixes ThinLTO bitcode and relocatable objects, for example
+  from a static library that was compiled without device LTO.
 
 (amdgpu-elf-code-object)=
 
@@ -4426,11 +4568,10 @@ if needed.
 
 `.amdgpu.info`
 
-: Per-function metadata for AMDGPU object linking, emitted only in relocatable
-  code objects when object linking is enabled
-  (`-amdgpu-enable-object-linking`). The linker uses this section to
-  propagate resource usage (registers, stack, LDS) and resolve call graph
-  dependencies across translation units.
+: Per-function metadata emitted only in relocatable code objects when object
+  linking is enabled. The linker uses this section to propagate resource usage
+  (registers, stack, LDS) and resolve call graph dependencies across
+  translation units.
 
   Each entry uses a tagged, length-prefixed binary encoding:
 
@@ -4480,6 +4621,9 @@ if needed.
   * - 10
     - `INFO_TYPEID`
     - u32 strtab offset; function type-ID
+  * - 11
+    - `INFO_OCCUPANCY`
+    - u32; ABI occupancy
   :::
 
   :::{list-table} AMDGPU Info Function Flags (`INFO_FLAGS`)
@@ -4498,6 +4642,12 @@ if needed.
   * - 0x4
     - `FUNC_HAS_DYN_STACK`
     - Function has dynamic stack allocation
+  * - 0x8
+    - `FUNC_FULL_SIMD_MODE`
+    - Function uses full SIMD execution mode
+  * - 0x10
+    - `FUNC_WAVE32`
+    - Function uses wave32; otherwise wave64
   :::
 
   Symbol references (`INFO_FUNC`, `INFO_USE`, `INFO_CALL`) generate
@@ -7159,7 +7309,7 @@ The memory space properties are:
   - private
   - scratch
   - 32
-  - 0x00000000
+  - 0xFFFFFFFF
 * - Local
   - group
   - LDS
@@ -7471,7 +7621,7 @@ The fields used by CP for code objects before V3 also match those specified in
     : - max_vgpr 1..256
       - max(0, ceil(vgprs_used / 8) - 1)
 
-    GFX125X (wavefront size 32)
+    GFX12.5 (wavefront size 32)
     : - max_vgpr 1..1024
       - max(0, ceil(vgprs_used / 16) - 1)
 
@@ -8732,7 +8882,7 @@ these sequences.
 - {ref}`amdgpu-amdhsa-memory-model-gfx942`
 - {ref}`amdgpu-amdhsa-memory-model-gfx10-gfx11`
 - {ref}`amdgpu-amdhsa-memory-model-gfx12`
-- {ref}`amdgpu-amdhsa-memory-model-gfx125x`
+- {ref}`amdgpu-amdhsa-memory-model-gfx12_5`
 
 (amdgpu-amdhsa-execution-barriers-memory-model)=
 
@@ -14308,11 +14458,11 @@ the instruction in the code sequence that references the table.
   - *Same as corresponding fence acq_rel, except must generate all instructions even for OpenCL.*
 :::
 
-(amdgpu-amdhsa-memory-model-gfx125x)=
+(amdgpu-amdhsa-memory-model-gfx12_5)=
 
-##### Memory Model GFX125x
+##### Memory Model GFX12.5
 
-For GFX125x:
+For GFX12.5:
 
 **Device Structure:**
 
@@ -14358,14 +14508,6 @@ For GFX125x:
   addresses.
 
 **Memory Model:**
-
-:::{note}
-This section is currently incomplete as work on the compiler is still ongoing.
-The following is a non-exhaustive list of unimplemented/undocumented features:
-non-volatile bit code sequences, globally accessing scratch atomics,
-multicast loads, barriers (including split barriers) and cooperative atomics.
-Scalar operations memory model needs more elaboration as well.
-:::
 
 - Vector memory operations are performed as wavefront wide operations, with the
   `EXEC` mask predicating which lanes execute.
@@ -14501,18 +14643,18 @@ Atomics in the scratch address space are handled as follows:
   Refer to the generic address space code sequences for further information.
 - Data types >32 bits: unsupported and an error is emitted.
 
-The code sequences used to implement the memory model for GFX125x are defined in
-table {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-table`.
+The code sequences used to implement the memory model for GFX12.5 are defined in
+table {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-table`.
 
-The mapping of LLVM IR syncscope to GFX125x instruction `scope` operands is
-defined in {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+The mapping of LLVM IR syncscope to GFX12.5 instruction `scope` operands is
+defined in {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 
 The table only applies if and only if it is directly referenced by an entry in
-{ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-table`, and it only applies to
+{ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-table`, and it only applies to
 the instruction in the code sequence that references the table.
 
-:::{list-table} AMDHSA Memory Model Code Sequences GFX125x - Instruction Scopes
-:name: amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table
+:::{list-table} AMDHSA Memory Model Code Sequences GFX12.5 - Instruction Scopes
+:name: amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table
 :header-rows: 1
 :widths: auto
 
@@ -14537,8 +14679,8 @@ the instruction in the code sequence that references the table.
 [^scope-cu]: `SCOPE_CU` is the default `scope:` emitted by the compiler.
     It will be omitted when instructions are emitted in textual form by the compiler.
 
-:::{list-table} AMDHSA Memory Model Code Sequences GFX125x
-:name: amdgpu-amdhsa-memory-model-code-sequences-gfx125x-table
+:::{list-table} AMDHSA Memory Model Code Sequences GFX12.5
+:name: amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-table
 :header-rows: 1
 :widths: auto
 
@@ -14546,7 +14688,7 @@ the instruction in the code sequence that references the table.
   - LLVM Memory Ordering
   - LLVM Memory Sync Scope
   - AMDGPU Address Space
-  - AMDGPU Machine Code GFX125x
+  - AMDGPU Machine Code GFX12.5
 * - **Non-Atomic**
   -
   -
@@ -14639,7 +14781,7 @@ the instruction in the code sequence that references the table.
     - generic
   - 1. buffer/global/flat_load
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 * - load atomic
   - monotonic
   - - singlethread
@@ -14664,7 +14806,7 @@ the instruction in the code sequence that references the table.
 
     2. buffer/global/flat_store
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 * - store atomic
   - monotonic
   - - singlethread
@@ -14689,7 +14831,7 @@ the instruction in the code sequence that references the table.
 
     2. buffer/global/flat_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 * - atomicrmw
   - monotonic
   - - singlethread
@@ -14716,7 +14858,7 @@ the instruction in the code sequence that references the table.
   - - global
   - 1. buffer/global_load
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 
     2. `s_wait_loadcnt 0x0`
 
@@ -14737,7 +14879,7 @@ the instruction in the code sequence that references the table.
   - - generic
   - 1. flat_load
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 
     2. `s_wait_loadcnt 0x0`\
        `s_wait_dscnt 0x0`
@@ -14751,7 +14893,7 @@ the instruction in the code sequence that references the table.
   - - global
   - 1. buffer/global_load
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 
     2. `s_wait_loadcnt 0x0`
 
@@ -14760,7 +14902,7 @@ the instruction in the code sequence that references the table.
 
     3. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
 * - load atomic
@@ -14770,7 +14912,7 @@ the instruction in the code sequence that references the table.
   - - global
   - 1. buffer/global_load
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 
     2. `s_wait_loadcnt 0x0`
 
@@ -14779,7 +14921,7 @@ the instruction in the code sequence that references the table.
 
     3. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`;
     >   use `SCOPE_SE` if MTYPE NC is not used.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
@@ -14791,7 +14933,7 @@ the instruction in the code sequence that references the table.
   - - generic
   - 1. flat_load
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 
     2. `s_wait_loadcnt 0x0`\
        `s_wait_dscnt 0x0`
@@ -14802,7 +14944,7 @@ the instruction in the code sequence that references the table.
 
     3. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
 * - load atomic
@@ -14812,7 +14954,7 @@ the instruction in the code sequence that references the table.
   - - generic
   - 1. flat_load
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 
     2. `s_wait_loadcnt 0x0`\
        `s_wait_dscnt 0x0`
@@ -14823,7 +14965,7 @@ the instruction in the code sequence that references the table.
 
     3. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`;
     >   use `SCOPE_SE` if MTYPE NC is not used.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
@@ -14853,7 +14995,7 @@ the instruction in the code sequence that references the table.
 
     2. buffer/global_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`
 
     3. **Atomic with return:**\
@@ -14881,7 +15023,7 @@ the instruction in the code sequence that references the table.
 
     2. flat_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`
 
     3. **Atomic with return:**\
@@ -14904,7 +15046,7 @@ the instruction in the code sequence that references the table.
 
     2. buffer/global_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`
 
     3. **Atomic with return:**\
@@ -14917,7 +15059,7 @@ the instruction in the code sequence that references the table.
 
     4. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
 * - atomicrmw
@@ -14932,7 +15074,7 @@ the instruction in the code sequence that references the table.
 
     2. buffer/global_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`
 
     3. **Atomic with return:**\
@@ -14945,7 +15087,7 @@ the instruction in the code sequence that references the table.
 
     4. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`;
     >   use `SCOPE_SE` if MTYPE NC is not used.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
@@ -14961,7 +15103,7 @@ the instruction in the code sequence that references the table.
 
     2. flat_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`
 
     3. **Atomic with return:**\
@@ -14977,7 +15119,7 @@ the instruction in the code sequence that references the table.
 
     4. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
 * - atomicrmw
@@ -14991,7 +15133,7 @@ the instruction in the code sequence that references the table.
 
     2. flat_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`
 
     3. **Atomic with return:**\
@@ -15007,7 +15149,7 @@ the instruction in the code sequence that references the table.
 
     4. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`;
     >   use `SCOPE_SE` if MTYPE NC is not used.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
@@ -15057,7 +15199,7 @@ the instruction in the code sequence that references the table.
 
     2. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - Ensures that following loads will not see stale data.
 * - fence
   - acquire
@@ -15081,7 +15223,7 @@ the instruction in the code sequence that references the table.
 
     2. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`;
     >   use `SCOPE_SE` if MTYPE NC is not used.
     > - Ensures that following loads will not see stale data.
 
@@ -15129,7 +15271,7 @@ the instruction in the code sequence that references the table.
 
     3. buffer/global/flat_store
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 * - store atomic
   - release
   - - workgroup
@@ -15165,7 +15307,7 @@ the instruction in the code sequence that references the table.
 
     2. `global_wb`
 
-       > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+       > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
        > - Omit if MTYPE NC is not used.
     3. `s_wait_storecnt 0x0`\
        `s_wait_loadcnt 0x0`\
@@ -15186,7 +15328,7 @@ the instruction in the code sequence that references the table.
 
     5. buffer/global/flat_store
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 * - atomicrmw
   - release
   - - singlethread
@@ -15225,7 +15367,7 @@ the instruction in the code sequence that references the table.
 
     3. buffer/global/flat_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 * - atomicrmw
   - release
   - - workgroup
@@ -15261,7 +15403,7 @@ the instruction in the code sequence that references the table.
 
     2. `global_wb`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - Omit if MTYPE NC is not used.
 
     3. `s_wait_storecnt 0x0`\
@@ -15283,7 +15425,7 @@ the instruction in the code sequence that references the table.
 
     5. buffer/global/flat_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
 * - fence
   - release
   - - singlethread
@@ -15326,7 +15468,7 @@ the instruction in the code sequence that references the table.
 
     2. `global_wb`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - Omit if MTYPE NC is not used.
 
     3. `s_wait_storecnt 0x0`\
@@ -15388,7 +15530,7 @@ the instruction in the code sequence that references the table.
 
     3. buffer/global_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`.
 
     4. **Atomic with return:**\
@@ -15440,7 +15582,7 @@ the instruction in the code sequence that references the table.
 
     3. flat_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`.
 
     4. **Atomic without return:**\
@@ -15470,7 +15612,7 @@ the instruction in the code sequence that references the table.
 
     2. `global_wb`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - Omit if MTYPE NC is not used.
 
     3. `s_wait_storecnt 0x0`\
@@ -15492,7 +15634,7 @@ the instruction in the code sequence that references the table.
 
     6. buffer/global_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`.
 
     6. **Atomic with return:**\
@@ -15505,7 +15647,7 @@ the instruction in the code sequence that references the table.
 
     7. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`;
     >   use `SCOPE_SE` if MTYPE NC is not used.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
@@ -15528,7 +15670,7 @@ the instruction in the code sequence that references the table.
     > - Omit if `global_wb` is omitted.
 
     2. `global_wb`
-       > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+       > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
        > - Omit if MTYPE NC is not used.
     3. `s_wait_storecnt 0x0`\
        `s_wait_loadcnt 0x0`\
@@ -15548,7 +15690,7 @@ the instruction in the code sequence that references the table.
 
     5. flat_atomic
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
     > - If atomic with return, use `th:TH_ATOMIC_RETURN`.
 
     6. **Atomic with return:**\
@@ -15564,7 +15706,7 @@ the instruction in the code sequence that references the table.
 
     7. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`;
     >   use `SCOPE_SE` if MTYPE NC is not used.
     > - Must happen before any following global/generic load/load atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
@@ -15617,7 +15759,7 @@ the instruction in the code sequence that references the table.
     > - Omit if `global_wb` is omitted.
 
     2. `global_wb`
-       > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`.
+       > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`.
        > - Omit if MTYPE NC is not used.
     3. `s_wait_storecnt 0x0`\
        `s_wait_loadcnt 0x0`\
@@ -15638,7 +15780,7 @@ the instruction in the code sequence that references the table.
 
     4. `global_inv`
 
-    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx125x-scopes-table`;
+    > - Apply {ref}`amdgpu-amdhsa-memory-model-code-sequences-gfx12_5-scopes-table`;
     >   use `SCOPE_SE` if MTYPE NC is not used.
     > - Must happen before any following global/generic load/load atomic/store/store atomic/atomicrmw.
     > - Ensures that following loads will not see stale global data.
@@ -15765,7 +15907,7 @@ the instruction in the code sequence that references the table.
   - *Same as corresponding fence acq_rel, except must generate all instructions even for OpenCL.*
 :::
 
-(amdgpu-amdhsa-memory-model-gfx125x-cooperative-atomics)=
+(amdgpu-amdhsa-memory-model-gfx12_5-cooperative-atomics)=
 
 ###### '`llvm.amdgcn.cooperative.atomic`' Intrinsics
 
@@ -15773,7 +15915,7 @@ The collection of convergent threads participating in a cooperative atomic must 
 to the same wave32.
 
 Only naturally-aligned, contiguous groups of lanes may be used;
-see {ref}`the table below<gfx125x-cooperative-atomic-intrinsics-table>` for the set of
+see {ref}`the table below<gfx12_5-cooperative-atomic-intrinsics-table>` for the set of
 possible lane groups.
 Cooperative atomics may be executed by more than one group per wave.
 Using an unsupported lane group, or using more lane groups per wave than the maximum will
@@ -15791,8 +15933,8 @@ Enumerate all cases where UB is invoked when using this intrinsic instead of han
 "specific global memory locations".
 :::
 
-:::{list-table} GFX125x Cooperative Atomic Intrinsics
-:name: gfx125x-cooperative-atomic-intrinsics-table
+:::{list-table} GFX12.5 Cooperative Atomic Intrinsics
+:name: gfx12_5-cooperative-atomic-intrinsics-table
 :header-rows: 1
 
 * - LLVM Intrinsic
@@ -16724,6 +16866,12 @@ within a map that has been added by the same *vendor-name*.
   - integer
   -
   - Scratch memory size in bytes.
+* - ".backend_stack_size"
+  - integer
+  -
+  - Amount of stack size in bytes used by the shader, including the stack used by its known callees.
+    Chain callees are excluded, since they reuse the caller's stack frame.
+    Indirect calls and recursion do not contribute.
 * - ".lds_size"
   - integer
   -
@@ -16836,7 +16984,12 @@ within a map that has been added by the same *vendor-name*.
   - Number of SGPRs used by the shader.
 * - ".stack_frame_size_in_bytes"
   - integer
-  - Amount of stack size used by the shader.
+  - Amount of stack size used by the shader itself, not including the stack used by any of its callees.
+* - ".backend_stack_size"
+  - integer
+  - Amount of stack size in bytes used by the shader, including the stack used by its known callees.
+    Chain callees are excluded, since they reuse the caller's stack frame.
+    Indirect calls and recursion do not contribute.
 * - ".shader_subtype"
   - string
   - Shader subtype/kind.
@@ -18005,6 +18158,8 @@ The following sub-directives may appear inside the block:
   - Accumulator VGPRs used (u32)
 * - `.amdgpu_private_segment_size` *n*
   - Private segment size in bytes (u32)
+* - `.amdgpu_occupancy` *value*
+  - ABI occupancy (u32). See {ref}`amdgpu-abi-occupancy` for more details.
 * - `.amdgpu_use` *symbol*
   - Resource dependency (LDS or barrier)
 * - `.amdgpu_call` *symbol*
@@ -18024,6 +18179,7 @@ Example:
   .amdgpu_num_vgpr 32
   .amdgpu_num_agpr 0
   .amdgpu_private_segment_size 0
+  .amdgpu_occupancy 4
   .amdgpu_use lds_var
   .amdgpu_call helper
   .amdgpu_indirect_call "vi"

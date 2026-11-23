@@ -129,7 +129,7 @@ private:
   // sure the type is not constructed without new, or destructed without
   // checking the reference count, we mark the constructor and destructor
   // private.
-  DataObject(amd_comgr_data_kind_t Kind);
+  explicit DataObject(amd_comgr_data_kind_t Kind);
   ~DataObject();
 };
 
@@ -139,9 +139,9 @@ class ScopedDataObjectReleaser {
   DataObject *Obj;
 
 public:
-  ScopedDataObjectReleaser(DataObject *Obj) : Obj(Obj) {}
+  explicit ScopedDataObjectReleaser(DataObject *Obj) : Obj(Obj) {}
 
-  ScopedDataObjectReleaser(amd_comgr_data_t Obj)
+  explicit ScopedDataObjectReleaser(amd_comgr_data_t Obj)
       : Obj(DataObject::convert(Obj)) {}
 
   ~ScopedDataObjectReleaser() { Obj->release(); }
@@ -151,7 +151,7 @@ class ScopedDataSetReleaser {
   amd_comgr_data_set_t Set;
 
 public:
-  ScopedDataSetReleaser(amd_comgr_data_set_t Set) : Set(Set) {}
+  explicit ScopedDataSetReleaser(amd_comgr_data_set_t Set) : Set(Set) {}
 
   ~ScopedDataSetReleaser() { amd_comgr_destroy_data_set(Set); }
 };
@@ -285,7 +285,7 @@ struct DataMeta {
 };
 
 struct DataSymbol {
-  DataSymbol(SymbolContext *DataSym);
+  explicit DataSymbol(SymbolContext *DataSym);
   ~DataSymbol();
 
   static amd_comgr_symbol_t convert(DataSymbol *Sym) {

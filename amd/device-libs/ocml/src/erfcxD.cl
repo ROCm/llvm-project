@@ -7,33 +7,18 @@
 
 #include "mathD.h"
 
+#define DOUBLE_SPECIALIZATION
+#include "ep.h"
+
+extern CONSTATTR double2 MATH_PRIVATE(erfcxep)(double);
+extern CONSTATTR double MATH_PRIVATE(expep)(double2);
+extern CONSTATTR double2 MATH_PRIVATE(epexpep)(double2);
+
 CONSTATTR double
 MATH_PRIVATE(erfcx)(double x)
 {
-    double n = x - 4.0;
-    double d = x + 4.0;
-    double r = MATH_FAST_RCP(d);
-    double q = n * r;
-    double e = MATH_MAD(-q, x, MATH_MAD(q + 1.0, -4.0, x));
-    q = BUILTIN_FMA_F64(r, e, q);
-    
-    double g = PE21(q, -0x1.15eb19bc60ea8p-29, -0x1.a047c341fece1p-27, 0x1.437e30a881907p-28,
-                     0x1.e0ed222d4423fp-24, -0x1.a703db5fda3ep-25, -0x1.a6d5571ceca55p-21,
-                     0x1.2436c05d90bf2p-20, 0x1.36bfbbf51ca4bp-18, -0x1.0a0095b7eedcdp-16,
-                     -0x1.1ed94dd3dd5f9p-17, 0x1.4dce32d9ead5bp-13, -0x1.77d64bb9af1dap-12,
-                     -0x1.a2beece46e0c2p-12, 0x1.63f2603106b16p-8, -0x1.625ed0917acadp-6,
-                     0x1.e1a956436902cp-5, -0x1.00428c8ff856dp-3, 0x1.c0398cb6f0a3ap-3,
-                     -0x1.47938f4c72d47p-2, 0x1.8d4ecb405c622p-2, -0x1.7d8f1c452474bp-2,
-                     0x1.dd2c8b74febf6p-3);
-    double p = MATH_MAD(q, g, g);
-
-    double tx = x + x;
-    d = 1.0 + tx;
-    r = MATH_FAST_RCP(d);
-    q = MATH_MAD(p, r, r);
-    e = MATH_MAD(-q, tx, 1.0) + (p - q);
-    q = MATH_MAD(r, e, q);
-    return q;
+    double2 q = MATH_PRIVATE(erfcxep)(x);
+    return q.hi + q.lo;
 }
 
 #if !defined EXTRA_ACCURACY
@@ -42,22 +27,38 @@ CONSTATTR double
 MATH_MANGLE(erfcx)(double x)
 {
     double ax = BUILTIN_ABS_F64(x);
-    double ret;
-    
+    double2 q;
+
     if (ax < 0x1.b39dc41e48bfcp+4) {
-        ret = MATH_PRIVATE(erfcx)(ax);
+        q = MATH_PRIVATE(erfcxep)(ax);
     } else {
-        double r = MATH_RCP(ax);
-        double t = r*r;
-        double p = PE6(t, 162.421875, -29.53125, 6.5625, -1.875, 0.75, -0.5, 1.0);
-        ret = 0x1.20dd750429b6dp-1 * r * p;
+        // c/ax (c = 1/sqrt(pi)) as hi + lo times 1 + s; scaled by 1/4 so
+        // the reciprocal stays normal
+        double a = 0x1.0p-2 * ax;
+        double r = MATH_FAST_RCP(a);
+        double t = r * r * 0x1.0p-4;
+        double s = t * PE5(t, 162.421875, -29.53125, 6.5625, -1.875, 0.75, -0.5);
+        double qh = 0x1.20dd750429b6dp-3 * r;
+        double ql = r * (MATH_MAD(-qh, a, 0x1.20dd750429b6dp-3) + 0x1.1ae3a914fed80p-59);
+        q = ax == PINF_F64 ? con(0.0, 0.0) : con(qh, MATH_MAD(qh, s, ql));
     }
 
+    double ret = q.hi + q.lo;
+
     if (x < 0.0) {
+        // 2 exp(x^2) - erfcx(-x); 2 exp(x^2) >= 2 > erfcx(-x)
         double x2h = x*x;
         double x2l = MATH_MAD(x, x, -x2h);
-        double e = MATH_MANGLE(exp)(x2h);
-        ret = MATH_MAD(2.0, MATH_MAD(e, x2l, e), -ret);
+#if defined MORE_ACCURACY
+        double2 e = MATH_PRIVATE(epexpep)(con(x2h, x2l));
+        double sh = MATH_MAD(2.0, e.hi, -q.hi);
+        double sl = MATH_MAD(2.0, e.hi, -sh) - q.hi;
+        ret = sh + (MATH_MAD(2.0, e.lo, sl) - q.lo);
+        ret = BUILTIN_ISINF_F64(sh) ? sh : ret;
+#else
+        double e = MATH_PRIVATE(expep)(con(x2h, x2l));
+        ret = MATH_MAD(2.0, e, -ret);
+#endif
         ret = x < -0x1.aa0f4d2e063cep+4 ? PINF_F64 : ret;
     }
 

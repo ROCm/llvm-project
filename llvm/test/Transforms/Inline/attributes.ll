@@ -13,6 +13,10 @@ define i32 @sanitize_hwaddress_callee(i32 %i) sanitize_hwaddress {
   ret i32 %i
 }
 
+define i32 @sanitize_device_address_callee(i32 %i) sanitize_device_address {
+  ret i32 %i
+}
+
 define i32 @sanitize_thread_callee(i32 %i) sanitize_thread {
   ret i32 %i
 }
@@ -46,6 +50,10 @@ define i32 @alwaysinline_sanitize_address_callee(i32 %i) alwaysinline sanitize_a
 }
 
 define i32 @alwaysinline_sanitize_hwaddress_callee(i32 %i) alwaysinline sanitize_hwaddress {
+  ret i32 %i
+}
+
+define i32 @alwaysinline_sanitize_device_address_callee(i32 %i) alwaysinline sanitize_device_address {
   ret i32 %i
 }
 
@@ -94,6 +102,17 @@ define i32 @test_no_sanitize_hwaddress(i32 %arg) {
   ret i32 %x4
 ; CHECK-LABEL: @test_no_sanitize_hwaddress(
 ; CHECK-NEXT: @sanitize_hwaddress_callee
+; CHECK-NEXT: ret i32
+}
+
+define i32 @test_no_sanitize_device_address(i32 %arg) {
+  %x1 = call i32 @noattr_callee(i32 %arg)
+  %x2 = call i32 @sanitize_device_address_callee(i32 %x1)
+  %x3 = call i32 @alwaysinline_callee(i32 %x2)
+  %x4 = call i32 @alwaysinline_sanitize_device_address_callee(i32 %x3)
+  ret i32 %x4
+; CHECK-LABEL: @test_no_sanitize_device_address(
+; CHECK-NEXT: @sanitize_device_address_callee
 ; CHECK-NEXT: ret i32
 }
 
@@ -154,6 +173,17 @@ define i32 @test_sanitize_hwaddress(i32 %arg) sanitize_hwaddress {
   %x4 = call i32 @alwaysinline_sanitize_hwaddress_callee(i32 %x3)
   ret i32 %x4
 ; CHECK-LABEL: @test_sanitize_hwaddress(
+; CHECK-NEXT: @noattr_callee
+; CHECK-NEXT: ret i32
+}
+
+define i32 @test_sanitize_device_address(i32 %arg) sanitize_device_address {
+  %x1 = call i32 @noattr_callee(i32 %arg)
+  %x2 = call i32 @sanitize_device_address_callee(i32 %x1)
+  %x3 = call i32 @alwaysinline_callee(i32 %x2)
+  %x4 = call i32 @alwaysinline_sanitize_device_address_callee(i32 %x3)
+  ret i32 %x4
+; CHECK-LABEL: @test_sanitize_device_address(
 ; CHECK-NEXT: @noattr_callee
 ; CHECK-NEXT: ret i32
 }
@@ -304,46 +334,6 @@ define i32 @test_target_features1(i32 %i) "target-features"="+sse4.2" {
   ret i32 %1
 ; CHECK-LABEL: @test_target_features1(
 ; CHECK-NEXT: @test_target_features_callee1
-; CHECK-NEXT: ret i32
-}
-
-define i32 @less-precise-fpmad_callee0(i32 %i) "less-precise-fpmad"="false" {
-  ret i32 %i
-; CHECK: @less-precise-fpmad_callee0(i32 %i) [[FPMAD_FALSE:#[0-9]+]] {
-; CHECK-NEXT: ret i32
-}
-
-define i32 @less-precise-fpmad_callee1(i32 %i) "less-precise-fpmad"="true" {
-  ret i32 %i
-; CHECK: @less-precise-fpmad_callee1(i32 %i) [[FPMAD_TRUE:#[0-9]+]] {
-; CHECK-NEXT: ret i32
-}
-
-define i32 @test_less-precise-fpmad0(i32 %i) "less-precise-fpmad"="false" {
-  %1 = call i32 @less-precise-fpmad_callee0(i32 %i)
-  ret i32 %1
-; CHECK: @test_less-precise-fpmad0(i32 %i) [[FPMAD_FALSE]] {
-; CHECK-NEXT: ret i32
-}
-
-define i32 @test_less-precise-fpmad1(i32 %i) "less-precise-fpmad"="false" {
-  %1 = call i32 @less-precise-fpmad_callee1(i32 %i)
-  ret i32 %1
-; CHECK: @test_less-precise-fpmad1(i32 %i) [[FPMAD_FALSE]] {
-; CHECK-NEXT: ret i32
-}
-
-define i32 @test_less-precise-fpmad2(i32 %i) "less-precise-fpmad"="true" {
-  %1 = call i32 @less-precise-fpmad_callee0(i32 %i)
-  ret i32 %1
-; CHECK: @test_less-precise-fpmad2(i32 %i) [[FPMAD_FALSE]] {
-; CHECK-NEXT: ret i32
-}
-
-define i32 @test_less-precise-fpmad3(i32 %i) "less-precise-fpmad"="true" {
-  %1 = call i32 @less-precise-fpmad_callee1(i32 %i)
-  ret i32 %1
-; CHECK: @test_less-precise-fpmad3(i32 %i) [[FPMAD_TRUE]] {
 ; CHECK-NEXT: ret i32
 }
 
@@ -541,8 +531,6 @@ define i32 @loader_replaceable_caller() {
 
 ; CHECK: attributes [[SANITIZE_ALLOC_TOKEN]] = { sanitize_alloc_token }
 ; CHECK: attributes [[SLH]] = { speculative_load_hardening }
-; CHECK: attributes [[FPMAD_FALSE]] = { "less-precise-fpmad"="false" }
-; CHECK: attributes [[FPMAD_TRUE]] = { "less-precise-fpmad"="true" }
 ; CHECK: attributes [[NOIMPLICITFLOAT]] = { noimplicitfloat }
 ; CHECK: attributes [[NOUSEJUMPTABLES]] = { "no-jump-tables"="true" }
 ; CHECK: attributes [[NULLPOINTERISVALID]] = { null_pointer_is_valid }

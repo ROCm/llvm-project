@@ -310,7 +310,7 @@ macro(get_test_cc_for_arch arch cc_out cflags_out)
   if (NOT ${ARGC} EQUAL 3)
     message(FATAL_ERROR "got too many args. expected 3, got ${ARGC} (namely: ${ARGV})")
   endif()
-  if(ANDROID OR (NOT APPLE AND ${arch} MATCHES "arm|aarch64|riscv32|riscv64"))
+  if(ANDROID OR (NOT APPLE AND ${arch} MATCHES "arm|aarch64|riscv32|riscv64|hexagon"))
     # This is only true if we are cross-compiling.
     # Build all tests with host compiler and use host tools.
     set(${cc_out} ${COMPILER_RT_TEST_COMPILER})
@@ -321,6 +321,9 @@ macro(get_test_cc_for_arch arch cc_out cflags_out)
       list(APPEND ${cflags_out} ${DARWIN_osx_CFLAGS})
     endif()
     string(REPLACE ";" " " ${cflags_out} "${${cflags_out}}")
+  endif()
+  if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux" AND NOT ANDROID AND CMAKE_SYSROOT)
+    string(APPEND ${cflags_out} " --sysroot=${CMAKE_SYSROOT}")
   endif()
 endmacro()
 
@@ -673,6 +676,9 @@ if(APPLE)
   list_intersect(RTSAN_SUPPORTED_ARCH
     ALL_RTSAN_SUPPORTED_ARCH
     SANITIZER_COMMON_SUPPORTED_ARCH)
+  list_intersect(DASAN_SUPPORTED_ARCH
+    ALL_DASAN_SUPPORTED_ARCH
+    SANITIZER_COMMON_SUPPORTED_ARCH)
   list_intersect(DFSAN_SUPPORTED_ARCH
     ALL_DFSAN_SUPPORTED_ARCH
     SANITIZER_COMMON_SUPPORTED_ARCH)
@@ -746,6 +752,7 @@ else()
     ${ALL_UBSAN_SUPPORTED_ARCH})
   filter_available_targets(ASAN_SUPPORTED_ARCH ${ALL_ASAN_SUPPORTED_ARCH})
   filter_available_targets(RTSAN_SUPPORTED_ARCH ${ALL_RTSAN_SUPPORTED_ARCH})
+  filter_available_targets(DASAN_SUPPORTED_ARCH ${ALL_DASAN_SUPPORTED_ARCH})
   filter_available_targets(FUZZER_SUPPORTED_ARCH ${ALL_FUZZER_SUPPORTED_ARCH})
   filter_available_targets(DFSAN_SUPPORTED_ARCH ${ALL_DFSAN_SUPPORTED_ARCH})
   filter_available_targets(LSAN_SUPPORTED_ARCH ${ALL_LSAN_SUPPORTED_ARCH})
@@ -804,7 +811,7 @@ if(COMPILER_RT_SUPPORTED_ARCH)
 endif()
 message(STATUS "Compiler-RT supported architectures: ${COMPILER_RT_SUPPORTED_ARCH}")
 
-set(ALL_SANITIZERS asan;rtsan;dfsan;msan;hwasan;tsan;csan;tysan;safestack;cfi;scudo_standalone;ubsan_minimal;gwp_asan;nsan;asan_abi)
+set(ALL_SANITIZERS asan;rtsan;dasan;dfsan;msan;hwasan;tsan;csan;tysan;safestack;cfi;scudo_standalone;ubsan_minimal;gwp_asan;nsan;asan_abi)
 set(COMPILER_RT_SANITIZERS_TO_BUILD all CACHE STRING
     "sanitizers to build if supported on the target (all;${ALL_SANITIZERS})")
 list_replace(COMPILER_RT_SANITIZERS_TO_BUILD all "${ALL_SANITIZERS}")
@@ -847,6 +854,15 @@ if (COMPILER_RT_HAS_SANITIZER_COMMON AND RTSAN_SUPPORTED_ARCH AND
   set(COMPILER_RT_HAS_RTSAN TRUE)
 else()
   set(COMPILER_RT_HAS_RTSAN FALSE)
+endif()
+
+if (DASAN_SUPPORTED_ARCH AND
+    "dasan" IN_LIST COMPILER_RT_SANITIZERS_TO_BUILD AND
+    (COMPILER_RT_GPU_BUILD OR
+     (COMPILER_RT_HAS_SANITIZER_COMMON AND OS_NAME MATCHES "Linux")))
+  set(COMPILER_RT_HAS_DASAN TRUE)
+else()
+  set(COMPILER_RT_HAS_DASAN FALSE)
 endif()
 
 if (OS_NAME MATCHES "Linux|FreeBSD|Windows|NetBSD|SunOS")

@@ -200,20 +200,20 @@ define void @ds_atomic_xchg_i32_ret_av_av_no_agprs(ptr addrspace(3) %ptr) #0 {
 ; CHECK-NEXT:    v_accvgpr_write_b32 a14, v62 ; Reload Reuse
 ; CHECK-NEXT:    v_accvgpr_write_b32 a15, v63 ; Reload Reuse
 ; CHECK-NEXT:    ;;#ASMSTART
-; CHECK-NEXT:    ; def v[6:37]
+; CHECK-NEXT:    ; def v1
 ; CHECK-NEXT:    ;;#ASMEND
 ; CHECK-NEXT:    ;;#ASMSTART
-; CHECK-NEXT:    ; def v1
+; CHECK-NEXT:    ; def v[6:37]
 ; CHECK-NEXT:    ;;#ASMEND
 ; CHECK-NEXT:    ds_wrxchg_rtn_b32 v0, v0, v1
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; use v[6:37]
 ; CHECK-NEXT:    ;;#ASMEND
+; CHECK-NEXT:    v_accvgpr_read_b32 v63, a15 ; Reload Reuse
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; use v0
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    v_accvgpr_read_b32 v63, a15 ; Reload Reuse
 ; CHECK-NEXT:    v_accvgpr_read_b32 v62, a14 ; Reload Reuse
 ; CHECK-NEXT:    v_accvgpr_read_b32 v61, a13 ; Reload Reuse
 ; CHECK-NEXT:    v_accvgpr_read_b32 v60, a12 ; Reload Reuse
@@ -691,20 +691,20 @@ define void @ds_atomic_xor_i32_ret_av_av_no_agprs(ptr addrspace(3) %ptr) #0 {
 ; CHECK-NEXT:    v_accvgpr_write_b32 a14, v62 ; Reload Reuse
 ; CHECK-NEXT:    v_accvgpr_write_b32 a15, v63 ; Reload Reuse
 ; CHECK-NEXT:    ;;#ASMSTART
-; CHECK-NEXT:    ; def v[6:37]
+; CHECK-NEXT:    ; def v1
 ; CHECK-NEXT:    ;;#ASMEND
 ; CHECK-NEXT:    ;;#ASMSTART
-; CHECK-NEXT:    ; def v1
+; CHECK-NEXT:    ; def v[6:37]
 ; CHECK-NEXT:    ;;#ASMEND
 ; CHECK-NEXT:    ds_xor_rtn_b32 v0, v0, v1
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; use v[6:37]
 ; CHECK-NEXT:    ;;#ASMEND
+; CHECK-NEXT:    v_accvgpr_read_b32 v63, a15 ; Reload Reuse
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; use v0
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    v_accvgpr_read_b32 v63, a15 ; Reload Reuse
 ; CHECK-NEXT:    v_accvgpr_read_b32 v62, a14 ; Reload Reuse
 ; CHECK-NEXT:    v_accvgpr_read_b32 v61, a13 ; Reload Reuse
 ; CHECK-NEXT:    v_accvgpr_read_b32 v60, a12 ; Reload Reuse

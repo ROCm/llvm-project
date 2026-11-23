@@ -8,6 +8,7 @@ define amdgpu_kernel void @straightline_kernel(ptr addrspace(1) noalias %in, ptr
 ; GFX12-NEXT:    s_load_b64 s[6:7], s[4:5], 0x10
 ; GFX12-NEXT:    s_load_b128 s[0:3], s[4:5], 0x0
 ; GFX12-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
+; GFX12-NEXT:    s_mov_b32 s4, 0
 ; GFX12-NEXT:    ; implicit-def: $vgpr1
 ; GFX12-NEXT:    ; implicit-def: $vgpr1
 ; GFX12-NEXT:    ; implicit-def: $vgpr1
@@ -17,17 +18,13 @@ define amdgpu_kernel void @straightline_kernel(ptr addrspace(1) noalias %in, ptr
 ; GFX12-NEXT:    ; implicit-def: $sgpr5
 ; GFX12-NEXT:    ; implicit-def: $sgpr5
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_nc_u32_e32 v0, s6, v0
 ; GFX12-NEXT:    s_bitcmp1_b32 s7, 0
-; GFX12-NEXT:    s_cselect_b32 s4, -1, 0
-; GFX12-NEXT:    s_and_b32 vcc_lo, exec_lo, s4
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_nc_u32_e32 v2, 64, v0
 ; GFX12-NEXT:    v_add_nc_u32_e32 v4, 0x80, v0
 ; GFX12-NEXT:    v_add_nc_u32_e32 v6, 0xc0, v0
-; GFX12-NEXT:    s_mov_b32 s4, 0
-; GFX12-NEXT:    s_cbranch_vccz .LBB0_2
+; GFX12-NEXT:    s_cbranch_scc0 .LBB0_2
 ; GFX12-NEXT:  ; %bb.1: ; %pred
 ; GFX12-NEXT:    s_load_b128 s[4:7], s[0:1], 0x0
 ; GFX12-NEXT:    v_add_nc_u32_e32 v0, 1, v0

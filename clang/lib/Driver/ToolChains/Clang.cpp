@@ -62,6 +62,7 @@
 #include "llvm/TargetParser/RISCVTargetParser.h"
 #include <cctype>
 #include <iterator>
+#include <optional>
 
 using namespace clang::driver;
 using namespace clang::driver::tools;
@@ -619,7 +620,18 @@ static void addPGOAndCoverageFlags(const ToolChain &TC, Compilation &C,
     StringRef Val = A->getValue();
     if (Val == "atomic" || Val == "prefer-atomic")
       CmdArgs.push_back("-fprofile-update=atomic");
-    else if (Val != "single")
+    else if (Val == "single") {
+      if (SanArgs.needsTsanRt() &&
+          (PGOGenerateArg || CSPGOGenerateArg || ProfileGenerateArg)) {
+        // Under TSan, instrprof defaults to atomic counter updates to avoid
+        // data race reports on profile counters; override that default and
+        // warn.
+        D.Diag(diag::warn_drv_tsan_profile_update_single)
+            << A->getAsString(Args);
+        CmdArgs.push_back("-mllvm");
+        CmdArgs.push_back("-instrprof-atomic-counter-update-all=false");
+      }
+    } else
       D.Diag(diag::err_drv_unsupported_option_argument)
           << A->getSpelling() << Val;
   }
@@ -1702,6 +1714,11 @@ void Clang::RenderTargetOptions(const llvm::Triple &EffectiveTriple,
   case llvm::Triple::ve:
     AddVETargetArgs(Args, CmdArgs);
     break;
+
+  case llvm::Triple::bpfel:
+  case llvm::Triple::bpfeb:
+    Args.AddAllArgs(CmdArgs, options::OPT_fbpf_no_enum_reloc_EQ);
+    break;
   }
 }
 
@@ -2467,6 +2484,14 @@ void Clang::AddHexagonTargetArgs(const ArgList &Args,
   CmdArgs.push_back("-mllvm");
   CmdArgs.push_back("-machine-sink-split=0");
 
+  // Let debuggers find the caller's HLX vector stack pointer.
+  if (const Arg *A = Args.getLastArg(options::OPT_g_Group);
+      A && !A->getOption().matches(options::OPT_g0) &&
+      !A->getOption().matches(options::OPT_ggdb0)) {
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-hexagon-save-parent-vsp");
+  }
+
   addQFloatBackendArg(getToolChain().getDriver(), Args, CmdArgs);
 }
 
@@ -3033,11 +3058,14 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
   // CUDA and HIP don't rely on the frontend to pass an ffp-contract option.
   // If one wasn't given by the user, don't pass it here.
   StringRef FPContract;
-  StringRef LastSeenFfpContractOption;
+  // Explicit contraction options and unsafe math establish a fallback.
+  // Without one, disabling unsafe math leaves precise/strict models unchanged.
+  std::optional<StringRef> FPContractFallback;
   StringRef LastFpContractOverrideOption;
-  bool SeenUnsafeMathModeOption = false;
-  if (!JA.isDeviceOffloading(Action::OFK_Cuda) &&
-      !JA.isOffloading(Action::OFK_HIP))
+  const bool UseFrontendFPContractDefault =
+      JA.isDeviceOffloading(Action::OFK_Cuda) ||
+      JA.isOffloading(Action::OFK_HIP);
+  if (!UseFrontendFPContractDefault)
     FPContract = "on";
   bool StrictFPModel = false;
   StringRef Float16ExcessPrecision = "";
@@ -3045,6 +3073,12 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
   LangOptions::ComplexRangeKind Range = LangOptions::ComplexRangeKind::CX_None;
   std::string ComplexRangeStr;
   StringRef LastComplexRangeOption;
+
+  auto enableUnsafeFPContract = [&]() {
+    FPContract = "fast";
+    if (!FPContractFallback)
+      FPContractFallback = "on";
+  };
 
   // Lambda to set fast-math options. This is also used by -ffp-model=fast
   auto applyFastMath = [&](bool Aggressive, StringRef CallerOption) {
@@ -3068,28 +3102,13 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
     TrappingMath = false;
     RoundingFPMath = false;
     FPExceptionBehavior = "";
-    FPContract = "fast";
-    SeenUnsafeMathModeOption = true;
+    enableUnsafeFPContract();
   };
 
   // Lambda to consolidate common handling for fp-contract
   auto restoreFPContractState = [&]() {
-    // CUDA and HIP don't rely on the frontend to pass an ffp-contract option.
-    // For other targets, if the state has been changed by one of the
-    // unsafe-math umbrella options a subsequent -fno-fast-math or
-    // -fno-unsafe-math-optimizations option reverts to the last value seen for
-    // the -ffp-contract option or "on" if we have not seen the -ffp-contract
-    // option. If we have not seen an unsafe-math option or -ffp-contract,
-    // we leave the FPContract state unchanged.
-    if (!JA.isDeviceOffloading(Action::OFK_Cuda) &&
-        !JA.isOffloading(Action::OFK_HIP)) {
-      if (LastSeenFfpContractOption != "")
-        FPContract = LastSeenFfpContractOption;
-      else if (SeenUnsafeMathModeOption)
-        FPContract = "on";
-    }
-    // In this case, we're reverting to the last explicit fp-contract option
-    // or the platform default
+    if (!UseFrontendFPContractDefault && FPContractFallback)
+      FPContract = *FPContractFallback;
     LastFpContractOverrideOption = "";
   };
 
@@ -3290,7 +3309,7 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
         }
 
         FPContract = Val;
-        LastSeenFfpContractOption = Val;
+        FPContractFallback = Val;
         LastFpContractOverrideOption = "";
       } else
         D.Diag(diag::err_drv_unsupported_option_argument)
@@ -3369,9 +3388,8 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
       ApproxFunc = true;
       TrappingMath = false;
       FPExceptionBehavior = "";
-      FPContract = "fast";
+      enableUnsafeFPContract();
       LastFpContractOverrideOption = "-funsafe-math-optimizations";
-      SeenUnsafeMathModeOption = true;
       break;
     case options::OPT_fno_unsafe_math_optimizations:
       AssociativeMath = false;
@@ -3416,7 +3434,6 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
       else
         Range = LangOptions::ComplexRangeKind::CX_None;
       LastComplexRangeOption = "";
-      LastFpContractOverrideOption = "";
       break;
     } // End switch (A->getOption().getID())
 
@@ -3999,7 +4016,6 @@ static void RenderOpenCLOptions(const ArgList &Args, ArgStringList &CmdArgs,
       options::OPT_cl_kernel_arg_info,
       options::OPT_cl_unsafe_math_optimizations,
       options::OPT_cl_fast_relaxed_math,
-      options::OPT_cl_mad_enable,
       options::OPT_cl_no_signed_zeros,
       options::OPT_cl_fp32_correctly_rounded_divide_sqrt,
       options::OPT_cl_uniform_work_group_size
@@ -4021,6 +4037,8 @@ static void RenderOpenCLOptions(const ArgList &Args, ArgStringList &CmdArgs,
   for (const auto &Arg : ForwardedArguments)
     if (const auto *A = Args.getLastArg(Arg))
       CmdArgs.push_back(Args.MakeArgString(A->getOption().getPrefixedName()));
+
+  Args.ClaimAllArgs(options::OPT_cl_mad_enable);
 
   // Only add the default headers if we are compiling OpenCL sources.
   if ((types::isOpenCL(InputType) ||
@@ -4053,7 +4071,8 @@ static void RenderHLSLOptions(const Driver &D, const ArgList &Args,
       options::OPT_fhlsl_spv_use_unknown_image_format,
       options::OPT_fhlsl_spv_use_legacy_buffer_matrix_order,
       options::OPT_fhlsl_spv_enable_maximal_reconvergence,
-      options::OPT_fhlsl_spv_preserve_interface};
+      options::OPT_fhlsl_spv_preserve_interface,
+      options::OPT_fhlsl_spv_support_nonzero_base_instance};
   if (!types::isHLSL(InputType))
     return;
   for (const auto &Arg : ForwardedArguments)
@@ -5149,6 +5168,8 @@ renderDebugOptions(const ToolChain &TC, const Driver &D, const llvm::Triple &T,
     CmdArgs.push_back("-dwarf-explicit-import");
 
   renderDwarfFormat(D, T, Args, CmdArgs, EffectiveDWARFVersion);
+  if (useMachORelocatableDwarf(T, EffectiveDWARFVersion))
+    CmdArgs.push_back("-grelocatable-dwarf");
   renderDebugInfoCompressionArgs(Args, CmdArgs, D, TC);
 
   bool EmitDwarfForAMDGCN =
@@ -7019,6 +7040,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (Args.hasArg(options::OPT_relocatable_pch))
     CmdArgs.push_back("-relocatable-pch");
+  Args.AddLastArg(CmdArgs, options::OPT_fpch_base_dir_is_cwd);
 
   if (const Arg *A = Args.getLastArg(options::OPT_fcf_runtime_abi_EQ)) {
     static const char *kCFABIs[] = {
@@ -7301,7 +7323,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       // backward compatibility, and emit a deprecation notice when explicitly
       // specified. Note that '-fopenmp-target-xteam-reduction-blocksize=' is
       // *not* deprecated: it still selects the block size of cross-team
-      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDHelper().
+      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDForNest().
       for (Arg *A :
            Args.filtered(options::OPT_fopenmp_target_xteam_reduction,
                          options::OPT_fno_openmp_target_xteam_reduction))
@@ -7327,10 +7349,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       if (Args.hasFlag(options::OPT_fopenmp_cuda_mode,
                        options::OPT_fno_openmp_cuda_mode, /*Default=*/false))
         CmdArgs.push_back("-fopenmp-cuda-mode");
-
-      // When in OpenMP offloading mode, enable or disable the new device
-      // runtime.
-      CmdArgs.push_back("-fopenmp-target-new-runtime");
 
       // When in OpenMP offloading mode, enable debugging on the device.
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_target_debug_EQ);
@@ -7583,6 +7601,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   Args.addOptOutFlag(CmdArgs, options::OPT_mstack_arg_probe,
                      options::OPT_mno_stack_arg_probe);
+
+  if (Arg *A = Args.getLastArg(options::OPT_msmall_int_abi_compat_EQ))
+    A->render(Args, CmdArgs);
 
   if (Arg *A = Args.getLastArg(options::OPT_mrestrict_it,
                                options::OPT_mno_restrict_it)) {
@@ -9354,6 +9375,9 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
     // This option does not allow the user redefinitions for these macros.
     if (!HasNoDateTime)
       CmdArgs.push_back("-init-datetime-macros=literalone");
+    // Omit tool, current workdir and command line in COFF CV debug section.
+    CmdArgs.push_back("-gno-codeview-command-line");
+    CmdArgs.push_back("-gno-codeview-cwd");
   }
 }
 
@@ -9573,6 +9597,8 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
   RenderDebugEnablingArgs(Args, CmdArgs, DebugInfoKind, DwarfVersion,
                           llvm::DebuggerKind::Default);
   renderDwarfFormat(D, Triple, Args, CmdArgs, DwarfVersion);
+  if (useMachORelocatableDwarf(Triple, DwarfVersion))
+    CmdArgs.push_back("-grelocatable-dwarf");
   renderDebugInfoCompressionArgs(Args, CmdArgs, D, getToolChain());
 
   // Handle -fPIC et al -- the relocation-model affects the assembler
@@ -10015,8 +10041,11 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
   };
   auto ToolChainHasSanitizerRT = [&](const ToolChain &TC, const ArgList &TCArgs,
                                      Action::OffloadKind Kind) {
-    if (TC.getSanitizerArgs(TCArgs, /*BA=*/{}, Kind).needsCsanRt())
+    const SanitizerArgs &SanArgs = TC.getSanitizerArgs(TCArgs, /*BA=*/{}, Kind);
+    if (SanArgs.needsCsanRt())
       return ToolChainHasRT(TC, "csan");
+    if (SanArgs.needsDasanRt())
+      return true;
     return ToolChainHasRT(TC, "ubsan_minimal") ||
            ToolChainHasRT(TC, "ubsan_standalone");
   };
@@ -10142,7 +10171,9 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       else if (DeviceLTOMode == LTOK_Thin) {
         CmdArgs.push_back(Args.MakeArgString(
             "--device-compiler=" + TC->getTripleString() + "=-flto=thin"));
-        if (TC->getTriple().isAMDGPU()) {
+        // OpenMP does not use object linking, so each ThinLTO backend imports
+        // all functions and internalizes the symbols.
+        if (TC->getTriple().isAMDGPU() && Kind == Action::OFK_OpenMP) {
           CmdArgs.push_back(
               Args.MakeArgString("--device-linker=" + TC->getTripleString() +
                                  "=-plugin-opt=-force-import-all"));
@@ -10152,13 +10183,20 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
           CmdArgs.push_back(Args.MakeArgString(
               "--device-linker=" + TC->getTripleString() +
               "=-plugin-opt=-avail-extern-gv-in-addrspace-to-local=3"));
-          if (Kind == Action::OFK_OpenMP) {
-            CmdArgs.push_back(
-                Args.MakeArgString("--device-linker=" + TC->getTripleString() +
-                                   "=-plugin-opt=-amdgpu-internalize-symbols"));
-          }
+          CmdArgs.push_back(
+              Args.MakeArgString("--device-linker=" + TC->getTripleString() +
+                                 "=-plugin-opt=-amdgpu-internalize-symbols"));
         }
       }
+
+      // Except for the per-TU HIP non-RDC fat binary job (the same condition
+      // as SuppressHIPNoRDCVerbose), this job links relocatable device code,
+      // even if `-fgpu-rdc` is not on the link command line.
+      if (shouldUseAMDGPUObjectLinking(*TC, ToolChainArgs, Kind,
+                                       /*AssumeRDC=*/!SuppressHIPNoRDCVerbose))
+        CmdArgs.push_back(
+            Args.MakeArgString("--device-linker=" + TC->getTripleString() +
+                               "=-plugin-opt=-amdgpu-enable-object-linking"));
     }
   }
 

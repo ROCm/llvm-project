@@ -16,3 +16,9 @@ ASAN-DEBUG lib breaks
 ---
 [DebugInfo] Accept DW_OP_xderef_size and DW_OP_lit1..DW_OP_lit31. (#227839)
 ---
+breaks smoke-fort and smoke-fort-limbo
+[mlir] [arith] Combine op for select (#234818) 
+---
+breaks build of rocprofiler-sdk
+[Clang][Inliner] Enable module-local optimizer hints by default (#238529)
+---

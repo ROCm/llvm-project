@@ -1208,6 +1208,7 @@ INSTANTIATE_TEST_SUITE_P(
                       AArch64CPUTestParams("apple-m4", "armv8.7-a"),
                       AArch64CPUTestParams("apple-a18", "armv8.7-a"),
                       AArch64CPUTestParams("apple-m5", "armv8.7-a"),
+                      AArch64CPUTestParams("apple-m6", "armv8.7-a"),
                       AArch64CPUTestParams("exynos-m3", "armv8-a"),
                       AArch64CPUTestParams("exynos-m4", "armv8.2-a"),
                       AArch64CPUTestParams("exynos-m5", "armv8.2-a"),
@@ -1316,24 +1317,25 @@ TEST_P(AArch64CPUAliasTestFixture, testCPUAlias) {
 
 INSTANTIATE_TEST_SUITE_P(
     AArch64CPUAliasTests, AArch64CPUAliasTestFixture,
-    ::testing::Values(AArch64CPUAliasTestParams({"neoverse-n2", "cobalt-100"}),
-                      AArch64CPUAliasTestParams({"c1-pro", "c2-pro"}),
-                      AArch64CPUAliasTestParams({"apple-a7", "cyclone",
-                                                 "apple-a8", "apple-a9"}),
-                      AArch64CPUAliasTestParams({"apple-a12", "apple-s4",
-                                                 "apple-s5"}),
-                      AArch64CPUAliasTestParams({"apple-a13", "apple-s6",
-                                                 "apple-s7", "apple-s8"}),
-                      AArch64CPUAliasTestParams({"apple-a14", "apple-m1"}),
-                      AArch64CPUAliasTestParams({"apple-a15", "apple-m2"}),
-                      AArch64CPUAliasTestParams({"apple-a16", "apple-m3",
-                                                 "apple-s9", "apple-s10"}),
-                      AArch64CPUAliasTestParams({"apple-m4", "apple-a18"}),
-                      AArch64CPUAliasTestParams({"apple-m5", "apple-a19"})),
+    ::testing::Values(
+        AArch64CPUAliasTestParams({"neoverse-n2", "cobalt-100"}),
+        AArch64CPUAliasTestParams({"c1-pro", "c2-pro"}),
+        AArch64CPUAliasTestParams({"apple-a7", "cyclone", "apple-a8",
+                                   "apple-a9"}),
+        AArch64CPUAliasTestParams({"apple-a12", "apple-s4", "apple-s5"}),
+        AArch64CPUAliasTestParams({"apple-a13", "apple-s6", "apple-s7",
+                                   "apple-s8"}),
+        AArch64CPUAliasTestParams({"apple-a14", "apple-m1"}),
+        AArch64CPUAliasTestParams({"apple-a15", "apple-m2"}),
+        AArch64CPUAliasTestParams({"apple-a16", "apple-m3", "apple-s9",
+                                   "apple-s10"}),
+        AArch64CPUAliasTestParams({"apple-m4", "apple-a18"}),
+        AArch64CPUAliasTestParams({"apple-m5", "apple-a19"}),
+        AArch64CPUAliasTestParams({"apple-m6", "apple-a20", "apple-s11"})),
     AArch64CPUAliasTestParams::PrintToStringParamName);
 
 // Note: number of CPUs includes aliases.
-static constexpr unsigned NumAArch64CPUArchs = 103;
+static constexpr unsigned NumAArch64CPUArchs = 106;
 
 TEST(TargetParserTest, testAArch64CPUArchList) {
   SmallVector<StringRef, NumAArch64CPUArchs> List;
@@ -2932,6 +2934,14 @@ TEST(TargetParserTest, testAMDGPUgetFeatureBitset) {
   // An unknown kind yields an empty bitset.
   EXPECT_EQ(AMDGPU::getFeatureBitset(AMDGPU::GK_NONE).count(), 0u);
 
+  // The subarch overload returns the bitset of the subarch's GPU.
+  EXPECT_EQ(AMDGPU::getFeatureBitset(Triple::AMDGPUSubArch900), GFX900);
+  EXPECT_TRUE(AMDGPU::getFeatureBitset(Triple::AMDGPUSubArch1250)
+                  .test(AMDGPU::FEAT_MCAST_FULL_MASK_BUG));
+  EXPECT_FALSE(AMDGPU::getFeatureBitset(Triple::AMDGPUSubArch1251)
+                   .test(AMDGPU::FEAT_MCAST_FULL_MASK_BUG));
+  EXPECT_EQ(AMDGPU::getFeatureBitset(Triple::NoSubArch).count(), 0u);
+
   // getFeatureNames maps the set bits back to their SubtargetFeature names, one
   // per set bit.
   SmallVector<StringRef, 0> Names;
@@ -3367,6 +3377,8 @@ TEST(TargetParserTest, testAMDGPUgetMaxHWAddressableLocalMemorySize) {
             163840u);
   EXPECT_EQ(AMDGPU::getMaxHWAddressableLocalMemorySize(AMDGPU::GK_GFX1250),
             327680u);
+  EXPECT_EQ(AMDGPU::getMaxHWAddressableLocalMemorySize(AMDGPU::GK_GFX1310),
+            196608u);
 }
 
 TEST(TargetParserTest, testAMDGPUgetBufferResourceNumRecordsWidth) {
@@ -3564,6 +3576,98 @@ TEST(TargetParserTest, testAMDGPUgetMaxWavesPerEU) {
   EXPECT_EQ(AMDGPU::getMaxWavesPerEU(AMDGPU::GK_GFX908), 10u);
   EXPECT_EQ(AMDGPU::getMaxWavesPerEU(AMDGPU::GK_GFX90A), 8u);
   EXPECT_EQ(AMDGPU::getMaxWavesPerEU(AMDGPU::GK_GFX1030), 16u);
+}
+
+TEST(TargetParserTest, testAMDGPUObjectLinkingWaveSize) {
+  const Triple AMDHSA("amdgcn-amd-amdhsa");
+  const AMDGPU::TargetID GFX900(AMDHSA, "gfx900");
+  const AMDGPU::TargetID GFX1030(AMDHSA, "gfx1030");
+  const AMDGPU::TargetID GFX1250(AMDHSA, "gfx1250");
+  const AMDGPU::TargetID GFX1310(AMDHSA, "gfx1310");
+
+  EXPECT_FALSE(AMDGPU::isWaveSizeSupported(GFX900, 32));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX900, 64));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1030, 32));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1030, 64));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1250, 32));
+  EXPECT_FALSE(AMDGPU::isWaveSizeSupported(GFX1250, 64));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1310, 32));
+  EXPECT_TRUE(AMDGPU::isWaveSizeSupported(GFX1310, 64));
+}
+
+TEST(TargetParserTest, testAMDGPUObjectLinkingRegisterEncoding) {
+  const Triple AMDHSA("amdgcn-amd-amdhsa");
+  const AMDGPU::TargetID GFX600(AMDHSA, "gfx600");
+  const AMDGPU::TargetID GFX900XnackOn(AMDHSA, "gfx900:xnack+");
+  const AMDGPU::TargetID GFX942XnackOff(AMDHSA, "gfx942:xnack-");
+  const AMDGPU::TargetID GFX1030(AMDHSA, "gfx1030");
+  const AMDGPU::TargetID GFX1250(AMDHSA, "gfx1250");
+
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX600, false, false), 0u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX600, true, false), 2u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX600, false, true), 4u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX900XnackOn, false, false), 4u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX900XnackOn, false, true), 6u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX942XnackOff, false, false), 6u);
+  EXPECT_EQ(AMDGPU::getNumExtraSGPRs(GFX1030, true, true), 2u);
+
+  EXPECT_EQ(AMDGPU::getEncodedNumVGPRBlocks(GFX600, 32, 64), 7u);
+  EXPECT_EQ(AMDGPU::getEncodedNumVGPRBlocks(GFX1030, 32, 32), 3u);
+  EXPECT_EQ(AMDGPU::getEncodedNumVGPRBlocks(GFX1250, 32, 32), 1u);
+
+  EXPECT_EQ(AMDGPU::getNumSGPRBlocks(0), 0u);
+  EXPECT_EQ(AMDGPU::getNumSGPRBlocks(8), 0u);
+  EXPECT_EQ(AMDGPU::getNumSGPRBlocks(9), 1u);
+}
+
+TEST(TargetParserTest, testAMDGPUObjectLinkingMaxWaveScratchSize) {
+  const Triple AMDHSA("amdgcn-amd-amdhsa");
+  const unsigned PreGFX11 = (256 * 4) * ((1 << 13) - 1);
+  const unsigned GFX11 = (64 * 4) * ((1 << 15) - 1);
+  const unsigned GFX12 = (64 * 4) * ((1 << 18) - 1);
+
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx900")),
+            PreGFX11);
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx1030")),
+            PreGFX11);
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx1100")),
+            GFX11);
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx1200")),
+            GFX12);
+  EXPECT_EQ(AMDGPU::getMaxWaveScratchSize(AMDGPU::TargetID(AMDHSA, "gfx1250")),
+            GFX12);
+}
+
+TEST(TargetParserTest, testAMDGPUObjectLinkingLDSOccupancy) {
+  const Triple AMDHSA("amdgcn-amd-amdhsa");
+  const AMDGPU::TargetID GFX900(AMDHSA, "gfx900");
+  const AMDGPU::TargetID GFX1250(AMDHSA, "gfx1250");
+  const AMDGPU::TargetID GFX1310(AMDHSA, "gfx1310");
+
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX900, 64, true, 21504, 10));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX900, 64, true, 21505, 10));
+  // gfx9 has no half-SIMD mode, so a request for it changes nothing.
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX900, 64, false, 21504, 10));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX900, 64, false, 21505, 10));
+
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1250, 32, true, 327680, 1));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1250, 32, true, 327681, 1));
+
+  // gfx13 has 192 KiB in full-SIMD mode and 96 KiB in half-SIMD mode.
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1310, 64, true, 65000, 9));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1310, 64, true, 65537, 9));
+  EXPECT_TRUE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1310, 64, false, 49000, 9));
+  EXPECT_FALSE(
+      AMDGPU::isLDSSizeCompatibleWithOccupancy(GFX1310, 64, false, 49153, 9));
 }
 
 TEST(TargetParserTest, testAMDGPUParseTargetIDString) {

@@ -15,6 +15,7 @@
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -116,11 +117,13 @@ uint64_t ModuleSummaryIndex::getFlags() const {
     Flags |= 0x200;
   if (withInternalizeAndPromote())
     Flags |= 0x400;
+  if (withSpeculativeDevirt())
+    Flags |= 0x800;
   return Flags;
 }
 
 void ModuleSummaryIndex::setFlags(uint64_t Flags) {
-  assert(Flags <= 0x7ff && "Unexpected bits in flag");
+  assert(Flags <= 0xfff && "Unexpected bits in flag");
   // 1 bit: WithGlobalValueDeadStripping flag.
   // Set on combined index only.
   if (Flags & 0x1)
@@ -163,6 +166,10 @@ void ModuleSummaryIndex::setFlags(uint64_t Flags) {
   // Set on combined index only.
   if (Flags & 0x400)
     setWithInternalizeAndPromote();
+  // 1 bit: WithSpeculativeDevirt flag.
+  // Set on combined index only.
+  if (Flags & 0x800)
+    setWithSpeculativeDevirt();
 }
 
 // Collect for the given module the list of function it defines
@@ -358,6 +365,71 @@ void ModuleSummaryIndex::propagateAttributes(
             if (GVS->maybeWriteOnly())
               WriteOnlyLiveGVars++;
           }
+}
+
+void ModuleSummaryIndex::resolveIndirectCalls(
+    const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols) {
+  if (HasResolvedIndirectCalls)
+    return;
+  HasResolvedIndirectCalls = true;
+
+  // The address of a value can be taken if some summary references it (every
+  // use of a function other than as the callee of a direct call is a
+  // reference), or if it is visible outside the summaries.
+  DenseSet<GlobalValue::GUID> AddressTaken(GUIDPreservedSymbols.begin(),
+                                           GUIDPreservedSymbols.end());
+  for (const auto &[GUID, Info] : GlobalValueMap) {
+    for (const auto &Summary : Info.getSummaryList()) {
+      for (ValueInfo Ref : Summary->refs())
+        AddressTaken.insert(Ref.getGUID());
+    }
+  }
+
+  // Map each call type identifier to the live address-taken functions with
+  // that identifier. The targets are in the order of the index, which is
+  // deterministic.
+  DenseMap<GlobalValue::GUID, SetVector<ValueInfo, std::vector<ValueInfo>>>
+      Targets;
+  for (const auto &Entry : GlobalValueMap) {
+    if (!AddressTaken.contains(Entry.first))
+      continue;
+    for (const auto &Summary : Entry.second.getSummaryList()) {
+      if (!isGlobalValueLive(Summary.get()))
+        continue;
+      ValueInfo Target(HaveGVs, &Entry);
+      if (auto *AS = dyn_cast<AliasSummary>(Summary.get())) {
+        if (!AS->hasAliasee())
+          continue;
+        Target = AS->getAliaseeVI();
+      }
+      auto *FS = dyn_cast<FunctionSummary>(Summary->getBaseObject());
+      if (FS && FS->callTypeId())
+        Targets[FS->callTypeId()].insert(Target);
+    }
+  }
+  for (auto &[Id, IdTargets] : Targets)
+    IndirectCallTargets[Id] = IdTargets.takeVector();
+
+  // Give each function the target lists of its indirect calls. No lists are
+  // added to IndirectCallTargets after this point, so the references stay
+  // valid.
+  for (const auto &[GUID, Info] : GlobalValueMap) {
+    for (const auto &Summary : Info.getSummaryList()) {
+      auto *FS = dyn_cast<FunctionSummary>(Summary.get());
+      if (!FS)
+        continue;
+      SmallVector<ArrayRef<ValueInfo>, 0> FSTargets;
+      for (GlobalValue::GUID Id : FS->indirectCallTypeIds()) {
+        auto It = IndirectCallTargets.find(Id);
+        if (It != IndirectCallTargets.end())
+          FSTargets.push_back(It->second);
+      }
+      FS->setIndirectCallTargets(std::move(FSTargets));
+    }
+  }
+
+  LLVM_DEBUG(dbgs() << "Resolved indirect calls: " << IndirectCallTargets.size()
+                    << " call type identifiers with targets\n");
 }
 
 bool ModuleSummaryIndex::canImportGlobalVar(const GlobalValueSummary *S,

@@ -18,7 +18,8 @@ typedef struct TestMetaDataS {
   amd_comgr_metadata_node_t Root;
 } test_meta_data_t;
 
-void read_metadata(test_meta_data_t *MetaData, const char *File, bool IsErr) {
+static void read_metadata(test_meta_data_t *MetaData, const char *File,
+                          bool IsErr) {
   long Size;
   amd_comgr_status_t Status;
   amd_comgr_metadata_kind_t Mkind = AMD_COMGR_METADATA_KIND_NULL;
@@ -68,7 +69,7 @@ void read_metadata(test_meta_data_t *MetaData, const char *File, bool IsErr) {
   printf("Metadata for file %s : end\n\n", File);
 }
 
-void close_meta_data(test_meta_data_t *MetaData) {
+static void close_meta_data(test_meta_data_t *MetaData) {
   amd_comgr_status_t Status;
 
   Status = amd_comgr_destroy_metadata(MetaData->Root);

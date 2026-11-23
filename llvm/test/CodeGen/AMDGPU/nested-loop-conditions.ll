@@ -13,12 +13,12 @@ define amdgpu_kernel void @reduced_nested_loop_conditions(ptr addrspace(3) captu
 ; GCN-NEXT:    s_load_dword s0, s[4:5], 0x9
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 3, v0
 ; GCN-NEXT:    s_mov_b32 m0, -1
+; GCN-NEXT:    s_cmp_eq_u32 0, 1
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_add_i32_e32 v0, vcc, s0, v0
 ; GCN-NEXT:    ds_read_b64 v[0:1], v0
-; GCN-NEXT:    s_and_b64 vcc, exec, -1
 ; GCN-NEXT:    s_mov_b64 s[0:1], -1
-; GCN-NEXT:    s_cmp_eq_u32 0, 1
+; GCN-NEXT:    s_mov_b64 vcc, exec
 ; GCN-NEXT:  .LBB0_1: ; %bb5
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    ; implicit-def: $sgpr2_sgpr3
@@ -35,7 +35,7 @@ define amdgpu_kernel void @reduced_nested_loop_conditions(ptr addrspace(3) captu
 ; GCN-NEXT:  ; %bb.5: ; %bb8
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    ds_read_b32 v0, v0
-; GCN-NEXT:    s_and_b64 vcc, exec, -1
+; GCN-NEXT:    s_mov_b64 vcc, exec
 ; GCN-NEXT:  .LBB0_6: ; %bb9
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_mov_b64 vcc, vcc

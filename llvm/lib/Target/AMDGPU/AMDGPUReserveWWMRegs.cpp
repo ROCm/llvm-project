@@ -10,14 +10,13 @@
 /// This pass should be invoked at the end of wwm-regalloc pipeline.
 /// It identifies the WWM regs allocated during this pipeline and add
 /// them to the list of reserved registers so that they won't be available for
-/// regular VGPR allocation in the subsequent regalloc pipeline.
+/// per-thread VGPR allocation in the subsequent regalloc pipeline.
 //
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUReserveWWMRegs.h"
 #include "AMDGPU.h"
 #include "SIMachineFunctionInfo.h"
-#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/InitializePasses.h"

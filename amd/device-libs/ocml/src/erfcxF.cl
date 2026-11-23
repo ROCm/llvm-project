@@ -1,28 +1,18 @@
 
 #include "mathF.h"
 
+#define FLOAT_SPECIALIZATION
+#include "ep.h"
+
+extern CONSTATTR float2 MATH_PRIVATE(erfcxep)(float);
+extern CONSTATTR float MATH_PRIVATE(expep)(float2);
+extern CONSTATTR float2 MATH_PRIVATE(epexpep)(float2);
+
 CONSTATTR float
 MATH_PRIVATE(erfcx)(float x)
 {
-    float n = x - 2.0f;
-    float d = x + 2.0f;
-    float r = MATH_FAST_RCP(d);
-    float q = n * r;
-    float e = BUILTIN_FMA_F32(-q, x, BUILTIN_FMA_F32(q + 1.0f, -2.0f, x));
-    q = BUILTIN_FMA_F32(r, e, q);
-    
-    float g = PE10(q, 0x1.3d95d4p-14f, 0x1.727f88p-14f, -0x1.fef738p-12f,
-                    -0x1.e779e6p-11f, 0x1.1e0d72p-9f, 0x1.abc1a8p-8f,
-                    -0x1.dd06d2p-7f, -0x1.44e6f4p-5f, 0x1.a133acp-3f,
-                    -0x1.7a9db2p-2f, 0x1.1ba038p-2f);
-    float p = BUILTIN_FMA_F32(q, g, g);
-    float tx = x + x;
-    d = 1.0f + tx;
-    r = MATH_FAST_RCP(d);
-    q = BUILTIN_FMA_F32(p, r, r);
-    e = BUILTIN_FMA_F32(-q, tx, 1.0f) + (p - q);
-    q = BUILTIN_FMA_F32(r, e, q);
-    return q;
+    float2 q = MATH_PRIVATE(erfcxep)(x);
+    return q.hi + q.lo;
 }
 
 #if !defined EXTRA_ACCURACY
@@ -31,22 +21,38 @@ CONSTATTR float
 MATH_MANGLE(erfcx)(float x)
 {
     float ax = BUILTIN_ABS_F32(x);
-    float ret;
-    
+    float2 q;
+
     if (ax < 0x1.41bbf8p+3f) {
-        ret = MATH_PRIVATE(erfcx)(ax);
+        q = MATH_PRIVATE(erfcxep)(ax);
     } else {
-        float r = MATH_FAST_RCP(0x1.0p-2f * ax);
-        float t = r*r * 0x1.0p-4f;
-        float p = PE4(t, 6.5625f, -1.875f, 0.75f, -0.5f, 1.0f);
-        ret = 0x1.20dd76p-3f * r * p;
+        // c/ax (c = 1/sqrt(pi)) as hi + lo times 1 + s; scaled by 1/4 so
+        // the reciprocal stays normal
+        float a = 0x1.0p-2f * ax;
+        float r = MATH_FAST_RCP(a);
+        float t = r * r * 0x1.0p-4f;
+        float s = t * PE3(t, 6.5625f, -1.875f, 0.75f, -0.5f);
+        float qh = 0x1.20dd76p-3f * r;
+        float ql = r * (BUILTIN_FMA_F32(-qh, a, 0x1.20dd76p-3f) - 0x1.f7ac92p-28f);
+        q = con(qh, ax == PINF_F32 ? 0.0f : BUILTIN_FMA_F32(qh, s, ql));
     }
 
+    float ret = q.hi + q.lo;
+
     if (x < 0.0f) {
+        // 2 exp(x^2) - erfcx(-x); 2 exp(x^2) >= 2 > erfcx(-x)
         float x2h = x*x;
         float x2l = BUILTIN_FMA_F32(x, x, -x2h);
-        float e = MATH_MANGLE(exp)(x2h);
-        ret = BUILTIN_FMA_F32(2.0f, BUILTIN_FMA_F32(e, x2l, e), -ret);
+#if defined MORE_ACCURACY
+        float2 e = MATH_PRIVATE(epexpep)(con(x2h, x2l));
+        float sh = BUILTIN_FMA_F32(2.0f, e.hi, -q.hi);
+        float sl = BUILTIN_FMA_F32(2.0f, e.hi, -sh) - q.hi;
+        ret = sh + (BUILTIN_FMA_F32(2.0f, e.lo, sl) - q.lo);
+        ret = BUILTIN_ISINF_F32(sh) ? sh : ret;
+#else
+        float e = MATH_PRIVATE(expep)(con(x2h, x2l));
+        ret = BUILTIN_FMA_F32(2.0f, e, -ret);
+#endif
         ret = x < -0x1.2d6abcp+3f ? PINF_F32 : ret;
     }
 

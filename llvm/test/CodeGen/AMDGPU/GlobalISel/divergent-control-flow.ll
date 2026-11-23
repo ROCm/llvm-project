@@ -105,12 +105,11 @@ define i32 @divergent_if_nonboolean_condition1(ptr addrspace(1) %ptr) {
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    global_load_dword v0, v[0:1], off
-; CHECK-NEXT:    s_mov_b64 s[4:5], exec
 ; CHECK-NEXT:    ; implicit-def: $sgpr6
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; CHECK-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge

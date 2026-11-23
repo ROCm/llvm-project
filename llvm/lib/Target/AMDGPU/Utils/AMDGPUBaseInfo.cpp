@@ -18,6 +18,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/IR/LLVMContext.h"
@@ -222,6 +223,45 @@ unsigned getAMDHSACodeObjectVersion(const Module &M) {
   }
 
   return getDefaultAMDHSACodeObjectVersion();
+}
+
+unsigned getAMDGPUABIWavesPerEU(const Module &M) {
+  if (auto *Val = mdconst::extract_or_null<ConstantInt>(
+          M.getModuleFlag("amdgpu_abi_waves_per_eu")))
+    return Val->getZExtValue();
+
+  return 0;
+}
+
+static void appendTypeEncoding(std::string &Enc, Type *Ty, const DataLayout &DL,
+                               bool IsReturnType) {
+  if (Ty->isVoidTy()) {
+    Enc += 'v';
+    return;
+  }
+  uint64_t Bits = DL.getTypeSizeInBits(Ty);
+  // Zero-sized non-void types (e.g. `{}` or `[0 x i8]`) consume no ABI
+  // registers. For returns, emit the same no-result marker as void so the
+  // parameter encoding still has an explicit return-type prefix.
+  if (Bits == 0) {
+    if (IsReturnType)
+      Enc += 'v';
+    return;
+  }
+  if (Bits <= 32)
+    Enc += 'i';
+  else if (Bits <= 64)
+    Enc += 'l';
+  else
+    Enc.append(divideCeil(Bits, 32), 'i');
+}
+
+std::string getFunctionTypeId(const FunctionType *FTy, const DataLayout &DL) {
+  std::string Enc;
+  appendTypeEncoding(Enc, FTy->getReturnType(), DL, /*IsReturnType=*/true);
+  for (Type *ParamTy : FTy->params())
+    appendTypeEncoding(Enc, ParamTy, DL, /*IsReturnType=*/false);
+  return Enc;
 }
 
 unsigned getDefaultAMDHSACodeObjectVersion() {
@@ -483,8 +523,15 @@ struct VOP3PHasNoOpSelHiInfo {
 #define GET_getMFMA_F8F6F4_WithSize_IMPL
 #define GET_isMFMA_F8F6F4Table_IMPL
 #define GET_isCvtScaleF32_F32F16ToF8F4Table_IMPL
+#define GET_VLdStIdxOpcodeInfoTable_IMPL
 
 #include "AMDGPUGenSearchableTables.inc"
+
+const VLdStIdxOpcodeInfo *
+getVLdStIdxOpcodeInfoByKey(unsigned BitWidth, bool IsStore, bool IsGPRIdx) {
+  assert(isUInt<16>(BitWidth) && "the table's key is 16 bits");
+  return getVLdStIdxOpcodeInfoByKeyImpl(BitWidth, IsStore, IsGPRIdx);
+}
 
 int getMTBUFBaseOpcode(unsigned Opc) {
   const MTBUFInfo *Info = getMTBUFInfoFromOpcode(Opc);
@@ -2579,8 +2626,8 @@ unsigned hasKernargPreload(const MCSubtargetInfo &STI) {
   return STI.hasFeature(AMDGPU::FeatureKernargPreload);
 }
 
-int32_t getTotalNumVGPRs(bool has90AInsts, int32_t ArgNumAGPR,
-                         int32_t ArgNumVGPR) {
+uint32_t getTotalNumVGPRs(bool has90AInsts, uint32_t ArgNumAGPR,
+                          uint32_t ArgNumVGPR) {
   if (has90AInsts && ArgNumAGPR)
     return alignTo(ArgNumVGPR, 4) + ArgNumAGPR;
   return std::max(ArgNumVGPR, ArgNumAGPR);
@@ -3394,6 +3441,25 @@ bool isIntrinsicSourceOfDivergence(unsigned IntrID) {
 
 bool isIntrinsicAlwaysUniform(unsigned IntrID) {
   return lookupAlwaysUniform(IntrID);
+}
+
+bool isTriviallyUniform(const Value *V, const Instruction *CtxI) {
+  if (isa<Constant>(V))
+    return true;
+  if (const auto *A = dyn_cast<Argument>(V))
+    return isArgPassedInSGPR(A);
+  if (const auto *II = dyn_cast<IntrinsicInst>(V)) {
+    if (!isIntrinsicAlwaysUniform(II->getIntrinsicID()))
+      return false;
+    // If II and CtxI are in different blocks then there is a possibility of a
+    // temporal divergence.
+    return II->getParent() == CtxI->getParent();
+  }
+  return false;
+}
+
+bool isTriviallyUniform(const Use &U) {
+  return isTriviallyUniform(U.get(), cast<Instruction>(U.getUser()));
 }
 
 bool isLDSDMAIntrinsic(unsigned IntrID) {

@@ -11,14 +11,11 @@ define amdgpu_kernel void @test_fence(ptr addrspace(1) %arg, i1 %arg1) {
 ; CHECK-NEXT:    ds_load_b32 v1, v1
 ; CHECK-NEXT:    s_wait_kmcnt 0x0
 ; CHECK-NEXT:    s_bitcmp1_b32 s0, 0
-; CHECK-NEXT:    s_cselect_b32 s0, -1, 0
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; CHECK-NEXT:    s_wait_dscnt 0x0
 ; CHECK-NEXT:    s_barrier_signal -1
 ; CHECK-NEXT:    s_barrier_wait -1
 ; CHECK-NEXT:    global_inv scope:SCOPE_SE
-; CHECK-NEXT:    s_cbranch_vccz .LBB0_2
+; CHECK-NEXT:    s_cbranch_scc0 .LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %bb2
 ; CHECK-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24
 ; CHECK-NEXT:    v_and_b32_e32 v0, 0x3ff, v0

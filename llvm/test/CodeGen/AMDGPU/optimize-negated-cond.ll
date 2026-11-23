@@ -8,11 +8,10 @@ define amdgpu_kernel void @negated_cond(ptr addrspace(1) %arg1) {
 ; GCN-NEXT:    s_mov_b32 s7, 0xf000
 ; GCN-NEXT:    s_mov_b32 s10, -1
 ; GCN-NEXT:    s_mov_b32 s11, s7
-; GCN-NEXT:    s_and_b64 s[0:1], exec, 0
+; GCN-NEXT:    s_mov_b32 s6, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b32 s8, s4
 ; GCN-NEXT:    s_mov_b32 s9, s5
-; GCN-NEXT:    s_mov_b32 s6, 0
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    s_branch .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; in Loop: Header=BB0_2 Depth=1
@@ -20,35 +19,33 @@ define amdgpu_kernel void @negated_cond(ptr addrspace(1) %arg1) {
 ; GCN-NEXT:    ; =>This Loop Header: Depth=1
 ; GCN-NEXT:    ; Child Loop BB0_4 Depth 2
 ; GCN-NEXT:    buffer_load_dword v1, off, s[8:11], 0
-; GCN-NEXT:    s_mov_b32 s12, s6
+; GCN-NEXT:    s_mov_b32 s2, s6
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    v_cmp_eq_u32_e64 s[2:3], 0, v1
+; GCN-NEXT:    v_cmp_eq_u32_e64 s[0:1], 0, v1
 ; GCN-NEXT:    s_branch .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %bb4
 ; GCN-NEXT:    ; in Loop: Header=BB0_4 Depth=2
-; GCN-NEXT:    s_ashr_i32 s13, s12, 31
-; GCN-NEXT:    s_lshl_b64 s[14:15], s[12:13], 2
-; GCN-NEXT:    v_mov_b32_e32 v1, s14
-; GCN-NEXT:    v_mov_b32_e32 v2, s15
-; GCN-NEXT:    s_cmp_eq_u32 s12, 32
+; GCN-NEXT:    s_ashr_i32 s3, s2, 31
+; GCN-NEXT:    s_lshl_b64 s[12:13], s[2:3], 2
+; GCN-NEXT:    v_mov_b32_e32 v1, s12
+; GCN-NEXT:    v_mov_b32_e32 v2, s13
+; GCN-NEXT:    s_cmp_eq_u32 s2, 32
 ; GCN-NEXT:    buffer_store_dword v0, v[1:2], s[4:7], 0 addr64
 ; GCN-NEXT:    s_cbranch_scc1 .LBB0_1
 ; GCN-NEXT:  .LBB0_4: ; %bb2
 ; GCN-NEXT:    ; Parent Loop BB0_2 Depth=1
 ; GCN-NEXT:    ; => This Inner Loop Header: Depth=2
-; GCN-NEXT:    s_lshl_b32 s12, s12, 5
-; GCN-NEXT:    s_mov_b64 vcc, s[2:3]
-; GCN-NEXT:    ; implicit-def: $sgpr13
-; GCN-NEXT:    ; implicit-def: $sgpr14_sgpr15
+; GCN-NEXT:    s_lshl_b32 s2, s2, 5
+; GCN-NEXT:    s_mov_b64 vcc, s[0:1]
+; GCN-NEXT:    ; implicit-def: $sgpr3
+; GCN-NEXT:    ; implicit-def: $sgpr12_sgpr13
 ; GCN-NEXT:    s_cbranch_vccz .LBB0_3
 ; GCN-NEXT:  ; %bb.5: ; %bb3
 ; GCN-NEXT:    ; in Loop: Header=BB0_4 Depth=2
-; GCN-NEXT:    s_mov_b64 vcc, s[0:1]
-; GCN-NEXT:    s_cbranch_vccnz .LBB0_7
 ; GCN-NEXT:  ; %bb.6: ; in Loop: Header=BB0_4 Depth=2
-; GCN-NEXT:    s_add_i32 s12, s12, 1
+; GCN-NEXT:    s_add_i32 s2, s2, 1
 ; GCN-NEXT:    s_branch .LBB0_3
-; GCN-NEXT:  .LBB0_7: ; in Loop: Header=BB0_2 Depth=1
+; GCN-NEXT:  ; %bb.7:
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  ; %bb.8: ; %DummyReturnBlock
 ; GCN-NEXT:    s_endpgm

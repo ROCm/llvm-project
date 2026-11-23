@@ -73,8 +73,7 @@ llvm::Value *CodeGenFunction::applyNoLoopInc(const Expr *Inc,
 }
 
 std::pair<const VarDecl *, Address>
-CodeGenFunction::EmitBigJumpLoopStartingIndex(const ForStmt &FStmt,
-                                              const FunctionArgList *Args) {
+CodeGenFunction::EmitBigJumpLoopStartingIndex(const ForStmt &FStmt) {
   const CodeGenModule::OptKernelNestDirectives &Directives =
       CGM.getBigJumpLoopNestDirs(&FStmt);
   assert(Directives.size() > 0 && isa<OMPLoopDirective>(Directives.back()) &&
@@ -228,8 +227,7 @@ CodeGenModule::getOptKernelDirectives(
 
 void CodeGenFunction::EmitOptKernel(
     const OMPExecutableDirective &D, const ForStmt *CapturedForStmt,
-    llvm::omp::OMPTgtExecModeFlags OptKernelMode, SourceLocation Loc,
-    const FunctionArgList *Args) {
+    llvm::omp::OMPTgtExecModeFlags OptKernelMode, SourceLocation Loc) {
   if (!HaveInsertPoint())
     EnsureInsertPoint();
 
@@ -248,7 +246,7 @@ void CodeGenFunction::EmitOptKernel(
     EmitOMPPrivateClause(*NestDirs[0], PrivateScope);
     (void)PrivateScope.Privatize();
 
-    EmitOptKernelCode(*NestDirs[0], CapturedForStmt, OptKernelMode, Loc, Args);
+    EmitOptKernelCode(*NestDirs[0], CapturedForStmt, OptKernelMode, Loc);
   } else if (NestDirs.size() == 2) {
     OMPPrivateScope PrivateScopeZero(*this);
     EmitOMPFirstprivateClause(*NestDirs[0], PrivateScopeZero);
@@ -260,7 +258,7 @@ void CodeGenFunction::EmitOptKernel(
     EmitOMPPrivateClause(*NestDirs[1], PrivateScopeOne);
     (void)PrivateScopeOne.Privatize();
 
-    EmitOptKernelCode(*NestDirs[1], CapturedForStmt, OptKernelMode, Loc, Args);
+    EmitOptKernelCode(*NestDirs[1], CapturedForStmt, OptKernelMode, Loc);
   } else {
     OMPPrivateScope PrivateScopeZero(*this);
     EmitOMPFirstprivateClause(*NestDirs[0], PrivateScopeZero);
@@ -277,15 +275,13 @@ void CodeGenFunction::EmitOptKernel(
     EmitOMPPrivateClause(*NestDirs[2], PrivateScopeTwo);
     (void)PrivateScopeTwo.Privatize();
 
-    EmitOptKernelCode(*NestDirs[2], CapturedForStmt, OptKernelMode, Loc, Args);
+    EmitOptKernelCode(*NestDirs[2], CapturedForStmt, OptKernelMode, Loc);
   }
 }
 
 void CodeGenFunction::EmitOptKernelCode(
     const OMPExecutableDirective &D, const ForStmt *CapturedForStmt,
-    llvm::omp::OMPTgtExecModeFlags OptKernelMode, SourceLocation Loc,
-    const FunctionArgList *Args) {
-  (void)Args;
+    llvm::omp::OMPTgtExecModeFlags OptKernelMode, SourceLocation Loc) {
   assert(
       OptKernelMode ==
           llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP ||
@@ -801,6 +797,9 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
   case Stmt::OMPTargetParallelGenericLoopDirectiveClass:
     EmitOMPTargetParallelGenericLoopDirective(
         cast<OMPTargetParallelGenericLoopDirective>(*S));
+    break;
+  case Stmt::OMPTargetGenericLoopDirectiveClass:
+    EmitOMPTargetSimdDirective(cast<OMPTargetGenericLoopDirective>(*S));
     break;
   case Stmt::OMPParallelMaskedDirectiveClass:
     EmitOMPParallelMaskedDirective(cast<OMPParallelMaskedDirective>(*S));
@@ -1577,9 +1576,8 @@ void CodeGenFunction::EmitDoStmt(const DoStmt &S,
     ConvergenceTokenStack.pop_back();
 }
 
-void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
-                                          const FunctionArgList *Args,
-                                          ArrayRef<const Attr *> ForAttrs) {
+void CodeGenFunction::EmitForStmt(const ForStmt &S,
+                                  ArrayRef<const Attr *> ForAttrs) {
   std::optional<LexicalScope> ForScope;
   JumpDest LoopExit;
   const bool HasForScope = getLangOpts().C99 || getLangOpts().CPlusPlus;
@@ -1599,7 +1597,7 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     BigJumpLoopLD = cast<OMPLoopDirective>(Directives.back());
 
     std::pair<const VarDecl *, Address> LoopVarInfo =
-        EmitBigJumpLoopStartingIndex(S, Args);
+        EmitBigJumpLoopStartingIndex(S);
     LoopVar = LoopVarInfo.first;
     BigJumpLoopIvAddr = LoopVarInfo.second;
   } else {
@@ -1669,21 +1667,26 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     // As long as the condition is true, iterate the loop.
     llvm::BasicBlock *ForBody = createBasicBlock("for.body");
 
-    {
-      // C99 6.8.5p2/p4: The first substatement is executed if the expression
-      // compares unequal to 0.  The condition must be a scalar type.
-      llvm::Value *BoolCondVal = EvaluateExprAsBool(CondExpr);
+    // C99 6.8.5p2/p4: The first substatement is executed if the expression
+    // compares unequal to 0.  The condition must be a scalar type.
+    llvm::Value *BoolCondVal = EvaluateExprAsBool(CondExpr);
 
-      MaybeEmitDeferredVarDeclInit(S.getConditionVariable());
+    MaybeEmitDeferredVarDeclInit(S.getConditionVariable());
 
-      llvm::MDNode *Weights =
-          createProfileWeightsForLoop(CondExpr, getProfileCount(S.getBody()));
-      if (!Weights && CGM.getCodeGenOpts().OptimizationLevel)
-        BoolCondVal = emitCondLikelihoodViaExpectIntrinsic(
-            BoolCondVal, Stmt::getLikelihood(S.getBody()));
+    llvm::MDNode *Weights =
+        createProfileWeightsForLoop(CondExpr, getProfileCount(S.getBody()));
+    if (!Weights && CGM.getCodeGenOpts().OptimizationLevel)
+      BoolCondVal = emitCondLikelihoodViaExpectIntrinsic(
+          BoolCondVal, Stmt::getLikelihood(S.getBody()));
 
-      Builder.CreateCondBr(BoolCondVal, ForBody, ExitBlock, Weights);
-    }
+    auto *I = Builder.CreateCondBr(BoolCondVal, ForBody, ExitBlock, Weights);
+    // Key Instructions: Emit the condition and branch as separate atoms to
+    // match existing loop stepping behaviour. FIXME: We could have the branch
+    // as the backup location for the condition, which would probably be a
+    // better experience (no jumping to the brace).
+    if (auto *CondI = dyn_cast<llvm::Instruction>(BoolCondVal))
+      addInstToNewSourceAtom(CondI, nullptr);
+    addInstToNewSourceAtom(I, nullptr);
 
     if (ExitBlock != LoopExit.getBlock()) {
       EmitBlock(ExitBlock);
@@ -1763,11 +1766,6 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     // match existing behaviour.
     addInstToNewSourceAtom(FinalBodyBB->getTerminator(), nullptr);
   }
-}
-
-void CodeGenFunction::EmitForStmt(const ForStmt &S,
-                                  ArrayRef<const Attr *> ForAttrs) {
-  CodeGenFunction::EmitForStmtWithArgs(S, nullptr, ForAttrs);
 }
 
 void
@@ -2120,6 +2118,99 @@ void CodeGenFunction::EmitContinueStmt(const ContinueStmt &S) {
   EmitBranchThroughCleanup(GetDestForLoopControlStmt(S)->ContinueBlock);
 }
 
+/// Return whether S has an enumerator of a BPF preserve_access_index enum,
+/// which Sema keeps as a pseudo-object for __builtin_preserve_enum_value().
+static bool hasBPFEnumeratorRef(const Stmt *S) {
+  if (!S)
+    return false;
+  if (const auto *POE = dyn_cast<PseudoObjectExpr>(S))
+    if (const auto *DRE = dyn_cast<DeclRefExpr>(POE->getSyntacticForm());
+        DRE && isa<EnumConstantDecl>(DRE->getDecl()))
+      return true;
+  return llvm::any_of(S->children(), hasBPFEnumeratorRef);
+}
+
+/// If the case value E has a relocated enumerator, see
+/// SemaBPF::verifyCaseExpr(), return E without its ConstantExpr and casts.
+/// Sema does not check it for duplicates, so it is not added to the switch even
+/// without debug info, where its local value is used.
+static const Expr *getBPFRelocatedCaseValue(CodeGenFunction &CGF,
+                                            const Expr *E) {
+  if (!E || !CGF.getTarget().getTriple().isBPF())
+    return nullptr;
+  while (const auto *ICE = dyn_cast<ImplicitCastExpr>(E))
+    E = ICE->getSubExpr();
+  const auto *CE = dyn_cast<ConstantExpr>(E);
+  if (!CE || !hasBPFEnumeratorRef(CE->getSubExpr()))
+    return nullptr;
+  return CE->getSubExpr();
+}
+
+static bool isBPFRelocatedCase(CodeGenFunction &CGF, const CaseStmt &S) {
+  return getBPFRelocatedCaseValue(CGF, S.getLHS()) ||
+         getBPFRelocatedCaseValue(CGF, S.getRHS());
+}
+
+/// Emit a case statement whose value is relocated: move the switch to a new
+/// block, and in its old block, branch to the case if the condition matches the
+/// relocated value, otherwise to the switch. So the relocated cases are checked
+/// in source order, before the other cases. E.g., with relocated A, B and C,
+///
+///   switch (x) { case 1: ... case A: ... case B ... C: ... }
+///
+/// is emitted like:
+///
+///   if (x == A) goto case_A;
+///   if (x >= B && x <= C) goto case_BC;
+///   switch (x) { case 1: ... }
+void CodeGenFunction::EmitBPFRelocatedCaseStmt(const CaseStmt &S,
+                                               ArrayRef<const Attr *> Attrs) {
+  llvm::BasicBlock *CaseDest = createBasicBlock("sw.bb");
+  EmitBlockWithFallThrough(CaseDest, &S);
+
+  llvm::BasicBlock *CheckBB = SwitchInsn->getParent();
+  llvm::BasicBlock *SwitchBB = createBasicBlock("sw.dispatch");
+  CurFn->insert(std::next(CheckBB->getIterator()), SwitchBB);
+  SwitchInsn->removeFromParent();
+  SwitchInsn->insertInto(SwitchBB, SwitchBB->end());
+
+  // Emit the check at the end of CheckBB, then come back to the case body.
+  {
+    llvm::IRBuilderBase::InsertPointGuard IPG(Builder);
+    Builder.SetInsertPoint(CheckBB);
+    ApplyDebugLocation DL(*this, S.getLHS());
+    llvm::Value *CondV = SwitchInsn->getCondition();
+    auto EmitCaseValue = [&](const Expr *E) -> llvm::Value * {
+      if (const Expr *Reloc = getBPFRelocatedCaseValue(*this, E))
+        return Builder.CreateIntCast(
+            EmitScalarExpr(Reloc), CondV->getType(),
+            Reloc->getType()->isSignedIntegerOrEnumerationType());
+      return Builder.getInt(E->EvaluateKnownConstInt(getContext()));
+    };
+
+    llvm::Value *Cond;
+    if (!S.getRHS()) {
+      Cond = Builder.CreateICmpEQ(CondV, EmitCaseValue(S.getLHS()));
+    } else {
+      // The relocated range may be empty.
+      bool IsSigned = S.getLHS()->getType()->isSignedIntegerOrEnumerationType();
+      llvm::Value *Lo = Builder.CreateICmp(IsSigned ? llvm::CmpInst::ICMP_SGE
+                                                    : llvm::CmpInst::ICMP_UGE,
+                                           CondV, EmitCaseValue(S.getLHS()));
+      llvm::Value *Hi = Builder.CreateICmp(IsSigned ? llvm::CmpInst::ICMP_SLE
+                                                    : llvm::CmpInst::ICMP_ULE,
+                                           CondV, EmitCaseValue(S.getRHS()));
+      Cond = Builder.CreateAnd(Lo, Hi);
+    }
+    if (SwitchLikelihood)
+      Cond = emitCondLikelihoodViaExpectIntrinsic(Cond,
+                                                  Stmt::getLikelihood(Attrs));
+    Builder.CreateCondBr(Cond, CaseDest, SwitchBB);
+  }
+
+  EmitStmt(S.getSubStmt());
+}
+
 /// EmitCaseStmtRange - If case statement range is not too big then
 /// add multiple cases to switch instruction, one for each value within
 /// the range. If range is too big then emit "if" condition check.
@@ -2221,6 +2312,11 @@ void CodeGenFunction::EmitCaseStmt(const CaseStmt &S,
     return;
   }
 
+  if (isBPFRelocatedCase(*this, S)) {
+    EmitBPFRelocatedCaseStmt(S, Attrs);
+    return;
+  }
+
   // Handle case ranges.
   if (S.getRHS()) {
     EmitCaseStmtRange(S, Attrs);
@@ -2290,7 +2386,8 @@ void CodeGenFunction::EmitCaseStmt(const CaseStmt &S,
   const CaseStmt *NextCase = dyn_cast<CaseStmt>(S.getSubStmt());
 
   // Otherwise, iteratively add consecutive cases to this switch stmt.
-  while (NextCase && NextCase->getRHS() == nullptr) {
+  while (NextCase && NextCase->getRHS() == nullptr &&
+         !isBPFRelocatedCase(*this, *NextCase)) {
     CurCase = NextCase;
     llvm::ConstantInt *CaseVal =
       Builder.getInt(CurCase->getLHS()->EvaluateKnownConstInt(getContext()));
@@ -2711,6 +2808,15 @@ getLikelihoodWeights(ArrayRef<Stmt::Likelihood> Likelihoods) {
   return Result;
 }
 
+static bool hasBPFRelocatedCase(CodeGenFunction &CGF, const SwitchStmt &S) {
+  for (const SwitchCase *SC = S.getSwitchCaseList(); SC;
+       SC = SC->getNextSwitchCase())
+    if (const auto *CS = dyn_cast<CaseStmt>(SC);
+        CS && isBPFRelocatedCase(CGF, *CS))
+      return true;
+  return false;
+}
+
 void CodeGenFunction::EmitSwitchStmt(const SwitchStmt &S) {
   // Handle nested switch statements.
   llvm::SwitchInst *SavedSwitchInsn = SwitchInsn;
@@ -2719,9 +2825,11 @@ void CodeGenFunction::EmitSwitchStmt(const SwitchStmt &S) {
   llvm::BasicBlock *SavedCRBlock = CaseRangeBlock;
 
   // See if we can constant fold the condition of the switch and therefore only
-  // emit the live case statement (if any) of the switch.
+  // emit the live case statement (if any) of the switch. A relocated case value
+  // is not known until load time.
   llvm::APSInt ConstantCondValue;
-  if (ConstantFoldsToSimpleInteger(S.getCond(), ConstantCondValue)) {
+  if (!hasBPFRelocatedCase(*this, S) &&
+      ConstantFoldsToSimpleInteger(S.getCond(), ConstantCondValue)) {
     SmallVector<const Stmt*, 4> CaseStmts;
     const SwitchCase *Case = nullptr;
     if (FindCaseStatementsForValue(S, ConstantCondValue, CaseStmts,

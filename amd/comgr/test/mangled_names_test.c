@@ -146,7 +146,8 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  const char *BcNames[] = {"source1", "__clang_ocl_kern_imp_source1", "source2", "__clang_ocl_kern_imp_source2"};
+  const char *BcNames[] = {"source1", "__clang_ocl_kern_imp_source1", "source2",
+                           "__clang_ocl_kern_imp_source2"};
 
   for (size_t I = 0; I < NumNames; ++I) {
     size_t Size;
@@ -228,7 +229,9 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  const char *ExecNames[] = {"source1", "source1.kd", "__clang_ocl_kern_imp_source1", "source2", "source2.kd", "__clang_ocl_kern_imp_source2"};
+  const char *ExecNames[] = {
+      "source1", "source1.kd", "__clang_ocl_kern_imp_source1",
+      "source2", "source2.kd", "__clang_ocl_kern_imp_source2"};
 
   for (size_t I = 0; I < NumNames; ++I) {
     size_t Size;

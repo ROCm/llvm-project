@@ -718,7 +718,7 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX90A-NEXT:    s_cbranch_scc1 .LBB5_1
 ; GFX90A-NEXT:    s_branch .LBB5_2
 ; GFX90A-NEXT:  .LBB5_1: ; %atomicrmw.shared
-; GFX90A-NEXT:    ds_add_rtn_f64 v[2:3], v0, v[0:1]
+; GFX90A-NEXT:    ds_add_rtn_f64 v[4:5], v0, v[0:1]
 ; GFX90A-NEXT:    s_branch .LBB5_7
 ; GFX90A-NEXT:  .LBB5_2: ; %atomicrmw.check.private
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
@@ -729,10 +729,10 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX90A-NEXT:    s_cbranch_scc1 .LBB5_3
 ; GFX90A-NEXT:    s_branch .LBB5_4
 ; GFX90A-NEXT:  .LBB5_3: ; %atomicrmw.private
-; GFX90A-NEXT:    buffer_load_dword v2, v0, s[0:3], 0 offen
+; GFX90A-NEXT:    buffer_load_dword v4, v0, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
-; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    v_add_f64 v[0:1], v[2:3], v[0:1]
+; GFX90A-NEXT:    v_mov_b32_e32 v5, v4
+; GFX90A-NEXT:    v_add_f64 v[0:1], v[4:5], v[0:1]
 ; GFX90A-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 offen
 ; GFX90A-NEXT:    buffer_store_dword v0, v0, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_branch .LBB5_7
@@ -767,9 +767,9 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX90A-NEXT:  ; %bb.8: ; %atomicrmw.end
 ; GFX90A-NEXT:    s_mov_b32 s4, 32
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX90A-NEXT:    v_lshrrev_b64 v[4:5], s4, v[2:3]
-; GFX90A-NEXT:    v_mov_b32_e32 v0, v2
-; GFX90A-NEXT:    v_mov_b32_e32 v1, v4
+; GFX90A-NEXT:    v_lshrrev_b64 v[2:3], s4, v[4:5]
+; GFX90A-NEXT:    v_mov_b32_e32 v0, v4
+; GFX90A-NEXT:    v_mov_b32_e32 v1, v2
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -785,7 +785,7 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX942-NEXT:    s_cbranch_scc1 .LBB5_1
 ; GFX942-NEXT:    s_branch .LBB5_2
 ; GFX942-NEXT:  .LBB5_1: ; %atomicrmw.shared
-; GFX942-NEXT:    ds_add_rtn_f64 v[2:3], v0, v[0:1]
+; GFX942-NEXT:    ds_add_rtn_f64 v[4:5], v0, v[0:1]
 ; GFX942-NEXT:    s_branch .LBB5_7
 ; GFX942-NEXT:  .LBB5_2: ; %atomicrmw.check.private
 ; GFX942-NEXT:    s_mov_b64 s[0:1], src_private_base
@@ -796,9 +796,9 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX942-NEXT:    s_cbranch_scc1 .LBB5_3
 ; GFX942-NEXT:    s_branch .LBB5_4
 ; GFX942-NEXT:  .LBB5_3: ; %atomicrmw.private
-; GFX942-NEXT:    scratch_load_dwordx2 v[2:3], off, s0
+; GFX942-NEXT:    scratch_load_dwordx2 v[4:5], off, s0
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_add_f64 v[0:1], v[2:3], v[0:1]
+; GFX942-NEXT:    v_add_f64 v[0:1], v[4:5], v[0:1]
 ; GFX942-NEXT:    scratch_store_dwordx2 off, v[0:1], s0
 ; GFX942-NEXT:    s_branch .LBB5_7
 ; GFX942-NEXT:  .LBB5_4: ; %atomicrmw.global
@@ -832,9 +832,9 @@ define double @optnone_atomicrmw_fadd_f64_expand(double %val) #1 {
 ; GFX942-NEXT:  ; %bb.8: ; %atomicrmw.end
 ; GFX942-NEXT:    s_mov_b32 s0, 32
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX942-NEXT:    v_lshrrev_b64 v[4:5], s0, v[2:3]
-; GFX942-NEXT:    v_mov_b32_e32 v0, v2
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
+; GFX942-NEXT:    v_lshrrev_b64 v[2:3], s0, v[4:5]
+; GFX942-NEXT:    v_mov_b32_e32 v0, v4
+; GFX942-NEXT:    v_mov_b32_e32 v1, v2
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;

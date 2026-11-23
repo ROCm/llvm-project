@@ -32,6 +32,9 @@ class TargetInfo {
 public:
   TargetInfo(Ctx &ctx) : ctx(ctx) {}
   virtual uint32_t calcEFlags() const { return 0; }
+  // Finalize target-specific symbols after LTO and symbol redirection, but
+  // before common symbols are converted to regular definitions.
+  virtual void finalizeSymbols() {}
   // Create target-specific synthetic sections, defined in Arch/ files.
   virtual void initTargetSpecificSections() {}
   virtual RelExpr getRelExpr(RelType type, const Symbol &s,
@@ -93,10 +96,7 @@ public:
   // require special type or addend adjustment. `shard` selects the `relocsVec`
   // shard that discovered dynamic relocations are appended to.
   virtual void scanSection(InputSectionBase &, unsigned shard);
-  // Called by scanSection as a default implementation for specific ELF
-  // relocation types.
-  template <class ELFT> void scanSection1(InputSectionBase &, unsigned shard);
-  template <class ELFT, class RelTy>
+  template <class RelTy>
   void scanSectionImpl(InputSectionBase &, Relocs<RelTy>, unsigned shard);
 
   // Called after parallel relocation scanning is complete but before
@@ -198,7 +198,6 @@ public:
   // non-split-stack callee this will return true. Otherwise returns false.
   bool needsMoreStackNonSplit = true;
 
-  virtual RelExpr adjustTlsExpr(RelType type, RelExpr expr) const;
   virtual RelExpr adjustGotPcExpr(RelType type, int64_t addend,
                                   const uint8_t *loc) const;
 

@@ -21,7 +21,7 @@ ENDIF:                                            ; preds = %IF, %main_body
 }
 
 ; GCN-LABEL: {{^}}fix_sgpr_live_ranges_crash:
-; GCN: s_cbranch_vccz [[BB0:.L[A-Z0-9_]+]]
+; GCN: s_cbranch_scc0 [[BB0:.L[A-Z0-9_]+]]
 ; GCN: {{^}}[[LOOP:.L[A-Z0-9_]+]]:
 ; GCN: s_cbranch_scc1 [[LOOP]]
 ; GCN: {{^}}[[BB0]]:

@@ -78,6 +78,16 @@ bool isHsaAbi(const MCSubtargetInfo &STI);
 /// \returns Code object version from the IR module flag.
 unsigned getAMDHSACodeObjectVersion(const Module &M);
 
+/// \returns ABI occupancy override in waves per EU from the IR module flag.
+unsigned getAMDGPUABIWavesPerEU(const Module &M);
+
+/// \returns The type ID of the function type \p FTy for the .amdgpu.info
+/// section and for the call type identifier. It encodes the return type, then
+/// each parameter type, by size: 'v' for a void or zero-size return type, 'i'
+/// for at most 32 bits, 'l' for at most 64 bits, and one 'i' for each 32 bits
+/// of a larger type. Zero-size parameter types are not encoded.
+std::string getFunctionTypeId(const FunctionType *FTy, const DataLayout &DL);
+
 /// \returns Code object version from ELF's e_ident[EI_ABIVERSION].
 unsigned getAMDHSACodeObjectVersion(unsigned ABIVersion);
 
@@ -474,6 +484,20 @@ struct MIMGInfo {
 
 LLVM_READONLY
 const MIMGInfo *getMIMGInfo(unsigned Opc);
+
+struct VLdStIdxOpcodeInfo {
+  unsigned Opcode;
+  uint16_t BitWidth;
+  bool IsStore;
+  bool IsGPRIdx;
+};
+
+LLVM_READONLY
+const VLdStIdxOpcodeInfo *getVLdStIdxOpcodeInfoByOpcode(unsigned Opc);
+
+LLVM_READONLY
+const VLdStIdxOpcodeInfo *
+getVLdStIdxOpcodeInfoByKey(unsigned BitWidth, bool IsStore, bool IsGPRIdx);
 
 LLVM_READONLY
 int getMTBUFBaseOpcode(unsigned Opc);
@@ -1554,7 +1578,8 @@ bool hasPrivateApertureRegs(const MCSubtargetInfo &STI);
 bool hasVOPD(const MCSubtargetInfo &STI);
 bool hasDPPSrc1SGPR(const MCSubtargetInfo &STI);
 
-int getTotalNumVGPRs(bool has90AInsts, int32_t ArgNumAGPR, int32_t ArgNumVGPR);
+uint32_t getTotalNumVGPRs(bool has90AInsts, uint32_t ArgNumAGPR,
+                          uint32_t ArgNumVGPR);
 unsigned hasKernargPreload(const MCSubtargetInfo &STI);
 bool hasSMRDSignedImmOffset(const MCSubtargetInfo &ST);
 
@@ -1791,6 +1816,12 @@ bool isIntrinsicSourceOfDivergence(unsigned IntrID);
 
 /// \returns true if the intrinsic is uniform
 bool isIntrinsicAlwaysUniform(unsigned IntrID);
+
+/// Return true if we can easily prove that \p V is uniform at \p CtxI.
+bool isTriviallyUniform(const Value *V, const Instruction *CtxI);
+
+/// Return true if we can easily prove that use \p U is uniform.
+bool isTriviallyUniform(const Use &U);
 
 /// \returns true if the intrinsic executes an LDSDMA operation
 bool isLDSDMAIntrinsic(unsigned IntrID);

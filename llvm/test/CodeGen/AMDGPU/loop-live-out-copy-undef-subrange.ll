@@ -21,7 +21,7 @@ define <3 x float> @liveout_undef_subrange(<3 x float> %arg) {
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
 ; CHECK-NEXT:  .LBB0_2: ; %bb2
 ; CHECK-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; CHECK-NEXT:    s_and_b64 vcc, exec, -1
+; CHECK-NEXT:    s_mov_b64 vcc, exec
 ; CHECK-NEXT:    s_and_b64 vcc, vcc, vcc
 ; CHECK-NEXT:    s_cselect_b64 s[10:11], exec, 0
 ; CHECK-NEXT:    v_mul_f32_e32 v2, v0, v2

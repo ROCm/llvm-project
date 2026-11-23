@@ -54,6 +54,10 @@ void renderDebugInfoCompressionArgs(const llvm::opt::ArgList &Args,
                                     llvm::opt::ArgStringList &CmdArgs,
                                     const Driver &D, const ToolChain &TC);
 
+/// Whether Mach-O objects for \p T with DWARF \p DwarfVersion relocate offsets
+/// between DWARF sections.
+bool useMachORelocatableDwarf(const llvm::Triple &T, unsigned DwarfVersion);
+
 void claimNoWarnArgs(const llvm::opt::ArgList &Args);
 
 bool addSanitizerRuntimes(const ToolChain &TC, const llvm::opt::ArgList &Args,
@@ -237,6 +241,17 @@ unsigned getAMDGPUCodeObjectVersion(const Driver &D,
 
 bool haveAMDGPUCodeObjectVersionArgument(const Driver &D,
                                          const llvm::opt::ArgList &Args);
+
+/// Return true if the AMDGPU backend must use object linking for device code
+/// of offload kind \p Kind on \p TC. This is the case for HIP and CUDA device
+/// code when the backend emits relocatable objects that are linked with other
+/// objects: RDC mode with device LTO disabled or with ThinLTO. If \p AssumeRDC
+/// is true, the caller links relocatable device code, so RDC mode is implied
+/// even if `-fgpu-rdc` is not given.
+bool shouldUseAMDGPUObjectLinking(const ToolChain &TC,
+                                  const llvm::opt::ArgList &Args,
+                                  Action::OffloadKind Kind,
+                                  bool AssumeRDC = false);
 
 void addMachineOutlinerArgs(const Driver &D, const llvm::opt::ArgList &Args,
                             llvm::opt::ArgStringList &CmdArgs,

@@ -38,7 +38,7 @@ body:             |
     %0:sgpr_32 = IMPLICIT_DEF
     %1:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, %0, implicit $exec
     %2:sgpr_32 = V_CMP_NE_U32_e64 %1, 1, implicit $exec
-    $vcc_lo = S_AND_B32 killed %2, $exec_lo, implicit-def dead $scc
+    $vcc_lo = S_AND_B32 %2, $exec_lo, implicit-def dead $scc
     S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
     S_BRANCH %bb.1
 
@@ -109,7 +109,7 @@ body:             |
     $vcc_lo = IMPLICIT_DEF
     %1:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, $vcc_lo, implicit $exec
     %2:sgpr_32 = V_CMP_NE_U32_e64 %1, 1, implicit $exec
-    $vcc_lo = S_AND_B32 killed %2, $exec_lo, implicit-def dead $scc
+    $vcc_lo = S_AND_B32 %2, $exec_lo, implicit-def dead $scc
     S_CBRANCH_VCCNZ %bb.2, implicit killed $vcc
     S_BRANCH %bb.1
 

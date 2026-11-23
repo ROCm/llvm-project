@@ -29,15 +29,15 @@ MATH_PRIVATE(sincosredep)(double2 xy)
     const double C5 = -0x1.907db46cc5e42p-37;
 
     double x2 = x*x;
-    double x3 = x * x2;
-    double r = 0.5 * x2;
-    double t = 1.0 - r;
+    double t = MATH_MAD(x2, -0.5, 1.0);
     double u = 1.0 - t;
-    double v = u - r;
+    double v = MATH_MAD(x2, -0.5, u);
 
     double cxy = t + MATH_MAD(x2*x2, MATH_MAD(x2, MATH_MAD(x2, MATH_MAD(x2, MATH_MAD(x2, MATH_MAD(x2, C5, C4), C3), C2), C1), C0), MATH_MAD(x, -y, v));
-    double sxy = PE4(x2, S5, S4, S3, S2, S1);
-    sxy = x - MATH_MAD(-x3, S0, MATH_MAD(x2, MATH_MAD(-x3, sxy, 0.5*y), -y));
+
+    // y*(1 - x^2/2) carries the first order sin(x + y) correction
+    double x3 = x * x2;
+    double sxy = x + MATH_MAD(x3, PE5(x2, S5, S4, S3, S2, S1, S0), y*t);
 
     struct scret ret;
     ret.c = cxy;

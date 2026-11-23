@@ -1,10 +1,11 @@
+; NOTE: Do not autogenerate. Check the ordered pass pipeline at each optimization level.
 ; RUN: llc -amdgpu-late-wave-transform=0 -enable-new-pm -mtriple=amdgpu7.00--amdhsa -O0 -print-pipeline-passes=tree < %s 2>&1 \
 ; RUN:   | FileCheck -check-prefix=GCN-O0 %s
+
 ; RUN: llc -amdgpu-late-wave-transform=0 -enable-new-pm -mtriple=amdgpu7.00--amdhsa -print-pipeline-passes=tree < %s 2>&1 \
 ; RUN:   | FileCheck -check-prefix=GCN-O2 %s
+
 ; RUN: llc -amdgpu-late-wave-transform=0 -O3 -enable-new-pm -mtriple=amdgpu7.00--amdhsa -print-pipeline-passes=tree < %s 2>&1 \
-
-
 ; RUN:   | FileCheck -check-prefix=GCN-O3 %s
 
 ; GCN-O0: require<MachineModuleAnalysis>

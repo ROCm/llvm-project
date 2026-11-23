@@ -71,6 +71,7 @@ endfunction()
 
 foreach(gpu gfx900 gfx1030)
   add_constant_fold_test(lgamma_r ${gpu})
+  add_constant_fold_test(fptoi_nan_fold ${gpu})
 endforeach()
 
 foreach(gpu gfx803)

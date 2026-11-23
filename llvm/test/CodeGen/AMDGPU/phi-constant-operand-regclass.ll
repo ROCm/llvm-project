@@ -85,17 +85,16 @@ define i64 @if_break_mask_shares_constant_with_divergent_phi(i1 %cond) {
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:av_64_align2 = PHI [[COPY3]], %bb.1
   ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:av_64_align2 = COPY [[PHI1]]
-  ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:vreg_64_align2 = COPY [[COPY4]], implicit $exec
   ; GFX90A-NEXT:   S_BRANCH %bb.3
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.3.UnifiedReturnBlock:
-  ; GFX90A-NEXT:   [[PHI2:%[0-9]+]]:vreg_64_align2 = PHI [[COPY2]], %bb.0, [[COPY5]], %bb.2
+  ; GFX90A-NEXT:   [[PHI2:%[0-9]+]]:vreg_64_align2 = PHI [[COPY2]], %bb.0, [[COPY4]], %bb.2
   ; GFX90A-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 32
   ; GFX90A-NEXT:   [[V_LSHRREV_B64_e64_:%[0-9]+]]:vreg_64_align2 = V_LSHRREV_B64_e64 [[S_MOV_B32_]], [[PHI2]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY6:%[0-9]+]]:av_32 = COPY [[V_LSHRREV_B64_e64_]].sub0
-  ; GFX90A-NEXT:   [[COPY7:%[0-9]+]]:av_32 = COPY [[PHI2]].sub0
-  ; GFX90A-NEXT:   $vgpr0 = COPY [[COPY7]]
-  ; GFX90A-NEXT:   $vgpr1 = COPY [[COPY6]]
+  ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:av_32 = COPY [[V_LSHRREV_B64_e64_]].sub0
+  ; GFX90A-NEXT:   [[COPY6:%[0-9]+]]:av_32 = COPY [[PHI2]].sub0
+  ; GFX90A-NEXT:   $vgpr0 = COPY [[COPY6]]
+  ; GFX90A-NEXT:   $vgpr1 = COPY [[COPY5]]
   ; GFX90A-NEXT:   SI_RETURN implicit $vgpr0, implicit $vgpr1
 entry:
   br i1 false, label %join, label %loop
@@ -176,18 +175,17 @@ define i64 @divergent_loop_with_bypass(i1 %cond, i64 %val) {
   ; GFX90A-NEXT:   successors: %bb.2(0x40000000), %bb.1(0x40000000)
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[V_CNDMASK_B32_e64_]], 0, implicit $exec
-  ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:vreg_64_align2 = COPY [[COPY3]], implicit $exec
   ; GFX90A-NEXT:   SI_BRCOND %bb.2, [[V_CMP_NE_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; GFX90A-NEXT:   S_BRANCH %bb.1
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.2.join:
-  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vreg_64_align2 = PHI [[V_MOV_B]], %bb.0, [[COPY4]], %bb.1
+  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vreg_64_align2 = PHI [[V_MOV_B]], %bb.0, [[COPY3]], %bb.1
   ; GFX90A-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 32
   ; GFX90A-NEXT:   [[V_LSHRREV_B64_e64_:%[0-9]+]]:vreg_64_align2 = V_LSHRREV_B64_e64 [[S_MOV_B32_]], [[PHI]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:av_32 = COPY [[V_LSHRREV_B64_e64_]].sub0
-  ; GFX90A-NEXT:   [[COPY6:%[0-9]+]]:av_32 = COPY [[PHI]].sub0
-  ; GFX90A-NEXT:   $vgpr0 = COPY [[COPY6]]
-  ; GFX90A-NEXT:   $vgpr1 = COPY [[COPY5]]
+  ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:av_32 = COPY [[V_LSHRREV_B64_e64_]].sub0
+  ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:av_32 = COPY [[PHI]].sub0
+  ; GFX90A-NEXT:   $vgpr0 = COPY [[COPY5]]
+  ; GFX90A-NEXT:   $vgpr1 = COPY [[COPY4]]
   ; GFX90A-NEXT:   SI_RETURN implicit $vgpr0, implicit $vgpr1
 entry:
   br i1 false, label %join, label %loop

@@ -1,8 +1,8 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00-- < %s | FileCheck -check-prefix=GCN -check-prefix=GCNMESA -check-prefix=SIMESA %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.03-- -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN -check-prefix=GCNMESA -check-prefix=VIMESA %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-- -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN -check-prefix=GCNMESA -check-prefix=GFX9MESA %s
-; RUN: llc -amdgpu-late-wave-transform=1  -mtriple=amdgpu7.01-unknown-amdhsa < %s | FileCheck -check-prefix=GCN -check-prefix=HSA %s
-; RUN: llc -amdgpu-late-wave-transform=1  -mtriple=amdgpu8.03-unknown-amdhsa < %s | FileCheck -check-prefix=GCN -check-prefix=HSA %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu7.01-unknown-amdhsa < %s | FileCheck -check-prefix=GCN -check-prefix=HSA %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.03-unknown-amdhsa < %s | FileCheck -check-prefix=GCN -check-prefix=HSA %s
 
 ; This ends up using all available VGPRs and spills. With the default
 ; maximum flat workgroup size of 1024, the VGPR budget is 64.

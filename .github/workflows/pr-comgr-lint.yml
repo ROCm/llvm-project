@@ -1,0 +1,158 @@
+#  clang-tidy gate for amd/comgr.
+#
+#  Deliberately standalone rather than a job in the SPIRV CI, which already
+#  builds Comgr: that workflow builds LLVM, Clang, lld, compiler-rt and
+#  device-libs first, so a lint result hanging off it would only appear after
+#  the whole compiler build. Comgr's compile database does not need any of
+#  that. A cmake configure produces it outright, and the only build required
+#  is the tablegen output that Comgr's translation units #include.
+#
+#  This also keeps the AMD-specific path rules out of
+#  llvm/utils/git/code-lint-helper.py, which is upstream's file and would
+#  conflict on every merge from main.
+
+name: "Comgr code lint"
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches:
+      - amd-staging
+    paths:
+      - 'amd/comgr/**'
+      - '.github/workflows/pr-comgr-lint.yml'
+
+jobs:
+  comgr_code_linter:
+    # Matches the guards on pr-code-format.yml / pr-code-lint.yml. Merges from
+    # upstream carry large diffs that this gate has no opinion about.
+    if: >-
+      !contains(github.event.pull_request.head.ref, 'upstream_merge')
+      && !contains(github.event.pull_request.labels.*.name, 'ci:skip')
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    # Supplies a prebuilt clang-tidy plus cmake, ninja and clang++, so nothing
+    # here has to build a toolchain. Pinned by digest: the image's clang-tidy
+    # decides which checks exist, so a version bump changes what is enforced
+    # and should be a deliberate edit rather than drift.
+    #
+    # That cuts both ways. The image carries clang-tidy 22.1.0 against a
+    # 24.0.0git tree, and the misc-*/llvm-* globs absorb the difference in
+    # silence: a check that does not exist yet is simply absent, with no
+    # diagnostic. 33 of the 40 checks the config resolves to are present
+    # here. Absent:
+    #
+    #   llvm-formatv-string             llvm-invalid-regex-pattern
+    #   llvm-redundant-casting          llvm-type-switch-case-types
+    #   llvm-use-vector-utils           misc-static-initialization-cycle
+    #   misc-explicit-constructor
+    #
+    # Of those only misc-explicit-constructor currently has anything to say
+    # about Comgr; it was migrated out of google-explicit-constructor in
+    # May 2026 and landed in release/23.x.
+    #
+    # This will not close by itself at the next merge from upstream.
+    # Upstream has moved on to ghcr.io/llvm/ci-ubuntu-26.04-lint, whose
+    # clang-tidy 23.1.0 resolves 39 of the 40 (everything above except
+    # llvm-invalid-regex-pattern). amd-staging stays on the ubuntu-24.04
+    # image because the tooling Dockerfile here is locally diverged from
+    # upstream's, carrying an LLVM_VERSION_MAJOR workaround whose FIXME
+    # says it can go "once we update runners to Ubuntu-26.04 with Buildah
+    # >= 1.37". The version is gated on that runner upgrade, not on merge
+    # lag. When it lands, move this digest along with pr-code-format.yml
+    # and pr-code-lint.yml.
+    container:
+      image: 'ghcr.io/llvm/ci-ubuntu-24.04-lint:latest@sha256:416874e477b33c1cb66a30e77e0b9942b7333a7bd304c2f1d51743e7adaedd54'
+    timeout-minutes: 60
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Fetch sources
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          # HEAD is the PR merge commit, so HEAD~1 is the base. Same shape as
+          # the format and lint workflows.
+          fetch-depth: 2
+
+      - name: Configure
+        # No build happens here. Configuring with Comgr and device-libs as
+        # external projects is enough to emit compile_commands.json entries for
+        # every Comgr translation unit, including the three test suites.
+        run: |
+          git config --global --add safe.directory '*'
+
+          cmake -G Ninja \
+            -B build \
+            -S llvm \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
+            -DLLVM_TARGETS_TO_BUILD="AMDGPU;X86" \
+            -DLLVM_EXTERNAL_PROJECTS="device-libs;comgr" \
+            -DLLVM_EXTERNAL_DEVICE_LIBS_SOURCE_DIR="$PWD/amd/device-libs" \
+            -DLLVM_EXTERNAL_COMGR_SOURCE_DIR="$PWD/amd/comgr" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Generate the headers Comgr includes
+        # Only tablegen output, not Clang itself. Each target here was chosen
+        # because a Comgr TU failed to parse without it:
+        #   clang-tablegen-targets  clang/Basic/DiagnosticGroups.inc
+        #   target_parser_gen       llvm/TargetParser/R600TargetParserDef.inc
+        #   intrinsics_gen          llvm/IR/*.inc
+        #   clang-resource-headers  Comgr's own configure step wants them
+        run: |
+          ninja -C build \
+            clang-tablegen-targets \
+            intrinsics_gen \
+            clang-resource-headers \
+            target_parser_gen
+
+      - name: Run clang-tidy on changed Comgr sources
+        run: |
+          set -o pipefail
+
+          # comgr-device-libs.cpp is excluded on purpose. It includes
+          # embedded_content_sha.inc and opencl-c-base.inc, which are produced
+          # by the device-libs embedding pipeline, and that needs a working
+          # Clang -- roughly 4900 extra ninja steps, against ~880 for
+          # everything above. The SPIRV CI builds Comgr in full and covers it.
+          git diff -U0 HEAD~1...HEAD -- \
+            amd/comgr \
+            ':(exclude)amd/comgr/src/comgr-device-libs.cpp' > comgr.diff
+
+          if [ ! -s comgr.diff ]; then
+            echo "No Comgr changes to lint."
+            exit 0
+          fi
+
+          # clang-tidy-diff.py restricts itself to the changed lines and
+          # filters to C/C++ extensions itself.
+          python3 clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py \
+            -p1 \
+            -path build \
+            -quiet \
+            -j "$(nproc)" \
+            < comgr.diff | tee clang-tidy.log
+
+          # clang-tidy exits 0 for warnings unless -warnings-as-errors is set,
+          # and clang-tidy-diff.py has no passthrough for it, so gate on the
+          # output instead.
+          if grep -qE '^[^[:space:]]+:[0-9]+:[0-9]+: (warning|error):' clang-tidy.log; then
+            echo "::error::clang-tidy reported findings in amd/comgr"
+            exit 1
+          fi
+
+          echo "clang-tidy found nothing in the changed Comgr lines."
+
+      - name: Upload clang-tidy output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: comgr-clang-tidy
+          path: |
+            clang-tidy.log
