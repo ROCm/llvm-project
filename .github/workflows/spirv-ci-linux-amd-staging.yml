@@ -229,6 +229,28 @@ jobs:
           EOF
           chmod +x "$STAGING/bin/hipconfig"
 
+      # hipCUB's installed CMake package requires libhipcxx. Stage its headers
+      # and package config so both runtime artifacts carry the dependency.
+      - name: Checkout libhipcxx
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/libhipcxx
+          ref: amd-develop
+          path: libhipcxx
+          persist-credentials: false
+
+      - name: Configure and install libhipcxx
+        run: |
+          cmake -G Ninja -S libhipcxx -B build-libhipcxx \
+            -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DCMAKE_PREFIX_PATH="$PWD/rocm-cmake/share/rocm" \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DLIBCUDACXX_ENABLE_HIP=OFF \
+            -DLIBCUDACXX_ENABLE_LIBCUDACXX_TESTS=OFF \
+            -Dlibhipcxx_ENABLE_CMAKE_TESTS=OFF
+          cmake --install build-libhipcxx --prefix $PWD/$STAGING
+
       # Build rocPRIM.
       - name: Checkout rocPRIM
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
