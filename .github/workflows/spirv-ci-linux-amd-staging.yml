@@ -206,31 +206,8 @@ jobs:
           cmake --build build-rocm-core
           cmake --install build-rocm-core --prefix $PWD/$STAGING
 
-      - name: Configure CLR (HIP runtime)
-        run: |
-          cmake -G Ninja -S rocm-systems/projects/clr -B "$CLR_BUILD" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
-            -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
-            -DBUILD_SHARED_LIBS=ON \
-            -DCMAKE_INSTALL_LIBDIR=lib \
-            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
-            -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD" \
-            -DHIP_PLATFORM=amd \
-            -DHIP_COMMON_DIR=$PWD/rocm-systems/projects/hip \
-            -DCLR_BUILD_HIP=ON \
-            -DROCM_KPACK_ENABLED=OFF \
-            -DHIP_ENABLE_ROCPROFILER_REGISTER=OFF
-
-      - name: Build CLR
-        run: ninja -C "$CLR_BUILD" install
-
-      - name: Stage translator binary for runtime SPIRV JIT
-        run: |
-          mkdir -p "$STAGING/bin"
-          cp -a "$LLVM_BUILD/bin/amd-llvm-spirv" "$STAGING/bin/"
-
-      # test_hecbench compiles with hipcc.
+      # CLR installs hipcc and hipconfig whenever their bin directory exists.
+      # Stage both before configuring CLR; rocm-core creates staging/bin.
       - name: Build and stage hipcc
         run: |
           cmake -G Ninja -S llvm-project/amd/hipcc -B build-hipcc \
@@ -254,6 +231,30 @@ jobs:
           esac
           EOF
           chmod +x "$STAGING/bin/hipconfig"
+
+      - name: Configure CLR (HIP runtime)
+        run: |
+          cmake -G Ninja -S rocm-systems/projects/clr -B "$CLR_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
+            -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
+            -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD" \
+            -DHIP_PLATFORM=amd \
+            -DHIP_COMMON_DIR=$PWD/rocm-systems/projects/hip \
+            -DCLR_BUILD_HIP=ON \
+            -DROCM_KPACK_ENABLED=OFF \
+            -DHIP_ENABLE_ROCPROFILER_REGISTER=OFF
+
+      - name: Build CLR
+        run: ninja -C "$CLR_BUILD" install
+
+      - name: Stage translator binary for runtime SPIRV JIT
+        run: |
+          mkdir -p "$STAGING/bin"
+          cp -a "$LLVM_BUILD/bin/amd-llvm-spirv" "$STAGING/bin/"
 
       # hipCUB's installed CMake package requires libhipcxx. Stage its headers
       # and package config so both runtime artifacts carry the dependency.
