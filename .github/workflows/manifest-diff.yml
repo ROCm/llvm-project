@@ -104,13 +104,18 @@ jobs:
         id: gen-report
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          END_REF: ${{ inputs.end_ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+          START_REF: ${{ inputs.start_ref || (github.event_name == 'push' && github.event.before) || '' }}
+          FIND_LAST_RUN: ${{ inputs.find_last_run }}
+          PR_BASE_REF: ${{ inputs.pr_base_ref || (github.event_name == 'pull_request' && github.event.pull_request.base.ref) || '' }}
+          BRANCH: ${{ inputs.branch }}
         run: |
           python3 build_tools/generate_manifest_diff_report.py \
-            --end "${{ inputs.end_ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}" \
-            --start "${{ inputs.start_ref || (github.event_name == 'push' && github.event.before) || '' }}" \
-            --find-last-run "${{ inputs.find_last_run }}" \
-            --pr-base-ref "${{ inputs.pr_base_ref || (github.event_name == 'pull_request' && github.event.pull_request.base.ref) || '' }}" \
-            --branch "${{ inputs.branch }}" \
+            --end "${END_REF}" \
+            --start "${START_REF}" \
+            --find-last-run "${FIND_LAST_RUN}" \
+            --pr-base-ref "${PR_BASE_REF}" \
+            --branch "${BRANCH}" \
             ${{ inputs.workflow_mode && '--workflow-mode' || '' }} \
             --output-dir reports
 
