@@ -146,6 +146,13 @@ jobs:
           path: rocm-cmake
           persist-credentials: false
 
+      # The source checkout lacks the generated package version file.
+      - name: Configure and install rocm-cmake
+        run: |
+          cmake -G Ninja -S rocm-cmake -B build-rocm-cmake \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING
+          cmake --install build-rocm-cmake --prefix $PWD/$STAGING
+
       - name: Configure ROCR-Runtime
         run: |
           cmake -G Ninja -S rocm-systems/projects/rocr-runtime -B "$ROCR_BUILD" \
@@ -189,7 +196,7 @@ jobs:
             -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_INSTALL_LIBDIR=lib \
             -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
-            -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD;$PWD/rocm-cmake/share/rocm" \
+            -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD" \
             -DHIP_PLATFORM=amd \
             -DHIP_COMMON_DIR=$PWD/rocm-systems/projects/hip \
             -DCLR_BUILD_HIP=ON \
@@ -243,7 +250,7 @@ jobs:
         run: |
           cmake -G Ninja -S libhipcxx -B build-libhipcxx \
             -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
-            -DCMAKE_PREFIX_PATH="$PWD/rocm-cmake/share/rocm" \
+            -DCMAKE_PREFIX_PATH="$PWD/$STAGING" \
             -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
             -DCMAKE_INSTALL_LIBDIR=lib \
             -DLIBCUDACXX_ENABLE_HIP=OFF \
