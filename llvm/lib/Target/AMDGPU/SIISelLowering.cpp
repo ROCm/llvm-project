@@ -20919,8 +20919,15 @@ unsigned SITargetLowering::getMaxPermittedBytesForAlignment(
   // instruction could be split by the 32-byte fetch window boundary.
   // See getPrefLoopAlignment() for context. A larger, user requested alignment
   // keeps the default limit.
-  if (MBB->getAlignment() <= Align(32) && needsFetchWindowAlignment(*MBB))
+  if (MBB->getAlignment() <= Align(32) && needsFetchWindowAlignment(*MBB)) {
+    // Record the alignment this cap was applied to, so the fetch-window pass
+    // can recognize it as compiler-set. MachineBlockPlacement calls this right
+    // after setting the alignment.
+    MBB->getParent()
+        ->getInfo<SIMachineFunctionInfo>()
+        ->recordFetchWindowLoopAlign(*MBB, MBB->getAlignment());
     return 4;
+  }
   return TargetLowering::getMaxPermittedBytesForAlignment(MBB);
 }
 

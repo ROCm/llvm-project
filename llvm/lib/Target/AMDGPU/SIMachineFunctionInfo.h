@@ -20,15 +20,18 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIInstrInfo.h"
 #include "SIModeRegisterDefaults.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MIRYamlMapping.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/raw_ostream.h"
 #include <optional>
 
 namespace llvm {
 
+class MachineBasicBlock;
 class MachineFrameInfo;
 class MachineFunction;
 class SIMachineFunctionInfo;
@@ -593,6 +596,13 @@ private:
 
   bool IsWholeWaveFunction = false;
 
+  // Loop alignments that SITargetLowering set through the GFX950 fetch-window
+  // rule, keyed by block and recorded when MachineBlockPlacement applies the
+  // 4-byte cap (see SITargetLowering::getMaxPermittedBytesForAlignment).
+  // AMDGPUFetchWindowPlacement reads them to tell a compiler-set (32, 4)
+  // alignment from a user-requested one with the same values.
+  DenseMap<const MachineBasicBlock *, Align> FetchWindowLoopAligns;
+
   using PrologEpilogSGPRSpill =
       std::pair<Register, PrologEpilogSGPRSaveRestoreInfo>;
   // To track the SGPR spill method used for a CSR SGPR register during
@@ -884,6 +894,19 @@ public:
 
   void setScratchReservedForDynamicVGPRs(unsigned SizeInBytes) {
     ScratchReservedForDynamicVGPRs = SizeInBytes;
+  }
+
+  void recordFetchWindowLoopAlign(const MachineBasicBlock &MBB, Align A) {
+    FetchWindowLoopAligns[&MBB] = A;
+  }
+
+  /// The alignment recorded for \p MBB by the fetch-window rule, if any.
+  std::optional<Align>
+  getFetchWindowLoopAlign(const MachineBasicBlock &MBB) const {
+    auto It = FetchWindowLoopAligns.find(&MBB);
+    if (It == FetchWindowLoopAligns.end())
+      return std::nullopt;
+    return It->second;
   }
 
   // Add user SGPRs.

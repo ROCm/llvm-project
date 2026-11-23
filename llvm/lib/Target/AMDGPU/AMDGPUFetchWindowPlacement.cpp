@@ -89,12 +89,14 @@ public:
 private:
   const SIInstrInfo *TII = nullptr;
   const MachineLoopInfo *MLI = nullptr;
+  const SIMachineFunctionInfo *MFInfo = nullptr;
   const MachineBlockFrequencyInfo *MBFI = nullptr;
   DenseMap<const MachineBasicBlock *, unsigned> Offset;
   SmallPtrSet<const MachineBasicBlock *, 8> UserAligned;
   SmallPtrSet<const MachineBasicBlock *, 32> InnerBlocks;
 
   unsigned size(const MachineInstr &MI) const;
+  bool hasUserAlignment(const MachineBasicBlock &MBB) const;
   void computeOffsets(MachineFunction &MF);
   unsigned endOfLayoutPred(const MachineBasicBlock &MBB) const;
   double cost(const MachineLoop &L, MachineBasicBlock *First,
@@ -149,14 +151,18 @@ void AMDGPUFetchWindowPlacement::computeOffsets(MachineFunction &MF) {
   }
 }
 
-/// The only loop alignment the compiler itself sets on GFX950 is the 32-byte
-/// fetch window alignment from SITargetLowering::getPrefLoopAlignment, capped
-/// at one s_nop. Any other alignment was requested by the user.
-static bool hasUserAlignment(const MachineBasicBlock &MBB) {
+/// The compiler's own loop alignment on GFX950 is the fetch-window alignment
+/// from SITargetLowering, with a one-s_nop cap. The lowering records that
+/// alignment when it applies the cap. A block is user-aligned unless its
+/// current alignment and cap still match that record, so a user's (32, 4)
+/// request is not mistaken for the compiler's.
+bool AMDGPUFetchWindowPlacement::hasUserAlignment(
+    const MachineBasicBlock &MBB) const {
   if (MBB.getAlignment() == Align(1))
     return false;
-  return MBB.getAlignment() != Align(FetchWindow) ||
-         MBB.getMaxBytesForAlignment() != NopBytes;
+  std::optional<Align> Recorded = MFInfo->getFetchWindowLoopAlign(MBB);
+  return !(Recorded && *Recorded == MBB.getAlignment() &&
+           MBB.getMaxBytesForAlignment() == NopBytes);
 }
 
 /// The llvm.loop.align value of \p L, or 0 if there is none.
@@ -422,6 +428,7 @@ bool AMDGPUFetchWindowPlacement::runOnMachineFunction(MachineFunction &MF) {
     return false;
 
   TII = ST.getInstrInfo();
+  MFInfo = MFI;
   for (const MachineBasicBlock &MBB : MF)
     for (const MachineInstr &MI : MBB.instrs())
       if (MI.isInlineAsm())
