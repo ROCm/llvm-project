@@ -58,6 +58,9 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       id-token: write
+    env:
+      DEST_SUBDIR: ${{ inputs.destsubdir }}
+      ROCM_VERSION: ${{ inputs.rocm_version }}
 
     steps:
       - name: Checkout Repository
@@ -81,16 +84,16 @@ jobs:
         run: |
           aws s3 cp \
             s3://therock-${{ inputs.sourcebucket }}-python/${{ inputs.sourcesubdir }}/${{ inputs.amdgpu_family }}/ \
-            s3://therock-${{ inputs.destbucket }}-python/${{ inputs.destsubdir }}/${{ inputs.amdgpu_family }}/ \
-            --recursive --exclude "*"  --include "rocm*${{ inputs.rocm_version }}*"
+            s3://therock-${{ inputs.destbucket }}-python/${DEST_SUBDIR}/${{ inputs.amdgpu_family }}/ \
+            --recursive --exclude "*"  --include "rocm*${ROCM_VERSION}*"
 
       - name: Copy torch wheels between S3 buckets
         if: ${{ inputs.include_torch }}
         run: |
           aws s3 cp \
             s3://therock-${{ inputs.sourcebucket }}-python/${{ inputs.sourcesubdir }}/${{ inputs.amdgpu_family }}/ \
-            s3://therock-${{ inputs.destbucket }}-python/${{ inputs.destsubdir }}/${{ inputs.amdgpu_family }}/ \
-            --recursive --exclude "*"  --include "*torch*${{ inputs.rocm_version }}*${{ env.cp_version }}*"
+            s3://therock-${{ inputs.destbucket }}-python/${DEST_SUBDIR}/${{ inputs.amdgpu_family }}/ \
+            --recursive --exclude "*"  --include "*torch*${ROCM_VERSION}*${{ env.cp_version }}*"
 
       - name: (Re-)Generate Python package release index
         env:
