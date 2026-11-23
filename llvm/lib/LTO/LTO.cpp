@@ -71,6 +71,10 @@ using namespace llvm;
 using namespace lto;
 using namespace object;
 
+#define HANDLE_EXTENSION(Ext)                                                  \
+  llvm::PassPluginLibraryInfo get##Ext##PluginInfo();
+#include "llvm/Support/Extension.def"
+
 #define DEBUG_TYPE "lto"
 
 Error LTO::setupOptimizationRemarks() {
@@ -192,6 +196,8 @@ std::string llvm::computeLTOCacheKey(
   else
     AddUnsigned(-1);
   for (const auto &S : Conf.MllvmArgs)
+    AddString(S);
+  for (const std::string &S : Conf.PassPluginArgs)
     AddString(S);
   AddUnsigned(static_cast<int>(Conf.CGOptLevel));
   AddUnsigned(static_cast<int>(Conf.CGFileType));
@@ -1319,10 +1325,6 @@ Error LTO::checkPartiallySplit() {
 }
 
 Error LTO::setupPassPlugins() {
-  // Filenames are cleared on success, so repeated calls are no-ops.
-  if (Conf.PassPluginFilenames.empty())
-    return Error::success();
-
   // Load plugins from file. Failures leave them all unregistered.
   SmallVector<std::unique_ptr<PassPlugin>, 0> Loaded;
   for (const std::string &PluginFN : Conf.PassPluginFilenames) {
@@ -1342,7 +1344,15 @@ Error LTO::setupPassPlugins() {
                                 FromFiles.begin(), FromFiles.end());
 
   Conf.PassPluginFilenames.clear();
-  return Error::success();
+
+  if (Conf.PassPluginArgs.empty())
+    return Error::success();
+  SmallVector<PassPluginLibraryInfo, 0> Infos;
+  for (const PassPlugin *Plugin : Conf.LoadedPassPlugins)
+    Infos.push_back(Plugin->getInfo());
+#define HANDLE_EXTENSION(Ext) Infos.push_back(get##Ext##PluginInfo());
+#include "llvm/Support/Extension.def"
+  return llvm::passPluginArguments(Infos, Conf.PassPluginArgs);
 }
 
 Error LTO::run(AddStreamFn AddStream, FileCache Cache) {
