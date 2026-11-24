@@ -1,9 +1,9 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 < %s | FileCheck --check-prefixes=CHECK,ON %s
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -amdgpu-enable-fetch-window-placement=0 < %s | FileCheck --check-prefixes=CHECK,OFF %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -amdgpu-fetch-window-print -o /dev/null < %s 2>&1 | FileCheck --check-prefix=PRINT %s
+; RUN: %if asserts %{ llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -debug-only=amdgpu-fetch-window-placement -o /dev/null < %s 2>&1 | FileCheck --check-prefix=PRINT %s %}
 ; RUN: llc -enable-new-pm -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 < %s | FileCheck --check-prefixes=CHECK,ON %s
-; RUN: llc -enable-new-pm -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -amdgpu-fetch-window-print -o /dev/null < %s 2>&1 | FileCheck --check-prefix=PRINT %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -align-loops=64 -amdgpu-fetch-window-print -o /dev/null < %s 2>&1 | FileCheck --allow-empty --check-prefix=ALIGN-LOOPS %s
+; RUN: %if asserts %{ llc -enable-new-pm -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -debug-only=amdgpu-fetch-window-placement -o /dev/null < %s 2>&1 | FileCheck --check-prefix=PRINT %s %}
+; RUN: %if asserts %{ llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -align-loops=64 -debug-only=amdgpu-fetch-window-placement -o /dev/null < %s 2>&1 | FileCheck --allow-empty --check-prefix=ALIGN-LOOPS %s %}
 
 ; Loops with llvm.loop.align are not moved by the fetch window placement. The
 ; one s_nop padding limit of the fetch window alignment does not apply to a

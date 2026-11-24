@@ -42,6 +42,7 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -58,11 +59,6 @@ static cl::opt<unsigned>
     MaxLoopBytes("amdgpu-fetch-window-max-loop-bytes",
                  cl::desc("Largest innermost loop considered for placement"),
                  cl::init(4096), cl::Hidden);
-
-static cl::opt<bool>
-    PrintDecisions("amdgpu-fetch-window-print",
-                   cl::desc("Print fetch window placement decisions"),
-                   cl::init(false), cl::Hidden);
 
 static cl::opt<unsigned> EntryPadForTesting(
     "amdgpu-fetch-window-entry-pad-for-testing",
@@ -307,9 +303,9 @@ bool AMDGPUFetchWindowPlacementImpl::placeLoop(MachineLoop &L,
 
   // Never move a loop whose alignment the user asked for.
   if (getLoopAlignMetadata(L) || UserAligned.contains(First)) {
-    if (PrintDecisions)
-      errs() << "fetch-window: " << MF.getName() << " loop "
-             << printMBBReference(*L.getHeader()) << " user-aligned, skip\n";
+    LLVM_DEBUG(dbgs() << "fetch-window: " << MF.getName() << " loop "
+                      << printMBBReference(*L.getHeader())
+                      << " user-aligned, skip\n");
     return false;
   }
 
@@ -335,29 +331,29 @@ bool AMDGPUFetchWindowPlacementImpl::placeLoop(MachineLoop &L,
         break;
       }
 
-  if (PrintDecisions) {
-    errs() << "fetch-window: " << MF.getName() << " loop "
+  LLVM_DEBUG({
+    dbgs() << "fetch-window: " << MF.getName() << " loop "
            << printMBBReference(*L.getHeader()) << " first "
            << printMBBReference(*First) << " @" << Offset.lookup(First)
            << " bytes=" << Bytes << " base=" << Base << " cost=[";
     for (double C : Costs)
-      errs() << ' ' << C;
-    errs() << " ] shift="
+      dbgs() << ' ' << C;
+    dbgs() << " ] shift="
            << (BestShift == ~0u ? std::string("keep")
                                 : std::to_string(BestShift))
            << " pad-in " << printMBBReference(*PadMBB) << " depth=" << PadDepth
            << '\n';
-  }
+  });
   if (BestShift == ~0u)
     return false;
 
   // The score only sees this loop. Padding also moves the code after it,
   // which can be hotter and is not scored again.
-  if (const MachineBasicBlock *Hot = hotCodeMoved(L, *PadMBB)) {
-    if (PrintDecisions)
-      errs() << "fetch-window: " << MF.getName() << " loop "
-             << printMBBReference(*L.getHeader()) << " moves hotter "
-             << printMBBReference(*Hot) << ", skip\n";
+  const MachineBasicBlock *Hot = hotCodeMoved(L, *PadMBB);
+  if (Hot) {
+    LLVM_DEBUG(dbgs() << "fetch-window: " << MF.getName() << " loop "
+                      << printMBBReference(*L.getHeader()) << " moves hotter "
+                      << printMBBReference(*Hot) << ", skip\n");
     return false;
   }
 
@@ -384,10 +380,9 @@ bool AMDGPUFetchWindowPlacementImpl::placeLoop(MachineLoop &L,
   if (any_of(Capped, [&](const MachineBasicBlock *MBB) {
         return !isAligned(MBB->getAlignment(), Offset.lookup(MBB));
       })) {
-    if (PrintDecisions)
-      errs() << "fetch-window: " << MF.getName() << " loop "
-             << printMBBReference(*L.getHeader())
-             << " shift breaks a user alignment, undo\n";
+    LLVM_DEBUG(dbgs() << "fetch-window: " << MF.getName() << " loop "
+                      << printMBBReference(*L.getHeader())
+                      << " shift breaks a user alignment, undo\n");
     for (MachineInstr *MI : Nops)
       MI->eraseFromParent();
     First->setAlignment(OldAlign, OldMaxBytes);
