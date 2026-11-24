@@ -10238,6 +10238,9 @@ bool LLParser::parseWpdRes(WholeProgramDevirtResolution &WPDRes) {
   case lltok::kw_branchFunnel:
     WPDRes.TheKind = WholeProgramDevirtResolution::BranchFunnel;
     break;
+  case lltok::kw_speculative:
+    WPDRes.TheKind = WholeProgramDevirtResolution::Speculative;
+    break;
   default:
     return error(Lex.getLoc(), "unexpected WholeProgramDevirtResolution kind");
   }
