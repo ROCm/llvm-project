@@ -2,6 +2,8 @@
 ; RUN: %if spirv-tools %{ llc --spirv-ext=+SPV_KHR_non_semantic_info -O0 -mtriple=spirv64-unknown-unknown %s -o - -filetype=obj | spirv-val %}
 ; RUN: llc --spirv-ext=+SPV_KHR_non_semantic_info,+SPV_KHR_relaxed_extended_instruction --spirv-debug-scope-forward-refs=true -O0 -mtriple=spirv64-unknown-unknown %s -o - | FileCheck %s --check-prefix=FWD
 ; RUN: %if spirv-tools %{ llc --spirv-ext=+SPV_KHR_non_semantic_info,+SPV_KHR_relaxed_extended_instruction --spirv-debug-scope-forward-refs=true -O0 -mtriple=spirv64-unknown-unknown %s -o - -filetype=obj | spirv-val %}
+; The AMD vendor enables -spirv-debug-scope-forward-refs.
+; RUN: llc -O0 -mtriple=spirv64-amd-amdhsa %s -o - | FileCheck %s --check-prefix=FWD
 
 ; struct S { int x; struct S *next; };
 ;

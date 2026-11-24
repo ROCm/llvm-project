@@ -60,6 +60,7 @@ add_llvm_target(SPIRVCodeGen
   SPIRVTypeInst.cpp
   SPIRVUtils.cpp
   SPIRVNonSemanticDebugHandler.cpp
+  SPIRVNonSemanticDebugHandlerDIOp.cpp
   SPIRVAuxDataHandler.cpp
   SPIRVCBufferAccess.cpp
   SPIRVPushConstantAccess.cpp

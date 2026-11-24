@@ -1,4 +1,6 @@
 ; RUN: llc -O0 -mtriple=spirv64-unknown-unknown --spirv-ext=+SPV_KHR_non_semantic_info -spirv-debug-lexical-block-discriminator-scope %s -o - | FileCheck %s
+; The AMD vendor enables -spirv-debug-lexical-block-discriminator-scope.
+; RUN: llc -O0 -mtriple=spirv64-amd-amdhsa %s -o - | FileCheck %s
 
 ; A DILocation scoped to a DILexicalBlockFile. The block-file becomes a
 ; DebugLexicalBlockDiscriminator whose parent is the DebugLexicalBlock, and
