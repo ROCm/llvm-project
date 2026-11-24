@@ -20,7 +20,7 @@ MATH_MANGLE(atan)(float x)
 
     float a = MATH_PRIVATE(atanred)(v);
 
-    float y = MATH_MAD(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -a);
+    float y = BUILTIN_FMA_F32(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -a);
     a = g ? y : a;
 
     return BUILTIN_COPYSIGN_F32(a, x);

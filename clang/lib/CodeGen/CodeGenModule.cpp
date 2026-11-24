@@ -35,6 +35,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/AST/HLSLResource.h"
 #include "clang/AST/Mangle.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/StmtVisitor.h"
@@ -54,6 +55,7 @@
 #include "llvm/ABI/IRTypeMapper.h"
 #include "llvm/ABI/TargetInfo.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -400,7 +402,8 @@ static void initializeCommonABICompatInfo(llvm::abi::ABICompatInfo &CompatInfo,
 
 static void initializeX86ABICompatInfo(llvm::abi::X86ABICompatInfo &CompatInfo,
                                        const llvm::Triple &T,
-                                       const LangOptions::ClangABI Compat) {
+                                       const LangOptions::ClangABI Compat,
+                                       const CodeGenOptions &CGOpts) {
   initializeCommonABICompatInfo(CompatInfo, Compat);
   CompatInfo.ClassifyIntegerMMXAsSSE = Compat > LangOptions::ClangABI::Ver3_8 &&
                                        !T.isOSDarwin() && !T.isPS() &&
@@ -414,6 +417,21 @@ static void initializeX86ABICompatInfo(llvm::abi::X86ABICompatInfo &CompatInfo,
   CompatInfo.Clang11Compat = Compat <= LangOptions::ClangABI::Ver11 || T.isPS();
   CompatInfo.ClassifyUnnamedBitFields =
       Compat > LangOptions::ClangABI::Ver23 && !T.isPS();
+  if (T.isOSDarwin() || T.isPS()) {
+    CompatInfo.SmallIntABICompat = llvm::abi::SmallIntABICompatKind::Clang23;
+  } else {
+    switch (CGOpts.getSmallIntABICompat()) {
+    case CodeGenOptions::SmallIntABICompatKind::Platform:
+      CompatInfo.SmallIntABICompat = llvm::abi::SmallIntABICompatKind::Platform;
+      break;
+    case CodeGenOptions::SmallIntABICompatKind::Clang23:
+      CompatInfo.SmallIntABICompat = llvm::abi::SmallIntABICompatKind::Clang23;
+      break;
+    case CodeGenOptions::SmallIntABICompatKind::Both:
+      CompatInfo.SmallIntABICompat = llvm::abi::SmallIntABICompatKind::Both;
+      break;
+    }
+  }
 }
 
 const llvm::abi::TargetInfo &
@@ -478,8 +496,8 @@ CodeGenModule::getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB) {
                         : llvm::abi::X86AVXABILevel::None;
 
     llvm::abi::X86ABICompatInfo CompatInfo;
-    initializeX86ABICompatInfo(CompatInfo, T,
-                               getLangOpts().getClangABICompat());
+    initializeX86ABICompatInfo(CompatInfo, T, getLangOpts().getClangABICompat(),
+                               getCodeGenOpts());
 
     bool Has64BitPointers = getTarget().getPointerWidth(LangAS::Default) == 64;
 
@@ -3479,7 +3497,7 @@ void CodeGenModule::SetCommonAttributes(GlobalDecl GD, llvm::GlobalValue *GV) {
 /// Get the feature delta from the default feature map for the given target CPU.
 static std::vector<std::string>
 getFeatureDeltaFromDefault(const CodeGenModule &CGM, StringRef TargetCPU,
-                           llvm::StringMap<bool> &FeatureMap) {
+                           const llvm::StringMap<bool> &FeatureMap) {
   llvm::StringMap<bool> DefaultFeatureMap;
   CGM.getTarget().initFeatureMap(
       DefaultFeatureMap, CGM.getContext().getDiagnostics(), TargetCPU, {});
@@ -3511,9 +3529,19 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(GlobalDecl GD,
   const auto *SD = FD ? FD->getAttr<CPUSpecificAttr>() : nullptr;
   const auto *TC = FD ? FD->getAttr<TargetClonesAttr>() : nullptr;
   bool AddedAttr = false;
+  auto GetTargetFeaturesAttr = [&](llvm::ArrayRef<std::string> Features) {
+    llvm::SmallVector<StringRef, 16> CanonicalFeatures;
+    for (StringRef Feature : Features)
+      if (!getTarget().isReadOnlyFeature(Feature.drop_front()))
+        CanonicalFeatures.push_back(Feature);
+    if (CanonicalFeatures.empty())
+      return llvm::Attribute();
+    llvm::sort(CanonicalFeatures);
+    return llvm::Attribute::get(getLLVMContext(), "target-features",
+                                llvm::join(CanonicalFeatures, ","));
+  };
   if (TD || TV || SD || TC) {
-    llvm::StringMap<bool> FeatureMap;
-    getContext().getFunctionFeatureMap(FeatureMap, GD);
+    const auto &FeatureMap = getContext().getFunctionFeatureMap(GD);
 
     // Now add the target-cpu and target-features to the function.
     // While we populated the feature map above, we still need to
@@ -3555,22 +3583,21 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(GlobalDecl GD,
     // Otherwise just add the existing target cpu and target features to the
     // function.
     if (SetTargetFeatures && getTarget().getTriple().isAMDGPU()) {
-      llvm::StringMap<bool> FeatureMap;
-      if (FD) {
-        getContext().getFunctionFeatureMap(FeatureMap, GD);
-      } else {
-        getTarget().initFeatureMap(FeatureMap, getContext().getDiagnostics(),
-                                   TargetCPU,
-                                   getTarget().getTargetOpts().Features);
-      }
+      const auto &FeatureMap = getContext().getFunctionFeatureMap(GD);
       Features = getFeatureDeltaFromDefault(*this, TargetCPU, FeatureMap);
     } else if (getTarget().getTriple().isSPIRV() &&
                getTarget().getTriple().getVendor() == llvm::Triple::AMD) {
       // The AMDGCN-flavored SPIR-V target unions every GPU's features so it can
       // report all builtins as supported, but that union is meaningless in the
       // emitted IR.
-    } else {
-      Features = getTarget().getTargetOpts().Features;
+    } else if (SetTargetFeatures) {
+      if (!DefaultTargetFeatures)
+        DefaultTargetFeatures =
+            GetTargetFeaturesAttr(getTarget().getTargetOpts().Features);
+      if (DefaultTargetFeatures->isValid()) {
+        Attrs.addAttribute(*DefaultTargetFeatures);
+        AddedAttr = true;
+      }
     }
   }
 
@@ -3583,12 +3610,9 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(GlobalDecl GD,
     AddedAttr = true;
   }
   if (!Features.empty() && SetTargetFeatures) {
-    llvm::erase_if(Features, [&](const std::string& F) {
-       return getTarget().isReadOnlyFeature(F.substr(1));
-    });
-    if (!Features.empty()) {
-      llvm::sort(Features);
-      Attrs.addAttribute("target-features", llvm::join(Features, ","));
+    llvm::Attribute FeatureAttr = GetTargetFeaturesAttr(Features);
+    if (FeatureAttr.isValid()) {
+      Attrs.addAttribute(FeatureAttr);
       AddedAttr = true;
     }
   }
@@ -3744,14 +3768,12 @@ void CodeGenModule::createFunctionTypeMetadataForIcall(const FunctionDecl *FD,
   if (isa<CXXMethodDecl>(FD) && !cast<CXXMethodDecl>(FD)->isStatic())
     return;
 
-  QualType FnType = GeneralizeFunctionType(getContext(), FD->getType(),
-                                           /*GeneralizePointers=*/false);
-  llvm::Metadata *MD = CreateMetadataIdentifierForType(FnType);
+  llvm::Metadata *MD = CreateMetadataIdentifierForCFIFnType(
+      FD->getType(), /*GeneralizePointers=*/false);
   F->addTypeMetadata(0, MD);
 
-  QualType GenPtrFnType = GeneralizeFunctionType(getContext(), FD->getType(),
-                                                 /*GeneralizePointers=*/true);
-  F->addTypeMetadata(0, CreateMetadataIdentifierGeneralized(GenPtrFnType));
+  F->addTypeMetadata(0, CreateMetadataIdentifierForCFIFnType(
+                            FD->getType(), /*GeneralizePointers=*/true));
 
   // Emit a hash-based bit set entry for cross-DSO calls.
   if (CodeGenOpts.SanitizeCfiCrossDso)
@@ -6576,10 +6598,15 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
 
   // TODO(Reflection): add support for consteval-only types.
 
-  // HLSL default buffer constants will be emitted during HLSLBufferDecl codegen
-  if (getLangOpts().HLSL &&
-      D->getType().getAddressSpace() == LangAS::hlsl_constant)
+  // HLSL default buffer constants will be emitted during HLSLBufferDecl
+  // codegen. Also skip emitting globals for structs or arrays of structs
+  // containing only resource constants, which should have already been
+  // flattened into separate variables.
+  if (getLangOpts().HLSL && (ASTTy.getAddressSpace() == LangAS::hlsl_constant ||
+                             (D->getStorageClass() != SC_Static &&
+                              hlsl::isStructOrArrayOfWithResources(ASTTy)))) {
     return;
+  }
 
   // If this is OpenMP device, check if it is legal to emit this global
   // normally.
@@ -8712,8 +8739,10 @@ void CodeGenModule::EmitOMPThreadPrivateDecl(const OMPThreadPrivateDecl *D) {
   }
 }
 
-llvm::Metadata *CodeGenModule::CreateMetadataIdentifierImpl(
-    QualType T, MetadataTypeMap &Map, StringRef Suffix, bool ForceString) {
+llvm::Metadata *
+CodeGenModule::CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
+                                            StringRef Suffix, bool ForceString,
+                                            bool NormalizeIntegers) {
   if (auto *FnType = T->getAs<FunctionProtoType>())
     T = getContext().getFunctionType(
         FnType->getReturnType(), FnType->getParamTypes(),
@@ -8726,10 +8755,10 @@ llvm::Metadata *CodeGenModule::CreateMetadataIdentifierImpl(
   if (ForceString || isExternallyVisible(T->getLinkage())) {
     std::string OutName;
     llvm::raw_string_ostream Out(OutName);
-    getCXXABI().getMangleContext().mangleCanonicalTypeName(
-        T, Out, getCodeGenOpts().SanitizeCfiICallNormalizeIntegers);
+    getCXXABI().getMangleContext().mangleCanonicalTypeName(T, Out,
+                                                           NormalizeIntegers);
 
-    if (getCodeGenOpts().SanitizeCfiICallNormalizeIntegers)
+    if (NormalizeIntegers)
       Out << ".normalized";
 
     Out << Suffix;
@@ -8743,13 +8772,24 @@ llvm::Metadata *CodeGenModule::CreateMetadataIdentifierImpl(
   return InternalId;
 }
 
-llvm::Metadata *CodeGenModule::CreateMetadataIdentifierForFnType(QualType T) {
-  assert(isa<FunctionType>(T));
-  T = GeneralizeFunctionType(
-      getContext(), T, getCodeGenOpts().SanitizeCfiICallGeneralizePointers);
-  if (getCodeGenOpts().SanitizeCfiICallGeneralizePointers)
-    return CreateMetadataIdentifierGeneralized(T);
-  return CreateMetadataIdentifierForType(T);
+llvm::Metadata *
+CodeGenModule::CreateMetadataIdentifierForCFIFnType(QualType T,
+                                                    bool GeneralizePointers) {
+  assert(T->isFunctionType());
+  T = GeneralizeFunctionType(getContext(), T, GeneralizePointers);
+  bool NormalizeIntegers = getCodeGenOpts().SanitizeCfiICallNormalizeIntegers;
+  if (GeneralizePointers)
+    return CreateMetadataIdentifierImpl(T, GeneralizedMetadataIdMap,
+                                        ".generalized", /*ForceString=*/false,
+                                        NormalizeIntegers);
+  return CreateMetadataIdentifierImpl(T, CfiICallMetadataIdMap, "",
+                                      /*ForceString=*/false, NormalizeIntegers);
+}
+
+llvm::Metadata *
+CodeGenModule::CreateMetadataIdentifierForCFIFnType(QualType T) {
+  return CreateMetadataIdentifierForCFIFnType(
+      T, getCodeGenOpts().SanitizeCfiICallGeneralizePointers);
 }
 
 llvm::Metadata *CodeGenModule::CreateMetadataIdentifierForType(QualType T) {
@@ -8759,11 +8799,6 @@ llvm::Metadata *CodeGenModule::CreateMetadataIdentifierForType(QualType T) {
 llvm::Metadata *
 CodeGenModule::CreateMetadataIdentifierForVirtualMemPtrType(QualType T) {
   return CreateMetadataIdentifierImpl(T, VirtualMetadataIdMap, ".virtual");
-}
-
-llvm::Metadata *CodeGenModule::CreateMetadataIdentifierGeneralized(QualType T) {
-  return CreateMetadataIdentifierImpl(T, GeneralizedMetadataIdMap,
-                                      ".generalized", /*ForceString=*/false);
 }
 
 // Applies C default argument promotions to a parameter type.
@@ -9144,17 +9179,11 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
   case NxNonSPMD:
     StatusMsg += "Non-SPMD mode not supported";
     break;
-  case NxOptionDisabled:
-    StatusMsg += "Command line option disabled";
-    break;
   case NxOptionDisabledOrHasCall:
     StatusMsg += "Command line option disabled or has a nested call";
     break;
   case NxUnsupportedDirective:
     StatusMsg += "Unsupported directive";
-    break;
-  case NxUnsupportedSplitDirective:
-    StatusMsg += "Unsupported split directive";
     break;
   case NxNoStmt:
     StatusMsg += "No statement found";
@@ -9164,12 +9193,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
     break;
   case NxNotLoopDirective:
     StatusMsg += "Not a loop directive";
-    break;
-  case NxNotCapturedStmt:
-    StatusMsg += "Not a captured statement";
-    break;
-  case NxNotExecutableStmt:
-    StatusMsg += "Not an executable directive";
     break;
   case NxUnsupportedNestedSplitDirective:
     StatusMsg += "Unsupported nested split directive";
@@ -9204,64 +9227,8 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
   case NxNonConcurrentOrder:
     StatusMsg += "Non-concurrent order not supported";
     break;
-  case NxUnsupportedRedType:
-    StatusMsg += "Unsupported reduction variable type";
-    break;
-  case NxUnsupportedRedIntSize:
-    StatusMsg +=
-        "Integer reduction variable with the specified size not supported";
-    break;
-  case NxNotScalarRed:
-    StatusMsg += "Non-scalar reduction variable";
-    break;
-  case NxNotBinOpRed:
-    StatusMsg += "Only binary reduction operator supported";
-    break;
-  case NxUnsupportedRedOp:
-    StatusMsg += "Unsupported reduction operator";
-    break;
-  case NxNoRedVar:
-    StatusMsg += "No reduction variable found";
-    break;
-  case NxMultRedVar:
-    StatusMsg += "Multiple reduction variables in the same loop not supported";
-    break;
-  case NxUnsupportedRedExpr:
-    StatusMsg += "Unsupported reduction expression found";
-    break;
-  case NxUnsupportedXteamRedThreadLimit:
-    StatusMsg += "Thread Limit less than 256 not supported";
-    break;
   case NxUnsupportedPseudoObject:
     StatusMsg += "Unsupported pseudo object found";
-    break;
-  case NxNotRedVarInBinOpRHS:
-    StatusMsg += "Reduction variable not found in RHS of binary operator";
-    break;
-  case NxNotAddOpInBinOpRHs:
-    StatusMsg += "Add operator not found in RHS of binary operator";
-    break;
-  case NxRhsOfAssignNotBinOpOrCall:
-    StatusMsg += "RHS of assignment is not a binary operator or call";
-    break;
-  case NxBinOpNotAddAssignOrAssign:
-    StatusMsg += "Binary operator is neither += nor =";
-    break;
-  case NxNotBinOpOrCallButAccessesRedVar:
-    StatusMsg +=
-        "RHS is not binary operator or call but accesses reduction variable";
-    break;
-  case NxNotArgScalarEval:
-    StatusMsg += "Arg of call does not evaluate to scalar";
-    break;
-  case NxReductionOpNotBinAssign:
-    StatusMsg += "Reduction ops not binary assignment";
-    break;
-  case NxReductionOpRhsNotBinOrCond:
-    StatusMsg += "Reduction ops rhs is not binary or conditional operator";
-    break;
-  case NxReductionOpRhsNotMinMaxSum:
-    StatusMsg += "Reduction ops rhs is not sum, min, or max";
     break;
   case NxNotBuiltinByNameInHostCompile:
     StatusMsg += "Not recognized as builtin in host compile";
@@ -9274,22 +9241,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
     break;
   case NxPOSemanticExprNotCall:
     StatusMsg += "Pseudo-expression semantic expression is not a call";
-    break;
-  case NxChildOfCallIsNull:
-    StatusMsg += "Child of call is null";
-    break;
-  case NxMultiDeviceMinMaxNotSupported:
-    StatusMsg +=
-        "Xteam min/max reduction not supported with multi-device compilation";
-    break;
-  case NxFastReductionMinMaxNotSupported:
-    StatusMsg += "Xteam min/max reduction not supported with fast reduction";
-    break;
-  case NxScanMinMaxNotSupported:
-    StatusMsg += "Xteam min/max reduction not supported with scan";
-    break;
-  case NxAmbiguousRedKind:
-    StatusMsg += "Could not determine reduction kind";
     break;
   }
 
@@ -10274,9 +10225,7 @@ CodeGenModule::getOrCreateMSVCGlobalDeleteWrapper(const FunctionDecl *GlobOD) {
     auto *BB = llvm::BasicBlock::Create(LLVMCtx, "", EmptyFn);
     llvm::Function *TrapFn =
         llvm::Intrinsic::getOrInsertDeclaration(&M, llvm::Intrinsic::trap);
-    auto *TrapCall = llvm::CallInst::Create(TrapFn, {}, "", BB);
-    TrapCall->setDoesNotReturn();
-    TrapCall->setDoesNotThrow();
+    llvm::CallInst::Create(TrapFn, {}, "", BB);
     new llvm::UnreachableInst(LLVMCtx, BB);
 
     // The empty is referenced only by the wrapper's weak alias. When this TU

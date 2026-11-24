@@ -127,7 +127,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Fetch artifacts
-        run: |
+        run: | # zizmor: ignore[template-injection] workflow inputs: amdgpu_families is a semicolon-separated list that artifact_manager.py expands through therock_amdgpu_targets.cmake; artifact_group is the GPU family fetch_artifacts.py uses to select archives; artifact_github_repo is the owner/repo of that artifact run (default ROCm/TheRock). This block also expands env.ARTIFACT_RUN_ID and env.ARTIFACTS_DIR, which the job sets itself
           if [ -n "${{ inputs.amdgpu_families }}" ]; then
             # Multi-arch mode: use artifact_manager.py to fetch all families
             echo "Fetching artifacts for multiple families: ${{ inputs.amdgpu_families }}"
@@ -152,7 +152,7 @@ jobs:
           fi
 
       - name: Build Python packages
-        run: |
+        run: | # zizmor: ignore[template-injection] workflow inputs: package_version is the package version (empty selects a dev version); linux_amdgpu_families and windows_amdgpu_families are comma- or semicolon-separated lists that build_python_packages.py expands through therock_amdgpu_targets.cmake. This block also expands env.ARTIFACTS_DIR and env.PACKAGES_DIR, which the job sets itself
           python ./build_tools/build_python_packages.py \
             --artifact-dir="${{ env.ARTIFACTS_DIR }}" \
             --dest-dir="${{ env.PACKAGES_DIR }}" \
@@ -171,9 +171,7 @@ jobs:
       # input run's subdirectory and _upload_ to our current run's subdirectory.
       - name: Upload Python packages
         id: upload
-        run: |
+        run: | # zizmor: ignore[template-injection] inputs.artifact_group is a workflow input naming the GPU artifact group (for example gfx94X-dcgpu); upload_python_packages.py uses it as the upload path, or omits it when multiarch_index selects --multiarch. This block also expands env.PACKAGES_DIR, which the job sets itself
           python build_tools/github_actions/upload_python_packages.py \
             --input-packages-dir="${{ env.PACKAGES_DIR }}" \
-            --artifact-group="${{ inputs.artifact_group }}" \
-            --run-id="${{ github.run_id }}" \
-            ${{ inputs.multiarch_index && '--multiarch' || '' }}
+            --run-id="${{ github.run_id }}"

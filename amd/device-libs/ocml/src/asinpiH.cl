@@ -26,22 +26,22 @@ MATH_MANGLE(asinpi)(half x)
     // together with the above polynomial approximation, and
     // reconstruct the terms carefully.
 
-    const half piinv = 0x1.45f306p-2h;
+    // Evaluate in float so that only the final conversion rounds to half
+    const float piinv = 0x1.45f306p-2f;
 
-    half ax = BUILTIN_ABS_F16(x);
+    float ax = BUILTIN_ABS_F32((float)x);
 
-    half r;
-    if (ax <= 0.5h) {
-        half s = x * x;
-        r = ax * PE2(s, 0x1.0b8p-5h, 0x1.a7cp-5h, 0x1.46p-2h);
-    } else {
-        float s = BUILTIN_MAD_F32((float)ax, -0.5f, 0.5f);
-        float t = BUILTIN_AMDGPU_SQRT_F32(s);
-        float p = BUILTIN_MAD_F32(t, BUILTIN_MAD_F32(s, BUILTIN_MAD_F32(s,
-                      -0x1.f4b736p-5f, -0x1.ad0826p-4f), -0x1.45f5a8p-1f), 0.5f);
-        r = (half)p;
-    }
+    float rt = BUILTIN_FMA_F32(-0.5f, ax, 0.5f);
+    float x2 = ax * ax;
+    float r = ax > 0.5f ? rt : x2;
 
-    return BUILTIN_COPYSIGN_F16(r, x);
+    float u = r * BUILTIN_FMA_F32(r, 0x1.ebc5e8p-6f, 0x1.ae67d4p-5f);
+
+    float s = BUILTIN_AMDGPU_SQRT_F32(r);
+    float z = BUILTIN_FMA_F32(-2.0f, BUILTIN_FMA_F32(s, u, piinv*s), 0.5f);
+    float zs = BUILTIN_FMA_F32(ax, u, piinv*ax);
+    z = ax > 0.5f ? z : zs;
+
+    return BUILTIN_COPYSIGN_F16((half)z, x);
 }
 

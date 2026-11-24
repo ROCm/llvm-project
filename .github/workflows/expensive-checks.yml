@@ -1,0 +1,221 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Release + assertions + expensive checks build of llvm-project, followed by
+# the llvm, clang and lld lit suites.
+#
+# LLVM_ENABLE_EXPENSIVE_CHECKS turns on assertions that are too slow for a
+# normal build: sorting-order validation, std::shuffle of equal-cost elements
+# in the scheduler, SelectionDAG node verification, and (on libstdc++)
+# _GLIBCXX_DEBUG, which hard-checks every iterator and container access. The
+# payoff is almost entirely at test time -- these assertions fire while lit
+# runs, not while ninja builds -- so this workflow builds and then tests.
+#
+# Nightly rather than presubmit: _GLIBCXX_DEBUG alone costs a large multiple
+# of normal runtime on container-heavy code, so a cold build plus three lit
+# suites is a multi-hour job. Running it per-PR would price out every
+# unrelated change. 04:00 UTC keeps it clear of the 02:00 nightly CI wave
+# (ci_nightly, ci_asan, rockci_multi_arch_nightly) and the 06:00 TheRock SHA
+# gate.
+#
+# Shape follows spirv-ci-linux-amd-staging.yml: one build job uploads a
+# stripped build tree, and the test jobs consume it instead of rebuilding.
+
+name: Expensive Checks - Linux - amd-staging
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag, or SHA to build. Empty uses the branch the dispatch was started on."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# The manylinux image defaults inline `run:` steps to `sh`. Force bash so the
+# steps below can rely on bash behaviour rather than on which shell the image
+# happens to resolve to.
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  # One run per ref. A queued nightly should not pile up behind a manual run
+  # of the same ref; it would only rebuild the same commit.
+  group: ${{ github.workflow }}-${{ inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  LLVM_BUILD: build
+
+jobs:
+  # =====================================================================
+  # Build LLVM + Clang + LLD with expensive checks, upload the build tree.
+  # =====================================================================
+  build:
+    name: Build
+    # Forks get the manual trigger but not the nightly: a fork has no reason
+    # to burn the shared runner pool on a scheduled build.
+    if: ${{ github.event_name != 'schedule' || github.repository == 'ROCm/llvm-project' }}
+    outputs:
+      commit: ${{ steps.checkout.outputs.commit }}
+    runs-on: aws-linux-scale-rocm-large
+    # Expensive checks roughly doubles compile time against the same tree
+    # built with plain assertions. 6h leaves headroom on a contended runner.
+    timeout-minutes: 360
+    container:
+      # Same digest-pinned image as the SPIRV CI. Pinned rather than :latest
+      # because the toolchain in the image decides what compiles: a silent
+      # image bump here would look like an llvm-project regression.
+      # The env context is not available in `container`, so the digest is
+      # repeated in the test job below.
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
+    steps:
+      - name: Checkout llvm-project
+        id: checkout
+        # steps.checkout.outputs.commit is the resolved SHA. The test jobs
+        # check out that SHA rather than the branch name, so a push landing
+        # mid-run cannot leave lit running source that does not match the
+        # binaries it is testing.
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure LLVM
+        # LLVM_ENABLE_EXPENSIVE_CHECKS hard-requires LLVM_ENABLE_ASSERTIONS
+        # (FATAL_ERROR in HandleLLVMOptions.cmake otherwise).
+        #
+        # CMAKE_BUILD_TYPE is set explicitly even though llvm/CMakeLists.txt
+        # would default it to Release: it does so with a WARNING, and a
+        # warning in the configure log of a nightly is noise nobody reads.
+        #
+        # _GLIBCXX_DEBUG changes the libstdc++ ABI, so nothing in this build
+        # tree can link against a library built without it. Everything here
+        # is built in-tree, which is what keeps that safe.
+        run: |
+          cmake -G Ninja -S llvm-project/llvm -B "$LLVM_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_ENABLE_EXPENSIVE_CHECKS=ON \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
+            -DLLVM_TARGETS_TO_BUILD="AMDGPU;X86" \
+            -DLLVM_INCLUDE_TESTS=ON \
+            -DLLVM_LIT_ARGS="-sv --no-progress-bar"
+
+      - name: Build LLVM + Clang + LLD + test deps
+        # The *-test-depends targets pull in every tool the matching lit suite
+        # needs (FileCheck, not, count, llc, opt, clang, lld, the gtest unit
+        # test binaries) and track upstream as tests gain dependencies, so
+        # this list does not need maintaining when a new tool is added.
+        run: ninja -C "$LLVM_BUILD" llvm-test-depends clang-test-depends lld-test-depends
+
+      - name: Report build size
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### Expensive checks build"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${{ steps.checkout.outputs.commit }}\` |"
+            echo "| Build type | Release + assertions + expensive checks |"
+            echo "| Targets | AMDGPU;X86 |"
+            echo "| Projects | clang;lld |"
+            echo "| Build tree | $(du -sh "$LLVM_BUILD" | cut -f1) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---- Strip + upload ---------------------------------------------------
+      # Strip to stay under GHA's 10GB artifact cap and to cut upload and
+      # download time. lit needs none of the debug info; assertion text lives
+      # in the binary itself, not in the debug sections, so expensive-check
+      # failures still report normally. --strip-unneeded keeps the dynamic
+      # symbols needed at link and load time.
+      - name: Strip binaries
+        run: |
+          find "$LLVM_BUILD" \
+            -type f \( -executable -o -name '*.so*' -o -name '*.a' \) \
+            -exec strip --strip-unneeded {} + 2>/dev/null || true
+
+      # Tar before upload: actions/upload-artifact strips the +x bit and
+      # excludes hidden files, both of which this tree needs.
+      - name: Tar build tree
+        # Size is echoed because the 10GB cap is the failure mode to watch:
+        # upload-artifact reports it as an opaque error, and expensive checks
+        # inflate object size over a plain assertions build.
+        run: |
+          tar -cf linux-expensive-checks-build-tree.tar "$LLVM_BUILD"
+          echo "Artifact size: $(du -h linux-expensive-checks-build-tree.tar | cut -f1)"
+
+      - name: Upload build tree artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: linux-expensive-checks-build-tree
+          path: linux-expensive-checks-build-tree.tar
+          # Consumed by the test jobs in this same run; nothing reads it later.
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
+
+  # =====================================================================
+  # Test - llvm, clang and lld lit suites
+  # =====================================================================
+  # One matrix leg per suite so each reports its own pass/fail and a slow
+  # suite does not hide behind a fast one. fail-fast is off: a clang
+  # regression should not cancel the lld result.
+  test:
+    name: Test ${{ matrix.suite.target }}
+    needs: build
+    runs-on: aws-linux-scale-rocm-large
+    timeout-minutes: ${{ matrix.suite.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          # `path` is the source test directory. Each one contains a Unit/
+          # subdirectory, so pointing lit at it runs the gtest binaries too --
+          # the same coverage as the check-* target.
+          - target: check-llvm
+            path: llvm/test
+            timeout_minutes: 240
+          - target: check-clang
+            path: clang/test
+            timeout_minutes: 240
+          - target: check-lld
+            path: lld/test
+            timeout_minutes: 60
+    container:
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
+    steps:
+      - name: Checkout llvm-project (build job commit)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download build tree artifact
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: linux-expensive-checks-build-tree
+
+      - name: Untar build tree
+        run: tar -xmf linux-expensive-checks-build-tree.tar
+
+      - name: Test - ${{ matrix.suite.target }}
+        # Invoke lit directly rather than `ninja check-*`: after extraction
+        # the tree's mtimes no longer reflect the real dependency order, and
+        # ninja would relink tools that are already correct. llvm-lit resolves
+        # the source path given here to the generated site config in the build
+        # tree, so a source-relative path is all it needs.
+        run: >-
+          python "$LLVM_BUILD/bin/llvm-lit" -sv --no-progress-bar
+          "llvm-project/${{ matrix.suite.path }}"

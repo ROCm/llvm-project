@@ -16,23 +16,21 @@ define amdgpu_ps float @global_atomic_fadd_f32_rtn_atomicrmw(ptr addrspace(1) %p
   ; GFX90A-NEXT:   [[COPY3:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE]]
   ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE]]
   ; GFX90A-NEXT:   [[GLOBAL_LOAD_DWORD:%[0-9]+]]:av_32 = GLOBAL_LOAD_DWORD [[COPY4]], 0, 0, implicit $exec :: (load (s32) from %ir.ptr, addrspace 1)
-  ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_LOAD_DWORD]], implicit $exec
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.1.atomicrmw.start:
   ; GFX90A-NEXT:   successors: %bb.2(0x04000000), %bb.1(0x7c000000)
   ; GFX90A-NEXT: {{  $}}
-  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI [[COPY5]], %bb.0, %19, %bb.1
+  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI [[GLOBAL_LOAD_DWORD]], %bb.0, %2, %bb.1
   ; GFX90A-NEXT:   [[V_ADD_F32_e64_:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e64 0, [[PHI]], 0, [[COPY]], 0, 0, implicit $mode, implicit $exec
   ; GFX90A-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64_align2 = REG_SEQUENCE [[V_ADD_F32_e64_]], %subreg.sub0, [[PHI]], %subreg.sub1
   ; GFX90A-NEXT:   [[GLOBAL_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = GLOBAL_ATOMIC_CMPSWAP_RTN [[COPY3]], [[REG_SEQUENCE1]], 0, 1, implicit $exec :: (load store syncscope("wavefront") monotonic monotonic (s32) on %ir.ptr, addrspace 1)
   ; GFX90A-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[GLOBAL_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY6:%[0-9]+]]:av_32 = COPY [[GLOBAL_ATOMIC_CMPSWAP_RTN]]
-  ; GFX90A-NEXT:   [[COPY7:%[0-9]+]]:vgpr_32 = COPY [[COPY6]], implicit $exec
+  ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:av_32 = COPY [[GLOBAL_ATOMIC_CMPSWAP_RTN]]
   ; GFX90A-NEXT:   SI_BRCOND %bb.2, [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; GFX90A-NEXT:   S_BRANCH %bb.1
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.2.atomicrmw.end:
-  ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:av_32 = PHI [[COPY6]], %bb.1
+  ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:av_32 = PHI [[COPY5]], %bb.1
   ; GFX90A-NEXT:   $vgpr0 = COPY [[PHI1]]
   ; GFX90A-NEXT:   SI_RETURN_TO_EPILOG $vgpr0
   ;
@@ -130,32 +128,30 @@ define amdgpu_ps float @global_atomic_fadd_f32_saddr_rtn_atomicrmw(ptr addrspace
   ; GFX90A-NEXT: bb.3.atomicrmw.start:
   ; GFX90A-NEXT:   successors: %bb.4(0x04000000), %bb.3(0x7c000000)
   ; GFX90A-NEXT: {{  $}}
-  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI [[COPY12]], %bb.2, %58, %bb.3
+  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI [[COPY12]], %bb.2, %5, %bb.3
   ; GFX90A-NEXT:   [[V_ADD_F32_e64_6:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e64 0, [[PHI]], 0, %1, 0, 0, implicit $mode, implicit $exec
   ; GFX90A-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64_align2 = REG_SEQUENCE [[V_ADD_F32_e64_6]], %subreg.sub0, [[PHI]], %subreg.sub1
   ; GFX90A-NEXT:   [[V_MOV_B32_e32_1:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
   ; GFX90A-NEXT:   [[GLOBAL_ATOMIC_CMPSWAP_SADDR_RTN:%[0-9]+]]:vgpr_32 = GLOBAL_ATOMIC_CMPSWAP_SADDR_RTN [[V_MOV_B32_e32_1]], [[REG_SEQUENCE1]], [[COPY3]], 0, 1, implicit $exec :: (load store syncscope("wavefront") monotonic monotonic (s32) on %ir.ptr, addrspace 1)
   ; GFX90A-NEXT:   [[V_CMP_EQ_U32_e64_1:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[GLOBAL_ATOMIC_CMPSWAP_SADDR_RTN]], [[PHI]], implicit $exec
   ; GFX90A-NEXT:   [[COPY13:%[0-9]+]]:av_32 = COPY [[GLOBAL_ATOMIC_CMPSWAP_SADDR_RTN]]
-  ; GFX90A-NEXT:   [[COPY14:%[0-9]+]]:vgpr_32 = COPY [[COPY13]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY15:%[0-9]+]]:vgpr_32 = COPY [[COPY13]], implicit $exec
   ; GFX90A-NEXT:   SI_BRCOND %bb.4, [[V_CMP_EQ_U32_e64_1]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; GFX90A-NEXT:   S_BRANCH %bb.3
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.4 (%ir-block.32):
   ; GFX90A-NEXT:   successors: %bb.5(0x80000000)
   ; GFX90A-NEXT: {{  $}}
-  ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[COPY10]], %bb.1, [[COPY15]], %bb.3
+  ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[COPY10]], %bb.1, [[COPY13]], %bb.3
   ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI1]], implicit $exec
   ; GFX90A-NEXT:   early-clobber %52:vgpr_32 = STRICT_WWM [[COPY9]], implicit $exec
   ; GFX90A-NEXT:   [[V_ADD_F32_e64_7:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e64 0, [[V_READFIRSTLANE_B32_]], 0, %52, 0, 0, implicit $mode, implicit $exec
   ; GFX90A-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_64_xexec = V_CMP_NE_U32_e64 [[V_CNDMASK_B32_e64_]], 0, implicit $exec
-  ; GFX90A-NEXT:   [[COPY16:%[0-9]+]]:vgpr_32 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX90A-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, [[V_ADD_F32_e64_7]], 0, [[COPY16]], [[V_CMP_NE_U32_e64_1]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY17:%[0-9]+]]:av_32 = COPY [[V_CNDMASK_B32_e64_1]]
+  ; GFX90A-NEXT:   [[COPY14:%[0-9]+]]:vgpr_32 = COPY [[V_READFIRSTLANE_B32_]]
+  ; GFX90A-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, [[V_ADD_F32_e64_7]], 0, [[COPY14]], [[V_CMP_NE_U32_e64_1]], implicit $exec
+  ; GFX90A-NEXT:   [[COPY15:%[0-9]+]]:av_32 = COPY [[V_CNDMASK_B32_e64_1]]
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.5 (%ir-block.38):
-  ; GFX90A-NEXT:   [[PHI2:%[0-9]+]]:av_32 = PHI [[COPY4]], %bb.0, [[COPY17]], %bb.4
+  ; GFX90A-NEXT:   [[PHI2:%[0-9]+]]:av_32 = PHI [[COPY4]], %bb.0, [[COPY15]], %bb.4
   ; GFX90A-NEXT:   $vgpr0 = COPY [[PHI2]]
   ; GFX90A-NEXT:   SI_RETURN_TO_EPILOG $vgpr0
   ;

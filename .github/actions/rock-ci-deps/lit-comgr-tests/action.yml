@@ -18,36 +18,48 @@ runs:
     - name: LLVM Lit Tests
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      env:
+        BUILD_DIR: ${{ inputs.build_dir }}
       run: |
-        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-llvm
+        ninja -C "${BUILD_DIR}/compiler/amd-llvm/build" check-llvm
 
     - name: Clang Lit Tests
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      env:
+        BUILD_DIR: ${{ inputs.build_dir }}
       run: |
-        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-clang
+        ninja -C "${BUILD_DIR}/compiler/amd-llvm/build" check-clang
 
     - name: Flang Lit Tests
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      env:
+        BUILD_DIR: ${{ inputs.build_dir }}
       run: |
-        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-flang
+        ninja -C "${BUILD_DIR}/compiler/amd-llvm/build" check-flang
 
     - name: MLIR Lit Tests
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      env:
+        BUILD_DIR: ${{ inputs.build_dir }}
       run: |
-        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-mlir
+        ninja -C "${BUILD_DIR}/compiler/amd-llvm/build" check-mlir
 
     - name: LLD Lit Tests
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      env:
+        BUILD_DIR: ${{ inputs.build_dir }}
       run: |
-        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-lld
+        ninja -C "${BUILD_DIR}/compiler/amd-llvm/build" check-lld
 
     - name: SQTT-Marker Lit Tests
       continue-on-error: true 
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      env:
+        BUILD_DIR: ${{ inputs.build_dir }}
       run: |
-        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-sqtt-marker
+        ninja -C "${BUILD_DIR}/compiler/amd-llvm/build" check-sqtt-marker

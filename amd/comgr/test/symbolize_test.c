@@ -27,7 +27,7 @@ typedef struct Container {
   int Sz;
 } container_t;
 
-void collectSymbolizedString(const char *Input, void *Data) {
+static void collectSymbolizedString(const char *Input, void *Data) {
   int Sz = strlen(Input);
   container_t *Ptr = (container_t *)Data;
   Ptr->Data = (char *)malloc(Sz + 1);
@@ -36,7 +36,7 @@ void collectSymbolizedString(const char *Input, void *Data) {
   memcpy(Ptr->Data, Input, Sz);
 }
 
-void testSymbolizedString(container_t *SymbolContainer) {
+static void testSymbolizedString(container_t *SymbolContainer) {
 
   char *SymbolStr = SymbolContainer->Data;
   CHECK(SymbolStr, "Failed, symbol_str is NULL.\n");

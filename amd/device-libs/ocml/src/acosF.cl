@@ -35,10 +35,17 @@ MATH_MANGLE(acos)(float x)
                         0x1.555558p-3f);
 
     float s = MATH_FAST_SQRT(r);
+#if defined EXTRA_ACCURACY
+    // s + sl = sqrt(r)
+    float sl = BUILTIN_FMA_F32(-s, s, r) * (0.5f * BUILTIN_AMDGPU_RSQRT_F32(r));
+    sl = r == 0.0f ? 0.0f : sl;
+    float ztp = 2.0f * (s + MATH_MAD(s, u, sl));
+#else
     float ztp = 2.0f * MATH_MAD(s, u, s);
-    float ztn = MATH_MAD(0x1.ddcb02p+0f, 0x1.aee9d6p+0f, -ztp);
+#endif
+    float ztn = BUILTIN_FMA_F32(0x1.ddcb02p+0f, 0x1.aee9d6p+0f, -ztp);
     float zt =  x < 0.0f ? ztn : ztp;
-    float z = MATH_MAD(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -MATH_MAD(x, u, x));
+    float z = BUILTIN_FMA_F32(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -MATH_MAD(x, u, x));
     z = ax > 0.5f ? zt : z;
 
     return z;

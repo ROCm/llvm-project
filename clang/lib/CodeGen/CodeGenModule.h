@@ -354,15 +354,11 @@ public:
   enum NoLoopXteamErr {
     NxSuccess,
     NxNonSPMD,
-    NxOptionDisabled,
     NxOptionDisabledOrHasCall,
     NxUnsupportedDirective,
-    NxUnsupportedSplitDirective,
     NxNoStmt,
     NxUnsupportedTargetClause,
     NxNotLoopDirective,
-    NxNotCapturedStmt,
-    NxNotExecutableStmt,
     NxUnsupportedNestedSplitDirective,
     NxSplitConstructImproperlyNested,
     NxNestedOmpParallelDirective,
@@ -374,34 +370,11 @@ public:
     NxGuidedOrRuntimeSched,
     NxNonUnitStaticChunk,
     NxNonConcurrentOrder,
-    NxUnsupportedRedType,
-    NxUnsupportedRedIntSize,
-    NxNotScalarRed,
-    NxNotBinOpRed,
-    NxUnsupportedRedOp,
-    NxNoRedVar,
-    NxMultRedVar,
-    NxUnsupportedRedExpr,
-    NxUnsupportedXteamRedThreadLimit,
     NxUnsupportedPseudoObject,
-    NxNotRedVarInBinOpRHS,
-    NxNotAddOpInBinOpRHs,
-    NxRhsOfAssignNotBinOpOrCall,
-    NxBinOpNotAddAssignOrAssign,
-    NxNotBinOpOrCallButAccessesRedVar,
-    NxNotArgScalarEval,
-    NxReductionOpNotBinAssign,
-    NxReductionOpRhsNotBinOrCond,
-    NxReductionOpRhsNotMinMaxSum,
     NxNotBuiltinByNameInHostCompile,
     NxNotBuiltinByNameInDeviceCompile,
     NxPOExprCountNotOne,
-    NxPOSemanticExprNotCall,
-    NxChildOfCallIsNull,
-    NxMultiDeviceMinMaxNotSupported,
-    NxFastReductionMinMaxNotSupported,
-    NxScanMinMaxNotSupported,
-    NxAmbiguousRedKind
+    NxPOSemanticExprNotCall
   };
 
   using Stmt2StmtMap = llvm::DenseMap<const Stmt *, const Stmt *>;
@@ -431,14 +404,15 @@ private:
   llvm::Module &TheModule;
   DiagnosticsEngine &Diags;
   const TargetInfo &Target;
+  /// Lazily cached target features for functions without a target attribute.
+  /// An invalid attribute means that the defaults were computed but no
+  /// target-features attribute needs to be emitted.
+  std::optional<llvm::Attribute> DefaultTargetFeatures;
   std::unique_ptr<CGCXXABI> ABI;
   llvm::LLVMContext &VMContext;
   std::string ModuleNameHash;
   bool CXX20ModuleInits = false;
   std::unique_ptr<CodeGenTBAA> TBAA;
-
-  /// Used by emitParallelCall
-  bool isSPMDExecutionMode = false;
 
   mutable std::unique_ptr<TargetCodeGenInfo> TheTargetCodeGenInfo;
 
@@ -783,6 +757,7 @@ private:
   typedef llvm::DenseMap<QualType, llvm::Metadata *> MetadataTypeMap;
   MetadataTypeMap MetadataIdMap;
   MetadataTypeMap VirtualMetadataIdMap;
+  MetadataTypeMap CfiICallMetadataIdMap;
   MetadataTypeMap GeneralizedMetadataIdMap;
   MetadataTypeMap CallGraphMetadataIdMap;
 
@@ -817,7 +792,6 @@ public:
   ~CodeGenModule();
 
   void clear();
-  const OMPExecutableDirective *OMPPresentScanDirective = nullptr;
 
   /// Finalize LLVM code generation.
   void Release();
@@ -874,9 +848,6 @@ public:
   }
 
   const std::string &getModuleNameHash() const { return ModuleNameHash; }
-
-  void setIsSPMDExecutionMode(bool isSPMD) { isSPMDExecutionMode = isSPMD; }
-  bool IsSPMDExecutionMode() { return isSPMDExecutionMode; }
 
   /// Return a reference to the configured OpenCL runtime.
   CGOpenCLRuntime &getOpenCLRuntime() {
@@ -1832,8 +1803,10 @@ public:
   /// Generate a KCFI type identifier for T.
   llvm::ConstantInt *CreateKCFITypeId(QualType T, StringRef Salt);
 
-  /// Create a metadata identifier for the given function type.
-  llvm::Metadata *CreateMetadataIdentifierForFnType(QualType T);
+  /// Create a metadata identifier for the given function type for CFI icall.
+  llvm::Metadata *CreateMetadataIdentifierForCFIFnType(QualType T,
+                                                       bool GeneralizePointers);
+  llvm::Metadata *CreateMetadataIdentifierForCFIFnType(QualType T);
 
   /// Create a metadata identifier for the given type. This may either be an
   /// MDString (for external identifiers) or a distinct unnamed MDNode (for
@@ -1859,11 +1832,6 @@ public:
   /// Create a metadata identifier that is intended to be used to check virtual
   /// calls via a member function pointer.
   llvm::Metadata *CreateMetadataIdentifierForVirtualMemPtrType(QualType T);
-
-  /// Create a metadata identifier for the generalization of the given type.
-  /// This may either be an MDString (for external identifiers) or a distinct
-  /// unnamed MDNode (for internal identifiers).
-  llvm::Metadata *CreateMetadataIdentifierGeneralized(QualType T);
 
   /// Create and attach type metadata to the given function.
   void createFunctionTypeMetadataForIcall(const FunctionDecl *FD,
@@ -2543,7 +2511,8 @@ private:
 
   llvm::Metadata *CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
                                                StringRef Suffix,
-                                               bool ForceString = false);
+                                               bool ForceString = false,
+                                               bool NormalizeIntegers = false);
 
   /// Return success if the directives are nested in a way appropriate for
   /// specialized kernel generation. Track the component directives in

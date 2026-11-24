@@ -879,7 +879,7 @@ bool clang::needsTaskBasedThreadLimit(OpenMPDirectiveKind DKind) {
   return DKind == OMPD_target || DKind == OMPD_target_parallel ||
          DKind == OMPD_target_parallel_for ||
          DKind == OMPD_target_parallel_for_simd || DKind == OMPD_target_simd ||
-         DKind == OMPD_target_parallel_loop;
+         DKind == OMPD_target_parallel_loop || DKind == OMPD_target_loop;
 }
 
 bool clang::isOpenMPExecutableDirective(OpenMPDirectiveKind DKind) {
@@ -970,15 +970,6 @@ void clang::getOpenMPCaptureRegions(
   assert(unsigned(DKind) < llvm::omp::Directive_enumSize);
   assert(isOpenMPCapturingDirective(DKind) && "Expecting capturing directive");
 
-  auto IsTeamsLoop = [&]() {
-    // Assume the current leaf is OMPD_loop, check if the CaptureRegions
-    // contains only OMPD_teams.
-    // Upstream OMPD_teams_loop has two regions: OMPD_teams, OMPD_parallel.
-    // Downstream, it has only one: OMPD_teams. Avoid adding the parallel
-    // region in this specific case.
-    return CaptureRegions.size() == 1 && CaptureRegions[0] == OMPD_teams;
-  };
-
   auto GetRegionsForLeaf = [&](OpenMPDirectiveKind LKind) {
     assert(isLeafConstruct(LKind) && "Epecting leaf directive");
     // Whether a leaf would require OMPD_unknown if it occurred on its own.
@@ -1011,11 +1002,8 @@ void clang::getOpenMPCaptureRegions(
     case OMPD_loop:
       // TODO: 'loop' may require different capture regions depending on the
       // bind clause or the parent directive when there is no bind clause.
-      // If any of the directives that push regions here are parents of 'loop',
-      // assume 'parallel'. Otherwise do nothing.
-      if (!CaptureRegions.empty() &&
-          !llvm::is_contained(CaptureRegions, OMPD_parallel) &&
-          !IsTeamsLoop())
+      // Only 'teams' parents get 'parallel'; 'target loop' is emitted as simd.
+      if (!CaptureRegions.empty() && CaptureRegions.back() == OMPD_teams)
         CaptureRegions.push_back(OMPD_parallel);
       else
         return true;
@@ -1056,7 +1044,7 @@ void clang::getOpenMPCaptureRegions(
   // constructs were present. Push a single OMPD_unknown as the capture
   /// region.
   if (CaptureRegions.empty() && MayNeedUnknownRegion)
-    CaptureRegions.push_back(OMPD_unknown);  
+    CaptureRegions.push_back(OMPD_unknown);
 
   // OMPD_unknown is only expected as the only region. If other regions
   // are present OMPD_unknown should not be present.

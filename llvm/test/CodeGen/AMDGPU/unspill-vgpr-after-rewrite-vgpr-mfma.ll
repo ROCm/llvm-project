@@ -8,8 +8,8 @@ define void @eliminate_spill_after_mfma_rewrite(i32 %x, i32 %y, <4 x i32> %arg, 
 ; CHECK-LABEL: eliminate_spill_after_mfma_rewrite:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    v_mov_b32_e32 v36, 0
 ; CHECK-NEXT:    v_mfma_i32_4x4x4i8 v[32:35], v0, v1, v[2:5]
+; CHECK-NEXT:    v_mov_b32_e32 v36, 0
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[16:31], v[0:15]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -59,8 +59,8 @@ define void @eliminate_spill_after_mfma_rewrite_x2(i32 %x, i32 %y, <4 x i32> %ar
 ; CHECK-LABEL: eliminate_spill_after_mfma_rewrite_x2:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    v_mov_b32_e32 v48, 0
 ; CHECK-NEXT:    v_mfma_i32_4x4x4i8 v[32:35], v0, v1, v[2:5]
+; CHECK-NEXT:    v_mov_b32_e32 v48, 0
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[16:31], v[0:15]
 ; CHECK-NEXT:    ;;#ASMEND

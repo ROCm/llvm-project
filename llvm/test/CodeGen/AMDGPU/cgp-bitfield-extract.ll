@@ -27,7 +27,7 @@
 
 ; GCN-LABEL: {{^}}sink_ubfe_i32:
 ; GCN-NOT: lshr
-; GCN: s_cbranch_vcc{{n?z}}
+; GCN: s_cbranch_scc{{0|1}}
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x80008
@@ -175,14 +175,15 @@ ret:
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_span_midpoint:
 
-; GCN: s_lshr_b64 s[[[LO:[0-9]+]]:[[HI:[0-9]+]]], s[{{[0-9]+}}:{{[0-9]+}}], 30
-; GCN: s_cbranch_vcc{{n?z}} .LBB3_2
+; GCN: s_cbranch_scc0 .LBB3_2
 
 ; GCN: ; %bb0
+; GCN: s_lshr_b64 s[[[LO:[0-9]+]]:{{[0-9]+}}], s[{{[0-9]+}}:{{[0-9]+}}], 30
 ; GCN: s_and_b32 s{{[0-9]+}}, s[[LO]], 0xff
 
 ; GCN: .LBB3_2:
-; GCN: s_and_b32 s{{[0-9]+}}, s[[LO]], 0x7f
+; GCN: s_lshr_b64 s[[[LO2:[0-9]+]]:{{[0-9]+}}], s[{{[0-9]+}}:{{[0-9]+}}], 30
+; GCN: s_and_b32 s{{[0-9]+}}, s[[LO2]], 0x7f
 
 ; GCN: .LBB3_3:
 ; GCN: buffer_store_dwordx2
@@ -226,7 +227,7 @@ ret:
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_low32:
 
-; GCN: s_cbranch_vcc{{n?z}} .LBB4_2
+; GCN: s_cbranch_scc{{0|1}} .LBB4_2
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x8000f
@@ -275,7 +276,7 @@ ret:
 ; OPT: ret
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_high32:
-; GCN: s_cbranch_vcc{{n?z}} .LBB5_2
+; GCN: s_cbranch_scc{{0|1}} .LBB5_2
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x80003

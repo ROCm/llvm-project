@@ -168,7 +168,6 @@ define i32 @global_atomic_usub_sat_offset(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX11-GISEL:       ; %bb.0:
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, 0x1000
-; GFX11-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-GISEL-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, vcc_lo
 ; GFX11-GISEL-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-GISEL-NEXT:    global_atomic_csub_u32 v0, v[0:1], v2, off glc
@@ -233,7 +232,6 @@ define i32 @global_atomic_usub_sat_offset(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX11-SDAG:       ; %bb.0:
 ; GFX11-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x1000, v0
-; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-SDAG-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, vcc_lo
 ; GFX11-SDAG-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-SDAG-NEXT:    global_atomic_csub_u32 v0, v[0:1], v2, off glc
@@ -417,7 +415,6 @@ define void @global_atomic_usub_sat_offset_nortn(ptr addrspace(1) %ptr, i32 %dat
 ; GFX11-GISEL:       ; %bb.0:
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, 0x1000
-; GFX11-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-GISEL-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, vcc_lo
 ; GFX11-GISEL-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-GISEL-NEXT:    global_atomic_csub_u32 v0, v[0:1], v2, off glc
@@ -482,7 +479,6 @@ define void @global_atomic_usub_sat_offset_nortn(ptr addrspace(1) %ptr, i32 %dat
 ; GFX11-SDAG:       ; %bb.0:
 ; GFX11-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x1000, v0
-; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-SDAG-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, vcc_lo
 ; GFX11-SDAG-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-SDAG-NEXT:    global_atomic_csub_u32 v0, v[0:1], v2, off glc

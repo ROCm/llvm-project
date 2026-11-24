@@ -7,32 +7,6 @@
 
 #include "mathF.h"
 
-// The arguments must only be variable names
-#define FULL_MUL(A, B, CHI, CLO) \
-    do { \
-        float __ha = AS_FLOAT(AS_UINT(A) & 0xfffff000U); \
-        float __ta = A - __ha; \
-        float __hb = AS_FLOAT(AS_UINT(B) & 0xfffff000U); \
-        float __tb = B - __hb; \
-        CHI = A * B; \
-        CLO = MATH_MAD(__ta, __tb, MATH_MAD(__ta, __hb, MATH_MAD(__ha, __tb, MATH_MAD(__ha, __hb, -CHI)))); \
-    } while (0)
-
-CONSTATTR static float
-fnma(float a, float b, float c)
-{
-    float d;
-    if (HAVE_FAST_FMA32()) {
-        d = BUILTIN_FMA_F32(-a, b, c);
-    } else {
-        float h, t;
-        FULL_MUL(a, b, h, t);
-        d = c - h;
-        d = (((c - d) - h) - t) + d;
-    }
-    return d;
-}
-
 #if defined(COMPILING_FMOD)
 CONSTATTR float
 MATH_MANGLE(fmod)(float x, float y)
@@ -44,8 +18,10 @@ CONSTATTR float
 MATH_MANGLE(remainder)(float x, float y)
 #endif
 {
-    // How many bits of the quotient per iteration
-    const int bits = 12;
+    // How many bits of the quotient per iteration.  The rcp based estimate
+    // of q < 2^(bits+1) must be within 0.5 of the true quotient, and the fma
+    // makes the reduction exact.
+    const int bits = 20;
     float ax = BUILTIN_ABS_F32(x);
     float ay = BUILTIN_ABS_F32(y);
 
@@ -75,7 +51,7 @@ MATH_MANGLE(remainder)(float x, float y)
 
         while (nb > bits) {
             float q = BUILTIN_RINT_F32(ax * ayinv);
-            ax = fnma(q, ay, ax);
+            ax = BUILTIN_FMA_F32(-q, ay, ax);
             int clt = ax < 0.0f;
             float axp = ax + ay;
             ax = clt ? axp : ax;
@@ -93,7 +69,7 @@ MATH_MANGLE(remainder)(float x, float y)
         // Final iteration
         {
             float q = BUILTIN_RINT_F32(ax * ayinv);
-            ax = fnma(q, ay, ax);
+            ax = BUILTIN_FMA_F32(-q, ay, ax);
             int clt = ax < 0.0f;
             float axp = ax + ay;
             ax = clt ? axp : ax;
@@ -123,7 +99,7 @@ MATH_MANGLE(remainder)(float x, float y)
         ax = BUILTIN_FLDEXP_F32(ax, ey);
         ret = AS_FLOAT((AS_INT(x) & SIGNBIT_SP32) ^ AS_INT(ax));
     } else {
-        ret = x;
+        ret = DAZ_OPT() ? BUILTIN_CANONICALIZE_F32(x) : x;
 #if defined(COMPILING_REMQUO)
         q7 = 0;
 #endif
@@ -133,7 +109,7 @@ MATH_MANGLE(remainder)(float x, float y)
 
         int qsgn = 1 + (((AS_INT(x) ^ AS_INT(y)) >> 31) << 1);
         float t = MATH_MAD(y, -(float)qsgn, x);
-        ret = c ? t : (DAZ_OPT() ? BUILTIN_CANONICALIZE_F32(x) : x);
+        ret = c ? t : ret;
 #if defined(COMPILING_REMQUO)
         q7 = c ? qsgn : q7;
 #endif

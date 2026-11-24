@@ -7,7 +7,7 @@ on:
   # It's safe to use pull_request_target here, because we aren't checking out
   # code from the pull request branch.
   # See https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] does not check out pull-request code; greeter only posts a comment
     types:
       - opened
       - reopened

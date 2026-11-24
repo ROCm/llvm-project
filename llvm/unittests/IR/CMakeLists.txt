@@ -16,6 +16,7 @@ add_llvm_unittest(IRTests
   BasicBlockTest.cpp
   BasicBlockDbgInfoTest.cpp
   CFGBuilder.cpp
+  CallTypeIdentifierTest.cpp
   ConstantFPRangeTest.cpp
   ConstantRangeTest.cpp
   ConstantRangeListTest.cpp
@@ -37,6 +38,7 @@ add_llvm_unittest(IRTests
   LegacyPassManagerTest.cpp
   LibraryOptionsContextTest.cpp
   MDBuilderTest.cpp
+  MemCacheHintTest.cpp
   MemoryModelRelaxationAnnotationsTest.cpp
   ManglerTest.cpp
   MetadataTest.cpp

@@ -6,7 +6,7 @@
 name: Diff test-suite codegen
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] build runs only after the llvm-committers membership check
     types:
       - created
 

@@ -19,10 +19,6 @@
 #include "Mapping.h"
 #include "State.h"
 
-namespace ompx {
-namespace synchronize {} // namespace synchronize
-} // namespace ompx
-
 using namespace ompx;
 
 namespace impl {
@@ -30,10 +26,6 @@ namespace impl {
 /// Atomics
 ///
 ///{
-/// NOTE: This function needs to be implemented by every target.
-uint32_t atomicInc(uint32_t *Address, uint32_t Val, atomic::OrderingTy Ordering,
-                   atomic::MemScopeTy MemScope);
-
 constexpr uint32_t UNSET = 0;
 constexpr uint32_t SET = 1;
 

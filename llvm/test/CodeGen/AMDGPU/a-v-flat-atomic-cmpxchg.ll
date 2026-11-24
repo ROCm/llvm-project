@@ -529,11 +529,10 @@ define void @flat_atomic_cmpxchg_i64_ret_av_av__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_cndmask_b32_e32 v6, -1, v4, vcc
 ; CHECK-NEXT:    buffer_load_dword v4, v6, s[0:3], 0 offen
 ; CHECK-NEXT:    buffer_load_dword v5, v6, s[0:3], 0 offen offset:4
-; CHECK-NEXT:    s_waitcnt vmcnt(1)
-; CHECK-NEXT:    v_accvgpr_write_b32 a0, v4
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[2:3]
 ; CHECK-NEXT:    v_cndmask_b32_e32 v1, v5, v1, vcc
+; CHECK-NEXT:    v_accvgpr_write_b32 a0, v4
 ; CHECK-NEXT:    v_accvgpr_write_b32 a1, v5
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v4, v0, vcc
 ; CHECK-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4
@@ -601,11 +600,10 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_cndmask_b32_e32 v6, -1, v2, vcc
 ; CHECK-NEXT:    buffer_load_dword v2, v6, s[0:3], 0 offen
 ; CHECK-NEXT:    buffer_load_dword v3, v6, s[0:3], 0 offen offset:4
-; CHECK-NEXT:    s_waitcnt vmcnt(1)
-; CHECK-NEXT:    v_accvgpr_write_b32 a0, v2
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc, v[2:3], v[0:1]
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v5, vcc
+; CHECK-NEXT:    v_accvgpr_write_b32 a0, v2
 ; CHECK-NEXT:    v_accvgpr_write_b32 a1, v3
 ; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v4, vcc
 ; CHECK-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen offset:4
@@ -858,11 +856,10 @@ define void @flat_atomic_cmpxchg_i64_ret_v_v__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_cndmask_b32_e32 v6, -1, v4, vcc
 ; CHECK-NEXT:    buffer_load_dword v4, v6, s[0:3], 0 offen
 ; CHECK-NEXT:    buffer_load_dword v5, v6, s[0:3], 0 offen offset:4
-; CHECK-NEXT:    s_waitcnt vmcnt(1)
-; CHECK-NEXT:    v_accvgpr_write_b32 a0, v4
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[2:3]
 ; CHECK-NEXT:    v_cndmask_b32_e32 v1, v5, v1, vcc
+; CHECK-NEXT:    v_accvgpr_write_b32 a0, v4
 ; CHECK-NEXT:    v_accvgpr_write_b32 a1, v5
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v4, v0, vcc
 ; CHECK-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4

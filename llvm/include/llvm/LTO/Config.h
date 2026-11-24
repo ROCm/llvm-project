@@ -55,14 +55,13 @@ struct Config {
   TargetOptions Options;
   std::vector<std::string> MAttrs;
   std::vector<std::string> MllvmArgs;
-  // LTO will register both lists of plugins, but
-  // if an LTO client has already loaded a set of plugins,
-  // they should register them via LoadedPassPlugins.
-  // LoadedPassPlugins is currently used by distributed thin-lto.
+  // Pass-plugins already loaded by the client. LTO does not take ownership, so
+  // they must outlive the lto::LTO object.
   std::vector<llvm::PassPlugin *> LoadedPassPlugins;
+  // Plugins that are passed by filename are loaded in lto::LTO::run(). Clients
+  // that call lto::backend(), lto::thinBackend() or lto::opt() directly must
+  // use LoadedPassPlugins.
   std::vector<std::string> PassPluginFilenames;
-  /// For adding passes that run right before codegen.
-  std::function<void(legacy::PassManager &)> PreCodeGenPassesHook;
   std::function<void(PassBuilder &)> PassBuilderCallback;
   std::optional<Reloc::Model> RelocModel = Reloc::PIC_;
   std::optional<CodeModel::Model> CodeModel;
@@ -264,6 +263,12 @@ struct Config {
   /// splitting the module.
   ModuleHookFn PreCodeGenModuleHook;
 
+  /// This hook is called in the ThinLTO backend after finalization and import,
+  /// but before optimization. Unlike ModuleHookFn, it takes a mutable Module
+  /// reference, allowing targets to apply cross-TU propagated attributes.
+  using MutableModuleHookFn = std::function<void(unsigned Task, Module &)>;
+  MutableModuleHookFn ApplyThinLTOAttributes;
+
   /// A combined index hook is called after all per-module indexes have been
   /// combined (ThinLTO-specific). It can be used to implement -save-temps for
   /// the combined index.
@@ -277,6 +282,12 @@ struct Config {
       const ModuleSummaryIndex &Index,
       const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols)>;
   CombinedIndexHookFn CombinedIndexHook;
+
+  /// This hook is called after regular LTO modules with summaries (e.g., split
+  /// LTO units) have been linked into the combined module, before optimizing
+  /// the combined module or running ThinLTO.
+  using PostRegularLTOLinkHookFn = std::function<void()>;
+  PostRegularLTOLinkHookFn PostRegularLTOLinkHook;
 
   /// This is a convenience function that configures this Config object to write
   /// temporary files named after the given OutputFileName for each of the LTO

@@ -655,6 +655,9 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   addLinkerCompressDebugSectionsOption(getToolChain(), Args, CmdArgs);
   getToolChain().AddFilePathLibArgs(Args, CmdArgs);
   Args.AddAllArgs(CmdArgs, options::OPT_L);
+  // FIXME: Device ASan is provided by the ROCm device library, not compiler-rt.
+  if (!getToolChain().getSanitizerArgs(Args).needsAsanRt())
+    addSanitizerRuntimes(getToolChain(), Args, CmdArgs, C);
   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs, JA);
 
   // Always pass the target-id features to the LTO job.
@@ -667,9 +670,6 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   getToolChain().addProfileRTLibs(Args, CmdArgs);
-  // FIXME: Device ASan is provided by the ROCm device library, not compiler-rt.
-  if (!getToolChain().getSanitizerArgs(Args).needsAsanRt())
-    addSanitizerRuntimes(getToolChain(), Args, CmdArgs, C);
 
   if (Args.hasArg(options::OPT_stdlib))
     CmdArgs.append({"-lc", "-lm"});
@@ -936,6 +936,9 @@ void AMDGPUToolChain::addClangTargetOptions(
         CC1Args.append({"-mllvm", "-amdgpu-enable-hipstdpar"});
     }
   }
+
+  if (shouldUseAMDGPUObjectLinking(*this, DriverArgs, DeviceOffloadingKind))
+    CC1Args.append({"-mllvm", "-amdgpu-enable-object-linking"});
 
   DriverArgs.AddLastArg(CC1Args, options::OPT_gpu_max_threads_per_block_EQ);
 
@@ -1417,18 +1420,26 @@ SanitizerMask AMDGPUToolChain::getSupportedSanitizers(
       ToolChain::getSupportedSanitizers(BA, DeviceOffloadKind);
 
   // Address sanitizer is potentially supported, but depends on the exact target
-  // arch xnack support.
-  if (!BA || isXnackAvailable(getTriple(), BA.ArchName))
+  // arch XNACK support; for SPIR-V, the availability of XNACK is known at
+  // finalisation time.
+  if (!BA ||
+      (isXnackAvailable(getTriple(), BA.ArchName) || getTriple().isSPIRV()))
     SupportedMask |= SanitizerKind::Address;
   // Watchpoint probes do not require xnack, but the runtime requires HSA.
-  if (getTriple().isAMDGCN() && getTriple().getOS() == llvm::Triple::AMDHSA)
+  if (getTriple().getOS() == llvm::Triple::AMDHSA)
     SupportedMask |= SanitizerKind::Concurrency;
+
+  // The device sanitizer is supported on all HSA devices.
+  if (getTriple().isAMDGCN())
+    SupportedMask |= SanitizerKind::DeviceAddress;
 
   return SupportedMask;
 }
 
 StringRef AMDGPUToolChain::getSanitizerRequirement(SanitizerMask Kinds,
                                                    BoundArch BA) const {
+  if (getTriple().isSPIRV())
+    return {};
   // Address sanitizer requires xnack+ feature
   if ((Kinds & SanitizerKind::Address) && BA &&
       !isXnackAvailable(getTriple(), BA.ArchName)) {

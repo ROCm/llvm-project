@@ -188,11 +188,10 @@ static bool handleNamedBarriersForObjectLinking(Module &M) {
          "modules with named barriers should have a unique ID");
   for (auto &[V, Funcs] : BarrierToFuncs) {
     if (V->hasLocalLinkage())
-      V->setName("__amdgpu_named_barrier." + V->getName() + ModuleId);
+      V->setName("__amdgpu_named_barrier." + V->getName() + "." + ModuleId);
     else if (!V->getName().starts_with("__amdgpu_named_barrier"))
       V->setName("__amdgpu_named_barrier." + V->getName());
-    V->setInitializer(nullptr);
-    V->setLinkage(GlobalValue::ExternalLinkage);
+    externalizeLDSGlobalForObjectLinking(*V);
 
     SmallVector<Metadata *, 4> Ops;
     Ops.push_back(ValueAsMetadata::get(V));

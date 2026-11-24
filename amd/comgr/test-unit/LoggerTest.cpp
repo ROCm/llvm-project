@@ -23,6 +23,8 @@ using namespace COMGR;
 using llvm::raw_string_ostream;
 using llvm::StringRef;
 
+namespace {
+
 // -- isEnabled / level filtering ---------------------------------------------
 //
 // LogLevel ranges None..Debug (higher is more verbose). A message is emitted
@@ -360,3 +362,5 @@ TEST(Logger, RedirectOpenFailureIsRecorded) {
             StringRef::npos);
 }
 #endif // _WIN32
+
+} // namespace

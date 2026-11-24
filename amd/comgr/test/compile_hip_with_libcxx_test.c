@@ -55,12 +55,14 @@ const char *HipSource =
     "static_assert(sizeof(std::int64_t) == 8, \"int64_t is 8 bytes\");\n"
     "\n"
     "// Template using enable_if\n"
-    "template<typename T, typename = std::enable_if_t<std::is_arithmetic<T>::value>>\n"
+    "template<typename T, typename = "
+    "std::enable_if_t<std::is_arithmetic<T>::value>>\n"
     "__device__ T square(T x) { return x * x; }\n"
     "\n"
     "// Template using conditional\n"
     "template<typename T>\n"
-    "__device__ auto get_value() -> std::conditional_t<std::is_integral<T>::value, int, float> {\n"
+    "__device__ auto get_value() -> "
+    "std::conditional_t<std::is_integral<T>::value, int, float> {\n"
     "    if constexpr (std::is_integral<T>::value) return 42;\n"
     "    else return 3.14f;\n"
     "}\n"
@@ -87,7 +89,7 @@ int main(int Argc, char *Argv[]) {
   // No explicit -I flags needed.
   const char *CompileOptions[] = {
       "-std=c++17",
-      "-nogpuinc"                  // Don't use GPU-specific includes
+      "-nogpuinc" // Don't use GPU-specific includes
   };
   size_t CompileOptionsCount =
       sizeof(CompileOptions) / sizeof(CompileOptions[0]);

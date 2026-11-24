@@ -51,35 +51,47 @@ MATH_MANGLE(tgamma)(double x)
             }
             n = con(1.0, 0.0);
         }
-        double qt = PE13(y, -0x1.aed75feec7b9ap-23, 0x1.31854a0be3cd3p-20, -0x1.5037d6a97a8b7p-20,
-                          -0x1.51d67f2cdbcfbp-16, 0x1.0c8ab2ac5112dp-13, -0x1.c364ce9b5e149p-13,
-                          -0x1.317113a39f929p-10, 0x1.d919c501178a3p-8, -0x1.3b4af282da690p-7,
-                          -0x1.59af103bf2cd0p-5, 0x1.5512320b432ccp-3, -0x1.5815e8fa28886p-5,
-                          -0x1.4fcf4026afa24p-1, 0x1.2788cfc6fb61cp-1);
+        // g + gl = 1/Gamma(1 + y)
+        double q = PE15(y, 0x1.66c534675cf87p-28, 0x1.4e292c4032facp-28, -0x1.b9ef237109715p-23, 0x1.304acb6af0cp-20,
+                        -0x1.4fa968a0f419fp-20, -0x1.51cf17a359656p-16, 0x1.0c8a7749ee0bdp-13,
+                        -0x1.c364fc196accdp-13, -0x1.317112c8cae4ap-10, 0x1.d919c5268d97bp-8,
+                        -0x1.3b4af2848ea4dp-7, -0x1.59af103c323b8p-5, 0x1.5512320b44013p-3,
+                        -0x1.5815e8fa270cdp-5, -0x1.4fcf4026afa2ep-1, 0x1.2788cfc6fb619p-1);
+        double g = BUILTIN_FMA_F64(y, q, 0x1p+0);
+        double gl = BUILTIN_FMA_F64(y, q, 0x1p+0 - g) + -0x1.53bfe0b67e704p-60;
+        double2 den = mul(d, con(g, gl));
 
-        double2 den = fadd(mul(d, y*qt), d);
-        ret = MATH_DIV(n.hi, den.hi);
+        // (n.hi + n.lo) / (den.hi + den.lo); scale a tiny den.hi so the reciprocal
+        // sees a normal input
+        double sc = ax < 0x1.0p-512 ? 0x1.0p+512 : 1.0;
+        double r = MATH_FAST_RCP(den.hi * sc) * sc;
+        double qq = n.hi * r;
+        ret = BUILTIN_FMA_F64(BUILTIN_FMA_F64(-qq, den.lo, BUILTIN_FMA_F64(-qq, den.hi, n.hi) + n.lo), r, qq);
+        ret = BUILTIN_ISINF_F64(qq) ? qq : ret;
         ret = x == 0.0 ? BUILTIN_COPYSIGN_F64(PINF_F64, x) : ret;
         ret = x < 0.0 && BUILTIN_TRUNC_F64(x) == x ? QNAN_F64 : ret;
     } else {
+        // e = lgamma(ax) = (ax - 0.5)*ln(ax) - ax + ln(sqrt(2pi)) + c(1/ax)
         double xr = MATH_FAST_RCP(ax);
-        double pt = PE6(xr, -0x1.2b04c5ea74bbfp-11, 0x1.14869344f1d9bp-14, 0x1.9b3457156ffefp-11,
-                          -0x1.e1427e86ee097p-13, -0x1.5f7266f67c4e0p-9, 0x1.c71c71c0f96adp-9,
-                          0x1.5555555555a28p-4);
-
-        double2 e = sub(mul(MATH_PRIVATE(epln)(ax), ax - 0.5), ax);
+        double c = xr * PE6(xr*xr, 0x1.a41a41a41a41ap-8, -0x1.f6ab0d9993c7dp-10, 0x1.b951e2b18ff23p-11,
+                            -0x1.3813813813814p-11, 0x1.a01a01a01a01ap-11, -0x1.6c16c16c16c17p-9,
+                            0x1.5555555555555p-4);
+        double2 e = fadd(fadd(sub(mul(MATH_PRIVATE(epln)(ax), ax - 0.5), ax),
+                              con(0x1.d67f1c864beb5p-1, -0x1.65b5a1b7ff5dfp-55)), c);
 
         if (x > 0.0) {
-            const double sqrt2pi = 0x1.40d931ff62706p+1;
-            double m = MATH_PRIVATE(expep)(e);
-            double g = MATH_MAD(sqrt2pi*m, xr*pt, sqrt2pi*m);
-            ret = x > 0x1.573fae561f646p+7 ? PINF_F64 : g;
+            ret = MATH_PRIVATE(expep)(e);
+            ret = x > 0x1.573fae561f646p+7 ? PINF_F64 : ret;
         } else {
-            const double2 lnsqrtpiby2 = con(0x1.ce6bb25aa1316p-3, -0x1.dcd49c8e5aff6p-58);
-            double s = -x * MATH_MANGLE(sinpi)(x);
-            double asp = BUILTIN_ABS_F64(s) * MATH_MAD(xr, pt, 1.0);
-            double mag = MATH_PRIVATE(expep)(sub(sub(lnsqrtpiby2, e), MATH_PRIVATE(epln)(asp)));
-            ret = BUILTIN_COPYSIGN_F64(mag, s);
+            // |Gamma(x)| = pi / (|x*sinpi(x)| * Gamma(ax)), computed 2^512 times larger
+            // so that exp of the high part stays normal for a normal result
+            double sp = MATH_MANGLE(sinpi)(x);
+            double sh = ax * BUILTIN_ABS_F64(sp);
+            double sl = BUILTIN_FMA_F64(ax, BUILTIN_ABS_F64(sp), -sh);
+            double2 ls = add(MATH_PRIVATE(epln)(sh), sl * MATH_FAST_RCP(sh));
+            double2 l = sub(sub(con(0x1.64093cf432191p+8, -0x1.af5db206c71b3p-49), e), ls);
+            double mag = BUILTIN_FLDEXP_F64(MATH_PRIVATE(expep)(l), -512);
+            ret = BUILTIN_COPYSIGN_F64(mag, sp);
             ret = BUILTIN_TRUNC_F64(x) == x || BUILTIN_ISNAN_F64(x) ? QNAN_F64 : ret;
         }
     }

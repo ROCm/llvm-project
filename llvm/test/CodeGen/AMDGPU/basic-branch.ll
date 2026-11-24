@@ -38,7 +38,7 @@ end:
 ; GCNNOOPT: s_cmp_{{eq|lg}}_u32
 ; GCNNOOPT: s_cbranch_scc1
 ; GCNNOOPT: s_branch [[END:.LBB[0-9]+_[0-9]+]]
-; GCNOPT: s_cbranch_vccz [[END:.LBB[0-9]+_[0-9]+]]
+; GCNOPT: s_cbranch_scc0 [[END:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: buffer_store_{{dword|b32}}
 

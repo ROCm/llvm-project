@@ -27,23 +27,25 @@ MATH_MANGLE(acospi)(half x)
     // together with the above rational approximation, and
     // reconstruct the terms carefully.
 
-    const half piinv = 0x1.46p-2h;
+    // Evaluate in float so that only the final conversion rounds to half
+    const float piinv = 0x1.45f306p-2f;
 
-    half ax = BUILTIN_ABS_F16(x);
+    float fx = (float)x;
+    float ax = BUILTIN_ABS_F32(fx);
 
-    half rt = MATH_MAD(-0.5h, ax, 0.5h);
-    half x2 = ax * ax;
-    half r = ax > 0.5h ? rt : x2;
+    float rt = BUILTIN_FMA_F32(-0.5f, ax, 0.5f);
+    float x2 = ax * ax;
+    float r = ax > 0.5f ? rt : x2;
 
-    half u = r * MATH_MAD(r, 0x1.0b8p-5h, 0x1.a7cp-5h);
+    float u = r * BUILTIN_FMA_F32(r, 0x1.ebc5e8p-6f, 0x1.ae67d4p-5f);
 
-    half s = MATH_FAST_SQRT(r);
-    half ztp = 2.0h * MATH_MAD(s, u, piinv*s);
-    half ztn = 1.0h - ztp;
-    half zt =  x < 0.0h ? ztn : ztp;
-    half z = 0.5h - MATH_MAD(x, u, piinv*x);
-    z = ax > 0.5h ? zt : z;
+    float s = BUILTIN_AMDGPU_SQRT_F32(r);
+    float ztp = 2.0f * BUILTIN_FMA_F32(s, u, piinv*s);
+    float ztn = 1.0f - ztp;
+    float zt =  fx < 0.0f ? ztn : ztp;
+    float z = 0.5f - BUILTIN_FMA_F32(fx, u, piinv*fx);
+    z = ax > 0.5f ? zt : z;
 
-    return z;
+    return (half)z;
 }
 

@@ -57,15 +57,14 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX90A-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64_align2 = REG_SEQUENCE [[V_ADD_CO_U32_e64_]], %subreg.sub0, [[V_ADDC_U32_e64_]], %subreg.sub1
   ; GFX90A-NEXT:   [[S_MOV_B64_:%[0-9]+]]:sreg_64_xexec = S_MOV_B64 0
   ; GFX90A-NEXT:   [[COPY11:%[0-9]+]]:av_64_align2 = COPY [[REG_SEQUENCE2]]
-  ; GFX90A-NEXT:   [[COPY12:%[0-9]+]]:vreg_64_align2 = COPY [[COPY11]], implicit $exec
   ; GFX90A-NEXT:   [[V_CNDMASK_B32_e64_:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, -1, [[S_MOV_B64_]], implicit $exec
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.2.do.body:
   ; GFX90A-NEXT:   successors: %bb.2(0x7c000000), %bb.4(0x04000000)
   ; GFX90A-NEXT: {{  $}}
-  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vreg_64_align2 = PHI [[COPY12]], %bb.1, %63, %bb.2
-  ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.1, %69, %bb.2
-  ; GFX90A-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI [[COPY5]], %bb.1, %65, %bb.2
+  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vreg_64_align2 = PHI [[COPY11]], %bb.1, %9, %bb.2
+  ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.1, %65, %bb.2
+  ; GFX90A-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI [[COPY5]], %bb.1, %8, %bb.2
   ; GFX90A-NEXT:   [[GLOBAL_LOAD_DWORD:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD [[PHI]], 0, 0, implicit $exec :: (load (s32) from %ir.lsr.iv, addrspace 1)
   ; GFX90A-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 7
   ; GFX90A-NEXT:   [[V_CMP_LT_I32_e64_:%[0-9]+]]:sreg_64 = V_CMP_LT_I32_e64 [[GLOBAL_LOAD_DWORD]], [[S_MOV_B32_3]], implicit $exec
@@ -74,22 +73,19 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX90A-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, -1, [[S_XOR_B64_]], implicit $exec
   ; GFX90A-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_MOV_B32 64
   ; GFX90A-NEXT:   [[V_ADD_U32_e64_:%[0-9]+]]:vgpr_32 = nuw V_ADD_U32_e64 [[PHI2]], [[S_MOV_B32_4]], 0, implicit $exec
-  ; GFX90A-NEXT:   [[COPY13:%[0-9]+]]:av_32 = COPY [[V_ADD_U32_e64_]]
+  ; GFX90A-NEXT:   [[COPY12:%[0-9]+]]:av_32 = COPY [[V_ADD_U32_e64_]]
   ; GFX90A-NEXT:   [[S_MOV_B32_5:%[0-9]+]]:sreg_32 = S_MOV_B32 11
   ; GFX90A-NEXT:   [[V_CMP_GT_I32_e64_:%[0-9]+]]:sreg_64 = V_CMP_GT_I32_e64 [[GLOBAL_LOAD_DWORD]], [[S_MOV_B32_5]], implicit $exec
   ; GFX90A-NEXT:   [[S_MOV_B:%[0-9]+]]:sreg_64 = S_MOV_B64_IMM_PSEUDO 256
-  ; GFX90A-NEXT:   [[COPY14:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub0
-  ; GFX90A-NEXT:   [[COPY15:%[0-9]+]]:sreg_32_xm0 = COPY [[S_MOV_B]].sub0
-  ; GFX90A-NEXT:   [[COPY16:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub1
-  ; GFX90A-NEXT:   [[COPY17:%[0-9]+]]:sreg_32_xm0 = COPY [[S_MOV_B]].sub1
-  ; GFX90A-NEXT:   [[V_ADD_CO_U32_e64_2:%[0-9]+]]:vgpr_32, [[V_ADD_CO_U32_e64_3:%[0-9]+]]:sreg_64_xexec = V_ADD_CO_U32_e64 [[COPY14]], [[COPY15]], 0, implicit $exec
-  ; GFX90A-NEXT:   [[COPY18:%[0-9]+]]:vgpr_32 = COPY [[COPY17]]
-  ; GFX90A-NEXT:   [[V_ADDC_U32_e64_2:%[0-9]+]]:vgpr_32, dead [[V_ADDC_U32_e64_3:%[0-9]+]]:sreg_64_xexec = V_ADDC_U32_e64 [[COPY16]], [[COPY18]], [[V_ADD_CO_U32_e64_3]], 0, implicit $exec
+  ; GFX90A-NEXT:   [[COPY13:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub0
+  ; GFX90A-NEXT:   [[COPY14:%[0-9]+]]:sreg_32_xm0 = COPY [[S_MOV_B]].sub0
+  ; GFX90A-NEXT:   [[COPY15:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub1
+  ; GFX90A-NEXT:   [[COPY16:%[0-9]+]]:sreg_32_xm0 = COPY [[S_MOV_B]].sub1
+  ; GFX90A-NEXT:   [[V_ADD_CO_U32_e64_2:%[0-9]+]]:vgpr_32, [[V_ADD_CO_U32_e64_3:%[0-9]+]]:sreg_64_xexec = V_ADD_CO_U32_e64 [[COPY13]], [[COPY14]], 0, implicit $exec
+  ; GFX90A-NEXT:   [[COPY17:%[0-9]+]]:vgpr_32 = COPY [[COPY16]]
+  ; GFX90A-NEXT:   [[V_ADDC_U32_e64_2:%[0-9]+]]:vgpr_32, dead [[V_ADDC_U32_e64_3:%[0-9]+]]:sreg_64_xexec = V_ADDC_U32_e64 [[COPY15]], [[COPY17]], [[V_ADD_CO_U32_e64_3]], 0, implicit $exec
   ; GFX90A-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:vreg_64_align2 = REG_SEQUENCE [[V_ADD_CO_U32_e64_2]], %subreg.sub0, [[V_ADDC_U32_e64_2]], %subreg.sub1
-  ; GFX90A-NEXT:   [[COPY19:%[0-9]+]]:av_64_align2 = COPY [[REG_SEQUENCE3]]
-  ; GFX90A-NEXT:   [[COPY20:%[0-9]+]]:vreg_64_align2 = COPY [[COPY19]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY21:%[0-9]+]]:vgpr_32 = COPY [[COPY13]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY22:%[0-9]+]]:vgpr_32 = COPY [[COPY13]], implicit $exec
+  ; GFX90A-NEXT:   [[COPY18:%[0-9]+]]:av_64_align2 = COPY [[REG_SEQUENCE3]]
   ; GFX90A-NEXT:   SI_BRCOND %bb.2, [[V_CMP_GT_I32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; GFX90A-NEXT:   S_BRANCH %bb.4
   ; GFX90A-NEXT: {{  $}}
@@ -106,7 +102,7 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX90A-NEXT:   successors: %bb.5(0x40000000), %bb.6(0x40000000)
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT:   [[PHI3:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_2]], %bb.3, [[V_CNDMASK_B32_e64_1]], %bb.2
-  ; GFX90A-NEXT:   [[PHI4:%[0-9]+]]:vgpr_32 = PHI [[COPY5]], %bb.3, [[COPY22]], %bb.2
+  ; GFX90A-NEXT:   [[PHI4:%[0-9]+]]:vgpr_32 = PHI [[COPY5]], %bb.3, [[COPY12]], %bb.2
   ; GFX90A-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI3]], 0, implicit $exec
   ; GFX90A-NEXT:   SI_BRCOND %bb.5, [[V_CMP_NE_U32_e64_1]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; GFX90A-NEXT:   S_BRANCH %bb.6
@@ -114,21 +110,21 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX90A-NEXT: bb.5.if.then11:
   ; GFX90A-NEXT:   successors: %bb.6(0x80000000)
   ; GFX90A-NEXT: {{  $}}
-  ; GFX90A-NEXT:   [[COPY23:%[0-9]+]]:sreg_32 = COPY [[S_LOAD_DWORDX4_IMM]].sub3
-  ; GFX90A-NEXT:   [[COPY24:%[0-9]+]]:sreg_32 = COPY [[S_LOAD_DWORDX4_IMM]].sub2
-  ; GFX90A-NEXT:   [[REG_SEQUENCE4:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[COPY24]], %subreg.sub0, [[COPY23]], %subreg.sub1
+  ; GFX90A-NEXT:   [[COPY19:%[0-9]+]]:sreg_32 = COPY [[S_LOAD_DWORDX4_IMM]].sub3
+  ; GFX90A-NEXT:   [[COPY20:%[0-9]+]]:sreg_32 = COPY [[S_LOAD_DWORDX4_IMM]].sub2
+  ; GFX90A-NEXT:   [[REG_SEQUENCE4:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[COPY20]], %subreg.sub0, [[COPY19]], %subreg.sub1
   ; GFX90A-NEXT:   [[V_ASHRREV_I32_e64_:%[0-9]+]]:vgpr_32 = V_ASHRREV_I32_e64 31, [[PHI4]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY25:%[0-9]+]]:vgpr_32 = COPY [[V_ASHRREV_I32_e64_]]
-  ; GFX90A-NEXT:   [[REG_SEQUENCE5:%[0-9]+]]:vreg_64_align2 = REG_SEQUENCE [[PHI4]], %subreg.sub0, [[COPY25]], %subreg.sub1
+  ; GFX90A-NEXT:   [[COPY21:%[0-9]+]]:vgpr_32 = COPY [[V_ASHRREV_I32_e64_]]
+  ; GFX90A-NEXT:   [[REG_SEQUENCE5:%[0-9]+]]:vreg_64_align2 = REG_SEQUENCE [[PHI4]], %subreg.sub0, [[COPY21]], %subreg.sub1
   ; GFX90A-NEXT:   [[S_MOV_B32_7:%[0-9]+]]:sreg_32 = S_MOV_B32 2
   ; GFX90A-NEXT:   [[V_LSHLREV_B64_e64_:%[0-9]+]]:vreg_64_align2 = nsw V_LSHLREV_B64_e64 [[S_MOV_B32_7]], [[REG_SEQUENCE5]], implicit $exec
-  ; GFX90A-NEXT:   [[COPY26:%[0-9]+]]:sreg_32_xexec_hi_and_sreg_32_xm0 = COPY [[REG_SEQUENCE4]].sub0
-  ; GFX90A-NEXT:   [[COPY27:%[0-9]+]]:vgpr_32 = COPY [[V_LSHLREV_B64_e64_]].sub0
-  ; GFX90A-NEXT:   [[COPY28:%[0-9]+]]:sreg_32_xexec_hi_and_sreg_32_xm0 = COPY [[REG_SEQUENCE4]].sub1
-  ; GFX90A-NEXT:   [[COPY29:%[0-9]+]]:vgpr_32 = COPY [[V_LSHLREV_B64_e64_]].sub1
-  ; GFX90A-NEXT:   [[V_ADD_CO_U32_e64_4:%[0-9]+]]:vgpr_32, [[V_ADD_CO_U32_e64_5:%[0-9]+]]:sreg_64_xexec = V_ADD_CO_U32_e64 [[COPY26]], [[COPY27]], 0, implicit $exec
-  ; GFX90A-NEXT:   [[COPY30:%[0-9]+]]:vgpr_32 = COPY [[COPY28]]
-  ; GFX90A-NEXT:   [[V_ADDC_U32_e64_4:%[0-9]+]]:vgpr_32, dead [[V_ADDC_U32_e64_5:%[0-9]+]]:sreg_64_xexec = V_ADDC_U32_e64 [[COPY30]], [[COPY29]], [[V_ADD_CO_U32_e64_5]], 0, implicit $exec
+  ; GFX90A-NEXT:   [[COPY22:%[0-9]+]]:sreg_32_xexec_hi_and_sreg_32_xm0 = COPY [[REG_SEQUENCE4]].sub0
+  ; GFX90A-NEXT:   [[COPY23:%[0-9]+]]:vgpr_32 = COPY [[V_LSHLREV_B64_e64_]].sub0
+  ; GFX90A-NEXT:   [[COPY24:%[0-9]+]]:sreg_32_xexec_hi_and_sreg_32_xm0 = COPY [[REG_SEQUENCE4]].sub1
+  ; GFX90A-NEXT:   [[COPY25:%[0-9]+]]:vgpr_32 = COPY [[V_LSHLREV_B64_e64_]].sub1
+  ; GFX90A-NEXT:   [[V_ADD_CO_U32_e64_4:%[0-9]+]]:vgpr_32, [[V_ADD_CO_U32_e64_5:%[0-9]+]]:sreg_64_xexec = V_ADD_CO_U32_e64 [[COPY22]], [[COPY23]], 0, implicit $exec
+  ; GFX90A-NEXT:   [[COPY26:%[0-9]+]]:vgpr_32 = COPY [[COPY24]]
+  ; GFX90A-NEXT:   [[V_ADDC_U32_e64_4:%[0-9]+]]:vgpr_32, dead [[V_ADDC_U32_e64_5:%[0-9]+]]:sreg_64_xexec = V_ADDC_U32_e64 [[COPY26]], [[COPY25]], [[V_ADD_CO_U32_e64_5]], 0, implicit $exec
   ; GFX90A-NEXT:   [[REG_SEQUENCE6:%[0-9]+]]:vreg_64_align2 = REG_SEQUENCE [[V_ADD_CO_U32_e64_4]], %subreg.sub0, [[V_ADDC_U32_e64_4]], %subreg.sub1
   ; GFX90A-NEXT:   GLOBAL_STORE_DWORD [[REG_SEQUENCE6]], [[PHI4]], 0, 0, implicit $exec :: (store (s32) into %ir.arrayidx13, addrspace 1)
   ; GFX90A-NEXT: {{  $}}

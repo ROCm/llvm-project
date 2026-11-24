@@ -202,6 +202,7 @@ add_executable(IncludeMaterializationTest
 target_link_libraries(IncludeMaterializationTest PRIVATE
   ${COMGR_GTEST_LIBS}
   amd_comgr
+  ${COMGR_TEST_UNIT_SUPPORT_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_compile_definitions(IncludeMaterializationTest PRIVATE

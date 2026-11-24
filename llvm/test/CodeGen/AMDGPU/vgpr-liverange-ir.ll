@@ -453,7 +453,7 @@ define amdgpu_kernel void @livevariables_update_missed_block(ptr addrspace(1) %s
   ; SI-NEXT: bb.5.sw.bb18:
   ; SI-NEXT:   successors: %bb.6(0x80000000)
   ; SI-NEXT: {{  $}}
-  ; SI-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI undef %39:vgpr_32, %bb.3, [[GLOBAL_LOAD_UBYTE1]], %bb.4
+  ; SI-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI undef %40:vgpr_32, %bb.3, [[GLOBAL_LOAD_UBYTE1]], %bb.4
   ; SI-NEXT:   [[V_MOV_B2:%[0-9]+]]:vreg_64 = V_MOV_B64_PSEUDO 0, implicit $exec
   ; SI-NEXT:   GLOBAL_STORE_BYTE [[V_MOV_B2]], [[PHI]], 0, 0, implicit $exec :: (store (s8) into `ptr addrspace(1) null`, addrspace 1)
   ; SI-NEXT: {{  $}}

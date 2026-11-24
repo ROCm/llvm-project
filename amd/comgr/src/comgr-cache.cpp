@@ -31,8 +31,10 @@ namespace {
 
 const unsigned CacheTask = 1;
 
-void serializeCacheEntry(llvm::raw_ostream &FS, StringRef FileContents,
-                         StringRef Log) {
+} // namespace
+
+static void serializeCacheEntry(llvm::raw_ostream &FS, StringRef FileContents,
+                                StringRef Log) {
   auto WriteStringRef = [&FS](StringRef Buf) {
     uint64_t Size = Buf.size();
     constexpr size_t NSize = sizeof(Size);
@@ -47,8 +49,8 @@ void serializeCacheEntry(llvm::raw_ostream &FS, StringRef FileContents,
   }
 }
 
-Error deserializeCacheEntry(const llvm::MemoryBuffer &Buffer,
-                            StringRef &FileContents, StringRef &Log) {
+static Error deserializeCacheEntry(const llvm::MemoryBuffer &Buffer,
+                                   StringRef &FileContents, StringRef &Log) {
   auto ConsumeStringRef = [&](StringRef Buffer,
                               StringRef &Buf) -> Expected<StringRef> {
     uint64_t Size;
@@ -80,7 +82,7 @@ Error deserializeCacheEntry(const llvm::MemoryBuffer &Buffer,
   return Error::success();
 }
 
-std::function<void(Error, const char *)>
+static std::function<void(Error, const char *)>
 getComgrCacheErrorHandler(llvm::raw_ostream &LogS) {
   if (!env::shouldEmitVerboseLogs()) {
     return [](Error E, const char *) { consumeError(std::move(E)); };
@@ -92,8 +94,8 @@ getComgrCacheErrorHandler(llvm::raw_ostream &LogS) {
   };
 }
 
-void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
-                       StringRef CapturedLogS, raw_ostream &LogS) {
+static void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
+                              StringRef CapturedLogS, raw_ostream &LogS) {
   auto ErrorHandler = getComgrCacheErrorHandler(LogS);
 
   Expected<std::unique_ptr<CachedFileStream>> FileOrErr =
@@ -114,8 +116,8 @@ void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
   ErrorHandler(CFS->commit(), "when commiting file stream");
 }
 
-bool readEntryFromCache(CachedCommandAdaptor &C, MemoryBuffer &CachedBuffer,
-                        raw_ostream &LogS) {
+static bool readEntryFromCache(CachedCommandAdaptor &C,
+                               MemoryBuffer &CachedBuffer, raw_ostream &LogS) {
   auto ErrorHandler = getComgrCacheErrorHandler(LogS);
 
   StringRef CachedOutputFile;
@@ -134,7 +136,6 @@ bool readEntryFromCache(CachedCommandAdaptor &C, MemoryBuffer &CachedBuffer,
   LogS << CachedLogS;
   return true;
 }
-} // namespace
 
 std::optional<CachePruningPolicy>
 CommandCache::getPolicyFromEnv(llvm::raw_ostream &LogS) {

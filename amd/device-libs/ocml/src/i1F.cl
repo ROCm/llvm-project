@@ -10,6 +10,8 @@
 #define FLOAT_SPECIALIZATION
 #include "ep.h"
 
+extern CONSTATTR float2 MATH_PRIVATE(epexpep)(float2 x);
+
 float
 MATH_MANGLE(i1)(float x)
 {
@@ -36,10 +38,16 @@ MATH_MANGLE(i1)(float x)
         p = fadd(mul(p, t), -0x1.3266ccp-3f);
         p = fadd(mul(p, t), 0x1.988456p-2f);
 
-        float as = a - 88.0f;
-        float e1 = MATH_MANGLE(exp)(a > 88.0f ? as : a);
-        float e2 = a > 88.0f ? 0x1.f1056ep+126f : 1.0f;
-        ret = omul(omul(mul(p, BUILTIN_AMDGPU_RSQRT_F32(a)), e1), e2).hi;
+        // 1/sqrt(a) = r + rl
+        float r = BUILTIN_AMDGPU_RSQRT_F32(a);
+        float rt = a * r;
+        float e = BUILTIN_FMA_F32(-BUILTIN_FMA_F32(a, r, -rt), r, BUILTIN_FMA_F32(-rt, r, 1.0f));
+        float2 rr = fadd(r, 0.5f * r * e);
+
+        // e^a * 2^-64 as a double-word
+        float2 ex = MATH_PRIVATE(epexpep)(sub(BUILTIN_MIN_F32(a, 0x1.0p+7f), con(0x1.62e430p+5f, -0x1.05c610p-23f)));
+        ret = BUILTIN_FLDEXP_F32(mul(mul(p, rr), ex).hi, 64);
+        ret = a > 0x1.0p+7f ? PINF_F32 : ret;
     }
 
     if  (!FINITE_ONLY_OPT()) {

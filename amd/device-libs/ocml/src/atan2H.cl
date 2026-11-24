@@ -8,33 +8,33 @@
 
 #include "mathH.h"
 
-extern CONSTATTR half MATH_PRIVATE(atanred)(half);
-
 CONSTATTR BGEN(atan2)
 
 CONSTATTR half
 MATH_MANGLE(atan2)(half y, half x)
 {
     const half pi = 0x1.921fb6p+1h;
-    const half piby2 = 0x1.921fb6p+0h;
     const half piby4 = 0x1.921fb6p-1h;
     const half threepiby4 = 0x1.2d97c8p+1h;
 
-    half ax = BUILTIN_ABS_F16(x);
-    half ay = BUILTIN_ABS_F16(y);
-    half v = BUILTIN_MIN_F16(ax, ay);
-    half u = BUILTIN_MAX_F16(ax, ay);
+    // Evaluate in float so that only the final conversion rounds to half
+    float fax = BUILTIN_ABS_F32((float)x);
+    float fay = BUILTIN_ABS_F32((float)y);
+    float v = BUILTIN_MIN_F32(fax, fay);
+    float u = BUILTIN_MAX_F32(fax, fay);
 
-    half vbyu = MATH_DIV(v, u);
+    float vbyu = v * BUILTIN_AMDGPU_RCP_F32(u);
+    float vv = vbyu * vbyu;
+    float p = BUILTIN_FMA_F32(vv, BUILTIN_FMA_F32(vv, BUILTIN_FMA_F32(vv, 0x1.96fbc8p-6f, -0x1.816ce6p-4f), 0x1.7e9874p-3f), -0x1.541a14p-2f);
+    float fa = BUILTIN_FMA_F32(vv, vbyu*p, vbyu);
 
-    half a = MATH_PRIVATE(atanred)(vbyu);
+    float ft = 0x1.921fb6p+0f - fa;
+    fa = fay > fax ? ft : fa;
+    ft = 0x1.921fb6p+1f - fa;
+    fa = x < 0.0h ? ft : fa;
 
-    half t = piby2 - a;
-    a = ay > ax ? t : a;
-    t = pi - a;
-    a = x < 0.0h ? t : a;
-
-    t = AS_SHORT(x) < 0 ? pi : 0.0h;
+    half a = (half)fa;
+    half t = AS_SHORT(x) < 0 ? pi : 0.0h;
     a = y == 0.0h ? t : a;
 
     if (!FINITE_ONLY_OPT()) {

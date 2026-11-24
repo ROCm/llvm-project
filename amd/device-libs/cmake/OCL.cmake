@@ -45,6 +45,10 @@ endif()
 # Disable code object version module flag.
 set(CLANG_OCL_FLAGS ${CLANG_OCL_FLAGS} -Xclang -mcode-object-version=none)
 
+# Float to int casts saturate and give 0 for NaN, instead of producing poison
+# that constant folding can turn into garbage.
+set(CLANG_OCL_FLAGS ${CLANG_OCL_FLAGS} -fno-strict-float-cast-overflow)
+
 set (BC_EXT .bc)
 set (LIB_SUFFIX ".lib${BC_EXT}")
 set (STRIP_SUFFIX ".strip${BC_EXT}")

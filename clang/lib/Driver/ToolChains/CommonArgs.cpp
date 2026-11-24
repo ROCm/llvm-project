@@ -700,6 +700,16 @@ void tools::addLinkerCompressDebugSectionsOption(
   }
 }
 
+bool tools::useMachORelocatableDwarf(const llvm::Triple &T,
+                                     unsigned DwarfVersion) {
+  // 32-bit ARM and x86 Mach-O use scattered relocations.
+  if (T.isARM() || T.isThumb() || T.getArch() == llvm::Triple::x86)
+    return false;
+  return T.isOSBinFormatMachO() && DwarfVersion >= 5 &&
+         !(T.isMacOSX() || T.isiOS() || T.isWatchOS() || T.isXROS() ||
+           T.isDriverKit());
+}
+
 void tools::renderDebugInfoCompressionArgs(const ArgList &Args,
                                            ArgStringList &CmdArgs,
                                            const Driver &D,
@@ -1243,22 +1253,13 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
         (A->getOption().matches(options::OPT_fglobal_isel) ? "1" : "0")));
   }
 
-  // If an explicit debugger tuning argument appeared, pass it along.
-  if (Arg *A =
-          Args.getLastArg(options::OPT_gTune_Group, options::OPT_ggdbN_Group)) {
-    if (A->getOption().matches(options::OPT_glldb))
-      CmdArgs.push_back(
-          Args.MakeArgString(Twine(PluginOptPrefix) + "-debugger-tune=lldb"));
-    else if (A->getOption().matches(options::OPT_gsce))
-      CmdArgs.push_back(
-          Args.MakeArgString(Twine(PluginOptPrefix) + "-debugger-tune=sce"));
-    else if (A->getOption().matches(options::OPT_gdbx))
-      CmdArgs.push_back(
-          Args.MakeArgString(Twine(PluginOptPrefix) + "-debugger-tune=dbx"));
-    else
-      CmdArgs.push_back(
-          Args.MakeArgString(Twine(PluginOptPrefix) + "-debugger-tune=gdb"));
-  }
+  if (Arg *A = Args.getLastArg(options::OPT_fdevirtualize_speculatively,
+                               options::OPT_fno_devirtualize_speculatively))
+    CmdArgs.push_back(Args.MakeArgString(
+        Twine(PluginOptPrefix) + "-devirtualize-speculatively=" +
+        (A->getOption().matches(options::OPT_fdevirtualize_speculatively)
+             ? "1"
+             : "0")));
 
   if (IsOSAIX) {
     if (!ToolChain.useIntegratedAs())
@@ -1828,6 +1829,11 @@ static bool hostNeedsCsanOffloadRt(Compilation &C, const ToolChain &HostTC) {
       C, HostTC, [](const SanitizerArgs &S) { return S.needsCsanRt(); });
 }
 
+static bool hostNeedsDasanRt(Compilation &C, const ToolChain &HostTC) {
+  return hostNeedsOffloadRt(
+      C, HostTC, [](const SanitizerArgs &S) { return S.needsDasanRt(); });
+}
+
 static void
 collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
                          const ArgList &Args,
@@ -1842,6 +1848,7 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
   const bool NeedsCsanOffloadRt = hostNeedsCsanOffloadRt(C, TC);
   const bool NeedsUbsanRt = SanArgs.needsUbsanRt() || NeedsUbsanOffloadRt;
   const bool NeedsCsanRt = SanArgs.needsCsanRt() || NeedsCsanOffloadRt;
+  const bool NeedsDasanRt = SanArgs.needsDasanRt() || hostNeedsDasanRt(C, TC);
   // Collect shared runtimes.
   if (SanArgs.needsSharedRt()) {
     if (SanArgs.needsAsanRt()) {
@@ -1862,6 +1869,8 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
       else
         SharedRuntimes.push_back("ubsan_standalone");
     }
+    if (NeedsDasanRt && !TC.getTriple().isGPU())
+      SharedRuntimes.push_back("dasan");
     if (SanArgs.needsScudoRt()) {
       SharedRuntimes.push_back("scudo_standalone");
     }
@@ -1905,6 +1914,9 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
   }
   if (NeedsCsanOffloadRt && !Args.hasArg(options::OPT_shared))
     HelperStaticRuntimes.push_back("csan_offload-preinit");
+  if (NeedsDasanRt && !TC.getTriple().isGPU() &&
+      !Args.hasArg(options::OPT_shared))
+    HelperStaticRuntimes.push_back("dasan-preinit");
 
   // Collect static runtimes.
   if (Args.hasArg(options::OPT_shared)) {
@@ -1952,8 +1964,11 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
     StaticRuntimes.push_back("dfsan");
   if (SanArgs.needsLsanRt())
     StaticRuntimes.push_back("lsan");
-  if (SanArgs.needsCopyProfRt())
+  if (SanArgs.needsCopyProfRt()) {
     StaticRuntimes.push_back("copyprof");
+    if (SanArgs.linkCXXRuntimes())
+      StaticRuntimes.push_back("copyprof_cxx");
+  }
   if (SanArgs.needsMsanRt()) {
     StaticRuntimes.push_back("msan");
     if (SanArgs.linkCXXRuntimes())
@@ -1968,6 +1983,8 @@ collectSanitizerRuntimes(Compilation &C, const ToolChain &TC,
   }
   if (!SanArgs.needsSharedRt() && SanArgs.needsTysanRt())
     StaticRuntimes.push_back("tysan");
+  if (NeedsDasanRt && (!SanArgs.needsSharedRt() || TC.getTriple().isGPU()))
+    StaticRuntimes.push_back("dasan");
   if (!SanArgs.needsSharedRt() && NeedsUbsanRt) {
     if (SanArgs.requiresMinimalRuntime()) {
       StaticRuntimes.push_back("ubsan_minimal");
@@ -2923,6 +2940,36 @@ unsigned tools::getAMDGPUCodeObjectVersion(const Driver &D,
 bool tools::haveAMDGPUCodeObjectVersionArgument(
     const Driver &D, const llvm::opt::ArgList &Args) {
   return getAMDGPUCodeObjectArgument(D, Args) != nullptr;
+}
+
+bool tools::shouldUseAMDGPUObjectLinking(const ToolChain &TC,
+                                         const llvm::opt::ArgList &Args,
+                                         Action::OffloadKind Kind,
+                                         bool AssumeRDC) {
+  if (!TC.getTriple().isAMDGCN())
+    return false;
+
+  // Only HIP and CUDA device code can use object linking. Non-RDC device code
+  // is a complete program per translation unit, so it is never linked with
+  // other relocatable objects.
+  bool IsRDC = AssumeRDC;
+  switch (Kind) {
+  case Action::OFK_Cuda:
+  case Action::OFK_HIP:
+    IsRDC |= Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,
+                          /*Default=*/false);
+    break;
+  default:
+    return false;
+  }
+  if (!IsRDC)
+    return false;
+
+  // Full LTO compiles the whole device program as one module. Without LTO,
+  // or with ThinLTO, the backend emits relocatable objects that are linked
+  // with each other.
+  LTOKind LTOMode = TC.getLTOMode(Args, Kind);
+  return LTOMode == LTOK_None || LTOMode == LTOK_Thin;
 }
 
 void tools::addMachineOutlinerArgs(const Driver &D,

@@ -1493,8 +1493,8 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
 ; GCN-NEXT:    v_rcp_f32_e32 v3, v3
 ; GCN-NEXT:    v_mul_f32_e32 v3, 0x5f7ffffc, v3
 ; GCN-NEXT:    v_mul_f32_e32 v4, 0x2f800000, v3
-; GCN-NEXT:    v_trunc_f32_e32 v4, v4
-; GCN-NEXT:    v_madmk_f32 v3, v4, 0xcf800000, v3
+; GCN-NEXT:    v_trunc_f32_e32 v5, v4
+; GCN-NEXT:    v_madmk_f32 v3, v5, 0xcf800000, v3
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v10, v4
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v11, v3
 ; GCN-NEXT:    v_mul_lo_u32 v6, v12, v10
@@ -1639,18 +1639,18 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
 ; TAHITI-NEXT:    v_xor_b32_e32 v5, v6, v5
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v6, v5
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v7, v3
-; TAHITI-NEXT:    v_sub_i32_e32 v8, vcc, 0, v5
-; TAHITI-NEXT:    v_subb_u32_e32 v9, vcc, 0, v3, vcc
 ; TAHITI-NEXT:    v_madmk_f32 v6, v7, 0x4f800000, v6
 ; TAHITI-NEXT:    v_rcp_f32_e32 v6, v6
 ; TAHITI-NEXT:    v_mul_f32_e32 v6, 0x5f7ffffc, v6
 ; TAHITI-NEXT:    v_mul_f32_e32 v7, 0x2f800000, v6
-; TAHITI-NEXT:    v_trunc_f32_e32 v7, v7
-; TAHITI-NEXT:    v_madmk_f32 v6, v7, 0xcf800000, v6
+; TAHITI-NEXT:    v_trunc_f32_e32 v8, v7
+; TAHITI-NEXT:    v_madmk_f32 v6, v8, 0xcf800000, v6
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v7, v7
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v6, v6
+; TAHITI-NEXT:    v_sub_i32_e32 v8, vcc, 0, v5
 ; TAHITI-NEXT:    v_mul_lo_u32 v11, v8, v7
 ; TAHITI-NEXT:    v_mul_hi_u32 v10, v8, v6
+; TAHITI-NEXT:    v_subb_u32_e32 v9, vcc, 0, v3, vcc
 ; TAHITI-NEXT:    v_mul_lo_u32 v12, v9, v6
 ; TAHITI-NEXT:    v_add_i32_e32 v10, vcc, v10, v11
 ; TAHITI-NEXT:    v_mul_lo_u32 v11, v8, v6
@@ -1814,8 +1814,8 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
 ; TONGA-NEXT:    v_rcp_f32_e32 v5, v5
 ; TONGA-NEXT:    v_mul_f32_e32 v5, 0x5f7ffffc, v5
 ; TONGA-NEXT:    v_mul_f32_e32 v6, 0x2f800000, v5
-; TONGA-NEXT:    v_trunc_f32_e32 v6, v6
-; TONGA-NEXT:    v_madmk_f32 v5, v6, 0xcf800000, v5
+; TONGA-NEXT:    v_trunc_f32_e32 v7, v6
+; TONGA-NEXT:    v_madmk_f32 v5, v7, 0xcf800000, v5
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v11, v6
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v12, v5
 ; TONGA-NEXT:    v_mul_lo_u32 v7, v13, v11
@@ -2681,8 +2681,8 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    v_rcp_f32_e32 v8, v8
 ; GCN-NEXT:    v_mul_f32_e32 v8, 0x5f7ffffc, v8
 ; GCN-NEXT:    v_mul_f32_e32 v9, 0x2f800000, v8
-; GCN-NEXT:    v_trunc_f32_e32 v9, v9
-; GCN-NEXT:    v_madmk_f32 v8, v9, 0xcf800000, v8
+; GCN-NEXT:    v_trunc_f32_e32 v10, v9
+; GCN-NEXT:    v_madmk_f32 v8, v10, 0xcf800000, v8
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v14, v9
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v15, v8
 ; GCN-NEXT:    v_mul_lo_u32 v11, v16, v14
@@ -2817,8 +2817,8 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    v_rcp_f32_e32 v0, v0
 ; GCN-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; GCN-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
-; GCN-NEXT:    v_trunc_f32_e32 v1, v1
-; GCN-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
+; GCN-NEXT:    v_trunc_f32_e32 v3, v1
+; GCN-NEXT:    v_madmk_f32 v0, v3, 0xcf800000, v0
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v11, v1
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v12, v0
 ; GCN-NEXT:    v_mul_lo_u32 v4, v13, v11
@@ -2964,18 +2964,18 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    v_xor_b32_e32 v8, v9, v8
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v9, v8
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v11, v1
-; TAHITI-NEXT:    v_sub_i32_e32 v12, vcc, 0, v8
-; TAHITI-NEXT:    v_subb_u32_e32 v13, vcc, 0, v1, vcc
 ; TAHITI-NEXT:    v_madmk_f32 v9, v11, 0x4f800000, v9
 ; TAHITI-NEXT:    v_rcp_f32_e32 v9, v9
 ; TAHITI-NEXT:    v_mul_f32_e32 v9, 0x5f7ffffc, v9
 ; TAHITI-NEXT:    v_mul_f32_e32 v11, 0x2f800000, v9
-; TAHITI-NEXT:    v_trunc_f32_e32 v11, v11
-; TAHITI-NEXT:    v_madmk_f32 v9, v11, 0xcf800000, v9
+; TAHITI-NEXT:    v_trunc_f32_e32 v12, v11
+; TAHITI-NEXT:    v_madmk_f32 v9, v12, 0xcf800000, v9
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v11, v11
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v9, v9
+; TAHITI-NEXT:    v_sub_i32_e32 v12, vcc, 0, v8
 ; TAHITI-NEXT:    v_mul_lo_u32 v15, v12, v11
 ; TAHITI-NEXT:    v_mul_hi_u32 v14, v12, v9
+; TAHITI-NEXT:    v_subb_u32_e32 v13, vcc, 0, v1, vcc
 ; TAHITI-NEXT:    v_mul_lo_u32 v16, v13, v9
 ; TAHITI-NEXT:    v_add_i32_e32 v14, vcc, v14, v15
 ; TAHITI-NEXT:    v_mul_lo_u32 v15, v12, v9
@@ -3116,18 +3116,18 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    v_xor_b32_e32 v0, v1, v0
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v1, v0
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v4, v3
-; TAHITI-NEXT:    v_sub_i32_e32 v5, vcc, 0, v0
-; TAHITI-NEXT:    v_subb_u32_e32 v10, vcc, 0, v3, vcc
 ; TAHITI-NEXT:    v_madmk_f32 v1, v4, 0x4f800000, v1
 ; TAHITI-NEXT:    v_rcp_f32_e32 v1, v1
 ; TAHITI-NEXT:    v_mul_f32_e32 v1, 0x5f7ffffc, v1
 ; TAHITI-NEXT:    v_mul_f32_e32 v4, 0x2f800000, v1
-; TAHITI-NEXT:    v_trunc_f32_e32 v4, v4
-; TAHITI-NEXT:    v_madmk_f32 v1, v4, 0xcf800000, v1
+; TAHITI-NEXT:    v_trunc_f32_e32 v5, v4
+; TAHITI-NEXT:    v_madmk_f32 v1, v5, 0xcf800000, v1
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v4, v4
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v1, v1
+; TAHITI-NEXT:    v_sub_i32_e32 v5, vcc, 0, v0
 ; TAHITI-NEXT:    v_mul_lo_u32 v12, v5, v4
 ; TAHITI-NEXT:    v_mul_hi_u32 v11, v5, v1
+; TAHITI-NEXT:    v_subb_u32_e32 v10, vcc, 0, v3, vcc
 ; TAHITI-NEXT:    v_mul_lo_u32 v13, v10, v1
 ; TAHITI-NEXT:    v_add_i32_e32 v11, vcc, v11, v12
 ; TAHITI-NEXT:    v_mul_lo_u32 v12, v5, v1
@@ -3293,8 +3293,8 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_rcp_f32_e32 v8, v8
 ; TONGA-NEXT:    v_mul_f32_e32 v8, 0x5f7ffffc, v8
 ; TONGA-NEXT:    v_mul_f32_e32 v9, 0x2f800000, v8
-; TONGA-NEXT:    v_trunc_f32_e32 v9, v9
-; TONGA-NEXT:    v_madmk_f32 v8, v9, 0xcf800000, v8
+; TONGA-NEXT:    v_trunc_f32_e32 v11, v9
+; TONGA-NEXT:    v_madmk_f32 v8, v11, 0xcf800000, v8
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v14, v9
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v15, v8
 ; TONGA-NEXT:    v_mul_lo_u32 v11, v16, v14
@@ -3433,8 +3433,8 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_rcp_f32_e32 v0, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
-; TONGA-NEXT:    v_trunc_f32_e32 v1, v1
-; TONGA-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
+; TONGA-NEXT:    v_trunc_f32_e32 v3, v1
+; TONGA-NEXT:    v_madmk_f32 v0, v3, 0xcf800000, v0
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v11, v1
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v12, v0
 ; TONGA-NEXT:    v_mul_lo_u32 v3, v13, v11
@@ -4829,8 +4829,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    v_rcp_f32_e32 v8, v8
 ; GCN-NEXT:    v_mul_f32_e32 v8, 0x5f7ffffc, v8
 ; GCN-NEXT:    v_mul_f32_e32 v9, 0x2f800000, v8
-; GCN-NEXT:    v_trunc_f32_e32 v9, v9
-; GCN-NEXT:    v_madmk_f32 v8, v9, 0xcf800000, v8
+; GCN-NEXT:    v_trunc_f32_e32 v18, v9
+; GCN-NEXT:    v_madmk_f32 v8, v18, 0xcf800000, v8
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v21, v9
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v22, v8
 ; GCN-NEXT:    v_mul_lo_u32 v19, v23, v21
@@ -4965,8 +4965,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    v_rcp_f32_e32 v10, v10
 ; GCN-NEXT:    v_mul_f32_e32 v10, 0x5f7ffffc, v10
 ; GCN-NEXT:    v_mul_f32_e32 v11, 0x2f800000, v10
-; GCN-NEXT:    v_trunc_f32_e32 v11, v11
-; GCN-NEXT:    v_madmk_f32 v10, v11, 0xcf800000, v10
+; GCN-NEXT:    v_trunc_f32_e32 v13, v11
+; GCN-NEXT:    v_madmk_f32 v10, v13, 0xcf800000, v10
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v19, v11
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v20, v10
 ; GCN-NEXT:    v_mul_lo_u32 v14, v21, v19
@@ -5103,8 +5103,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    v_rcp_f32_e32 v12, v12
 ; GCN-NEXT:    v_mul_f32_e32 v12, 0x5f7ffffc, v12
 ; GCN-NEXT:    v_mul_f32_e32 v13, 0x2f800000, v12
-; GCN-NEXT:    v_trunc_f32_e32 v13, v13
-; GCN-NEXT:    v_madmk_f32 v12, v13, 0xcf800000, v12
+; GCN-NEXT:    v_trunc_f32_e32 v14, v13
+; GCN-NEXT:    v_madmk_f32 v12, v14, 0xcf800000, v12
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v18, v13
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v19, v12
 ; GCN-NEXT:    v_mul_lo_u32 v15, v20, v18
@@ -5239,8 +5239,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    v_rcp_f32_e32 v0, v0
 ; GCN-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; GCN-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
-; GCN-NEXT:    v_trunc_f32_e32 v1, v1
-; GCN-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
+; GCN-NEXT:    v_trunc_f32_e32 v3, v1
+; GCN-NEXT:    v_madmk_f32 v0, v3, 0xcf800000, v0
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v15, v1
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v16, v0
 ; GCN-NEXT:    v_mul_lo_u32 v4, v17, v15
@@ -5389,18 +5389,18 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    v_xor_b32_e32 v8, v9, v8
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v9, v8
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v18, v11
-; TAHITI-NEXT:    v_sub_i32_e32 v20, vcc, 0, v8
-; TAHITI-NEXT:    v_subb_u32_e32 v21, vcc, 0, v11, vcc
 ; TAHITI-NEXT:    v_madmk_f32 v9, v18, 0x4f800000, v9
 ; TAHITI-NEXT:    v_rcp_f32_e32 v9, v9
 ; TAHITI-NEXT:    v_mul_f32_e32 v9, 0x5f7ffffc, v9
 ; TAHITI-NEXT:    v_mul_f32_e32 v18, 0x2f800000, v9
-; TAHITI-NEXT:    v_trunc_f32_e32 v18, v18
-; TAHITI-NEXT:    v_madmk_f32 v9, v18, 0xcf800000, v9
+; TAHITI-NEXT:    v_trunc_f32_e32 v20, v18
+; TAHITI-NEXT:    v_madmk_f32 v9, v20, 0xcf800000, v9
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v18, v18
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v9, v9
+; TAHITI-NEXT:    v_sub_i32_e32 v20, vcc, 0, v8
 ; TAHITI-NEXT:    v_mul_lo_u32 v23, v20, v18
 ; TAHITI-NEXT:    v_mul_hi_u32 v22, v20, v9
+; TAHITI-NEXT:    v_subb_u32_e32 v21, vcc, 0, v11, vcc
 ; TAHITI-NEXT:    v_mul_lo_u32 v24, v21, v9
 ; TAHITI-NEXT:    v_add_i32_e32 v22, vcc, v22, v23
 ; TAHITI-NEXT:    v_mul_lo_u32 v23, v20, v9
@@ -5541,18 +5541,18 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    v_xor_b32_e32 v10, v11, v10
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v11, v10
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v14, v13
-; TAHITI-NEXT:    v_sub_i32_e32 v15, vcc, 0, v10
-; TAHITI-NEXT:    v_subb_u32_e32 v18, vcc, 0, v13, vcc
 ; TAHITI-NEXT:    v_madmk_f32 v11, v14, 0x4f800000, v11
 ; TAHITI-NEXT:    v_rcp_f32_e32 v11, v11
 ; TAHITI-NEXT:    v_mul_f32_e32 v11, 0x5f7ffffc, v11
 ; TAHITI-NEXT:    v_mul_f32_e32 v14, 0x2f800000, v11
-; TAHITI-NEXT:    v_trunc_f32_e32 v14, v14
-; TAHITI-NEXT:    v_madmk_f32 v11, v14, 0xcf800000, v11
+; TAHITI-NEXT:    v_trunc_f32_e32 v15, v14
+; TAHITI-NEXT:    v_madmk_f32 v11, v15, 0xcf800000, v11
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v14, v14
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v11, v11
+; TAHITI-NEXT:    v_sub_i32_e32 v15, vcc, 0, v10
 ; TAHITI-NEXT:    v_mul_lo_u32 v20, v15, v14
 ; TAHITI-NEXT:    v_mul_hi_u32 v19, v15, v11
+; TAHITI-NEXT:    v_subb_u32_e32 v18, vcc, 0, v13, vcc
 ; TAHITI-NEXT:    v_mul_lo_u32 v21, v18, v11
 ; TAHITI-NEXT:    v_add_i32_e32 v19, vcc, v19, v20
 ; TAHITI-NEXT:    v_mul_lo_u32 v20, v15, v11
@@ -5694,18 +5694,18 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    v_xor_b32_e32 v12, v13, v12
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v13, v12
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v14, v1
-; TAHITI-NEXT:    v_sub_i32_e32 v15, vcc, 0, v12
-; TAHITI-NEXT:    v_subb_u32_e32 v16, vcc, 0, v1, vcc
 ; TAHITI-NEXT:    v_madmk_f32 v13, v14, 0x4f800000, v13
 ; TAHITI-NEXT:    v_rcp_f32_e32 v13, v13
 ; TAHITI-NEXT:    v_mul_f32_e32 v13, 0x5f7ffffc, v13
 ; TAHITI-NEXT:    v_mul_f32_e32 v14, 0x2f800000, v13
-; TAHITI-NEXT:    v_trunc_f32_e32 v14, v14
-; TAHITI-NEXT:    v_madmk_f32 v13, v14, 0xcf800000, v13
+; TAHITI-NEXT:    v_trunc_f32_e32 v15, v14
+; TAHITI-NEXT:    v_madmk_f32 v13, v15, 0xcf800000, v13
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v14, v14
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v13, v13
+; TAHITI-NEXT:    v_sub_i32_e32 v15, vcc, 0, v12
 ; TAHITI-NEXT:    v_mul_lo_u32 v18, v15, v14
 ; TAHITI-NEXT:    v_mul_hi_u32 v17, v15, v13
+; TAHITI-NEXT:    v_subb_u32_e32 v16, vcc, 0, v1, vcc
 ; TAHITI-NEXT:    v_mul_lo_u32 v19, v16, v13
 ; TAHITI-NEXT:    v_add_i32_e32 v17, vcc, v17, v18
 ; TAHITI-NEXT:    v_mul_lo_u32 v18, v15, v13
@@ -5845,18 +5845,18 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    v_xor_b32_e32 v0, v1, v0
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v1, v0
 ; TAHITI-NEXT:    v_cvt_f32_u32_e32 v4, v3
-; TAHITI-NEXT:    v_sub_i32_e32 v5, vcc, 0, v0
-; TAHITI-NEXT:    v_subb_u32_e32 v14, vcc, 0, v3, vcc
 ; TAHITI-NEXT:    v_madmk_f32 v1, v4, 0x4f800000, v1
 ; TAHITI-NEXT:    v_rcp_f32_e32 v1, v1
 ; TAHITI-NEXT:    v_mul_f32_e32 v1, 0x5f7ffffc, v1
 ; TAHITI-NEXT:    v_mul_f32_e32 v4, 0x2f800000, v1
-; TAHITI-NEXT:    v_trunc_f32_e32 v4, v4
-; TAHITI-NEXT:    v_madmk_f32 v1, v4, 0xcf800000, v1
+; TAHITI-NEXT:    v_trunc_f32_e32 v5, v4
+; TAHITI-NEXT:    v_madmk_f32 v1, v5, 0xcf800000, v1
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v4, v4
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v1, v1
+; TAHITI-NEXT:    v_sub_i32_e32 v5, vcc, 0, v0
 ; TAHITI-NEXT:    v_mul_lo_u32 v16, v5, v4
 ; TAHITI-NEXT:    v_mul_hi_u32 v15, v5, v1
+; TAHITI-NEXT:    v_subb_u32_e32 v14, vcc, 0, v3, vcc
 ; TAHITI-NEXT:    v_mul_lo_u32 v17, v14, v1
 ; TAHITI-NEXT:    v_add_i32_e32 v15, vcc, v15, v16
 ; TAHITI-NEXT:    v_mul_lo_u32 v16, v5, v1
@@ -6029,8 +6029,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_rcp_f32_e32 v8, v8
 ; TONGA-NEXT:    v_mul_f32_e32 v8, 0x5f7ffffc, v8
 ; TONGA-NEXT:    v_mul_f32_e32 v9, 0x2f800000, v8
-; TONGA-NEXT:    v_trunc_f32_e32 v9, v9
-; TONGA-NEXT:    v_madmk_f32 v8, v9, 0xcf800000, v8
+; TONGA-NEXT:    v_trunc_f32_e32 v20, v9
+; TONGA-NEXT:    v_madmk_f32 v8, v20, 0xcf800000, v8
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v22, v9
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v23, v8
 ; TONGA-NEXT:    v_mul_lo_u32 v20, v24, v22
@@ -6169,8 +6169,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_rcp_f32_e32 v10, v10
 ; TONGA-NEXT:    v_mul_f32_e32 v10, 0x5f7ffffc, v10
 ; TONGA-NEXT:    v_mul_f32_e32 v11, 0x2f800000, v10
-; TONGA-NEXT:    v_trunc_f32_e32 v11, v11
-; TONGA-NEXT:    v_madmk_f32 v10, v11, 0xcf800000, v10
+; TONGA-NEXT:    v_trunc_f32_e32 v13, v11
+; TONGA-NEXT:    v_madmk_f32 v10, v13, 0xcf800000, v10
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v19, v11
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v20, v10
 ; TONGA-NEXT:    v_mul_lo_u32 v13, v21, v19
@@ -6310,8 +6310,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_rcp_f32_e32 v12, v12
 ; TONGA-NEXT:    v_mul_f32_e32 v12, 0x5f7ffffc, v12
 ; TONGA-NEXT:    v_mul_f32_e32 v13, 0x2f800000, v12
-; TONGA-NEXT:    v_trunc_f32_e32 v13, v13
-; TONGA-NEXT:    v_madmk_f32 v12, v13, 0xcf800000, v12
+; TONGA-NEXT:    v_trunc_f32_e32 v14, v13
+; TONGA-NEXT:    v_madmk_f32 v12, v14, 0xcf800000, v12
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v18, v13
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v19, v12
 ; TONGA-NEXT:    v_mul_lo_u32 v14, v20, v18
@@ -6449,8 +6449,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_rcp_f32_e32 v0, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
-; TONGA-NEXT:    v_trunc_f32_e32 v1, v1
-; TONGA-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
+; TONGA-NEXT:    v_trunc_f32_e32 v3, v1
+; TONGA-NEXT:    v_madmk_f32 v0, v3, 0xcf800000, v0
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v15, v1
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v16, v0
 ; TONGA-NEXT:    v_mul_lo_u32 v3, v17, v15
@@ -10077,33 +10077,33 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; GCN-NEXT:    v_rcp_f32_e32 v0, v0
 ; GCN-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; GCN-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
-; GCN-NEXT:    v_trunc_f32_e32 v1, v1
-; GCN-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
+; GCN-NEXT:    v_trunc_f32_e32 v2, v1
+; GCN-NEXT:    v_madmk_f32 v0, v2, 0xcf800000, v0
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v1, v1
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v0, v0
 ; GCN-NEXT:    v_readfirstlane_b32 s8, v1
-; GCN-NEXT:    v_readfirstlane_b32 s9, v0
-; GCN-NEXT:    s_mul_i32 s10, s6, s8
-; GCN-NEXT:    s_mul_hi_u32 s12, s6, s9
-; GCN-NEXT:    s_mul_i32 s11, s7, s9
-; GCN-NEXT:    s_add_i32 s10, s12, s10
-; GCN-NEXT:    s_add_i32 s10, s10, s11
-; GCN-NEXT:    s_mul_i32 s13, s6, s9
-; GCN-NEXT:    s_mul_i32 s12, s9, s10
-; GCN-NEXT:    s_mul_hi_u32 s14, s9, s13
-; GCN-NEXT:    s_mul_hi_u32 s11, s9, s10
+; GCN-NEXT:    v_readfirstlane_b32 s10, v0
+; GCN-NEXT:    s_mul_i32 s9, s6, s8
+; GCN-NEXT:    s_mul_hi_u32 s12, s6, s10
+; GCN-NEXT:    s_mul_i32 s11, s7, s10
+; GCN-NEXT:    s_add_i32 s9, s12, s9
+; GCN-NEXT:    s_add_i32 s9, s9, s11
+; GCN-NEXT:    s_mul_i32 s13, s6, s10
+; GCN-NEXT:    s_mul_i32 s12, s10, s9
+; GCN-NEXT:    s_mul_hi_u32 s14, s10, s13
+; GCN-NEXT:    s_mul_hi_u32 s11, s10, s9
 ; GCN-NEXT:    s_add_u32 s12, s14, s12
 ; GCN-NEXT:    s_addc_u32 s11, 0, s11
 ; GCN-NEXT:    s_mul_hi_u32 s14, s8, s13
 ; GCN-NEXT:    s_mul_i32 s13, s8, s13
 ; GCN-NEXT:    s_add_u32 s12, s12, s13
 ; GCN-NEXT:    s_addc_u32 s11, s11, s14
-; GCN-NEXT:    s_mul_hi_u32 s12, s8, s10
+; GCN-NEXT:    s_mul_hi_u32 s12, s8, s9
 ; GCN-NEXT:    s_addc_u32 s12, s12, 0
-; GCN-NEXT:    s_mul_i32 s10, s8, s10
-; GCN-NEXT:    s_add_u32 s10, s11, s10
+; GCN-NEXT:    s_mul_i32 s9, s8, s9
+; GCN-NEXT:    s_add_u32 s9, s11, s9
 ; GCN-NEXT:    s_addc_u32 s11, 0, s12
-; GCN-NEXT:    s_add_u32 s9, s9, s10
+; GCN-NEXT:    s_add_u32 s9, s10, s9
 ; GCN-NEXT:    s_addc_u32 s8, s8, s11
 ; GCN-NEXT:    s_mul_i32 s10, s6, s9
 ; GCN-NEXT:    s_mul_i32 s13, s6, s8
@@ -10237,27 +10237,27 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; TAHITI-NEXT:    v_rcp_f32_e32 v0, v0
 ; TAHITI-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; TAHITI-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
-; TAHITI-NEXT:    v_trunc_f32_e32 v1, v1
-; TAHITI-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
+; TAHITI-NEXT:    v_trunc_f32_e32 v2, v1
+; TAHITI-NEXT:    v_madmk_f32 v0, v2, 0xcf800000, v0
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v0, v0
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v1, v1
 ; TAHITI-NEXT:    v_mul_hi_u32 v2, s6, v0
 ; TAHITI-NEXT:    v_readfirstlane_b32 s8, v1
-; TAHITI-NEXT:    v_readfirstlane_b32 s9, v0
-; TAHITI-NEXT:    s_mul_i32 s10, s6, s8
+; TAHITI-NEXT:    s_mul_i32 s9, s6, s8
+; TAHITI-NEXT:    v_readfirstlane_b32 s10, v0
 ; TAHITI-NEXT:    v_readfirstlane_b32 s13, v2
-; TAHITI-NEXT:    s_mul_i32 s11, s7, s9
-; TAHITI-NEXT:    s_mul_i32 s12, s6, s9
-; TAHITI-NEXT:    s_add_i32 s10, s13, s10
+; TAHITI-NEXT:    s_mul_i32 s11, s7, s10
+; TAHITI-NEXT:    s_mul_i32 s12, s6, s10
+; TAHITI-NEXT:    s_add_i32 s9, s13, s9
 ; TAHITI-NEXT:    v_mul_hi_u32 v3, v0, s12
-; TAHITI-NEXT:    s_add_i32 s10, s10, s11
-; TAHITI-NEXT:    v_mul_hi_u32 v0, v0, s10
+; TAHITI-NEXT:    s_add_i32 s9, s9, s11
+; TAHITI-NEXT:    v_mul_hi_u32 v0, v0, s9
 ; TAHITI-NEXT:    v_mul_hi_u32 v4, v1, s12
 ; TAHITI-NEXT:    v_readfirstlane_b32 s11, v3
-; TAHITI-NEXT:    s_mul_i32 s13, s9, s10
+; TAHITI-NEXT:    s_mul_i32 s13, s10, s9
 ; TAHITI-NEXT:    s_add_u32 s11, s11, s13
 ; TAHITI-NEXT:    v_readfirstlane_b32 s13, v0
-; TAHITI-NEXT:    v_mul_hi_u32 v0, v1, s10
+; TAHITI-NEXT:    v_mul_hi_u32 v0, v1, s9
 ; TAHITI-NEXT:    s_addc_u32 s13, 0, s13
 ; TAHITI-NEXT:    s_mul_i32 s12, s8, s12
 ; TAHITI-NEXT:    v_readfirstlane_b32 s14, v4
@@ -10265,10 +10265,10 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; TAHITI-NEXT:    s_addc_u32 s11, s13, s14
 ; TAHITI-NEXT:    v_readfirstlane_b32 s12, v0
 ; TAHITI-NEXT:    s_addc_u32 s12, s12, 0
-; TAHITI-NEXT:    s_mul_i32 s10, s8, s10
-; TAHITI-NEXT:    s_add_u32 s10, s11, s10
+; TAHITI-NEXT:    s_mul_i32 s9, s8, s9
+; TAHITI-NEXT:    s_add_u32 s9, s11, s9
 ; TAHITI-NEXT:    s_addc_u32 s11, 0, s12
-; TAHITI-NEXT:    s_add_u32 s9, s9, s10
+; TAHITI-NEXT:    s_add_u32 s9, s10, s9
 ; TAHITI-NEXT:    v_mov_b32_e32 v1, s9
 ; TAHITI-NEXT:    v_mul_hi_u32 v1, s6, v1
 ; TAHITI-NEXT:    s_addc_u32 s8, s8, s11
@@ -10419,8 +10419,8 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; TONGA-NEXT:    v_rcp_f32_e32 v0, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
-; TONGA-NEXT:    v_trunc_f32_e32 v1, v1
-; TONGA-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
+; TONGA-NEXT:    v_trunc_f32_e32 v2, v1
+; TONGA-NEXT:    v_madmk_f32 v0, v2, 0xcf800000, v0
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v7, v1
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v8, v0
 ; TONGA-NEXT:    v_mul_lo_u32 v2, s8, v7

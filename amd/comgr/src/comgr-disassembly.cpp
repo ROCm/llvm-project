@@ -47,8 +47,8 @@ DisassemblyInfo::create(const TargetIdentifier &Ident,
     return AMD_COMGR_STATUS_ERROR;
   }
 
-  std::unique_ptr<const MCRegisterInfo>
-    MRI(TheTarget->createMCRegInfo(TheTriple));
+  std::unique_ptr<const MCRegisterInfo> MRI(
+      TheTarget->createMCRegInfo(TheTriple));
   if (!MRI) {
     return AMD_COMGR_STATUS_ERROR;
   }
@@ -71,8 +71,8 @@ DisassemblyInfo::create(const TargetIdentifier &Ident,
     return AMD_COMGR_STATUS_ERROR;
   }
 
-  std::unique_ptr<MCContext> Ctx(new (std::nothrow) MCContext(
-      Triple(TT), *MAI, *MRI, *STI));
+  std::unique_ptr<MCContext> Ctx(new (std::nothrow)
+                                     MCContext(Triple(TT), *MAI, *MRI, *STI));
   if (!Ctx) {
     return AMD_COMGR_STATUS_ERROR;
   }

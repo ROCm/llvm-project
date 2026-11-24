@@ -170,7 +170,7 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:  .LBB0_9: ; %inner_done
 ; CHECK-NEXT:    ; in Loop: Header=BB0_6 Depth=4
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[22:23]
-; CHECK-NEXT:    s_and_b64 vcc, exec, 0
+; CHECK-NEXT:    s_mov_b64 vcc, 0
 ; CHECK-NEXT:    s_and_b64 vcc, vcc, vcc
 ; CHECK-NEXT:    s_mov_b64 s[76:77], -1
 ; CHECK-NEXT:    s_cselect_b64 s[22:23], 0, exec

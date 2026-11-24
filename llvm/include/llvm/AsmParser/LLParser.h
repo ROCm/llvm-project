@@ -188,10 +188,6 @@ namespace llvm {
     SmallVector<std::tuple<LocTy, Instruction *, TrackingMDNodeRef>>
         PendingDbgInsts;
 
-    /// Only the llvm-as tool may set this to false to bypass
-    /// UpgradeDebuginfo so it can generate broken bitcode.
-    bool UpgradeDebugInfo;
-
     bool SeenNewDbgInfoFormat = false;
     bool SeenOldDbgInfoFormat = false;
 
@@ -426,6 +422,7 @@ namespace llvm {
     bool parseGVReference(ValueInfo &VI, unsigned &GVId);
     bool parseSummaryIndexFlags();
     bool parseBlockCount();
+    bool parseCfiFunctions();
     bool parseGVEntry(unsigned ID);
     bool parseFunctionSummary(std::string Name, GlobalValue::GUID, unsigned ID);
     bool parseVariableSummary(std::string Name, GlobalValue::GUID, unsigned ID);
@@ -437,6 +434,8 @@ namespace llvm {
     bool parseHotness(CalleeInfo::HotnessType &Hotness);
     bool parseOptionalTypeIdInfo(FunctionSummary::TypeIdInfo &TypeIdInfo);
     bool parseTypeTests(std::vector<GlobalValue::GUID> &TypeTests);
+    bool parseOptionalIndirectCallTypeIds(
+        std::vector<GlobalValue::GUID> &IndirectCallTypeIds);
     bool parseVFuncIdList(lltok::Kind Kind,
                           std::vector<FunctionSummary::VFuncId> &VFuncIdList);
     bool parseConstVCallList(
