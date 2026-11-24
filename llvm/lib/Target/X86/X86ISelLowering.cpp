@@ -33263,10 +33263,37 @@ void X86TargetLowering::emitCmpArithAtomicRMWIntrinsic(
   AI->eraseFromParent();
 }
 
+void X86TargetLowering::emitExpandAtomicRMW(AtomicRMWInst *AI) const {
+  assert(AI->getType()->isVectorTy() && AI->use_empty() &&
+         "Only unused vector logical atomicrmw is custom expanded");
+  IRBuilder<> Builder(AI);
+  const DataLayout &DL = AI->getDataLayout();
+  Type *IntTy = Builder.getIntNTy(DL.getTypeSizeInBits(AI->getType()));
+  Value *Val = Builder.CreateBitCast(AI->getValOperand(), IntTy);
+  AtomicRMWInst *NewAI = Builder.CreateAtomicRMW(
+      AI->getOperation(), AI->getPointerOperand(), Val, AI->getAlign(),
+      AI->getOrdering(), AI->getSyncScopeID());
+  NewAI->setVolatile(AI->isVolatile());
+  NewAI->copyMetadata(*AI);
+  AI->eraseFromParent();
+}
+
 TargetLowering::AtomicExpansionKind
 X86TargetLowering::shouldExpandAtomicRMWInIR(const AtomicRMWInst *AI) const {
   unsigned NativeWidth = Subtarget.is64Bit() ? 64 : 32;
   Type *MemType = AI->getType();
+
+  // x86 has no native atomic RMW operations for vectors. An unused and/or/xor
+  // that fits a GPR is bitcast to an integer so it can select to a lock
+  // prefixed instruction; everything else is expanded to a CmpXChg loop.
+  if (MemType->isVectorTy()) {
+    AtomicRMWInst::BinOp Op = AI->getOperation();
+    if ((Op == AtomicRMWInst::And || Op == AtomicRMWInst::Or ||
+         Op == AtomicRMWInst::Xor) &&
+        AI->use_empty() && MemType->getPrimitiveSizeInBits() <= NativeWidth)
+      return AtomicExpansionKind::CustomExpand;
+    return AtomicExpansionKind::CmpXChg;
+  }
 
   // If the operand is too big, we must see if cmpxchg8/16b is available
   // and default to library calls otherwise.
@@ -64600,6 +64627,16 @@ bool X86TargetLowering::isTypeDesirableForOp(unsigned Opc, EVT VT) const {
 
   // Any legal type not explicitly accounted for above here is desirable.
   return true;
+}
+
+bool X86TargetLowering::isTypeDesirableForOp(SDNode *N, EVT VT) const {
+  unsigned Opc = N->getOpcode();
+  // There are no vXi64 to f32 or f64 conversions without AVX512DQ.
+  if ((Opc == ISD::SINT_TO_FP || Opc == ISD::UINT_TO_FP) &&
+      VT.isVectorOf(MVT::i64) && !Subtarget.hasDQI() &&
+      !(Subtarget.hasFP16() && N->getValueType(0).isVectorOf(MVT::f16)))
+    return false;
+  return isTypeDesirableForOp(Opc, VT);
 }
 
 SDValue X86TargetLowering::expandIndirectJTBranch(const SDLoc &dl,
