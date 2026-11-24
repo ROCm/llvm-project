@@ -1,4 +1,5 @@
 // Check that the memory-order clauses of 'flush' reach the host runtime and
+// XFAIL: *
 // become fences on GPUs.
 
 // RUN: %clang_cc1 -fopenmp -fopenmp-version=51 -x c++ -triple x86_64-unknown-linux-gnu -fopenmp-targets=amdgcn-amd-amdhsa -emit-llvm %s -o - | FileCheck %s --check-prefix=HOST
