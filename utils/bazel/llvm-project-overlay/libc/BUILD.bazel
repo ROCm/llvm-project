@@ -228,11 +228,17 @@ LLVM_LIBC_HEADERS = [
     libc_header_info("sys/mman"),
     libc_header_info("sys/random"),
     libc_header_info("sys/resource"),
-    libc_header_info("sys/select"),
+    libc_header_info(
+        "sys/select",
+        other_srcs = ["include/sys/select-time.yaml"],
+    ),
     libc_header_info("sys/socket"),
     libc_header_info("sys/stat"),
     libc_header_info("sys/statvfs"),
-    libc_header_info("sys/time"),
+    libc_header_info(
+        "sys/time",
+        other_srcs = ["include/sys/select-time.yaml"],
+    ),
     libc_header_info("sys/types"),
     libc_header_info("sys/utsname"),
     libc_header_info("sys/wait"),
@@ -246,7 +252,10 @@ LLVM_LIBC_HEADERS = [
     libc_header_info("wctype"),
     libc_header_info(
         "stdlib",
-        other_srcs = ["include/stdlib-malloc.yaml"],
+        other_srcs = [
+            "include/stdlib-alloca.yaml",
+            "include/stdlib-malloc.yaml",
+        ],
     ),
     libc_header_info(
         "malloc",
@@ -1183,6 +1192,17 @@ libc_support_library(
     ],
 )
 
+libc_support_library(
+    name = "__support_math_static_rounding_exp10f",
+    hdrs = ["shared/math/static_rounding/exp10f.h"],
+    deps = [
+        ":shared_libc_common",
+        "//libc/src/__support:common",
+        "//libc/src/__support/macros:config",
+        "//libc/src/__support/math:exp10f_integer_eval",
+    ],
+)
+
 ############################### complex targets ################################
 
 alias(
@@ -1408,6 +1428,7 @@ alias(
         "cosf",
         "cosf16",
         "cosh",
+        "coshbf16",
         "coshf",
         "coshf16",
         "cospif",
