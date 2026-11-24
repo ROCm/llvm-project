@@ -4177,6 +4177,37 @@ struct S {
     (this)->bar();     // expected-note {{later used here}}
     this->p_ = &GLOBAL_INT;
   }
+  void alias_note_for_field_use() {
+    {
+      int num;
+      int *p = &num; // expected-warning {{local variable 'num' does not live long enough}}
+      this->p_ = p;  // expected-note {{local variable 'p' aliases the storage of local variable 'num'}}
+    }                // expected-note {{local variable 'num' is destroyed here}}
+    bar();           // expected-note {{later used here}}
+  }
+  void alias_note_ignores_later_flow() {
+    int *q;
+    {
+      int num;
+      int *p = &num; // expected-warning {{local variable 'num' does not live long enough}}
+      this->p_ = p;  // expected-note {{local variable 'p' aliases the storage of local variable 'num'}}
+      q = p;
+    }                // expected-note {{local variable 'num' is destroyed here}}
+    bar();           // expected-note {{later used here}}
+    this->p_ = q;
+  }
+  void alias_note_from_previous_iteration(int n) {
+    int *q;
+    {
+      int num;
+      q = &num;      // expected-warning {{local variable 'num' does not live long enough}}
+    }                // expected-note {{local variable 'num' is destroyed here}}
+    for (int i = 0; i < n; ++i) {
+      bar();         // expected-note {{later used here}}
+      this->p_ = q;  // expected-note {{local variable 'q' aliases the storage of local variable 'num'}}
+    }
+    this->p_ = nullptr;
+  }
 };
 
 struct T {
@@ -5462,7 +5493,7 @@ void closure_dtor_reads_captured_borrow() {
   std::string backing;
   Ref r;
   r = backing; // expected-warning {{local variable 'backing' does not live long enough}}
-  fn = [r] {};
+  fn = [r] {}; // expected-note {{local variable 'r' aliases the storage of local variable 'backing'}}
 } // expected-note {{local variable 'backing' is destroyed here}} expected-note {{later used by the destructor of 'fn' at scope exit}}
 
 // The explicit use and the destructor use of `r` meet after the if.
