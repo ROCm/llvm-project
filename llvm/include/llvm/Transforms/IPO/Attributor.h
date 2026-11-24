@@ -769,11 +769,10 @@ struct IRPosition {
 
   /// Return the value this abstract attribute is associated with.
   Value &getAssociatedValue() const {
-    if (getCallSiteArgNo() < 0 || isa<Argument>(&getAnchorValue()))
-      return getAnchorValue();
-    assert(isa<CallBase>(&getAnchorValue()) && "Expected a call base!");
-    return *cast<CallBase>(&getAnchorValue())
-                ->getArgOperand(getCallSiteArgNo());
+    // A call site argument position is encoded by the argument operand use.
+    if (getEncodingBits() == ENC_CALL_SITE_ARGUMENT_USE)
+      return *getAsUsePtr()->get();
+    return getAnchorValue();
   }
 
   /// Return the type this abstract attribute is associated with.
@@ -973,7 +972,11 @@ private:
   }
 
   /// Verify internal invariants.
+#ifdef EXPENSIVE_CHECKS
   LLVM_ABI void verify();
+#else
+  void verify() {}
+#endif
 
   /// Return the underlying pointer as Value *, valid for all positions but
   /// IRP_CALL_SITE_ARGUMENT.

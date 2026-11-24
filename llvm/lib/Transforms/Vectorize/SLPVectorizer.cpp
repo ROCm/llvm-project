@@ -8989,7 +8989,8 @@ void BoUpSLP::tryToVectorizeGatheredLoads(
                            size_t Start = std::distance(Slice.begin(), It);
                            size_t Sz = Slice.size() - Start;
                            return Sz < VL.size() ||
-                                  Slice.slice(Start, VL.size()) != VL;
+                                  !std::is_permutation(VL.begin(), VL.end(),
+                                                       Slice.begin() + Start);
                          }))
                 continue;
               // Try to build long masked gather loads.
@@ -12323,6 +12324,33 @@ void BoUpSLP::buildTreeRec(ArrayRef<Value *> VLRef, unsigned Depth,
   TreeEntry::EntryState State = getScalarsVectorizationState(
       S, VL, IsScatterVectorizeUserTE, CurrentOrder, PointerOps, SPtrInfo,
       ExpandShuffleMask);
+  // Postpone the reused loads of a binary operator operand, if both operands
+  // form a single vector load, to load them at once with the gathered loads.
+  auto IsMergeableLoadOperand = [&]() {
+    const TreeEntry *UserTE = UserTreeIdx.UserTE;
+    if (IsGraphTransformMode || ReuseShuffleIndices.empty() ||
+        S.getOpcode() != Instruction::Load ||
+        isa<FixedVectorType>(S.getMainOp()->getType()) || !UserTE ||
+        UserTE->State != TreeEntry::Vectorize || UserTE->isAltShuffle() ||
+        !Instruction::isBinaryOp(UserTE->getOpcode()) ||
+        UserTE->getNumOperands() != 2 || UserTE->hasReassocScalars())
+      return false;
+    SmallSetVector<Value *, 8> Pool;
+    Pool.insert_range(UserTE->getOperand(0));
+    Pool.insert_range(UserTE->getOperand(1));
+    OrdersType PoolOrder;
+    SmallVector<Value *> PoolPointerOps;
+    StridedPtrInfo PoolSPtrInfo;
+    return Pool.size() == UserTE->Scalars.size() &&
+           isPowerOf2_32(Pool.size()) && all_of(Pool, IsaPred<LoadInst>) &&
+           canVectorizeLoads(Pool.getArrayRef(), Pool.front(), PoolOrder,
+                             PoolPointerOps,
+                             PoolSPtrInfo) == LoadsState::Vectorize;
+  };
+  if (State == TreeEntry::Vectorize && IsMergeableLoadOperand()) {
+    LoadEntriesToVectorize.insert(VectorizableTree.size());
+    State = TreeEntry::NeedToGather;
+  }
   // The zero-extended sub-fields of the same wider integer scalar are
   // gathered and emitted as a bitcast to the field vector plus a permutation.
   // For 2 lanes the emission is not cheaper than the insertelement chain.
@@ -12628,7 +12656,12 @@ void BoUpSLP::buildTreeRec(ArrayRef<Value *> VLRef, unsigned Depth,
         SmallVector<Value *> Calls;
         if (checkEVsForVecCalls(VL, S, *TLI, Indices, Calls)) {
           TE->StructEVIndices = std::move(Indices);
-          buildTreeRec(Operands.front(), Depth + 1, {TE, 0});
+          // The calls are vectorized already for another field - reuse them.
+          if (TreeEntry *CallTE =
+                  getSameValuesTreeEntry(Calls.front(), Calls, /*SameVF=*/true))
+            OperandsToTreeEntry.try_emplace({TE, 0}, CallTE);
+          else
+            buildTreeRec(Operands.front(), Depth + 1, {TE, 0});
         }
       }
       return;
@@ -19999,6 +20032,18 @@ BoUpSLP::calculateTreeCostAndTrimNonProfitable(ArrayRef<Value *> VectorizedVals,
     GatherCost += getUnfusedFMulsPenalty(*TE);
     // Erase subtree if it is non-profitable.
     ArrayRef<unsigned> Nodes = std::get<2>(Worklist.top().second);
+    // Skip, if the struct call in the subtree is still reused by the
+    // extractvalue node outside of the subtree.
+    if (any_of(VectorizableTree, [&](const std::unique_ptr<TreeEntry> &EV) {
+          return !EV->StructEVIndices.empty() && EV.get() != TE &&
+                 !DeletedNodes.contains(EV.get()) &&
+                 !TransformedToGatherNodes.contains(EV.get()) &&
+                 !is_contained(Nodes, EV->Idx) &&
+                 is_contained(Nodes, getOperandEntry(EV.get(), 0)->Idx);
+        })) {
+      Worklist.pop();
+      continue;
+    }
     // Prefer trimming equal-cost alternate-shuffle subtrees rooted at binary
     // ops: alt-shuffles introduce runtime shuffle overhead that the cost model
     // may underestimate. Skip if the subtree contains ExtractElement nodes,
