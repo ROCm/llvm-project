@@ -284,6 +284,7 @@
 ; GCN-O2-NEXT:       amdgpu-lower-vgpr-encoding
 ; GCN-O2-NEXT:       amdgpu-insert-delay-alu
 ; GCN-O2-NEXT:       branch-relaxation
+; GCN-O2-NEXT:       amdgpu-fetch-window-placement
 ; GCN-O2-NEXT:       reg-usage-collector
 ; GCN-O2-NEXT:       remove-loads-into-fake-uses
 ; GCN-O2-NEXT:       live-debug-values
@@ -472,6 +473,7 @@
 ; GCN-O3-NEXT:       amdgpu-lower-vgpr-encoding
 ; GCN-O3-NEXT:       amdgpu-insert-delay-alu
 ; GCN-O3-NEXT:       branch-relaxation
+; GCN-O3-NEXT:       amdgpu-fetch-window-placement
 ; GCN-O3-NEXT:       reg-usage-collector
 ; GCN-O3-NEXT:       remove-loads-into-fake-uses
 ; GCN-O3-NEXT:       live-debug-values

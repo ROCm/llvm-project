@@ -77,14 +77,16 @@ constexpr double TargetCrossCost = 8.0;
 constexpr double VMEMSpillCost = 2.0;
 constexpr double CostSlack = 1.0;
 
-class AMDGPUFetchWindowPlacement : public MachineFunctionPass {
+/// The placement itself, shared by the legacy and new pass manager wrappers.
+class AMDGPUFetchWindowPlacementImpl {
 public:
-  static char ID;
-  AMDGPUFetchWindowPlacement() : MachineFunctionPass(ID) {}
-
-  bool runOnMachineFunction(MachineFunction &MF) override;
-  StringRef getPassName() const override;
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
+  /// Places loops in \p MF and returns true if the function changed. \p Skip
+  /// is set for functions the pass must leave alone. \p GetAnalyses returns the
+  /// MachineLoopInfo and MachineBlockFrequencyInfo of \p MF. It is called only
+  /// once the pass has decided to act, so the analyses are computed only where
+  /// they are used.
+  template <typename GetAnalysesT>
+  bool run(MachineFunction &MF, bool Skip, GetAnalysesT GetAnalyses);
 
 private:
   const SIInstrInfo *TII = nullptr;
@@ -108,22 +110,11 @@ private:
 
 } // end anonymous namespace
 
-StringRef AMDGPUFetchWindowPlacement::getPassName() const {
-  return "AMDGPU Fetch Window Placement";
-}
-
-void AMDGPUFetchWindowPlacement::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<MachineLoopInfoWrapperPass>();
-  AU.addRequired<MachineBlockFrequencyInfoWrapperPass>();
-  AU.setPreservesCFG();
-  MachineFunctionPass::getAnalysisUsage(AU);
-}
-
-unsigned AMDGPUFetchWindowPlacement::size(const MachineInstr &MI) const {
+unsigned AMDGPUFetchWindowPlacementImpl::size(const MachineInstr &MI) const {
   return MI.isBundle() ? 0 : TII->getInstSizeInBytes(MI);
 }
 
-unsigned AMDGPUFetchWindowPlacement::endOfLayoutPred(
+unsigned AMDGPUFetchWindowPlacementImpl::endOfLayoutPred(
     const MachineBasicBlock &MBB) const {
   if (MBB.getIterator() == MBB.getParent()->begin())
     return 0;
@@ -141,7 +132,7 @@ static unsigned alignPad(unsigned Off, const MachineBasicBlock &MBB) {
   return (Max && Pad > Max) ? 0 : Pad;
 }
 
-void AMDGPUFetchWindowPlacement::computeOffsets(MachineFunction &MF) {
+void AMDGPUFetchWindowPlacementImpl::computeOffsets(MachineFunction &MF) {
   unsigned Off = 0;
   for (MachineBasicBlock &MBB : MF) {
     Off += alignPad(Off, MBB);
@@ -156,7 +147,7 @@ void AMDGPUFetchWindowPlacement::computeOffsets(MachineFunction &MF) {
 /// alignment when it applies the cap. A block is user-aligned unless its
 /// current alignment and cap still match that record, so a user's (32, 4)
 /// request is not mistaken for the compiler's.
-bool AMDGPUFetchWindowPlacement::hasUserAlignment(
+bool AMDGPUFetchWindowPlacementImpl::hasUserAlignment(
     const MachineBasicBlock &MBB) const {
   if (MBB.getAlignment() == Align(1))
     return false;
@@ -198,7 +189,7 @@ static bool isBranchTarget(const MachineBasicBlock &MBB) {
 /// Cost of the layout range [First, Last] when shifted by \p Shift bytes.
 /// Block alignment inside the range is re-evaluated at the new offsets; the
 /// alignment of \p First is ignored unless \p KeepAlign is set.
-double AMDGPUFetchWindowPlacement::cost(const MachineLoop &L,
+double AMDGPUFetchWindowPlacementImpl::cost(const MachineLoop &L,
                                         MachineBasicBlock *First,
                                         MachineBasicBlock *Last, unsigned Shift,
                                         bool KeepAlign) const {
@@ -261,7 +252,7 @@ double AMDGPUFetchWindowPlacement::cost(const MachineLoop &L,
 /// hotter than the header of \p L, or null. Blocks of innermost loops are
 /// re-scored when those loops are placed, so they do not count.
 const MachineBasicBlock *
-AMDGPUFetchWindowPlacement::hotCodeMoved(const MachineLoop &L,
+AMDGPUFetchWindowPlacementImpl::hotCodeMoved(const MachineLoop &L,
                                          const MachineBasicBlock &PadMBB) const {
   BlockFrequency HeaderFreq = MBFI->getBlockFreq(L.getHeader());
   for (const MachineBasicBlock &MBB :
@@ -275,7 +266,7 @@ AMDGPUFetchWindowPlacement::hotCodeMoved(const MachineLoop &L,
   return nullptr;
 }
 
-bool AMDGPUFetchWindowPlacement::placeLoop(MachineLoop &L,
+bool AMDGPUFetchWindowPlacementImpl::placeLoop(MachineLoop &L,
                                            MachineBasicBlock *&Fence) {
   MachineFunction &MF = *L.getHeader()->getParent();
   MachineBasicBlock *First = nullptr, *Last = nullptr;
@@ -406,7 +397,9 @@ bool AMDGPUFetchWindowPlacement::placeLoop(MachineLoop &L,
   return true;
 }
 
-bool AMDGPUFetchWindowPlacement::runOnMachineFunction(MachineFunction &MF) {
+template <typename GetAnalysesT>
+bool AMDGPUFetchWindowPlacementImpl::run(MachineFunction &MF, bool Skip,
+                                         GetAnalysesT GetAnalyses) {
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
   if (EntryPadForTesting && MFI->isEntryFunction()) {
@@ -419,7 +412,7 @@ bool AMDGPUFetchWindowPlacement::runOnMachineFunction(MachineFunction &MF) {
 
   // -align-loops is a user request for every loop.
   if (!EnablePlacement || !ST.hasLoopHeadInstSplitSensitivity() ||
-      MF.getTarget().Options.LoopAlignment || skipFunction(MF.getFunction()))
+      MF.getTarget().Options.LoopAlignment || Skip)
     return EntryPadForTesting != 0;
 
   // Offsets are only known modulo the function alignment, and the kernarg
@@ -434,8 +427,9 @@ bool AMDGPUFetchWindowPlacement::runOnMachineFunction(MachineFunction &MF) {
       if (MI.isInlineAsm())
         return false;
 
-  MBFI = &getAnalysis<MachineBlockFrequencyInfoWrapperPass>().getMBFI();
-  MLI = &getAnalysis<MachineLoopInfoWrapperPass>().getLI();
+  auto [LI, BFI] = GetAnalyses();
+  MLI = &LI;
+  MBFI = &BFI;
 
   // MachineBlockPlacement takes the larger of llvm.loop.align and the fetch
   // window alignment, but the latter caps the padding at one s_nop. Lift the
@@ -483,12 +477,56 @@ bool AMDGPUFetchWindowPlacement::runOnMachineFunction(MachineFunction &MF) {
   return Changed;
 }
 
-char AMDGPUFetchWindowPlacement::ID = 0;
-char &llvm::AMDGPUFetchWindowPlacementID = AMDGPUFetchWindowPlacement::ID;
+namespace {
+class AMDGPUFetchWindowPlacementLegacy : public MachineFunctionPass {
+public:
+  static char ID;
 
-INITIALIZE_PASS_BEGIN(AMDGPUFetchWindowPlacement, DEBUG_TYPE,
+  AMDGPUFetchWindowPlacementLegacy() : MachineFunctionPass(ID) {}
+
+  StringRef getPassName() const override {
+    return "AMDGPU Fetch Window Placement";
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addRequired<MachineLoopInfoWrapperPass>();
+    AU.addRequired<MachineBlockFrequencyInfoWrapperPass>();
+    AU.setPreservesCFG();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    AMDGPUFetchWindowPlacementImpl Impl;
+    return Impl.run(MF, skipFunction(MF.getFunction()), [this] {
+      return std::pair<MachineLoopInfo &, MachineBlockFrequencyInfo &>(
+          getAnalysis<MachineLoopInfoWrapperPass>().getLI(),
+          getAnalysis<MachineBlockFrequencyInfoWrapperPass>().getMBFI());
+    });
+  }
+};
+} // end anonymous namespace
+
+PreservedAnalyses
+AMDGPUFetchWindowPlacementPass::run(MachineFunction &MF,
+                                    MachineFunctionAnalysisManager &MFAM) {
+  AMDGPUFetchWindowPlacementImpl Impl;
+  if (!Impl.run(MF, MF.getFunction().hasOptNone(), [&MF, &MFAM] {
+        return std::pair<MachineLoopInfo &, MachineBlockFrequencyInfo &>(
+            MFAM.getResult<MachineLoopAnalysis>(MF),
+            MFAM.getResult<MachineBlockFrequencyAnalysis>(MF));
+      }))
+    return PreservedAnalyses::all();
+  auto PA = getMachineFunctionPassPreservedAnalyses();
+  PA.preserveSet<CFGAnalyses>();
+  return PA;
+}
+
+char AMDGPUFetchWindowPlacementLegacy::ID = 0;
+char &llvm::AMDGPUFetchWindowPlacementID = AMDGPUFetchWindowPlacementLegacy::ID;
+
+INITIALIZE_PASS_BEGIN(AMDGPUFetchWindowPlacementLegacy, DEBUG_TYPE,
                       "AMDGPU Fetch Window Placement", false, false)
 INITIALIZE_PASS_DEPENDENCY(MachineLoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfoWrapperPass)
-INITIALIZE_PASS_END(AMDGPUFetchWindowPlacement, DEBUG_TYPE,
+INITIALIZE_PASS_END(AMDGPUFetchWindowPlacementLegacy, DEBUG_TYPE,
                     "AMDGPU Fetch Window Placement", false, false)

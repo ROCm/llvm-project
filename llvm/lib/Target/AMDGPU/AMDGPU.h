@@ -352,6 +352,12 @@ struct AMDGPUInsertDelayAluPass
                         MachineFunctionAnalysisManager &MFAM);
 };
 
+struct AMDGPUFetchWindowPlacementPass
+    : public OptionalPassInfoMixin<AMDGPUFetchWindowPlacementPass> {
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+};
+
 FunctionPass *createAMDGPUISelDag(TargetMachine &TM, CodeGenOptLevel OptLevel);
 ModulePass *createAMDGPUAlwaysInlinePass(bool GlobalOpt = true);
 
@@ -640,7 +646,7 @@ extern char &GCNRewritePartialRegUsesID;
 void initializeAMDGPUWaitSGPRHazardsLegacyPass(PassRegistry &);
 extern char &AMDGPUWaitSGPRHazardsLegacyID;
 
-void initializeAMDGPUFetchWindowPlacementPass(PassRegistry &);
+void initializeAMDGPUFetchWindowPlacementLegacyPass(PassRegistry &);
 extern char &AMDGPUFetchWindowPlacementID;
 
 class AMDGPURewriteAGPRCopyMFMAPass
