@@ -417,6 +417,7 @@ bool AMDGPUFetchWindowPlacementImpl::run(MachineFunction &MF, bool Skip,
 
   TII = ST.getInstrInfo();
   MFInfo = MFI;
+  // The size of inline asm is an estimate, so the offsets would not be exact.
   for (const MachineBasicBlock &MBB : MF)
     for (const MachineInstr &MI : MBB.instrs())
       if (MI.isInlineAsm())
