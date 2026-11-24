@@ -90,12 +90,14 @@ jobs:
       - name: Fetch artifact archives (no extract)
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ARTIFACT_GITHUB_REPO: ${{ inputs.artifact_github_repo }}
+          AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
         run: |
           python ./build_tools/artifact_manager.py fetch \
             --run-id="${{ env.ARTIFACT_RUN_ID }}" \
-            --run-github-repo="${{ inputs.artifact_github_repo }}" \
+            --run-github-repo="${ARTIFACT_GITHUB_REPO}" \
             --stage=all \
-            --amdgpu-families="${{ inputs.amdgpu_families }}" \
+            --amdgpu-families="${AMDGPU_FAMILIES}" \
             --platform="${{ env.PLATFORM }}" \
             --output-dir="${GITHUB_WORKSPACE}" \
             --no-extract

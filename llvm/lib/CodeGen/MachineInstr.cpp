@@ -2013,14 +2013,15 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
       OS << F.getKindName();
 
       unsigned RCID;
-      if (!F.isImmKind() && !F.isMemKind() && F.hasRegClassConstraint(RCID)) {
+      if (!F.isImmKind() && !F.isMemKind() && !F.isFuncKind() &&
+          F.hasRegClassConstraint(RCID)) {
         if (TRI) {
           OS << ':' << TRI->getRegClassName(TRI->getRegClass(RCID));
         } else
           OS << ":RC" << RCID;
       }
 
-      if (F.isMemKind()) {
+      if (F.isMemKind() || F.isFuncKind()) {
         const InlineAsm::ConstraintCode MCID = F.getMemoryConstraintID();
         OS << ":" << InlineAsm::getMemConstraintName(MCID);
       }
@@ -2486,6 +2487,16 @@ static const DIExpression *computeExprForSpill(
          "Expected inlined-at fields to agree");
 
   const DIExpression *Expr = MI.getDebugExpression();
+  if (Expr->holdsOldElements() && MI.isNonListDebugValue()) {
+    if (!MI.isIndirectDebugValue()) {
+      if (!Expr->isComplex() || Expr->isImplicit())
+        return Expr;
+    } else {
+      assert(MI.getDebugOffset().getImm() == 0 &&
+             "DBG_VALUE with nonzero offset");
+    }
+  }
+
   SmallBitVector SpilledOpIndexes(MI.getNumDebugOperands());
   for (const MachineOperand *Op : SpilledOperands)
     SpilledOpIndexes.set(MI.getDebugOperandIndex(Op));
