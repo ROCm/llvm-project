@@ -6650,13 +6650,6 @@ convertOmpAtomicCapture(omp::AtomicCaptureOp atomicCaptureOp,
                             llvmAtomicV.IsVolatile);
       }
 
-      // Emit flush after atomic compare if needed (release/acq_rel/seq_cst).
-      if (atomicOrdering == llvm::AtomicOrdering::Release ||
-          atomicOrdering == llvm::AtomicOrdering::AcquireRelease ||
-          atomicOrdering == llvm::AtomicOrdering::SequentiallyConsistent) {
-        llvm::OpenMPIRBuilder::LocationDescription flushLoc(builder);
-        ompBuilder->createFlush(flushLoc);
-      }
       return success();
     }
 
@@ -7090,14 +7083,6 @@ convertOmpAtomicCompare(omp::AtomicCompareOp atomicCompareOp,
     (void)oldComplex;
     (void)cmpOk;
 
-    // Emit flush after atomic compare if needed (for release, acq_rel,
-    // seq_cst orderings).
-    if (atomicOrdering == llvm::AtomicOrdering::Release ||
-        atomicOrdering == llvm::AtomicOrdering::AcquireRelease ||
-        atomicOrdering == llvm::AtomicOrdering::SequentiallyConsistent) {
-      llvm::OpenMPIRBuilder::LocationDescription ompLoc(builder);
-      ompBuilder->createFlush(ompLoc);
-    }
     return success();
   } else {
     AtomicComparePatternInfo patternInfo;
