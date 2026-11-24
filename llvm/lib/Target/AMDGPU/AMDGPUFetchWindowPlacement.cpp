@@ -39,6 +39,9 @@
 #include "SIInstrInfo.h"
 #include "SIMachineFunctionInfo.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
+#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
+#include "llvm/CodeGen/MachineCycleAnalysis.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/InitializePasses.h"
@@ -485,18 +488,31 @@ public:
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.addRequired<MachineLoopInfoWrapperPass>();
-    AU.addRequired<MachineBlockFrequencyInfoWrapperPass>();
     AU.setPreservesCFG();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
+    // The loop and block frequency analyses are built here and not required
+    // in getAnalysisUsage. The legacy pass manager would compute a required
+    // analysis for every function, and this pass only uses them in gfx950
+    // kernels. The new pass manager version requests them the same way, after
+    // the pass has decided to act.
+    std::optional<MachineDominatorTree> MDT;
+    std::optional<MachineLoopInfo> MLI;
+    std::optional<MachineBranchProbabilityInfo> MBPI;
+    std::optional<MachineCycleInfo> MCI;
+    std::optional<MachineBlockFrequencyInfo> MBFI;
     AMDGPUFetchWindowPlacementImpl Impl;
-    return Impl.run(MF, skipFunction(MF.getFunction()), [this] {
-      return std::pair<MachineLoopInfo &, MachineBlockFrequencyInfo &>(
-          getAnalysis<MachineLoopInfoWrapperPass>().getLI(),
-          getAnalysis<MachineBlockFrequencyInfoWrapperPass>().getMBFI());
+    return Impl.run(MF, skipFunction(MF.getFunction()), [&] {
+      MDT.emplace(MF);
+      MLI.emplace(*MDT);
+      MBPI.emplace();
+      MCI.emplace();
+      MCI->compute(MF);
+      MBFI.emplace(MF, *MBPI, *MCI);
+      return std::pair<MachineLoopInfo &, MachineBlockFrequencyInfo &>(*MLI,
+                                                                       *MBFI);
     });
   }
 };
@@ -520,9 +536,5 @@ AMDGPUFetchWindowPlacementPass::run(MachineFunction &MF,
 char AMDGPUFetchWindowPlacementLegacy::ID = 0;
 char &llvm::AMDGPUFetchWindowPlacementID = AMDGPUFetchWindowPlacementLegacy::ID;
 
-INITIALIZE_PASS_BEGIN(AMDGPUFetchWindowPlacementLegacy, DEBUG_TYPE,
-                      "AMDGPU Fetch Window Placement", false, false)
-INITIALIZE_PASS_DEPENDENCY(MachineLoopInfoWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfoWrapperPass)
-INITIALIZE_PASS_END(AMDGPUFetchWindowPlacementLegacy, DEBUG_TYPE,
-                    "AMDGPU Fetch Window Placement", false, false)
+INITIALIZE_PASS(AMDGPUFetchWindowPlacementLegacy, DEBUG_TYPE,
+                "AMDGPU Fetch Window Placement", false, false)
