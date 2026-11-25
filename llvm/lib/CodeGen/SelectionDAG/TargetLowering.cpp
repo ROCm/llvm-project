@@ -6322,7 +6322,7 @@ void TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
         // now; without this it would get ZExt'd later in
         // ScheduleDAGSDNodes::EmitNode, which is very generic.
         bool IsBool = C->getConstantIntValue()->getBitWidth() == 1;
-        BooleanContent BCont = getBooleanContents(MVT::i64);
+        BooleanContent BCont = getBooleanContents(/*isVec=*/false);
         ISD::NodeType ExtOpc =
             IsBool ? getExtendForContent(BCont) : ISD::SIGN_EXTEND;
         int64_t ExtVal =
@@ -12669,8 +12669,7 @@ TargetLowering::getVectorSubVecPointer(SelectionDAG &DAG, SDValue VecPtr,
   // An out-of-range index only makes the vector operation return poison, but
   // a load/store through the pointer computed below would be immediate UB, so
   // freeze the index before clamping it into range.
-  if (!DAG.isGuaranteedNotToBePoison(Index))
-    Index = DAG.getFreeze(Index);
+  Index = DAG.getFreeze(Index, UndefPoisonKind::PoisonOnly);
 
   EVT IdxVT = Index.getValueType();
   if (SubVecVT.isScalableVector())
