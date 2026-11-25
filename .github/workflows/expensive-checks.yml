@@ -64,7 +64,7 @@ jobs:
     if: ${{ github.event_name != 'schedule' || github.repository == 'ROCm/llvm-project' }}
     outputs:
       commit: ${{ steps.checkout.outputs.commit }}
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: az-linux-scale-rocm-asan-prod-2
     # Expensive checks roughly doubles compile time against the same tree
     # built with plain assertions. 6h leaves headroom on a contended runner.
     timeout-minutes: 360
@@ -173,7 +173,7 @@ jobs:
   test:
     name: Test ${{ matrix.suite.target }}
     needs: build
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: az-linux-scale-rocm-asan-prod-2
     timeout-minutes: ${{ matrix.suite.timeout_minutes }}
     strategy:
       fail-fast: false

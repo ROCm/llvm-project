@@ -61,7 +61,7 @@ jobs:
         fromJSON(inputs.build_config).prebuilt_stages != '' &&
         fromJSON(inputs.build_config).baseline_run_id != ''
       }}
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: az-linux-scale-rocm-asan-prod-2
     permissions:
       contents: read
       id-token: write
