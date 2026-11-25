@@ -16537,7 +16537,7 @@ static SDValue lowerShuffleAsRepeatedMaskAndLanePermute(
 
       // Avoid returning the same shuffle operation. For example,
       // v8i32 = vector_shuffle<0,1,0,1,0,1,0,1> t5, undef:v8i32
-      if (BroadcastMask == Mask)
+      if (isShuffleEquivalent(Mask, BroadcastMask))
         return SDValue();
 
       return DAG.getVectorShuffle(VT, DL, RepeatShuf, DAG.getUNDEF(VT),
@@ -32001,10 +32001,10 @@ static SDValue LowerShift(SDValue Op, const X86Subtarget &Subtarget,
       // than 7, the result will be zero.
       SmallVector<APInt, 8> MaskBits, IdxBits;
       for (unsigned I = 0, E = VT.getSizeInBits() / 128; I != E; ++I) {
-        MaskBits.push_back(APInt(64, 0x0103070F1F3F7FFFULL));
-        IdxBits.push_back(APInt(64, 0x8040201008040201ULL));
-        MaskBits.push_back(APInt::getZero(64));
-        IdxBits.push_back(APInt::getZero(64));
+        MaskBits.emplace_back(64, 0x0103070F1F3F7FFFULL);
+        IdxBits.emplace_back(64, 0x8040201008040201ULL);
+        MaskBits.emplace_back(64, 0);
+        IdxBits.emplace_back(64, 0);
       }
 
       MVT CVT = MVT::getVectorVT(MVT::i64, VT.getSizeInBits() / 64);
@@ -52049,10 +52049,13 @@ static SDValue combineShiftRightLogical(SDNode *N, SelectionDAG &DAG,
   // which DAG folds to: srl(vecreduce_umax(x),bw-1).
   // This attempts to reconstruct the signbit reduction.
   if (sd_match(N1, m_SpecificInt(EltSizeInBits - 1))) {
-    SDValue X = N0;
+    SDValue X;
     ISD::CondCode CC = ISD::SETNE;
+    // A failed match can still have bound X to an xor operand.
     if (sd_match(N0, m_Not(m_Value(X))))
       CC = ISD::SETEQ;
+    else
+      X = N0;
     if (X.getOpcode() == ISD::VECREDUCE_UMAX) {
       SDValue V = X.getOperand(0);
       EVT VecVT = V.getValueType();
