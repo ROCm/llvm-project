@@ -155,6 +155,8 @@ jobs:
             --changed-projects "$CHANGED_PROJECTS" \
             --gha-output
 
+      #rocprim is temporarily disabled and issue/fix followed in ROCm/rocm-libraries/issues/16724
+      #Re-enable/re-add rocprim in PROJECTS_TO_TEST when the fix is merged
       - name: "Configuring CI options"
         id: configure
         env:
@@ -168,7 +170,7 @@ jobs:
           CI_CONFIG_PATH: ci-config
         run: |
           if [[ "${TEST_TYPE:-}" == "quick" ]]; then
-               PROJECTS_TO_TEST='rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,hipcub,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma,rocgdb-gpu'
+               PROJECTS_TO_TEST='rocroller,hipblas,hipblaslt,hipsolver,rocsolver,hipcub,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma,rocgdb-gpu'
                export PROJECTS_TO_TEST
                echo "PROJECTS_TO_TEST=$PROJECTS_TO_TEST" >> "$GITHUB_ENV"
           fi            
