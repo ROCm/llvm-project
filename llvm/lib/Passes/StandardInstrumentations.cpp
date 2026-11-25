@@ -30,6 +30,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/ModuleSummaryIndex.h"
 #include "llvm/IR/PassInstrumentation.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/PrintPasses.h"
@@ -119,6 +120,11 @@ const Module *unwrapModule(IRUnitRef IR, bool Force = false) {
     return MF->getFunction().getParent();
   }
 
+  if (isa<ModuleSummaryIndex>(IR)) {
+    assert(!Force && "A summary index has no module");
+    return nullptr;
+  }
+
   llvm_unreachable("Unknown IR unit");
 }
 
@@ -176,6 +182,9 @@ std::string getIRName(IRUnitRef IR, ExtendedIRContext *Context) {
   if (const auto *MF = dyn_cast<MachineFunction>(IR))
     return MF->getName().str();
 
+  if (isa<ModuleSummaryIndex>(IR))
+    return "[summary index]";
+
   if (Context) {
     // Go through the traits and check if any of them apply
     for (const auto &extendedIRTraits : Context->traits) {
@@ -216,6 +225,10 @@ bool shouldPrintIR(IRUnitRef IR) {
 
   if (const auto *MF = dyn_cast<MachineFunction>(IR))
     return shouldGenerateData(*MF);
+
+  // A filter selects functions in IR, so it does not select a summary index.
+  if (isa<ModuleSummaryIndex>(IR))
+    return shouldPrintAllFunctions();
   llvm_unreachable("Unknown wrapped IR type");
 }
 
@@ -224,6 +237,13 @@ bool shouldPrintIR(IRUnitRef IR) {
 void unwrapAndPrint(raw_ostream &OS, IRUnitRef IR) {
   if (!shouldPrintIR(IR))
     return;
+
+  // A summary index has no module, so print it also with
+  // -print-module-scope.
+  if (const auto *Index = dyn_cast<ModuleSummaryIndex>(IR)) {
+    Index->print(OS);
+    return;
+  }
 
   if (forcePrintModuleIR()) {
     auto *M = unwrapModule(IR);
@@ -301,6 +321,9 @@ bool isInteresting(IRUnitRef IR, StringRef PassID, StringRef PassName) {
     return false;
   if (const auto *F = dyn_cast<Function>(IR))
     return isInterestingFunction(*F);
+  // The change reporters do not support a summary index.
+  if (isa<ModuleSummaryIndex>(IR))
+    return false;
   return true;
 }
 
@@ -313,8 +336,9 @@ template <typename T> ChangeReporter<T>::~ChangeReporter() {
 template <typename T>
 void ChangeReporter<T>::saveIRBeforePass(IRUnitRef IR, StringRef PassID,
                                          StringRef PassName) {
-  // Is this the initial IR?
-  if (InitialIR) {
+  // Is this the initial IR? A summary index is not, as the change reporters do
+  // not support it.
+  if (InitialIR && !isa<ModuleSummaryIndex>(IR)) {
     InitialIR = false;
     if (VerboseMode)
       handleInitialIR(IR);
@@ -700,6 +724,12 @@ PrintIRInstrumentation::~PrintIRInstrumentation() {
 }
 
 static void writeIRFileDisplayName(raw_ostream &ResultStream, IRUnitRef IR) {
+  // A summary index has no module name to hash.
+  if (isa<ModuleSummaryIndex>(IR)) {
+    ResultStream << "summary-index";
+    return;
+  }
+
   const Module *M = unwrapModule(IR, /*Force=*/true);
   assert(M && "should have unwrapped module");
   uint64_t NameHash = xxh3_64bits(M->getName());
@@ -1022,13 +1052,18 @@ bool OptPassGateInstrumentation::shouldRun(StringRef PassName, IRUnitRef IR) {
     // FIXME: print IR if limit is higher than number of opt-bisect
     // invocations
     this->HasWrittenIR = true;
-    const Module *M = unwrapModule(IR, /*Force=*/true);
-    assert((M && &M->getContext() == &Context) && "Missing/Mismatching Module");
+    const auto *Index = dyn_cast<ModuleSummaryIndex>(IR);
+    const Module *M = Index ? nullptr : unwrapModule(IR, /*Force=*/true);
+    assert((Index || (M && &M->getContext() == &Context)) &&
+           "Missing/Mismatching Module");
     std::error_code EC;
     raw_fd_ostream OS(Opts.opt_bisect_print_ir_path, EC);
     if (EC)
       report_fatal_error(errorCodeToError(EC));
-    M->print(OS, nullptr);
+    if (Index)
+      Index->print(OS);
+    else
+      M->print(OS, nullptr);
   }
   return ShouldRun;
 }
@@ -1336,6 +1371,10 @@ void PreservedCFGCheckerInstrumentation::registerCallbacks(
 #endif
     (void)this;
 
+    // A summary index has no functions to check.
+    if (isa<ModuleSummaryIndex>(IR))
+      return;
+
     auto &FAM = MAM.getResult<FunctionAnalysisManagerModuleProxy>(
                        *const_cast<Module *>(unwrapModule(IR, /*Force=*/true)))
                     .getManager();
@@ -1374,6 +1413,9 @@ void PreservedCFGCheckerInstrumentation::registerCallbacks(
            "Before and After callbacks must correspond");
 #endif
     (void)this;
+
+    if (isa<ModuleSummaryIndex>(IR))
+      return;
 
     // We have to get the FAM via the MAM, rather than directly use a passed in
     // FAM because if MAM has not cached the FAM, it won't invalidate function

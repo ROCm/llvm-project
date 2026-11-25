@@ -1128,6 +1128,12 @@ bool llvm::needsParamAccessSummary(const Module &M) {
   return false;
 }
 
+PreservedAnalyses ThinLinkParamAccessPass::run(ModuleSummaryIndex &Index,
+                                               SummaryAnalysisManager &) {
+  generateParamAccessSummary(LibraryOptions, Index);
+  return PreservedAnalyses::none();
+}
+
 void llvm::generateParamAccessSummary(
     const cl::LibraryOptionsContext *LibraryOptions,
     ModuleSummaryIndex &Index) {

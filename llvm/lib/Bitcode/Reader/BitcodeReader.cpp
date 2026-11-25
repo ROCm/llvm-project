@@ -995,6 +995,11 @@ class ModuleSummaryIndexBitcodeReader : public BitcodeReaderBase {
   DenseMap<unsigned, std::pair<ValueInfo, GlobalValue::GUID>>
       ValueIdToValueInfoMap;
 
+  /// The summaries that a per-module summary block adds, by value ID. The
+  /// entries of the summary extensions refer to them. The module path cannot
+  /// find them: the summaries of all regular LTO modules have the same path.
+  DenseMap<unsigned, GlobalValueSummary *> PerModuleSummaries;
+
   /// Map populated during module path string table parsing, from the
   /// module ID to a string reference owned by the index's module
   /// path string table, used to correlate with combined index
@@ -1052,6 +1057,7 @@ private:
   makeCallList(ArrayRef<uint64_t> Record, bool IsOldProfileFormat,
                bool HasProfile, bool HasRelBF);
   Error parseEntireSummary(unsigned ID);
+  Error parseSummaryExtension();
   Error parseModuleStringTable();
   void parseTypeIdCompatibleVtableSummaryRecord(ArrayRef<uint64_t> Record);
   void parseTypeIdCompatibleVtableInfo(ArrayRef<uint64_t> Record, size_t &Slot,
@@ -8011,11 +8017,6 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
   GlobalValueSummary *LastSeenSummary = nullptr;
   GlobalValue::GUID LastSeenGUID = 0;
 
-  // Track the function associated with an optional AMDGPU summary record.
-  // Unlike LastSeenGUID, this is never set for aliases or global variables.
-  std::optional<GlobalValue::GUID> CurrentFunctionGUID;
-  bool CurrentFunctionIsPrevailing = false;
-
   // Track the most recent function summary if it was prevailing, and while we
   // are not done processing any subsequent memprof records. Starting with
   // summary version 13 (tracked by MemProfAfterFunctionSummary), MemProf
@@ -8046,13 +8047,21 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
   std::vector<uint64_t> PendingContextIds;
 
   while (true) {
-    Expected<BitstreamEntry> MaybeEntry = Stream.advanceSkippingSubblocks();
+    Expected<BitstreamEntry> MaybeEntry = Stream.advance();
     if (!MaybeEntry)
       return MaybeEntry.takeError();
     BitstreamEntry Entry = MaybeEntry.get();
 
     switch (Entry.Kind) {
-    case BitstreamEntry::SubBlock: // Handled for us already.
+    case BitstreamEntry::SubBlock:
+      // Skip the sub-blocks that this reader does not know.
+      if (Entry.ID == bitc::SUMMARY_EXTENSION_BLOCK_ID) {
+        if (Error Err = parseSummaryExtension())
+          return Err;
+      } else if (Error Err = Stream.SkipBlock()) {
+        return Err;
+      }
+      continue;
     case BitstreamEntry::Error:
       return error("Malformed block");
     case BitstreamEntry::EndBlock:
@@ -8074,12 +8083,6 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
     if (!MaybeBitCode)
       return MaybeBitCode.takeError();
     unsigned BitCode = MaybeBitCode.get();
-
-    // An AMDGPU entry must immediately follow its function summary.
-    if (BitCode != bitc::FS_AMDGPU_ENTRY) {
-      CurrentFunctionGUID = std::nullopt;
-      CurrentFunctionIsPrevailing = false;
-    }
 
     switch (BitCode) {
     default: // Default behavior: ignore.
@@ -8185,9 +8188,6 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       SetPendingCallTypeIds(*FS);
       FS->setModulePath(getThisModule()->first());
       FS->setOriginalName(GUID);
-      LastSeenGUID = VI.getGUID();
-      CurrentFunctionGUID = LastSeenGUID;
-      CurrentFunctionIsPrevailing = IsPrevailingSym;
       // Set CurrentPrevailingFS only if prevailing, so subsequent MemProf
       // records are attached (new order) or skipped.
       if (MemProfAfterFunctionSummary) {
@@ -8196,6 +8196,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
         else
           CurrentPrevailingFS = nullptr;
       }
+      PerModuleSummaries[ValueID] = FS.get();
       TheIndex.addGlobalValueSummary(VI, std::move(FS));
       break;
     }
@@ -8223,7 +8224,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
 
       auto GUID = getValueInfoFromValueId(ValueID);
       AS->setOriginalName(std::get<1>(GUID));
-      LastSeenGUID = std::get<0>(GUID).getGUID();
+      PerModuleSummaries[ValueID] = AS.get();
       TheIndex.addGlobalValueSummary(std::get<0>(GUID), std::move(AS));
       break;
     }
@@ -8248,6 +8249,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       FS->setModulePath(getThisModule()->first());
       auto GUID = getValueInfoFromValueId(ValueID);
       FS->setOriginalName(std::get<1>(GUID));
+      PerModuleSummaries[ValueID] = FS.get();
       TheIndex.addGlobalValueSummary(std::get<0>(GUID), std::move(FS));
       break;
     }
@@ -8276,6 +8278,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       VS->setVTableFuncs(VTableFuncs);
       auto GUID = getValueInfoFromValueId(ValueID);
       VS->setOriginalName(std::get<1>(GUID));
+      PerModuleSummaries[ValueID] = VS.get();
       TheIndex.addGlobalValueSummary(std::get<0>(GUID), std::move(VS));
       break;
     }
@@ -8343,8 +8346,6 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       if (MemProfAfterFunctionSummary)
         CurrentPrevailingFS = FS.get();
       LastSeenGUID = VI.getGUID();
-      CurrentFunctionGUID = LastSeenGUID;
-      CurrentFunctionIsPrevailing = true;
       FS->setModulePath(ModuleIdMap[ModuleId]);
       TheIndex.addGlobalValueSummary(VI, std::move(FS));
       break;
@@ -8400,54 +8401,6 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       TheIndex.addGlobalValueSummary(VI, std::move(FS));
       break;
     }
-    case bitc::FS_AMDGPU_ENTRY: {
-      if (Record.size() < 9)
-        return error("invalid AMDGPU summary entry");
-      if (!CurrentFunctionGUID)
-        return error("amdgpu summary entry does not follow a function summary");
-
-      if (Record[0] > CallingConv::MaxID ||
-          llvm::any_of(ArrayRef(Record).slice(2, 7),
-                       [](uint64_t Value) { return !isUInt<32>(Value); }))
-        return error("invalid value in AMDGPU summary entry");
-
-      uint64_t Flags = Record[1];
-      if ((Flags & bitc::AFS_HAS_WAVES_PER_EU_MAX) &&
-          !(Flags & bitc::AFS_HAS_WAVES_PER_EU))
-        return error("invalid flags in AMDGPU summary entry");
-
-      AMDGPUFunctionSummary AFS;
-      AFS.CC = static_cast<CallingConv::ID>(Record[0]);
-      if (Flags & bitc::AFS_HAS_FLAT_WORK_GROUP_SIZE)
-        AFS.FlatWorkGroupSize = std::make_pair(
-            static_cast<uint32_t>(Record[2]), static_cast<uint32_t>(Record[3]));
-      if (Flags & bitc::AFS_HAS_WAVES_PER_EU) {
-        AMDGPUFunctionSummary::WavesPerEUInfo WavesPerEU{
-            static_cast<uint32_t>(Record[4]), std::nullopt};
-        if (Flags & bitc::AFS_HAS_WAVES_PER_EU_MAX)
-          WavesPerEU.Max = static_cast<uint32_t>(Record[5]);
-        AFS.WavesPerEU = WavesPerEU;
-      }
-      if (Flags & bitc::AFS_HAS_MAX_NUM_WORKGROUPS)
-        AFS.MaxNumWorkgroups = std::array<uint32_t, 3>{
-            static_cast<uint32_t>(Record[6]), static_cast<uint32_t>(Record[7]),
-            static_cast<uint32_t>(Record[8])};
-
-      if (!CurrentFunctionIsPrevailing) {
-        CurrentFunctionGUID = std::nullopt;
-        CurrentFunctionIsPrevailing = false;
-        break;
-      }
-
-      AMDGPUSummaryMap &Summaries = TheIndex.getAMDGPUSummaries();
-      auto [It, Inserted] = Summaries.try_emplace(*CurrentFunctionGUID, AFS);
-      if (!Inserted && !(It->second == AFS))
-        return error("conflicting AMDGPU summary entries for GUID " +
-                     Twine(*CurrentFunctionGUID));
-      CurrentFunctionGUID = std::nullopt;
-      CurrentFunctionIsPrevailing = false;
-      break;
-    }
     // FS_COMBINED_ORIGINAL_NAME: [original_name]
     case bitc::FS_COMBINED_ORIGINAL_NAME: {
       uint64_t OriginalName = Record[0];
@@ -8466,13 +8419,14 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       break;
 
     case bitc::FS_CALL_TYPE_IDS:
-      if (Record.empty())
+      if (Record.size() < 2 || (Record[1] & ~uint64_t(1)))
         return error("Invalid call type ID record");
       assert(!PendingCallTypeIds);
       PendingCallTypeIds.emplace();
       PendingCallTypeIds->CallTypeId = Record[0];
+      PendingCallTypeIds->HasCallWithoutTypeId = Record[1] & 1;
       llvm::append_range(PendingCallTypeIds->IndirectCallTypeIds,
-                         drop_begin(Record));
+                         drop_begin(Record, 2));
       break;
 
     case bitc::FS_TYPE_TEST_ASSUME_VCALLS:
@@ -8749,6 +8703,104 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
     }
   }
   llvm_unreachable("Exit infinite loop");
+}
+
+// Parse a summary extension block into the Index.
+Error ModuleSummaryIndexBitcodeReader::parseSummaryExtension() {
+  if (Error Err = Stream.EnterSubBlock(bitc::SUMMARY_EXTENSION_BLOCK_ID))
+    return Err;
+
+  SmallVector<uint64_t, 64> Record;
+  SummaryExtension *Ext = nullptr;
+  while (true) {
+    Expected<BitstreamEntry> MaybeEntry = Stream.advanceSkippingSubblocks();
+    if (!MaybeEntry)
+      return MaybeEntry.takeError();
+    BitstreamEntry Entry = MaybeEntry.get();
+
+    switch (Entry.Kind) {
+    case BitstreamEntry::SubBlock: // Handled for us already.
+    case BitstreamEntry::Error:
+      return error("Malformed block");
+    case BitstreamEntry::EndBlock:
+      return Error::success();
+    case BitstreamEntry::Record:
+      // The interesting case.
+      break;
+    }
+
+    Record.clear();
+    Expected<unsigned> MaybeBitCode = Stream.readRecord(Entry.ID, Record);
+    if (!MaybeBitCode)
+      return MaybeBitCode.takeError();
+    unsigned BitCode = MaybeBitCode.get();
+    switch (BitCode) {
+    default: // Default behavior: ignore.
+      break;
+    case bitc::SUMMARY_EXT_HEADER: {
+      // [strtab_offset, strtab_size, version, flags]
+      auto [Name, Rest] = readNameFromStrtab(Record);
+      if (Name.empty() || Rest.size() < 2)
+        return error("Invalid summary extension header");
+      // The modules of a link can hold the same extension, also in different
+      // versions.
+      Ext = &TheIndex.getOrInsertExtension(Name, /*Version=*/Rest[0],
+                                           /*Required=*/Rest[1] & 1);
+      break;
+    }
+    case bitc::SUMMARY_EXT_ENTRY:
+    case bitc::SUMMARY_EXT_COMBINED_ENTRY: {
+      // ENTRY: [valueid, n, n x int, m x (strtab_offset, strtab_size)]
+      // COMBINED_ENTRY: [valueid, modid, n, n x int,
+      //                  m x (strtab_offset, strtab_size)]
+      if (!Ext)
+        return error("Invalid summary extension: entry before the header");
+      bool IsCombined = BitCode == bitc::SUMMARY_EXT_COMBINED_ENTRY;
+      ArrayRef<uint64_t> Ops = Record;
+      size_t NumIds = IsCombined ? 2 : 1;
+      if (Ops.size() <= NumIds || Ops[NumIds] > Ops.size() - NumIds - 1 ||
+          (Ops.size() - NumIds - 1 - Ops[NumIds]) % 2 != 0)
+        return error("Invalid summary extension entry");
+
+      // Find the summary that the entry belongs to: the summary of the value
+      // in this block, or in the module of a combined entry.
+      if (Ops[0] > std::numeric_limits<unsigned>::max())
+        return error("Invalid value id in summary extension entry");
+      GlobalValueSummary *S = nullptr;
+      if (IsCombined) {
+        auto It = ValueIdToValueInfoMap.find(Ops[0]);
+        if (It == ValueIdToValueInfoMap.end() || !It->second.first)
+          return error("Invalid value id in summary extension entry");
+        auto ModIt = ModuleIdMap.find(Ops[1]);
+        if (ModIt == ModuleIdMap.end())
+          return error("Invalid module id in summary extension entry");
+        S = TheIndex.findSummaryInModule(It->second.first, ModIt->second);
+      } else {
+        S = PerModuleSummaries.lookup(Ops[0]);
+      }
+      if (!S)
+        return error("Summary extension entry for a value without a summary");
+      if (Ext->getEntry(S))
+        return error("Duplicate summary extension entry");
+
+      SummaryExtension::Entry E;
+      uint64_t NumInts = Ops[NumIds];
+      Ops = Ops.drop_front(NumIds + 1);
+      E.Ints.assign(Ops.begin(), Ops.begin() + NumInts);
+      Ops = Ops.drop_front(NumInts);
+      while (!Ops.empty()) {
+        if (!UseStrtab || Ops.size() < 2 || Ops[0] > Strtab.size() ||
+            Ops[1] > Strtab.size() - Ops[0])
+          return error("Invalid string in summary extension entry");
+        auto [Str, Rest] = readNameFromStrtab(Ops);
+        E.Strings.push_back(Str.str());
+        Ops = Rest;
+      }
+      Ext->setEntry(S, std::move(E));
+      break;
+    }
+    }
+  }
 }
 
 // Parse the  module string table block into the Index.

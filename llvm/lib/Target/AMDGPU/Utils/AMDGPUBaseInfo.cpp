@@ -3796,23 +3796,42 @@ std::string ClusterDimsAttr::to_string() const {
   llvm_unreachable("Unknown ClusterDimsAttr kind");
 }
 
-ClusterDimsAttr ClusterDimsAttr::get(const Function &F) {
-  std::optional<SmallVector<unsigned>> Attr =
-      getIntegerVecAttribute(F, "amdgpu-cluster-dims", /*Size=*/3);
+ClusterDimsAttr ClusterDimsAttr::fromDims(ArrayRef<unsigned> Dims) {
+  assert(Dims.size() == 3 && "expect three dims");
   ClusterDimsAttr::Kind AttrKind = Kind::FixedDims;
-
-  if (!Attr.has_value())
-    AttrKind = Kind::Unknown;
-  else if (all_of(*Attr, equal_to(EncoNoCluster)))
+  if (all_of(Dims, equal_to(EncoNoCluster)))
     AttrKind = Kind::NoCluster;
-  else if (all_of(*Attr, equal_to(EncoVariableDims)))
+  else if (all_of(Dims, equal_to(EncoVariableDims)))
     AttrKind = Kind::VariableDims;
 
   ClusterDimsAttr A(AttrKind);
   if (AttrKind == Kind::FixedDims)
-    A.Dims = {(*Attr)[0], (*Attr)[1], (*Attr)[2]};
-
+    A.Dims = {Dims[0], Dims[1], Dims[2]};
   return A;
+}
+
+ClusterDimsAttr ClusterDimsAttr::get(const Function &F) {
+  std::optional<SmallVector<unsigned>> Attr =
+      getIntegerVecAttribute(F, "amdgpu-cluster-dims", /*Size=*/3);
+  if (!Attr.has_value())
+    return ClusterDimsAttr();
+  return fromDims(*Attr);
+}
+
+ClusterDimsAttr ClusterDimsAttr::get(StringRef Value) {
+  // The same syntax as getIntegerVecAttribute().
+  SmallVector<unsigned, 3> Dims;
+  while (!Value.empty() && Dims.size() < 3) {
+    auto [Dim, Rest] = Value.split(',');
+    unsigned D;
+    if (Dim.trim().getAsInteger(0, D))
+      return ClusterDimsAttr();
+    Dims.push_back(D);
+    Value = Rest;
+  }
+  if (!Value.empty() || Dims.size() < 3)
+    return ClusterDimsAttr();
+  return fromDims(Dims);
 }
 
 std::optional<APFloat> evaluateRcp(const APFloat &Val) {

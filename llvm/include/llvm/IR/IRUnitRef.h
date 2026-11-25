@@ -26,6 +26,7 @@ class Function;
 class Loop;
 class MachineFunction;
 class Module;
+class ModuleSummaryIndex;
 
 /// The IR units a pass can run on.
 enum class IRUnitKind {
@@ -34,6 +35,7 @@ enum class IRUnitKind {
   Loop,
   MachineFunction,
   LazyCallGraphSCC,
+  ModuleSummaryIndex,
 };
 
 /// Map an IR unit type to its IRUnitKind.
@@ -50,6 +52,9 @@ template <> struct IRUnitKindTraits<Loop> {
 };
 template <> struct IRUnitKindTraits<MachineFunction> {
   static constexpr IRUnitKind Kind = IRUnitKind::MachineFunction;
+};
+template <> struct IRUnitKindTraits<ModuleSummaryIndex> {
+  static constexpr IRUnitKind Kind = IRUnitKind::ModuleSummaryIndex;
 };
 
 // IRUnitKindTraits<LazyCallGraph::SCC> needs to be defined in

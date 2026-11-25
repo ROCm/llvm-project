@@ -163,4 +163,4 @@ entry:
 ; DIS-DAG: = gv: (name: "bar", summaries: (variable: (module: ^0, flags: (linkage: external, visibility: default, notEligibleToImport: 0, live: 0, dsoLocal: 0, canAutoHide: 0, importType: definition, noRenameOnPromotion: 0), varFlags: (readonly: 1, writeonly: 1, constant: 0),  refs: (^{{.*}})))) ; guid = 16434608426314478903
 ; Don't try to match the exact GUID. Since it is private, the file path
 ; will get hashed, and that will be test dependent.
-; DIS-DAG: = gv: (name: "Y", summaries: (function: (module: ^0, flags: (linkage: private, visibility: default, notEligibleToImport: 0, live: 0, dsoLocal: 1, canAutoHide: 0, importType: definition, noRenameOnPromotion: 0), insts: 14, calls: ((callee: ^{{.*}}, tail: 1))))) ; guid =
+; DIS-DAG: = gv: (name: "Y", summaries: (function: (module: ^0, flags: (linkage: private, visibility: default, notEligibleToImport: 0, live: 0, dsoLocal: 1, canAutoHide: 0, importType: definition, noRenameOnPromotion: 0), insts: 14, calls: ((callee: ^{{.*}}, tail: 1)), callTypeId: 0))) ; guid =

@@ -1,22 +1,37 @@
-; Verify that the AMDGPU summary table keeps the prevailing definition's entry.
+; Test that the occupancy pass uses the facts of the copy of a function that
+; prevails. Each copy of @f has its own amdgpu-waves-per-eu: "2" in a.bc, and
+; "7" in b.bc, which prevails. The kernel has no waves-per-EU limit, so both
+; copies of @f get the limit of the copy that prevails. Each index file keeps
+; the facts of its own copy.
 ; RUN: split-file %s %t
 ; RUN: opt -module-summary < %t/a.ll -o %t/a.bc
 ; RUN: opt -module-summary < %t/b.ll -o %t/b.bc
 ; RUN: llvm-lto2 run %t/a.bc %t/b.bc -o %t/o \
-; RUN:   -thinlto-distributed-indexes -r=%t/a.bc,f, -r=%t/b.bc,f,px
-; RUN: llvm-bcanalyzer -dump %t/a.bc.thinlto.bc | FileCheck %s
-; RUN: llvm-bcanalyzer -dump %t/b.bc.thinlto.bc | FileCheck %s
+; RUN:   -thinlto-distributed-indexes -thinlink-pipeline=amdgpu-thinlink-occupancy \
+; RUN:   -r=%t/a.bc,f, -r=%t/a.bc,kernel,px \
+; RUN:   -r=%t/b.bc,f,px
+; RUN: llvm-dis %t/a.bc.thinlto.bc -o - | FileCheck %s --check-prefix=A
+; RUN: llvm-dis %t/b.bc.thinlto.bc -o - | FileCheck %s --check-prefix=B
 
-; CHECK:     <GLOBALVAL_SUMMARY_BLOCK
-; CHECK-NOT:   <AMDGPU_ENTRY {{.*}} op4=2
-; CHECK:       <AMDGPU_ENTRY op0=0 op1=2 op2=0 op3=0 op4=7 op5=0 op6=0 op7=0 op8=0/>
-; CHECK-NOT:   <AMDGPU_ENTRY
-; CHECK:     </GLOBALVAL_SUMMARY_BLOCK>
+; A kernel has facts also without launch attributes.
+; A: ^[[F:[0-9]+]] = gv: (guid: {{[0-9]+}}, summaries: (function: (module: ^0, flags: (linkage: available_externally,
+; A: ^[[KERNEL:[0-9]+]] = gv: (guid: {{[0-9]+}}, {{.*}}calls: ((callee: ^[[F]])), callTypeId: 0)))
+; A: = extension: (name: "amdgpu-launch-attrs", version: 1, required: 0, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ("amdgpu-waves-per-eu", "2")), (gv: ^[[KERNEL]], module: ^0, ints: (91))))
+; A: = extension: (name: "fn-attrs", version: 1, required: 1, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ({{.*}}, "amdgpu-waves-per-eu", "7"))))
+
+; B: ^[[F:[0-9]+]] = gv: (guid: {{[0-9]+}}, summaries: (function: (module: ^0, flags: (linkage: weak_odr,
+; B: = extension: (name: "amdgpu-launch-attrs", version: 1, required: 0, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ("amdgpu-waves-per-eu", "7"))))
+; B: = extension: (name: "fn-attrs", version: 1, required: 1, entries: ((gv: ^[[F]], module: ^0, ints: (0), strings: ({{.*}}, "amdgpu-waves-per-eu", "7"))))
 
 ;--- a.ll
 target triple = "amdgcn-amd-amdhsa"
 
 define weak_odr void @f() #0 {
+  ret void
+}
+
+define amdgpu_kernel void @kernel() {
+  call void @f()
   ret void
 }
 

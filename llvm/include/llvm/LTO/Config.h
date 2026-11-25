@@ -127,6 +127,29 @@ struct Config {
   // conjunction OptPipeline.
   std::string AAPipeline;
 
+  /// If this field is set, the ThinLTO thin link runs this pipeline of summary
+  /// passes, instead of the default pipeline. The passes run on the combined
+  /// index after the link resolved the prevailing copies. The pass "default"
+  /// adds the passes of the default pipeline. After each pipeline, the link
+  /// runs ThinLinkParamAccessPass: stack safety in the backends needs its
+  /// results. Only the backends register pass plugins, so a plugin cannot add
+  /// summary passes to the thin link.
+  std::string ThinLinkPipeline;
+
+  /// If this field is set, the ThinLTO thin link assumes a closed world (see
+  /// ThinLinkInfoAnalysis). A toolchain can set it if each function of the
+  /// program is in a module with a summary, and the code outside the modules
+  /// never calls a function through a pointer: for example the device link of
+  /// a GPU program without native objects. The link ignores this field if a
+  /// module without a summary is in the link, or if LinkHasNativeCode is set.
+  /// The option -thinlink-closed-world has the same effect as this field.
+  bool ThinLinkClosedWorld = false;
+
+  /// If this field is set, the link has code that no LTO module holds, for
+  /// example a native object file or a shared library. The linker sets it.
+  /// The thin link then does not assume a closed world.
+  bool LinkHasNativeCode = false;
+
   /// Setting this field will replace target triples in input files with this
   /// triple.
   std::string OverrideTriple;
@@ -264,12 +287,6 @@ struct Config {
   /// PostOptModuleHook, but for parallel code generation it is called after
   /// splitting the module.
   ModuleHookFn PreCodeGenModuleHook;
-
-  /// This hook is called in the ThinLTO backend after finalization and import,
-  /// but before optimization. Unlike ModuleHookFn, it takes a mutable Module
-  /// reference, allowing targets to apply cross-TU propagated attributes.
-  using MutableModuleHookFn = std::function<void(unsigned Task, Module &)>;
-  MutableModuleHookFn ApplyThinLTOAttributes;
 
   /// A combined index hook is called after all per-module indexes have been
   /// combined (ThinLTO-specific). It can be used to implement -save-temps for

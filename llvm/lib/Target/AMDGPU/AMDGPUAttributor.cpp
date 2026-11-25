@@ -14,8 +14,10 @@
 #include "AMDGPUTargetMachine.h"
 #include "GCNSubtarget.h"
 #include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO/Attributor.h"
 #include <cstdint>
@@ -141,6 +143,24 @@ static bool hasSanitizerAttributes(const Function &F) {
          F.hasFnAttribute(Attribute::SanitizeMemTag);
 }
 
+/// Returns the implicit kernel arguments at a fixed offset from
+/// implicitarg_ptr, with their ranges, for the code object version \p COV.
+static SmallVector<std::pair<ImplicitArgumentMask, AA::RangeTy>, 6>
+getImplicitArgRanges(unsigned COV) {
+  SmallVector<std::pair<ImplicitArgumentMask, AA::RangeTy>, 6> Ranges = {
+      {MULTIGRID_SYNC_ARG,
+       {AMDGPU::getMultigridSyncArgImplicitArgPosition(COV), 8}},
+      {HOSTCALL_PTR, {AMDGPU::getHostcallImplicitArgPosition(COV), 8}},
+      {DEFAULT_QUEUE, {AMDGPU::getDefaultQueueImplicitArgPosition(COV), 8}},
+      {COMPLETION_ACTION,
+       {AMDGPU::getCompletionActionImplicitArgPosition(COV), 8}}};
+  if (COV >= 5) {
+    Ranges.push_back({HEAP_PTR, {AMDGPU::ImplicitArg::HEAP_PTR_OFFSET, 8}});
+    Ranges.push_back({QUEUE_PTR, {AMDGPU::ImplicitArg::QUEUE_PTR_OFFSET, 8}});
+  }
+  return Ranges;
+}
+
 namespace {
 class AMDGPUInformationCache : public InformationCache {
 public:
@@ -160,20 +180,7 @@ public:
       return A.second.getKindAsString() < B.second.getKindAsString();
     });
 
-    unsigned COV = CodeObjectVersion;
-    ImplicitArgRanges = {
-        {MULTIGRID_SYNC_ARG,
-         {AMDGPU::getMultigridSyncArgImplicitArgPosition(COV), 8}},
-        {HOSTCALL_PTR, {AMDGPU::getHostcallImplicitArgPosition(COV), 8}},
-        {DEFAULT_QUEUE, {AMDGPU::getDefaultQueueImplicitArgPosition(COV), 8}},
-        {COMPLETION_ACTION,
-         {AMDGPU::getCompletionActionImplicitArgPosition(COV), 8}}};
-    if (COV >= 5) {
-      ImplicitArgRanges.push_back(
-          {HEAP_PTR, {AMDGPU::ImplicitArg::HEAP_PTR_OFFSET, 8}});
-      ImplicitArgRanges.push_back(
-          {QUEUE_PTR, {AMDGPU::ImplicitArg::QUEUE_PTR_OFFSET, 8}});
-    }
+    ImplicitArgRanges = ::getImplicitArgRanges(CodeObjectVersion);
 
     int64_t Begin = INT64_MAX, End = 0;
     for (auto [Mask, Range] : ImplicitArgRanges) {
@@ -278,13 +285,17 @@ private:
     return Status;
   }
 
-  /// Get the constant access bitmap for \p C.
-  uint8_t getConstantAccess(const Constant *C) {
+public:
+  /// Get the constant access bitmap for \p C. \p Cache holds the bitmaps of
+  /// the constants that the walks visit.
+  static uint8_t
+  getConstantAccess(const Constant *C,
+                    DenseMap<const Constant *, std::optional<uint8_t>> &Cache) {
     if (isa<ConstantData>(C))
       return NONE;
 
-    const auto &It = ConstantStatus.find(C);
-    if (It != ConstantStatus.end())
+    const auto &It = Cache.find(C);
+    if (It != Cache.end())
       return It->second.value();
 
     SmallPtrSet<const Constant *, 8> Visited;
@@ -296,7 +307,7 @@ private:
     while (Result != CS_WORST && !Worklist.empty()) {
       const Constant *CurC = Worklist.pop_back_val();
 
-      std::optional<uint8_t> &CurCResultOrNone = ConstantStatus[CurC];
+      std::optional<uint8_t> &CurCResultOrNone = Cache[CurC];
       if (CurCResultOrNone) {
         Result |= CurCResultOrNone.value();
         continue;
@@ -320,11 +331,10 @@ private:
       Result |= CurCResult;
     }
 
-    ConstantStatus[C] = Result;
+    Cache[C] = Result;
     return Result;
   }
 
-public:
   /// Returns true if \p Fn needs the queue pointer because of \p C.
   bool needsQueuePtr(const Constant *C, Function &Fn) {
     bool IsNonEntryFunc = !AMDGPU::isEntryFunctionCC(Fn.getCallingConv());
@@ -334,7 +344,7 @@ public:
     if (!IsNonEntryFunc && HasAperture)
       return false;
 
-    uint8_t Access = getConstantAccess(C);
+    uint8_t Access = getConstantAccess(C, ConstantStatus);
 
     // We need to trap on DS globals in non-entry functions.
     if (IsNonEntryFunc && (Access & DS_GLOBAL))
@@ -344,7 +354,7 @@ public:
   }
 
   bool checkConstForAddrSpaceCastFromPrivate(const Constant *C) {
-    uint8_t Access = getConstantAccess(C);
+    uint8_t Access = getConstantAccess(C, ConstantStatus);
     return Access & ADDR_SPACE_CAST_PRIVATE_TO_FLAT;
   }
 
@@ -1830,4 +1840,133 @@ PreservedAnalyses llvm::AMDGPUAttributorCGSCCPass::run(LazyCallGraph::SCC &C,
                  TM, Options, ThinOrFullLTOPhase::None)
              ? PreservedAnalyses::none()
              : PreservedAnalyses::all();
+}
+
+/// Returns the implicit arguments in \p Ranges that the code can read through
+/// the pointer that the implicitarg_ptr call \p Call returns. The code reads
+/// at constant offsets from the pointer. Any other use of the pointer can read
+/// all of them.
+static uint32_t getImplicitArgsReadThrough(
+    const CallBase &Call,
+    ArrayRef<std::pair<ImplicitArgumentMask, AA::RangeTy>> Ranges) {
+  uint32_t All = 0;
+  for (auto [Mask, Range] : Ranges)
+    All |= Mask;
+
+  const DataLayout &DL = Call.getDataLayout();
+  uint32_t Read = 0;
+  SmallVector<std::pair<const Value *, int64_t>> Worklist = {{&Call, 0}};
+  while (!Worklist.empty()) {
+    auto [Ptr, Offset] = Worklist.pop_back_val();
+    for (const Use &U : Ptr->uses()) {
+      const auto *User = U.getUser();
+      if (const auto *I = dyn_cast<Instruction>(User); I && I->isDroppable())
+        continue;
+      if (const auto *GEP = dyn_cast<GEPOperator>(User)) {
+        APInt GEPOffset(DL.getIndexTypeSizeInBits(GEP->getType()), 0);
+        if (U.getOperandNo() != GEP->getPointerOperandIndex() ||
+            !GEP->accumulateConstantOffset(DL, GEPOffset))
+          return All;
+        Worklist.push_back({GEP, Offset + GEPOffset.getSExtValue()});
+        continue;
+      }
+      if (isa<AddrSpaceCastOperator>(User)) {
+        Worklist.push_back({User, Offset});
+        continue;
+      }
+      const auto *Load = dyn_cast<LoadInst>(User);
+      if (!Load)
+        return All;
+      TypeSize Size = DL.getTypeStoreSize(Load->getType());
+      if (Size.isScalable())
+        return All;
+      AA::RangeTy LoadRange(Offset, Size.getFixedValue());
+      for (auto [Mask, Range] : Ranges)
+        if (LoadRange.mayOverlap(Range))
+          Read |= Mask;
+    }
+  }
+  return Read;
+}
+
+std::optional<uint32_t> AMDGPU::getLocalImplicitArgUses(const Function &F) {
+  // Like the attributor, do not track the implicit arguments of graphics
+  // shaders.
+  CallingConv::ID CC = F.getCallingConv();
+  if (AMDGPU::isGraphics(CC))
+    return std::nullopt;
+
+  const Module &M = *F.getParent();
+  const AMDGPU::AMDGPUFeatureBitset Features = AMDGPU::getFeatureBitset(
+      AMDGPU::getGPUKindFromSubArch(M.getTargetTriple().getSubArch()));
+  bool HasApertureRegs = Features.test(AMDGPU::FEAT_APERTURE_REGS);
+  bool SupportsGetDoorbellID = Features.test(AMDGPU::FEAT_GET_DOORBELL_ID);
+  unsigned COV = AMDGPU::getAMDHSACodeObjectVersion(M);
+  bool IsNonEntryFunc = !AMDGPU::isEntryFunctionCC(CC);
+  SmallVector<std::pair<ImplicitArgumentMask, AA::RangeTy>, 6> Ranges =
+      getImplicitArgRanges(COV);
+
+  // The checks are the ones of AAAMDAttributesFunction, without the calls to
+  // other functions.
+  uint32_t Uses = 0;
+  if (hasSanitizerAttributes(F))
+    Uses |= IMPLICIT_ARG_PTR | HOSTCALL_PTR | FLAT_SCRATCH_INIT;
+
+  bool NeedsImplicit = false;
+  bool NeedsQueuePtr = false;
+  DenseMap<const Constant *, std::optional<uint8_t>> ConstantAccess;
+  for (const Instruction &I : instructions(F)) {
+    if (const auto *Cast = dyn_cast<AddrSpaceCastInst>(&I)) {
+      unsigned SrcAS = Cast->getSrcAddressSpace();
+      if (!HasApertureRegs && castRequiresQueuePtr(SrcAS))
+        NeedsQueuePtr = true;
+      if (SrcAS == AMDGPUAS::PRIVATE_ADDRESS)
+        Uses |= FLAT_SCRATCH_INIT;
+    }
+
+    for (const Use &U : I.operands()) {
+      const auto *C = dyn_cast<Constant>(U);
+      if (!C)
+        continue;
+      uint8_t Access =
+          AMDGPUInformationCache::getConstantAccess(C, ConstantAccess);
+      // Non-entry functions trap on DS globals.
+      if ((IsNonEntryFunc && (Access & AMDGPUInformationCache::DS_GLOBAL)) ||
+          (!HasApertureRegs &&
+           (Access & AMDGPUInformationCache::ADDR_SPACE_CAST_BOTH_TO_FLAT)))
+        NeedsQueuePtr = true;
+      if (Access & AMDGPUInformationCache::ADDR_SPACE_CAST_PRIVATE_TO_FLAT)
+        Uses |= FLAT_SCRATCH_INIT;
+    }
+
+    // The summary has the calls to other functions.
+    const auto *Call = dyn_cast<CallBase>(&I);
+    const Function *Callee = Call ? Call->getCalledFunction() : nullptr;
+    if (!Callee || !Callee->isIntrinsic())
+      continue;
+
+    Intrinsic::ID IID = Callee->getIntrinsicID();
+    bool NonKernelOnly = false;
+    ImplicitArgumentMask Mask =
+        intrinsicToAttrMask(IID, NonKernelOnly, NeedsImplicit, HasApertureRegs,
+                            SupportsGetDoorbellID, COV);
+    if (Mask == UNKNOWN_INTRINSIC) {
+      // An intrinsic that can call back can reach any function.
+      if (!Callee->hasFnAttribute(Attribute::NoCallback))
+        return std::nullopt;
+      continue;
+    }
+    if (Mask != NOT_IMPLICIT_INPUT && (IsNonEntryFunc || !NonKernelOnly))
+      Uses |= Mask;
+    if (IID == Intrinsic::amdgcn_implicitarg_ptr)
+      Uses |= getImplicitArgsReadThrough(*Call, Ranges);
+  }
+
+  // The implicit arguments hold the queue pointer and the apertures in code
+  // object version 5.
+  if (NeedsImplicit)
+    Uses |= IMPLICIT_ARG_PTR;
+  if (NeedsQueuePtr)
+    Uses |= COV >= 5 ? IMPLICIT_ARG_PTR : QUEUE_PTR;
+  return Uses;
 }

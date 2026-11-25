@@ -1903,10 +1903,17 @@ public:
 
   static ClusterDimsAttr get(const Function &F);
 
+  /// \returns the attribute with the value \p Value of "amdgpu-cluster-dims".
+  /// The attribute is unknown if \p Value is not three integers. Unlike
+  /// get(const Function &), it reports no error.
+  static ClusterDimsAttr get(StringRef Value);
+
 private:
   enum Encoding { EncoNoCluster = 0, EncoVariableDims = 1024 };
 
   ClusterDimsAttr(Kind AttrKind) : AttrKind(AttrKind) {}
+
+  static ClusterDimsAttr fromDims(ArrayRef<unsigned> Dims);
 
   std::array<unsigned, 3> Dims = {0, 0, 0};
 

@@ -34,10 +34,13 @@
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/RuntimeLibcalls.h"
+#include "llvm/IR/SummaryPassManager.h"
 #include "llvm/LTO/LTOBackend.h"
 #include "llvm/Linker/IRMover.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/IRObjectFile.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/StandardInstrumentations.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/Caching.h"
 #include "llvm/Support/CommandLine.h"
@@ -63,7 +66,6 @@
 #include "llvm/Transforms/Utils/FunctionImportUtils.h"
 #include "llvm/Transforms/Utils/SplitModule.h"
 
-#include <limits>
 #include <optional>
 #include <set>
 
@@ -127,6 +129,12 @@ cl::opt<bool> EnableLTOInternalization(
 static cl::opt<bool>
     LTOKeepSymbolCopies("lto-keep-symbol-copies", cl::init(false), cl::Hidden,
                         cl::desc("Keep copies of symbols in LTO indexing"));
+
+static cl::opt<bool> AssumeThinLinkClosedWorld(
+    "thinlink-closed-world", cl::init(false), cl::Hidden,
+    cl::desc("Assume at the ThinLTO thin link that the link has all code that "
+             "can call the functions in the summaries, and all code that "
+             "their indirect calls can reach"));
 
 /// Indicate we are linking with an allocator that supports hot/cold operator
 /// new interfaces.
@@ -306,6 +314,49 @@ std::string llvm::computeLTOCacheKey(
         AddUnsigned(ET.first.isDSOLocal(Index.withDSOLocalPropagation()));
         AddUsedCfiGlobal(ET.first.getGUID());
       }
+
+      // The thin link can change these fields of a summary, also when the
+      // module itself does not change: the function flags (function attribute
+      // propagation), the MemProf clone decisions, and the parameter access
+      // ranges (stack safety).
+      FunctionSummary::FFlags Flags = FS->fflags();
+      AddUnsigned(Flags.ReadNone);
+      AddUnsigned(Flags.ReadOnly);
+      AddUnsigned(Flags.NoRecurse);
+      AddUnsigned(Flags.ReturnDoesNotAlias);
+      AddUnsigned(Flags.NoInline);
+      AddUnsigned(Flags.AlwaysInline);
+      AddUnsigned(Flags.NoUnwind);
+      AddUnsigned(Flags.MayThrow);
+      AddUnsigned(Flags.HasUnknownCall);
+      AddUnsigned(Flags.MustBeUnreachable);
+      AddUint64(FS->callsites().size());
+      for (const CallsiteInfo &CI : FS->callsites()) {
+        AddUint64(CI.Clones.size());
+        for (unsigned Clone : CI.Clones)
+          AddUnsigned(Clone);
+      }
+      AddUint64(FS->allocs().size());
+      for (const AllocInfo &AI : FS->allocs()) {
+        AddUint64(AI.Versions.size());
+        for (uint8_t Version : AI.Versions)
+          AddUint8(Version);
+      }
+      auto AddRange = [&](const ConstantRange &Range) {
+        AddUint64(Range.getLower().getZExtValue());
+        AddUint64(Range.getUpper().getZExtValue());
+      };
+      AddUint64(FS->paramAccesses().size());
+      for (const FunctionSummary::ParamAccess &PA : FS->paramAccesses()) {
+        AddUint64(PA.ParamNo);
+        AddRange(PA.Use);
+        AddUint64(PA.Calls.size());
+        for (const FunctionSummary::ParamAccess::Call &Call : PA.Calls) {
+          AddUint64(Call.ParamNo);
+          AddUint64(Call.Callee.getGUID());
+          AddRange(Call.Offsets);
+        }
+      }
     }
   };
 
@@ -314,6 +365,9 @@ std::string llvm::computeLTOCacheKey(
   SmallVector<std::pair<GlobalValue::GUID, GlobalValueSummary *>>
       SortedDefinedGlobals(DefinedGlobals.begin(), DefinedGlobals.end());
   llvm::sort(SortedDefinedGlobals, llvm::less_first());
+  // The summaries that the backend uses, for the summary extensions.
+  SmallVector<std::pair<GlobalValue::GUID, const GlobalValueSummary *>>
+      UsedSummaries;
   for (auto &GS : SortedDefinedGlobals) {
     // Include the hash for the linkage type to reflect internalization and weak
     // resolution, and collect any used type identifier resolutions.
@@ -322,6 +376,7 @@ std::string llvm::computeLTOCacheKey(
         ArrayRef<uint8_t>((const uint8_t *)&Linkage, sizeof(Linkage)));
     AddUsedCfiGlobal(GS.first);
     AddUsedThings(GS.second);
+    UsedSummaries.emplace_back(GS.first, GS.second);
   }
 
   // Imported functions may introduce new uses of type identifier resolutions,
@@ -329,10 +384,40 @@ std::string llvm::computeLTOCacheKey(
   for (const auto &[FromModule, GUID, Type] : SortedImportList) {
     GlobalValueSummary *S = Index.findSummaryInModule(GUID, FromModule);
     AddUsedThings(S);
+    if (S)
+      UsedSummaries.emplace_back(GUID, S);
     // If this is an alias, we also care about any types/etc. that the aliasee
     // may reference.
-    if (auto *AS = dyn_cast_or_null<AliasSummary>(S))
+    if (auto *AS = dyn_cast_or_null<AliasSummary>(S)) {
       AddUsedThings(AS->getBaseObject());
+      if (AS->hasAliasee())
+        UsedSummaries.emplace_back(AS->getAliaseeGUID(), AS->getBaseObject());
+    }
+  }
+
+  // Include the entries of the summary extensions for the summaries that the
+  // backend uses. A thin-link pass can store its results there. The module
+  // hashes above identify the modules of the summaries.
+  for (const auto &[Key, Ext] : Index.extensions()) {
+    bool HasEntries = false;
+    for (const auto &[GUID, S] : UsedSummaries) {
+      const SummaryExtension::Entry *E = Ext.getEntry(S);
+      if (!E)
+        continue;
+      if (!HasEntries) {
+        AddString(Ext.getName());
+        AddUint64(Ext.getVersion());
+        AddUnsigned(Ext.isRequired());
+        HasEntries = true;
+      }
+      AddUint64(GUID);
+      AddUint64(E->Ints.size());
+      for (uint64_t Int : E->Ints)
+        AddUint64(Int);
+      AddUint64(E->Strings.size());
+      for (const std::string &Str : E->Strings)
+        AddString(Str);
+    }
   }
 
   auto AddTypeIdSummary = [&](StringRef TId, const TypeIdSummary &S) {
@@ -848,6 +933,14 @@ Error LTO::add(std::unique_ptr<InputFile> InputPtr,
   if (Conf.ResolutionFile)
     writeToResolutionFile(*Conf.ResolutionFile, Input, Res);
 
+  // The backends choose the triple of a module in the same way.
+  if (!Conf.OverrideTriple.empty())
+    TargetTriples.emplace(Conf.OverrideTriple);
+  else if (!Input->getTargetTriple().empty())
+    TargetTriples.emplace(Input->getTargetTriple());
+  else
+    TargetTriples.emplace(Conf.DefaultTriple);
+
   if (RegularLTO.CombinedModule->getTargetTriple().empty()) {
     Triple InputTriple(Input->getTargetTriple());
     RegularLTO.CombinedModule->setTargetTriple(InputTriple);
@@ -921,6 +1014,7 @@ LTO::addModule(InputFile &Input, ArrayRef<SymbolResolution> InputRes,
   Res = ModOrErr->second;
 
   if (!LTOInfo->HasSummary) {
+    RegularLTO.HasModuleWithoutSummary = true;
     if (Error Err = linkRegularLTO(std::move(ModOrErr->first),
                                    /*LivenessFromIndex=*/false))
       return Err;
@@ -2106,210 +2200,6 @@ ThinBackend lto::createWriteIndexesThinBackend(
   return ThinBackend(Func, Parallelism);
 }
 
-namespace {
-
-/// Values used by the current AMDGPU ThinLTO propagation policy.
-/// A missing waves-per-EU maximum remains target-dependent.
-struct AMDGPUPropagatedFunctionAttrs {
-  CallingConv::ID CC = CallingConv::C;
-  uint32_t FlatWGSizeMin = 1;
-  uint32_t FlatWGSizeMax = 1024;
-  uint32_t WavesPerEUMin = 1;
-  std::optional<uint32_t> WavesPerEUMax;
-  uint32_t MaxNumWGX = std::numeric_limits<uint32_t>::max();
-  uint32_t MaxNumWGY = std::numeric_limits<uint32_t>::max();
-  uint32_t MaxNumWGZ = std::numeric_limits<uint32_t>::max();
-
-  void mergeFrom(const AMDGPUPropagatedFunctionAttrs &Caller) {
-    FlatWGSizeMin = std::min(FlatWGSizeMin, Caller.FlatWGSizeMin);
-    FlatWGSizeMax = std::max(FlatWGSizeMax, Caller.FlatWGSizeMax);
-    WavesPerEUMin = std::max(WavesPerEUMin, Caller.WavesPerEUMin);
-    if (WavesPerEUMax && Caller.WavesPerEUMax)
-      WavesPerEUMax = std::max(*WavesPerEUMax, *Caller.WavesPerEUMax);
-    else
-      WavesPerEUMax = std::nullopt;
-    MaxNumWGX = std::max(MaxNumWGX, Caller.MaxNumWGX);
-    MaxNumWGY = std::max(MaxNumWGY, Caller.MaxNumWGY);
-    MaxNumWGZ = std::max(MaxNumWGZ, Caller.MaxNumWGZ);
-  }
-
-  bool hasValidWavesPerEU() const {
-    return !WavesPerEUMax || WavesPerEUMin <= *WavesPerEUMax;
-  }
-};
-
-using AMDGPUPropagatedAttrsMap =
-    DenseMap<GlobalValue::GUID, AMDGPUPropagatedFunctionAttrs>;
-
-static AMDGPUPropagatedFunctionAttrs
-getAMDGPUPropagatedAttrs(const AMDGPUFunctionSummary &Summary) {
-  AMDGPUPropagatedFunctionAttrs Attrs;
-  Attrs.CC = Summary.CC;
-
-  if (Summary.FlatWorkGroupSize) {
-    Attrs.FlatWGSizeMin = Summary.FlatWorkGroupSize->first;
-    Attrs.FlatWGSizeMax = Summary.FlatWorkGroupSize->second;
-  }
-
-  if (Summary.WavesPerEU) {
-    Attrs.WavesPerEUMin = Summary.WavesPerEU->Min;
-    if (Summary.WavesPerEU->Max)
-      Attrs.WavesPerEUMax = *Summary.WavesPerEU->Max;
-  }
-
-  if (Summary.MaxNumWorkgroups) {
-    Attrs.MaxNumWGX = (*Summary.MaxNumWorkgroups)[0];
-    Attrs.MaxNumWGY = (*Summary.MaxNumWorkgroups)[1];
-    Attrs.MaxNumWGZ = (*Summary.MaxNumWorkgroups)[2];
-  }
-
-  return Attrs;
-}
-
-/// Propagate AMDGPU kernel occupancy attributes (flat-work-group-size,
-/// waves-per-eu, max-num-workgroups) top-down from kernels to device functions
-/// through the combined index call graph. Sets a backend callback on \p Conf
-/// to apply the propagated attributes when each module is compiled.
-static void thinLTOPropagateAMDGPUAttributes(
-    ModuleSummaryIndex &CombinedIndex,
-    const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols,
-    lto::Config &Conf) {
-  const AMDGPUSummaryMap &AMDGPUSummaries = CombinedIndex.getAMDGPUSummaries();
-  if (AMDGPUSummaries.empty())
-    return;
-
-  LLVM_DEBUG(dbgs() << "AMDGPU ThinLTO: read " << AMDGPUSummaries.size()
-                    << " function summaries\n");
-
-  AMDGPUPropagatedAttrsMap Propagated;
-  SmallVector<GlobalValue::GUID> KernelGUIDs;
-  for (const auto &[GUID, Summary] : AMDGPUSummaries) {
-    if (Summary.CC == CallingConv::AMDGPU_KERNEL) {
-      KernelGUIDs.push_back(GUID);
-      Propagated[GUID] = getAMDGPUPropagatedAttrs(Summary);
-    }
-  }
-
-  CombinedIndex.resolveIndirectCalls(GUIDPreservedSymbols);
-
-  // Per-kernel BFS: propagate each kernel's constraints to all reachable
-  // callees. When a callee is reached by multiple kernels, merge
-  // conservatively. Callees are initialized from the first reaching
-  // kernel (not from their own defaults) to avoid loose defaults
-  // diluting the propagated constraints.
-  for (GlobalValue::GUID KernelGUID : KernelGUIDs) {
-    auto KIt = AMDGPUSummaries.find(KernelGUID);
-    if (KIt == AMDGPUSummaries.end())
-      continue;
-    const AMDGPUPropagatedFunctionAttrs KernelAttrs =
-        getAMDGPUPropagatedAttrs(KIt->second);
-
-    SmallVector<GlobalValue::GUID> Worklist;
-    DenseSet<GlobalValue::GUID> Visited;
-    Worklist.push_back(KernelGUID);
-    Visited.insert(KernelGUID);
-
-    auto VisitCallee = [&](GlobalValue::GUID CalleeGUID) {
-      if (!Visited.insert(CalleeGUID).second)
-        return false;
-      Worklist.push_back(CalleeGUID);
-
-      auto [It, Inserted] = Propagated.try_emplace(CalleeGUID);
-      if (Inserted) {
-        auto CalleeIt = AMDGPUSummaries.find(CalleeGUID);
-        if (CalleeIt != AMDGPUSummaries.end())
-          It->second = getAMDGPUPropagatedAttrs(CalleeIt->second);
-        else
-          It->second = KernelAttrs;
-      }
-      It->second.mergeFrom(KernelAttrs);
-      return true;
-    };
-
-    for (unsigned Idx = 0; Idx < Worklist.size(); ++Idx) {
-      GlobalValue::GUID CurGUID = Worklist[Idx];
-      ValueInfo VI = CombinedIndex.getValueInfo(CurGUID);
-      if (!VI)
-        continue;
-
-      for (const auto &Summary : VI.getSummaryList()) {
-        auto *FS = dyn_cast<FunctionSummary>(Summary->getBaseObject());
-        if (!FS)
-          continue;
-        for (const auto &Edge : FS->calls())
-          VisitCallee(Edge.first.getGUID());
-        for (const auto &Edge : FS->indirect_calls()) {
-          if (VisitCallee(Edge.first.getGUID()))
-            LLVM_DEBUG(dbgs()
-                       << "AMDGPU ThinLTO: indirect call edge GUID=" << CurGUID
-                       << " -> GUID=" << Edge.first.getGUID() << "\n");
-        }
-      }
-    }
-  }
-
-  LLVM_DEBUG({
-    dbgs() << "AMDGPU ThinLTO: propagated to " << Propagated.size()
-           << " functions\n";
-    for (auto &[GUID, Attrs] : Propagated) {
-      dbgs() << "  GUID=" << GUID << " flat_wg=[" << Attrs.FlatWGSizeMin << ","
-             << Attrs.FlatWGSizeMax << "]"
-             << " waves=[" << Attrs.WavesPerEUMin << ",";
-      if (Attrs.WavesPerEUMax)
-        dbgs() << *Attrs.WavesPerEUMax;
-      else
-        dbgs() << "target";
-      dbgs() << "]"
-             << " max_wg=[" << Attrs.MaxNumWGX << "," << Attrs.MaxNumWGY << ","
-             << Attrs.MaxNumWGZ << "]"
-             << (Attrs.CC == CallingConv::AMDGPU_KERNEL ? " [kernel]" : "")
-             << "\n";
-    }
-  });
-
-  auto PropagatedPtr =
-      std::make_shared<AMDGPUPropagatedAttrsMap>(std::move(Propagated));
-  Conf.ApplyThinLTOAttributes = [PropagatedPtr](unsigned /*Task*/, Module &M) {
-    for (Function &F : M) {
-      if (F.isDeclaration())
-        continue;
-      auto It = PropagatedPtr->find(F.getGUID());
-      if (It == PropagatedPtr->end())
-        continue;
-      const AMDGPUPropagatedFunctionAttrs &Attrs = It->second;
-
-      if (F.getCallingConv() == CallingConv::AMDGPU_KERNEL)
-        continue;
-
-      if (!Attrs.hasValidWavesPerEU()) {
-        F.getContext().emitError(
-            "amdgpu ThinLTO: contradictory waves-per-eu constraints "
-            "propagated to function '" +
-            F.getName() + "': min=" + Twine(Attrs.WavesPerEUMin) +
-            " > max=" + Twine(*Attrs.WavesPerEUMax));
-        continue;
-      }
-
-      std::string Val;
-      Val = std::to_string(Attrs.FlatWGSizeMin) + "," +
-            std::to_string(Attrs.FlatWGSizeMax);
-      F.addFnAttr("amdgpu-flat-work-group-size", Val);
-
-      Val = std::to_string(Attrs.WavesPerEUMin);
-      if (Attrs.WavesPerEUMax)
-        Val += "," + std::to_string(*Attrs.WavesPerEUMax);
-      F.addFnAttr("amdgpu-waves-per-eu", Val);
-
-      Val = std::to_string(Attrs.MaxNumWGX) + "," +
-            std::to_string(Attrs.MaxNumWGY) + "," +
-            std::to_string(Attrs.MaxNumWGZ);
-      F.addFnAttr("amdgpu-max-num-workgroups", Val);
-    }
-  };
-}
-
-} // end anonymous namespace
-
 Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
                       const DenseSet<GlobalValue::GUID> &GUIDPreservedSymbols) {
   llvm::TimeTraceScope timeScope("Run ThinLTO");
@@ -2498,12 +2388,52 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
   thinLTOResolvePrevailingInIndex(Conf, ThinLTO.CombinedIndex, isPrevailing,
                                   recordNewLinkage, GUIDPreservedSymbols);
 
-  thinLTOPropagateFunctionAttrs(ThinLTO.CombinedIndex, isPrevailing);
-
-  thinLTOPropagateAMDGPUAttributes(ThinLTO.CombinedIndex, GUIDPreservedSymbols,
-                                   Conf);
-
-  generateParamAccessSummary(Conf.LibraryOptions, ThinLTO.CombinedIndex);
+  // Run the thin-link passes that need the final linkage and the prevailing
+  // copies. The pass builder and the instrumentation need a context only for
+  // their options, so they use the context of the regular LTO module, which
+  // is done by now.
+  PassInstrumentationCallbacks PIC;
+  StandardInstrumentations SI(RegularLTO.Ctx, Conf.DebugPassManager,
+                              Conf.VerifyEach);
+  SI.registerCallbacks(PIC);
+  PassBuilder PB(RegularLTO.Ctx, /*TM=*/nullptr, /*PTO=*/std::nullopt,
+                 /*PGOOpt=*/std::nullopt, &PIC);
+  // Let the targets of the inputs add their passes. Two triples, or two
+  // targets, can have the same function, which adds the passes one time.
+  SmallVector<Target::ThinLinkPassBuilderCallbackTy, 2> Callbacks;
+  for (const Triple &TT : TargetTriples) {
+    std::string Msg;
+    const Target *T = TargetRegistry::lookupTarget(TT, Msg);
+    Target::ThinLinkPassBuilderCallbackTy Fn =
+        T ? T->getThinLinkPassBuilderCallback() : nullptr;
+    if (Fn && !is_contained(Callbacks, Fn)) {
+      Callbacks.push_back(Fn);
+      Fn(PB);
+    }
+  }
+  SummaryAnalysisManager SAM;
+  PB.registerSummaryAnalyses(SAM);
+  // The link can assume a closed world only if all code has a summary.
+  bool ClosedWorld = (Conf.ThinLinkClosedWorld || AssumeThinLinkClosedWorld) &&
+                     !Conf.LinkHasNativeCode &&
+                     !RegularLTO.HasModuleWithoutSummary;
+  SAM.registerPass([&] {
+    return ThinLinkInfoAnalysis(GUIDPreservedSymbols, isPrevailing,
+                                ClosedWorld);
+  });
+  SummaryPassManager SPM;
+  if (Conf.ThinLinkPipeline.empty())
+    SPM = PB.buildThinLinkDefaultPipeline();
+  else if (Error Err = PB.parsePassPipeline(SPM, Conf.ThinLinkPipeline))
+    return make_error<StringError>("unable to parse the thin-link pipeline '" +
+                                       Conf.ThinLinkPipeline +
+                                       "': " + toString(std::move(Err)),
+                                   inconvertibleErrorCode());
+  // Stack safety in the backends reads the parameter access ranges that this
+  // pass computes. The ranges of a module alone are not safe, so the pass also
+  // runs after a custom pipeline.
+  SPM.addPass(ThinLinkParamAccessPass(&RegularLTO.Ctx.getLibraryOptions()));
+  SPM.run(ThinLTO.CombinedIndex, SAM);
 
   if (llvm::timeTraceProfilerEnabled())
     llvm::timeTraceProfilerEnd();

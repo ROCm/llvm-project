@@ -11,6 +11,7 @@
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/ModuleSummaryAnalysis.h"
 #include "llvm/Analysis/ProfileSummaryInfo.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfo.h"
@@ -297,14 +298,32 @@ bool mustEmitToMergedModule(const GlobalValue *GV) {
   return GV->getName() == "__cfi_check";
 }
 
+// Builds the summary of M. GetTTI gives the TTI of a function, which the
+// summary uses for the target data of the function, like the call type IDs.
+// So the summary has the same data as the summary that
+// ModuleSummaryIndexAnalysis builds.
+ModuleSummaryIndex buildSummary(
+    const Module &M, ProfileSummaryInfo &PSI,
+    function_ref<const TargetTransformInfo *(const Function &)> GetTTI) {
+  return buildModuleSummaryIndex(
+      M, /*GetBFICallback=*/nullptr, &PSI,
+      /*GetSSICallback=*/
+      [](const Function &) -> const StackSafetyInfo * { return nullptr; },
+      GetTTI);
+}
+
 // If it's possible to split M into regular and thin LTO parts, do so and write
 // a multi-module bitcode file with the two parts to OS. Otherwise, write only a
 // regular LTO bitcode file to OS.
 void splitAndWriteThinLTOBitcode(
     raw_ostream &OS, raw_ostream *ThinLinkOS,
     function_ref<AAResults &(Function &)> AARGetter,
-    function_ref<const BlockFrequencyInfo &(Function &)> BFIGetter, Module &M,
+    function_ref<const BlockFrequencyInfo &(Function &)> BFIGetter,
+    function_ref<const TargetTransformInfo &(Function &)> TTIGetter, Module &M,
     const bool ShouldPreserveUseListOrder) {
+  auto GetTTI = [&](const Function &F) -> const TargetTransformInfo * {
+    return &TTIGetter(const_cast<Function &>(F));
+  };
   std::string ModuleId = getUniqueModuleId(&M);
   if (ModuleId.empty()) {
     assert(!enableUnifiedLTO(M));
@@ -312,7 +331,7 @@ void splitAndWriteThinLTOBitcode(
     // regular LTO module with an index for summary-based dead stripping.
     ProfileSummaryInfo PSI(M);
     M.addModuleFlag(Module::Error, "ThinLTO", uint32_t(0));
-    ModuleSummaryIndex Index = buildModuleSummaryIndex(M, nullptr, &PSI);
+    ModuleSummaryIndex Index = buildSummary(M, PSI, GetTTI);
     WriteBitcodeToFile(M, OS, ShouldPreserveUseListOrder, &Index,
                        /*UnifiedLTO=*/false);
 
@@ -428,13 +447,23 @@ void splitAndWriteThinLTOBitcode(
   simplifyExternals(*MergedM);
 
   // FIXME: Try to re-use BSI from the original module here.
-  ModuleSummaryIndex Index = buildModuleSummaryIndex(M, nullptr, &PSI);
+  ModuleSummaryIndex Index = buildSummary(M, PSI, GetTTI);
 
   // Mark the merged module as requiring full LTO. We still want an index for
   // it though, so that it can participate in summary-based dead stripping.
   MergedM->addModuleFlag(Module::Error, "ThinLTO", uint32_t(0));
-  ModuleSummaryIndex MergedMIndex =
-      buildModuleSummaryIndex(*MergedM, nullptr, &PSI);
+  // A function of MergedM gets the TTI of the function of M that it is a clone
+  // of. The analysis manager must not keep results for the functions of
+  // MergedM, which this function deletes.
+  DenseMap<const Value *, Function *> Originals;
+  for (Function &F : M)
+    if (Value *Clone = VMap.lookup(&F))
+      Originals[Clone] = &F;
+  ModuleSummaryIndex MergedMIndex = buildSummary(
+      *MergedM, PSI, [&](const Function &F) -> const TargetTransformInfo * {
+        Function *Original = Originals.lookup(&F);
+        return Original ? &TTIGetter(*Original) : nullptr;
+      });
 
   SmallVector<char, 0> Buffer;
 
@@ -489,15 +518,16 @@ bool requiresSplit(Module &M) {
 bool writeThinLTOBitcode(
     raw_ostream &OS, raw_ostream *ThinLinkOS,
     function_ref<AAResults &(Function &)> AARGetter,
-    function_ref<const BlockFrequencyInfo &(Function &)> BFIGetter, Module &M,
+    function_ref<const BlockFrequencyInfo &(Function &)> BFIGetter,
+    function_ref<const TargetTransformInfo &(Function &)> TTIGetter, Module &M,
     const ModuleSummaryIndex *Index, const bool ShouldPreserveUseListOrder) {
   std::unique_ptr<ModuleSummaryIndex> NewIndex = nullptr;
   // See if this module needs to be split. If so, we try to split it
   // or at least promote type ids to enable WPD.
   if (requiresSplit(M)) {
     if (enableSplitLTOUnit(M)) {
-      splitAndWriteThinLTOBitcode(OS, ThinLinkOS, AARGetter, BFIGetter, M,
-                                  ShouldPreserveUseListOrder);
+      splitAndWriteThinLTOBitcode(OS, ThinLinkOS, AARGetter, BFIGetter,
+                                  TTIGetter, M, ShouldPreserveUseListOrder);
       return true;
     }
     // Promote type ids as needed for index-based WPD.
@@ -513,8 +543,10 @@ bool writeThinLTOBitcode(
       // splitAndWriteThinLTOBitcode). Just always build it once via the
       // buildModuleSummaryIndex when Module(s) are ready.
       ProfileSummaryInfo PSI(M);
-      NewIndex = std::make_unique<ModuleSummaryIndex>(
-          buildModuleSummaryIndex(M, nullptr, &PSI));
+      NewIndex = std::make_unique<ModuleSummaryIndex>(buildSummary(
+          M, PSI, [&](const Function &F) -> const TargetTransformInfo * {
+            return &TTIGetter(const_cast<Function &>(F));
+          }));
       Index = NewIndex.get();
     }
   }
@@ -549,6 +581,9 @@ llvm::ThinLTOBitcodeWriterPass::run(Module &M, ModuleAnalysisManager &AM) {
       },
       [&FAM](Function &F) -> const BlockFrequencyInfo & {
         return FAM.getResult<BlockFrequencyAnalysis>(F);
+      },
+      [&FAM](Function &F) -> const TargetTransformInfo & {
+        return FAM.getResult<TargetIRAnalysis>(F);
       },
       M, &AM.getResult<ModuleSummaryIndexAnalysis>(M),
       ShouldPreserveUseListOrder);

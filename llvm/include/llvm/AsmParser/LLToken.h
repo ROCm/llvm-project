@@ -393,6 +393,14 @@ enum Kind {
   // Use-list order directives.
   kw_uselistorder,
 
+  // Summary extension keywords
+  kw_extension,
+  kw_version,
+  kw_required,
+  kw_entries,
+  kw_ints,
+  kw_strings,
+
   // Summary index keywords
   kw_path,
   kw_hash,
@@ -449,6 +457,7 @@ enum Kind {
   kw_typeCheckedLoadConstVCalls,
   kw_callTypeId,
   kw_indirectCallTypeIds,
+  kw_hasCallWithoutTypeId,
   kw_vFuncId,
   kw_offset,
   kw_args,

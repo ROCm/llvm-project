@@ -81,6 +81,8 @@ GetBlockName(unsigned BlockID, const BitstreamBlockInfo &BlockInfo,
     return "STRTAB_BLOCK";
   case bitc::SYMTAB_BLOCK_ID:
     return "SYMTAB_BLOCK";
+  case bitc::SUMMARY_EXTENSION_BLOCK_ID:
+    return "SUMMARY_EXTENSION_BLOCK";
   }
 }
 
@@ -334,7 +336,6 @@ GetCodeName(unsigned CodeID, unsigned BlockID,
       STRINGIFY_CODE(FS, ALLOC_CONTEXT_IDS)
       STRINGIFY_CODE(FS, CONTEXT_RADIX_TREE_ARRAY)
       STRINGIFY_CODE(FS, COMBINED_ALLOC_INFO_NO_CONTEXT)
-      STRINGIFY_CODE(FS, AMDGPU_ENTRY)
       STRINGIFY_CODE(FS, CALL_TYPE_IDS)
     }
   case bitc::METADATA_ATTACHMENT_ID:
@@ -423,6 +424,14 @@ GetCodeName(unsigned CodeID, unsigned BlockID,
       return std::nullopt;
     case bitc::SYMTAB_BLOB:
       return "BLOB";
+    }
+  case bitc::SUMMARY_EXTENSION_BLOCK_ID:
+    switch (CodeID) {
+    default:
+      return std::nullopt;
+      STRINGIFY_CODE(SUMMARY_EXT, HEADER)
+      STRINGIFY_CODE(SUMMARY_EXT, ENTRY)
+      STRINGIFY_CODE(SUMMARY_EXT, COMBINED_ENTRY)
     }
   }
 #undef STRINGIFY_CODE

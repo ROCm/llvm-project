@@ -20,7 +20,7 @@
 ; RUN:   -r %t1.bc,kernel1,px \
 ; RUN:   -r %t1.bc,kernel2,px \
 ; RUN:   -r %t1.bc,device_func,l \
-; RUN:   -r %t2.bc,device_func,px \
+; RUN:   -r %t2.bc,device_func,p \
 ; RUN:   -save-temps
 ; RUN: llvm-dis %t.o.2.5.precodegen.bc -o - | FileCheck %s
 

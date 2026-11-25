@@ -3938,6 +3938,16 @@ driver then enables object linking for the device compilation and the device
 link. OpenMP offloading uses ThinLTO without object linking: each ThinLTO
 backend imports all functions that its module calls.
 
+The Clang driver also passes `-thinlink-closed-world` to the HIP device link.
+The thin link then assumes a closed world: the device link has all device code,
+the host never calls a device function through a pointer, and inline assembly
+does not call functions. With this assumption, a device function that can be
+called through a pointer gets attribute values from the kernels that can make
+the call, instead of the default values. The thin link does not assume a closed
+world if the device link has a relocatable object, a shared library, or bitcode
+without a module summary. To turn off the assumption, pass
+`-Xoffload-linker -mllvm=-thinlink-closed-world=false`.
+
 ### Limitations
 
 The limitations of object linking also apply to ThinLTO (see
