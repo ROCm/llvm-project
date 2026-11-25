@@ -20,6 +20,9 @@
 #
 # Options read by this file must be passed before -C:
 #   LLVM_INCLUDE_TESTS  Builds every LLVM and Clang tool which the tests need.
+#   LLVM_INSTALL_UTILS  ON by default. The utils distribution is only declared
+#                       when this is ON, because LLVM creates the utility
+#                       install targets only then.
 #   CLANG_ENABLE_CIR    Builds ClangIR. Clang's libraries then link MLIR, so the
 #                       MLIR package ships in dev instead of fortran. OFF on
 #                       Windows, where MLIR is not built.
@@ -226,10 +229,16 @@ endif()
 # links against. fortran links the MLIR libraries that dev ships with ClangIR,
 # so it comes after dev.
 if(CMAKE_HOST_WIN32)
-  set(LLVM_DISTRIBUTIONS "compiler;runtimes;dev;tools;utils" CACHE STRING "")
+  set(_ROCM_DISTRIBUTIONS "compiler;runtimes;dev;tools")
 else()
-  set(LLVM_DISTRIBUTIONS "compiler;runtimes;dev;fortran;tools;utils;multilibs" CACHE STRING "")
+  set(_ROCM_DISTRIBUTIONS "compiler;runtimes;dev;fortran;tools;multilibs")
 endif()
+# utils comes last and nothing depends on it. LLVM only creates its install
+# targets when LLVM_INSTALL_UTILS is ON.
+if(LLVM_INSTALL_UTILS)
+  list(APPEND _ROCM_DISTRIBUTIONS utils)
+endif()
+set(LLVM_DISTRIBUTIONS "${_ROCM_DISTRIBUTIONS}" CACHE STRING "")
 
 # The tools the HIP driver runs and the libraries they link. Linux links with
 # compiler-rt by default.
