@@ -87,7 +87,7 @@ The AMDGPU target defines the following scopes:
 
 - *system scope* (same as LLVM)
 - "agent" scope
-- "cluster" scope
+- "cluster" scope (see {ref}`amdgpu-clusters`)
 - "workgroup" scope
 - "wavefront" scope
 - "singlethread" scope (same as LLVM)
@@ -98,19 +98,24 @@ These are arranged from largest scope (*system scope*) to smallest scope
 Every operation performed by a thread is contained in the corresponding
 "singlethread" scope instance.
 
+In addition, there exists a symbolic string
+{ref}`"lds-dma"<amdgpu-lds-dma-scope>` which can refer to either "workgroup"
+scope or "cluster" scope.
+
 (amdgpu-subscopes)=
 
 ### Subscopes
 
-Every instance `X` of some scope `S1` other than "singlethread" scope is
-partitioned by the scope `S2` one level below it. Each subset defined by this
-partition is an instance of `S2` and is called a *subscope instance* of `X`.
-`S2` itself is called a *subscope* of `S1`.
+Every scope `S1` other than the *system scope* is a *subscope* of the scope `S2`
+one level above it. Every instance `I1` of `S1` is a subset of some instance
+`I2` of `S2`. `I1` is said to be a *subscope instance* of `I2`.
 
 The two relations *subscope* and *subscope instance* are transitive.
 
 A scope instance `X` *contains* a scope instance `Y` if `Y` is a subset of
 `X`. In particular, every scope instance contains itself.
+
+(amdgpu-inclusive-scopes)=
 
 ### Inclusive Scopes
 
@@ -220,16 +225,16 @@ operation with scope `syncscope`.
 ### addrspace(3) Accesses
 
 Any access to `addrspace(3)` (aka LDS or local) is always a *store-available* or
-*load-visible* operation with scope "workgroup".
+*load-visible* operation with scope "lds-dma".
 
 Any access to `addrspace(0)` (aka flat or generic) is always a
-*store-available* or *load-visible* operation with scope "workgroup" if the
+*store-available* or *load-visible* operation with scope "lds-dma" if the
 flat address resolves to `addrspace(3)`.
 
 :::{note}
 This is independent of the `syncscope` of an atomic access. For example, even if
 a `store atomic` to `addrspace(3)` specifies a smaller `syncscope` such as
-"wavefront", the effect of this write is made available at "workgroup" scope. In
+"wavefront", the effect of this write is made available at "lds-dma" scope. In
 other words, the scope for atomicity is not always the same as the scope for
 availability/visibility.
 :::
@@ -245,8 +250,9 @@ A non-atomic `volatile` access is a *store-available* or *load-visible*
 operation with the widest scope supported by its address space:
 
 - "system" scope for `addrspace(1)` (global) and `addrspace(0)` (generic), and
-- "workgroup" scope for `addrspace(3)` (local), since local memory is not
-  observable beyond its workgroup.
+- "lds-dma" scope for `addrspace(3)` (local), since local memory is not
+  observable beyond its workgroup and the DMA operations associated with that
+  workgroup.
 
 An `atomic volatile` access is not widened in this way. Its availability and
 visibility remain limited to its `syncscope`, as described for atomic accesses
