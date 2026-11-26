@@ -1,4 +1,5 @@
 ; REQUIRES: x86-registered-target
+; REQUIRES: stability
 
 ; Test that speculative devirtualization works with LTO
 
