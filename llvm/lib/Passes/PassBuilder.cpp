@@ -1566,11 +1566,6 @@ parseFunctionSimplificationPipelineOptions(StringRef Params) {
   return *L;
 }
 
-Expected<bool> parseMemorySSAPrinterPassOptions(StringRef Params) {
-  return PassBuilder::parseSinglePassOption(Params, "no-ensure-optimized-uses",
-                                            "MemorySSAPrinterPass");
-}
-
 Expected<bool> parseSpeculativeExecutionPassOptions(StringRef Params) {
   return PassBuilder::parseSinglePassOption(Params, "only-if-divergent-target",
                                             "SpeculativeExecutionPass");

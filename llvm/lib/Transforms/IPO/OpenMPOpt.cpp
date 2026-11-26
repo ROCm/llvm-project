@@ -2085,7 +2085,7 @@ private:
                       << " functions, result: " << Changed << ".\n");
 
     if (Changed == ChangeStatus::CHANGED)
-      OMPInfoCache.invalidateAnalyses();
+      OMPInfoCache.invalidateAnalyses(M);
 
     return Changed == ChangeStatus::CHANGED;
   }
@@ -5944,6 +5944,11 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
       AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
   KernelSet Kernels = getDeviceKernels(M);
 
+  // Preserving the proxy invalidates each function individually, which keeps
+  // analyses like TargetLibraryInfo.
+  PreservedAnalyses ChangedPA;
+  ChangedPA.preserve<FunctionAnalysisManagerModuleProxy>();
+
   if (Opts.openmp_opt_print_module_before)
     LLVM_DEBUG(dbgs() << TAG << "Module before OpenMPOpt Module Pass:\n" << M);
 
@@ -5993,7 +5998,7 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
     }
 
   if (SCC.empty())
-    return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
+    return Changed ? ChangedPA : PreservedAnalyses::all();
 
   AnalysisGetter AG(FAM);
 
@@ -6003,6 +6008,8 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
 
   BumpPtrAllocator Allocator;
   CallGraphUpdater CGUpdater;
+  // Clear the analyses of functions the Attributor deletes.
+  CGUpdater.initialize(FAM);
 
   bool PostLink = LTOPhase == ThinOrFullLTOPhase::FullLTOPostLink ||
                   LTOPhase == ThinOrFullLTOPhase::ThinLTOPostLink ||
@@ -6040,7 +6047,7 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
     LLVM_DEBUG(dbgs() << TAG << "Module after OpenMPOpt Module Pass:\n" << M);
 
   if (Changed)
-    return PreservedAnalyses::none();
+    return ChangedPA;
 
   return PreservedAnalyses::all();
 }

@@ -58,7 +58,7 @@ on:
       build_runs_on:
         description: "Build runner label (selected by configure script with weighted distribution)"
         type: string
-        default: "aws-linux-scale-rocm-large"
+        default: "az-linux-scale-rocm-asan-prod-2"
       repository:
         description: "Repository to checkout. Defaults to github.repository."
         type: string
