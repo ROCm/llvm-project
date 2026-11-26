@@ -1157,7 +1157,7 @@ static Value *createBoundedMemSetSplat(IRBuilderBase &B, Value *SetValue,
 static void
 createMemSetLoopKnownSize(Instruction *InsertBefore, Value *DstAddr,
                           ConstantInt *Len, Value *SetValue, Align DstAlign,
-                          bool IsVolatile, const TargetTransformInfo &TTI,
+                          bool IsVolatile, const TargetTransformInfo *TTI,
                           std::optional<uint64_t> AverageTripCount) {
   // No need to expand zero length memsets.
   if (Len->isZero())
@@ -1174,10 +1174,13 @@ createMemSetLoopKnownSize(Instruction *InsertBefore, Value *DstAddr,
   Type *Int8Type = Type::getInt8Ty(Ctx);
   assert(SetValue->getType() == Int8Type && "Can only set bytes");
 
-  // Use the same memory access type as for a memcpy with the same Dst and Src
-  // alignment and address space.
-  Type *LoopOpType = TTI.getMemcpyLoopLoweringType(
-      Ctx, Len, DstAS, DstAS, DstAlign, DstAlign, std::nullopt);
+  Type *LoopOpType = Int8Type;
+  if (TTI) {
+    // Use the same memory access type as for a memcpy with the same Dst and Src
+    // alignment and address space.
+    LoopOpType = TTI->getMemcpyLoopLoweringType(
+        Ctx, Len, DstAS, DstAS, DstAlign, DstAlign, std::nullopt);
+  }
   TypeSize LoopOpSize = DL.getTypeStoreSize(LoopOpType);
   assert(LoopOpSize.isFixed() && "LoopOpType cannot be a scalable vector type");
 
@@ -1220,10 +1223,11 @@ createMemSetLoopKnownSize(Instruction *InsertBefore, Value *DstAddr,
 
   IRBuilder<> RBuilder(InsertBefore);
 
+  assert(TTI && "there cannot be a residual loop without TTI");
   SmallVector<Type *, 5> RemainingOps;
-  TTI.getMemcpyLoopResidualLoweringType(RemainingOps, Ctx, RemainingBytes,
-                                        DstAS, DstAS, DstAlign, DstAlign,
-                                        std::nullopt);
+  TTI->getMemcpyLoopResidualLoweringType(RemainingOps, Ctx, RemainingBytes,
+                                         DstAS, DstAS, DstAlign, DstAlign,
+                                         std::nullopt);
 
   Type *PreviousOpTy = nullptr;
   Value *SplatSetValue = nullptr;
@@ -1252,7 +1256,7 @@ createMemSetLoopKnownSize(Instruction *InsertBefore, Value *DstAddr,
 static void
 createMemSetLoopUnknownSize(Instruction *InsertBefore, Value *DstAddr,
                             Value *Len, Value *SetValue, Align DstAlign,
-                            bool IsVolatile, const TargetTransformInfo &TTI,
+                            bool IsVolatile, const TargetTransformInfo *TTI,
                             std::optional<uint64_t> AverageTripCount) {
   BasicBlock *PreLoopBB = InsertBefore->getParent();
   Function *ParentFunc = PreLoopBB->getParent();
@@ -1264,8 +1268,11 @@ createMemSetLoopUnknownSize(Instruction *InsertBefore, Value *DstAddr,
   Type *Int8Type = Type::getInt8Ty(Ctx);
   assert(SetValue->getType() == Int8Type && "Can only set bytes");
 
-  Type *LoopOpType = TTI.getMemcpyLoopLoweringType(
-      Ctx, Len, DstAS, DstAS, DstAlign, DstAlign, std::nullopt);
+  Type *LoopOpType = Int8Type;
+  if (TTI) {
+    LoopOpType = TTI->getMemcpyLoopLoweringType(
+        Ctx, Len, DstAS, DstAS, DstAlign, DstAlign, std::nullopt);
+  }
   TypeSize LoopOpSize = DL.getTypeStoreSize(LoopOpType);
   assert(LoopOpSize.isFixed() && "LoopOpType cannot be a scalable vector type");
 
@@ -1310,7 +1317,7 @@ createMemSetLoopUnknownSize(Instruction *InsertBefore, Value *DstAddr,
 static void createMemSetPatternLoop(Instruction *InsertBefore, Value *DstAddr,
                                     Value *Len, Value *SetValue, Align DstAlign,
                                     bool IsVolatile,
-                                    const TargetTransformInfo &TTI,
+                                    const TargetTransformInfo *TTI,
                                     std::optional<uint64_t> AverageTripCount) {
   // No need to expand zero length memset.pattern.
   if (auto *CLen = dyn_cast<ConstantInt>(Len))
@@ -1324,8 +1331,11 @@ static void createMemSetPatternLoop(Instruction *InsertBefore, Value *DstAddr,
 
   unsigned DstAS = cast<PointerType>(DstAddr->getType())->getAddressSpace();
 
-  Type *PreferredLoopOpType = TTI.getMemcpyLoopLoweringType(
-      Ctx, Len, DstAS, DstAS, DstAlign, DstAlign, std::nullopt);
+  Type *PreferredLoopOpType = SetValue->getType();
+  if (TTI) {
+    PreferredLoopOpType = TTI->getMemcpyLoopLoweringType(
+        Ctx, Len, DstAS, DstAS, DstAlign, DstAlign, std::nullopt);
+  }
   TypeSize PreferredLoopOpStoreSize = DL.getTypeStoreSize(PreferredLoopOpType);
   assert(PreferredLoopOpStoreSize.isFixed() &&
          "PreferredLoopOpType cannot be a scalable vector type");
@@ -1509,7 +1519,7 @@ bool llvm::expandMemMoveAsLoop(MemMoveInst *Memmove,
 }
 
 void llvm::expandMemSetAsLoop(MemSetInst *Memset,
-                              const TargetTransformInfo &TTI) {
+                              const TargetTransformInfo *TTI) {
   auto AverageTripCount = getAverageMemOpLoopTripCount(*Memset);
   if (ConstantInt *CI = dyn_cast<ConstantInt>(Memset->getLength())) {
     createMemSetLoopKnownSize(
@@ -1532,6 +1542,11 @@ void llvm::expandMemSetAsLoop(MemSetInst *Memset,
         /*TTI=*/TTI,
         /*AverageTripCount=*/AverageTripCount);
   }
+}
+
+void llvm::expandMemSetAsLoop(MemSetInst *MemSet,
+                              const TargetTransformInfo &TTI) {
+  expandMemSetAsLoop(MemSet, &TTI);
 }
 
 /// Return the VP (value profiling) memop size data of a bounded memset as
@@ -1698,7 +1713,7 @@ void llvm::expandBoundedMemSet(MemSetInst *MemSet, uint64_t MinLen,
 }
 
 void llvm::expandMemSetPatternAsLoop(MemSetPatternInst *Memset,
-                                     const TargetTransformInfo &TTI) {
+                                     const TargetTransformInfo *TTI) {
   createMemSetPatternLoop(
       /*InsertBefore=*/Memset,
       /*DstAddr=*/Memset->getRawDest(),
@@ -1708,6 +1723,11 @@ void llvm::expandMemSetPatternAsLoop(MemSetPatternInst *Memset,
       /*IsVolatile=*/Memset->isVolatile(),
       /*TTI=*/TTI,
       /*AverageTripCount=*/getAverageMemOpLoopTripCount(*Memset));
+}
+
+void llvm::expandMemSetPatternAsLoop(MemSetPatternInst *MemSet,
+                                     const TargetTransformInfo &TTI) {
+  expandMemSetPatternAsLoop(MemSet, &TTI);
 }
 
 void llvm::expandAtomicMemCpyAsLoop(AnyMemCpyInst *AtomicMemcpy,
