@@ -227,17 +227,36 @@ All arguments must be wave-uniform.
 ## The "lds-dma" Scope
 
 An LDS DMA operation or a tensor DMA operation initiated by a thread is not
-contained in the corresponding instance of "singlethread" scope. Instead,
-depending on the target, the DMA operation is contained in either the
-"workgroup" scope instance or "cluster" scope instance that contains the
-initiating thread. Operations in LLVM IR may refer to this scope instance using
-the "lds-dma" symbolic string.
+always contained in the corresponding instance of "singlethread" scope.
+Depending on the target, the DMA operation may also be contained in the
+corresponding "cluster" scope instance. Operations in LLVM IR may refer to this
+scope instance using the architecture-independent string "lds-dma", commonly
+referred to as *the "lds-dma" scope*.
+
+```{list-table}
+:header-rows: 1
+:align: left
+
+   * - Target
+     - Mapped Scope
+   * - GFX9+
+     - "singlethread"
+   * - GFX1250+
+     - "cluster"
+```
 
 This affects how DMA operations are related to other operations when determining
 availability and visibility. Additional {ref}`explicit availability and
 visibility<amdgpu-dma-visibility>` operations are often required at the
 corresponding "lds-dma" scope to establish
 {ref}`location-order<amdgpu-location-order>`.
+
+```{note}
+DMA operations take different paths to access global memory on these architectures:
+- On GFX9+, LDS DMA operations use the same path as ordinary global (VMEM) operations.
+- On GFX1250+, an eligible async load/store operation may perform a direct copy
+  between global memory and LDS without staging the data in the WGP cache.
+```
 
 ### Memory Accesses
 
@@ -247,7 +266,7 @@ on each source location and a
 location, both with "lds-dma" scope. This applies to accesses to both global
 memory and LDS, including locations specified through tensor descriptors.
 
-### Effect on Inclusive Scopes
+## Effect on Inclusive Scopes
 
 [This section is informational.]
 
@@ -268,7 +287,7 @@ more efficient implementation.
 
 (amdgpu-dma-visibility)=
 
-### Explicit Visibility Required
+## Explicit Visibility Required
 
 [This section is informational.]
 
@@ -282,7 +301,7 @@ additional availability and visibility operations to ensure
 accesses, additional availability and visibility operations are not needed
 because accesses to `addrspace(3)` always use the "lds-dma" scope.)
 
-#### Wavefront Scope
+### Wavefront Scope
 
 Consider a thread that writes to global memory and then initiates a DMA
 operation that reads from the same location. This previous write must be made
@@ -318,7 +337,7 @@ call @llvm.amdgcn.wait.asyncmark(0)
 %val = call @llvm.amdgcn.av.load.b128(%global, metadata !{!"lds-dma"}) ; <--
 ```
 
-#### Workgroup Scope
+### Workgroup Scope
 
 Consider the case where one wave writes to global memory and a different wave in
 the same workgroup initiates a DMA operation that reads from the same
