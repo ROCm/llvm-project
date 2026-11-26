@@ -22,3 +22,6 @@ breaks smoke-fort and smoke-fort-limbo
 breaks build of rocprofiler-sdk
 [Clang][Inliner] Enable module-local optimizer hints by default (#238529)
 ---
+SPIRv API change
+[LowerMemIntrinsics] Make TTI non-optional and simplify signature of expandMemSet(Pattern)AsLoop (NFC) (#246090)
+---
