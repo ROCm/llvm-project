@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUISelLowering.h"
+#include "GCNSubtarget.h"
 #include "AMDGPU.h"
 #include "AMDGPUInstrInfo.h"
 #include "AMDGPUMachineFunctionInfo.h"
@@ -4815,6 +4816,22 @@ SDValue AMDGPUTargetLowering::performMulCombine(SDNode *N,
     N1 = DAG.getSExtOrTrunc(N1, DL, MVT::i32);
     Mul = getMul24(DAG, DL, N0, N1, Size, true);
   } else {
+    // The 32-bit vector multiply takes several cycles on GFX10+ (RDNA). A
+    // multiply by 2^n + 1 or 2^n - 1 that cannot use the 24-bit form is two
+    // single-cycle instructions as a shift and an add or subtract.
+    if (VT == MVT::i32 &&
+        DAG.getMachineFunction().getSubtarget<GCNSubtarget>().getGeneration() >=
+            AMDGPUSubtarget::GFX10)
+      if (auto *C = dyn_cast<ConstantSDNode>(N->getOperand(1))) {
+        const APInt &V = C->getAPIntValue();
+        SDValue X = N->getOperand(0);
+        if (V.ugt(2) && (V - 1).isPowerOf2())
+          return DAG.getNode(ISD::ADD, DL, VT,
+                             DAG.getNode(ISD::SHL, DL, VT, X, DAG.getConstant((V - 1).logBase2(), DL, MVT::i32)), X);
+        if (V.ugt(2) && (V + 1).isPowerOf2())
+          return DAG.getNode(ISD::SUB, DL, VT,
+                             DAG.getNode(ISD::SHL, DL, VT, X, DAG.getConstant((V + 1).logBase2(), DL, MVT::i32)), X);
+      }
     return SDValue();
   }
 
