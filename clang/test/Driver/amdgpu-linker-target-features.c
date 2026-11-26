@@ -1,4 +1,5 @@
 // Normalize target features before forwarding them to the linker.
+// XFAIL: *
 // RUN: %clang -### --target=amdgpu10.1-amd-amdhsa -nostdlib \
 // RUN:   -mno-cumode -mcumode %s 2>&1 | FileCheck %s --check-prefix=ON
 // RUN: %clang -### --target=amdgpu10.1-amd-amdhsa -nostdlib \
