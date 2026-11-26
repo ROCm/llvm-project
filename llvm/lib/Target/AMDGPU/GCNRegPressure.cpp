@@ -910,7 +910,17 @@ GCNRegPressure GCNDownwardRPTrackerBase::bumpDownwardPressure(
 }
 
 bool GCNUpwardRPTracker::isValid() const {
-  const auto &SI = LIS.getInstructionIndex(*LastTrackedMI).getBaseIndex();
+  // Debug instructions have no slot index. After receding over them the
+  // tracked live set is still the one in front of the next non-debug
+  // instruction, so validate against that. SlotIndexes::getInstructionIndex()
+  // only looks one instruction ahead and asserts on a run of debug
+  // instructions.
+  const MachineBasicBlock *MBB = LastTrackedMI->getParent();
+  MachineBasicBlock::const_iterator MI = skipDebugInstructionsForward(
+      MachineBasicBlock::const_iterator(LastTrackedMI), MBB->end());
+  if (MI == MBB->end())
+    return true;
+  const auto &SI = LIS.getInstructionIndex(*MI).getBaseIndex();
   const auto LISLR = llvm::getLiveRegs(SI, LIS, *MRI);
   const auto &TrackedLR = LiveRegs;
 
