@@ -34,7 +34,7 @@ jobs:
     name: Build
     outputs:
       translator_sha: ${{ steps.resolve_translator.outputs.sha }}
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: az-linux-scale-rocm-asan-prod-2
     timeout-minutes: 120
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
@@ -417,7 +417,7 @@ jobs:
   test_translator_lit:
     name: Test SPIRV translator lit
     needs: build
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: az-linux-scale-rocm-asan-prod-2
     timeout-minutes: 30
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
@@ -484,7 +484,7 @@ jobs:
   test_codegen:
     name: Test LLVM SPIRV codegen
     needs: build
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: az-linux-scale-rocm-asan-prod-2
     timeout-minutes: 15
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
@@ -532,7 +532,7 @@ jobs:
   test_comgr:
     name: Test Comgr
     needs: build
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: az-linux-scale-rocm-asan-prod-2
     timeout-minutes: 30
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:f1f9dd9b20404c239f01a02ffec61d6c2e80abcafe7fdac854f06169828e53ce # 2026-10-30
@@ -602,7 +602,7 @@ jobs:
   pick_runner:
     name: Select gfx942 test runner
     needs: [build]
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: az-linux-scale-rocm-asan-prod-2
     timeout-minutes: 5
     outputs:
       test_runs_on: ${{ steps.pick.outputs.label }}

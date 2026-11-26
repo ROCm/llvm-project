@@ -20,6 +20,12 @@
 #
 # Options read by this file must be passed before -C:
 #   LLVM_INCLUDE_TESTS  Builds every LLVM and Clang tool which the tests need.
+#   LLVM_INSTALL_UTILS  ON by default. The utils distribution is only declared
+#                       when this is ON, because LLVM creates the utility
+#                       install targets only then.
+#   CLANG_ENABLE_CIR    Builds ClangIR. Clang's libraries then link MLIR, so the
+#                       MLIR package ships in dev instead of fortran. OFF on
+#                       Windows, where MLIR is not built.
 
 get_filename_component(_ROCM_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 
@@ -40,6 +46,9 @@ set(LLVM_TARGETS_TO_BUILD "Native;AMDGPU;SPIRV" CACHE STRING "")
 if(CMAKE_HOST_WIN32)
   set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld" CACHE STRING "")
   set(_ROCM_HOST_RUNTIMES "compiler-rt")
+  # MLIR is not an enabled project here. ClangIR would pull it in as a
+  # dependency-only project whose targets are not exported with Clang.
+  set(CLANG_ENABLE_CIR OFF CACHE BOOL "")
 else()
   set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;mlir;flang;lld" CACHE STRING "")
   set(_ROCM_HOST_RUNTIMES "compiler-rt;libunwind;libcxx;libcxxabi;openmp;offload;flang-rt")
@@ -128,6 +137,12 @@ if(NOT LLVM_INCLUDE_TESTS)
 endif()
 
 # Clang options.
+# LLVM reads this option after -C, so set it here to branch on it below.
+if(CMAKE_HOST_WIN32)
+  set(CLANG_ENABLE_CIR OFF CACHE BOOL "")
+else()
+  set(CLANG_ENABLE_CIR ON CACHE BOOL "")
+endif()
 set(CLANG_DEFAULT_LINKER lld CACHE STRING "")
 set(CLANG_DEFAULT_RTLIB compiler-rt CACHE STRING "")
 set(CLANG_DEFAULT_UNWINDLIB libgcc CACHE STRING "")
@@ -214,12 +229,19 @@ endif()
 # omitted from the exported CMake packages. Each distribution installs its own
 # exported targets, in the <project>-<name>-cmake-exports components, and the
 # packages load them in this order, so a distribution must come after those it
-# links against.
+# links against. fortran links the MLIR libraries that dev ships with ClangIR,
+# so it comes after dev.
 if(CMAKE_HOST_WIN32)
-  set(LLVM_DISTRIBUTIONS "compiler;runtimes;dev;tools;utils" CACHE STRING "")
+  set(_ROCM_DISTRIBUTIONS "compiler;runtimes;dev;tools")
 else()
-  set(LLVM_DISTRIBUTIONS "compiler;runtimes;fortran;dev;tools;utils;multilibs" CACHE STRING "")
+  set(_ROCM_DISTRIBUTIONS "compiler;runtimes;dev;fortran;tools;multilibs")
 endif()
+# utils comes last and nothing depends on it. LLVM only creates its install
+# targets when LLVM_INSTALL_UTILS is ON.
+if(LLVM_INSTALL_UTILS)
+  list(APPEND _ROCM_DISTRIBUTIONS utils)
+endif()
+set(LLVM_DISTRIBUTIONS "${_ROCM_DISTRIBUTIONS}" CACHE STRING "")
 
 # The tools the HIP driver runs and the libraries they link. Linux links with
 # compiler-rt by default.
@@ -244,6 +266,25 @@ else()
     LLVM)
 endif()
 set(LLVM_compiler_DISTRIBUTION_COMPONENTS ${_ROCM_COMPILER_COMPONENTS} CACHE STRING "")
+
+# With ClangIR, Clang's libraries link MLIR's, and an export set belongs to the
+# distribution that owns the target. dev therefore ships the MLIR package and
+# fortran only adds libMLIR and the tools. Without ClangIR, fortran ships it all.
+if(CLANG_ENABLE_CIR)
+  set(_ROCM_MLIR_DEV_COMPONENTS
+    mlir-cmake-exports
+    mlir-dev-cmake-exports
+    mlir-headers
+    mlir-libraries)
+  set(_ROCM_MLIR_FORTRAN_COMPONENTS mlir-fortran-cmake-exports)
+else()
+  set(_ROCM_MLIR_DEV_COMPONENTS)
+  set(_ROCM_MLIR_FORTRAN_COMPONENTS
+    mlir-cmake-exports
+    mlir-fortran-cmake-exports
+    mlir-headers
+    mlir-libraries)
+endif()
 
 if(CMAKE_HOST_WIN32)
   set(LLVM_runtimes_DISTRIBUTION_COMPONENTS
@@ -282,10 +323,7 @@ else()
     flang-headers
     flang-libraries
     flang-rt-headers-${ROCM_HOST_TRIPLE}
-    mlir-cmake-exports
-    mlir-fortran-cmake-exports
-    mlir-headers
-    mlir-libraries
+    ${_ROCM_MLIR_FORTRAN_COMPONENTS}
     # Flang and MLIR tools.
     bbc
     f18-parse-demo
@@ -328,6 +366,7 @@ set(LLVM_dev_DISTRIBUTION_COMPONENTS
   lld-dev-cmake-exports
   lld-headers
   lld-libraries
+  ${_ROCM_MLIR_DEV_COMPONENTS}
   CACHE STRING "")
 
 set(_ROCM_TOOLS_COMPONENTS

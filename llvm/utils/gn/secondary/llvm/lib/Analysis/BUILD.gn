@@ -150,6 +150,7 @@ static_library("Analysis") {
     "ValueLattice.cpp",
     "ValueLatticeUtils.cpp",
     "ValueTracking.cpp",
+    "ValueTrackingFP.cpp",
     "VectorUtils.cpp",
   ]
 }
