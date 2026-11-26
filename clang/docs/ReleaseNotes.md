@@ -457,6 +457,13 @@ documentation](CIR/index.md) for more information regarding ClangIR's status and
   {doc}`Return Address Authentication Hardening <ReturnAddressAuthenticationHardening>`
   for more information.
 
+- Added experimental `-fmodules-driver` option to enable explicit module
+  builds using C++20 named modules or Clang modules, managed by the Clang
+  driver. This also supports the C++ standard library modules.
+
+- Added `-Rmodules-driver` option to emit remarks for `-fmodules-driver`,
+  such as the build graph with module dependencies as a DOT graph.
+
 - Added `-fpass-plugin-arg=<plugin>,<arg>`, which passes `<arg>` to the pass
   plugin named `<plugin>`, as `opt -plugin-arg=<plugin>,<arg>` does. It reaches
   plugins loaded with `-fpass-plugin=` and statically linked ones such as Polly.
@@ -1514,6 +1521,8 @@ documentation](CIR/index.md) for more information regarding ClangIR's status and
   not Arm64EC or x64) reuses the tail padding of the over-aligned base for the
   subsequent base; Clang now does the same.
   ([#210174](https://github.com/llvm/llvm-project/issues/210174))
+
+- `_AddressOfReturnAddress` is now available on 32-bit Arm.
 
 - Fixed ``/hotpatch`` with LTO, where objects were not marked as hotpatchable,
   so ``/FUNCTIONPADMIN`` didn't pad their functions.

@@ -67,7 +67,7 @@ def main() -> None:
         "build_python_packages": True,
         "build_pytorch": True,
         "build_rocm": True,
-        "build_runs_on": "aws-linux-scale-rocm-large",
+        "build_runs_on": "az-linux-scale-rocm-asan-prod-2",
         "prebuilt_stages": prebuilt_stages,
         "baseline_run_id": baseline_run_id,
     }
