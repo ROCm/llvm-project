@@ -228,6 +228,7 @@ LanguageFeatureControl::LanguageFeatureControl() {
   warnUsage_.set(UsageWarning::IoImpliedDoIndexConflict);
   warnUsage_.set(UsageWarning::BOZLiteralTruncation);
   warnUsage_.set(UsageWarning::ModuleFileMismatch);
+  warnUsage_.set(UsageWarning::UndelimitedNamelistCharacter);
   warnLanguage_.set(LanguageFeature::PreferIntrinsicModuleUseAssociation);
   warnLanguage_.set(LanguageFeature::OpenMPThreadprivateEquivalence);
   warnLanguage_.set(LanguageFeature::OpenAccDefaultNoneScalarsStrict);
