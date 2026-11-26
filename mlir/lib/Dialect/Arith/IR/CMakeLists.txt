@@ -31,7 +31,6 @@ add_mlir_dialect_library(MLIRArithDialect
   MLIRInferIntRangeInterface
   MLIRInferTypeOpInterface
   MLIRIR
-  MLIRSideEffectInterfaces
   MLIRUBDialect
   )
 
