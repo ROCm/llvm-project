@@ -93,7 +93,8 @@ ENUM_CLASS(UsageWarning, Portability, PointerToUndefinable,
     NamelistParameter, ImpureFinalInPure, IgnoredNoReallocateLHS,
     ExperimentalOption, IoImpliedDoIndexConflict, BOZLiteralTruncation,
     IntentInActualForDefaultIntent, BindCArrayDescriptor,
-    OpenMPDeprecated, OpenMPFuture, OpenMPMapSaveWithoutAlways, StatKind)
+    OpenMPDeprecated, OpenMPFuture, OpenMPMapSaveWithoutAlways, StatKind,
+    UndelimitedNamelistCharacter)
 
 using LanguageFeatures = EnumSet<LanguageFeature, LanguageFeature_enumSize>;
 using UsageWarnings = EnumSet<UsageWarning, UsageWarning_enumSize>;
