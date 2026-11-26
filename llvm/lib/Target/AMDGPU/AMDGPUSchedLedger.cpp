@@ -75,6 +75,7 @@ struct RegionEntry {
   bool Validated = false;
   bool Stale = false;
   bool CycleWarned = false;
+  unsigned PairGuarded = 0; // order edges skipped because they would split a dual-issue pair
 };
 
 struct FunctionEntry {
@@ -501,11 +502,47 @@ void SchedLedger::applyRegion(ScheduleDAGMI &DAG, RegionEntry &R,
     SU->setHeightDirty();
   }
 
+  // After register allocation the VOPD pairing mutation has already clustered
+  // pairs of instructions that can be issued as one dual instruction. An order
+  // edge that forces something between the two members of such a pair splits
+  // it (one extra instruction per pair), so it is skipped. A ledger entry
+  // cannot ask for that; PSCHED_NO_PAIR_GUARD=1 turns the guard off.
+  static const bool PairGuard = !std::getenv("PSCHED_NO_PAIR_GUARD");
+  // Pairs from this DAG's own nodes (the cluster list itself may hold entries
+  // of earlier regions).
+  SmallVector<std::pair<SUnit *, SUnit *>, 32> Pairs;
+  if (PostRA && PairGuard) {
+    DenseMap<unsigned, SmallVector<SUnit *, 2>> ByCluster;
+    for (SUnit &SU : DAG.SUnits)
+      if (SU.isClustered())
+        ByCluster[SU.ParentClusterIdx].push_back(&SU);
+    for (auto &[Idx, Members] : ByCluster)
+      if (Members.size() == 2)
+        Pairs.emplace_back(Members[0]->NodeNum < Members[1]->NodeNum ? Members[0] : Members[1],
+                           Members[0]->NodeNum < Members[1]->NodeNum ? Members[1] : Members[0]);
+  }
+  auto SplitsPair = [&](SUnit *Pred, SUnit *Succ) {
+    for (auto [P, Q] : Pairs) {
+      // the pair is P then Q: Pred after P and Succ before Q puts both between
+      bool AfterP = Pred == P || DAG.IsReachable(Pred, P);
+      bool BeforeQ = Succ == Q || DAG.IsReachable(Q, Succ);
+      if (AfterP && BeforeQ && !(Pred == P && Succ == Q))
+        return true;
+    }
+    return false;
+  };
+
   for (const std::vector<unsigned> &Chain : R.Order)
     for (unsigned I = 0; I + 1 < Chain.size(); ++I) {
       auto A = Ids.find(Chain[I]), B = Ids.find(Chain[I + 1]);
       if (A == Ids.end() || B == Ids.end())
         continue;
+      if (SplitsPair(A->second, B->second)) {
+        if (R.PairGuarded++ == 0 && std::getenv("PSCHED_VERBOSE"))
+          errs() << "psched: " << DAG.MF.getName() << ": order " << Chain[I] << " -> " << Chain[I + 1]
+                 << " (" << R.Origin << ") would split a dual-issue pair; skipped (further ones counted silently)\n";
+        continue;
+      }
       if (DAG.canAddEdge(B->second, A->second)) {
         DAG.addEdge(B->second, SDep(A->second, SDep::Artificial));
       } else if (!R.CycleWarned) {

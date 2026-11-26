@@ -248,6 +248,15 @@ public:
     auto VOPDInst =
         BuildMI(*MIX->getParent(), MIX, MIMetadata(*MIX), SII->get(NewOpcode))
             .setMIFlags(MIX->getFlags() | MIY->getFlags());
+    // Keep the !pcsections of both halves, so tools that map instructions to
+    // addresses through them (e.g. a scheduling ledger's id table) see both.
+    if (MDNode *MY = MIY->getPCSections()) {
+      SmallVector<Metadata *, 8> Ops;
+      if (MDNode *MX = MIX->getPCSections())
+        Ops.append(MX->op_begin(), MX->op_end());
+      Ops.append(MY->op_begin(), MY->op_end());
+      VOPDInst->setPCSections(*MIX->getMF(), MDNode::get(MIX->getMF()->getFunction().getContext(), Ops));
+    }
 
     namespace VOPD = AMDGPU::VOPD;
     MachineInstr *MI[] = {MIX, MIY};
