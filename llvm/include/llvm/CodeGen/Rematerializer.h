@@ -238,6 +238,13 @@ public:
   /// Returns whether there is any rematerializable register in regions.
   LLVM_ABI bool analyze();
 
+  /// Determines whether \p MI is considered rematerializable. This further
+  /// restricts constraints imposed by the TII on rematerializable instructions,
+  /// requiring for example that the defined register is virtual.
+  LLVM_ABI static bool isMIRematerializable(const MachineInstr &MI,
+                                            const TargetInstrInfo &TII,
+                                            const MachineRegisterInfo &MRI);
+
   /// Adds a new listener to the rematerializer.
   void addListener(Listener *Listen) {
     assert(Listen && "null listener");
@@ -554,11 +561,6 @@ private:
   addRegIfRematerializable(unsigned VirtRegIdx,
                            const DenseMap<MachineInstr *, unsigned> &MIRegion,
                            BitVector &SeenRegs);
-
-  /// Determines whether \p MI is considered rematerializable. This further
-  /// restricts constraints imposed by the TII on rematerializable instructions,
-  /// requiring for example that the defined register is virtual.
-  bool isMIRematerializable(const MachineInstr &MI) const;
 
   /// Implementation of \ref Rematerializer::transferUser that doesn't update
   /// register users.

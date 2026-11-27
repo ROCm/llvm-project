@@ -414,6 +414,11 @@ public:
   /// Move to the state of RP just before the \p MI.
   void recede(const MachineInstr &MI);
 
+  /// Move to the state of RP just before \p Begin, from the state just before
+  /// \p End.
+  void recede(MachineBasicBlock::const_iterator Begin,
+              MachineBasicBlock::const_iterator End);
+
   /// \p returns whether the tracker's state after receding MI corresponds
   /// to reported by LIS.
   bool isValid() const;

@@ -639,21 +639,12 @@ private:
   GCNRegPressure summarizeWalk(ArrayRef<InstrPressure> Walk, bool UnifiedRF,
                                GCNRematStrategy::RegionPeaks &Peaks) const;
 
-  /// Returns the registers live at \p Begin, walking up from the live-outs \p
-  /// LiveOuts at \p End.
-  GCNRPTracker::LiveRegSet
-  getLiveRegsBefore(MachineBasicBlock::iterator Begin,
-                    MachineBasicBlock::iterator End,
-                    const GCNRPTracker::LiveRegSet &LiveOuts) const;
-
-  /// Returns the instruction after which the region [\p Begin, \p End) is
-  /// split, or null if it is not split. \p Walk is the region's pressure from
-  /// \ref walkRegion and \p VectorExcess selects the register kind whose peak
-  /// is used.
-  MachineInstr *findRematSplit(MachineBasicBlock::iterator Begin,
-                               MachineBasicBlock::iterator End,
-                               ArrayRef<InstrPressure> Walk, bool UnifiedRF,
-                               bool VectorExcess) const;
+  /// Returns the index in \p Walk of the instruction after which the region is
+  /// split, if it is split. \p Walk is the region's pressure from \ref
+  /// walkRegion and \p VectorExcess selects the register kind whose peak is
+  /// used.
+  std::optional<size_t> findRematSplit(ArrayRef<InstrPressure> Walk,
+                                       bool UnifiedRF, bool VectorExcess) const;
 
   /// Returns the slot of the last defining instruction of \p Reg if all its
   /// defining instructions are rematerializable, and an invalid slot

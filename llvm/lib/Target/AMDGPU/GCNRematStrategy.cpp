@@ -155,23 +155,26 @@ void GCNRematStrategy::RematCandidate::init(const RematRegions &RF,
   Live |= LiveIn;
   Live |= LiveOut;
 
-  // In a region whose RP peak is known, the rematerialization can only save
-  // the register at the peak if the register is no longer live there. In the
-  // defining region, the original register stays when it has users there. In
-  // a using region, the rematerialized register lives from the first to the
-  // last use in the region. The peaks are those of the initial schedule and
-  // are not updated after rematerializations.
+  // In a region whose RP peak is known, the rematerialization saves the
+  // register at the peak only if the register is live there before the
+  // rematerialization and dead there after it. In the defining region, the
+  // original register stays when it has users there. In a using region, the
+  // rematerialized register lives from the first to the last use in the
+  // region, and the original register is live at the peak before the
+  // rematerialization unless all uses are before the peak and the register is
+  // not live-out. The peaks are those of the initial schedule and are not
+  // updated after rematerializations.
   const bool IsSGPR = SIRegisterInfo::isSGPRClass(MRI.getRegClass(DefReg));
   for (unsigned I : Live.set_bits()) {
     const SlotIndex Peak = RF.getPeak(I, IsSGPR);
     if (!Peak.isValid())
       continue;
-    bool LiveAtPeak = false;
+    bool NoSaveAtPeak = false;
     auto RegionUsers = Reg.Uses.find(I);
     if (I == Reg.DefRegion) {
-      LiveAtPeak = !(LIS.getInstructionIndex(*Reg.getLastDef()) < Peak);
+      NoSaveAtPeak = !(LIS.getInstructionIndex(*Reg.getLastDef()) < Peak);
       if (RegionUsers != Reg.Uses.end()) {
-        LiveAtPeak |= any_of(RegionUsers->second, [&](MachineInstr *MI) {
+        NoSaveAtPeak |= any_of(RegionUsers->second, [&](MachineInstr *MI) {
           return !(LIS.getInstructionIndex(*MI) < Peak);
         });
       }
@@ -182,12 +185,11 @@ void GCNRematStrategy::RematCandidate::init(const RematRegions &RF,
         UseAtOrBefore |= !(Peak < UseIdx);
         UseAtOrAfter |= !(UseIdx < Peak);
       }
-      LiveAtPeak = UseAtOrBefore && (UseAtOrAfter || !LiveOut[I]);
+      NoSaveAtPeak = UseAtOrBefore && (UseAtOrAfter || !LiveOut[I]);
     }
-    if (LiveAtPeak)
+    if (NoSaveAtPeak)
       NoPeakSave.set(I);
   }
-  Live.reset(NoPeakSave);
 
   for (unsigned I : Live.set_bits()) {
     // If the register is both unused and live-through in the region, the
@@ -217,7 +219,7 @@ void GCNRematStrategy::RematCandidate::init(const RematRegions &RF,
 void GCNRematStrategy::RematCandidate::update(const RematTargets &Targets) {
   MaxFreq = RegionImpact = 0;
   for (unsigned RegionIdx : Targets.ExcessRP.set_bits()) {
-    if (!Live[RegionIdx])
+    if (!Live[RegionIdx] || NoPeakSave[RegionIdx])
       continue;
 
     // The rematerialization must contribute positively in at least one
@@ -246,7 +248,8 @@ void GCNRematStrategy::RematCandidate::update(const RematTargets &Targets) {
 bool GCNRematStrategy::RematCandidate::maybeBeneficial(
     const RematTargets &Targets) const {
   for (unsigned I : Targets.ExcessRP.set_bits()) {
-    if (Live[I] && Targets.RPTargets[I].isSaveBeneficial(RPSave))
+    if (Live[I] && !NoPeakSave[I] &&
+        Targets.RPTargets[I].isSaveBeneficial(RPSave))
       return true;
   }
   return false;
@@ -404,11 +407,12 @@ void GCNRematStrategy::rematerializeFor(
       // Adjust RP targets. The save is guaranteed in regions in which the
       // register is live-through and unused but optimistic in all other regions
       // where the register is live.
-      Targets.updateRPTargets(Cand.Live, Cand.RPSave);
+      BitVector SaveRegions(Cand.Live);
+      SaveRegions.reset(Cand.NoPeakSave);
+      Targets.updateRPTargets(SaveRegions, Cand.RPSave);
       RecomputeRP |= Cand.UnpredictableRPSave;
       RecomputeRP |= Cand.NoPeakSave;
       AffectedRegions |= Cand.Live;
-      AffectedRegions |= Cand.NoPeakSave;
       if (Targets.allAchieved()) {
         LLVM_DEBUG(dbgs() << "All targets cleared, verifying...\n");
         break;

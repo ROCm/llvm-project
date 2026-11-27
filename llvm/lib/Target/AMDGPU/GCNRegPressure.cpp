@@ -645,6 +645,12 @@ void GCNUpwardRPTracker::recede(const MachineInstr &MI) {
   assert(CurPressure == getRegPressure(*MRI, LiveRegs));
 }
 
+void GCNUpwardRPTracker::recede(MachineBasicBlock::const_iterator Begin,
+                                MachineBasicBlock::const_iterator End) {
+  while (End != Begin)
+    recede(*--End);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // GCNDownwardRPTracker
 

@@ -2921,16 +2921,18 @@ void PreRARematStage::buildRematRegions(const BitVector &TargetRegions,
     const GCNRPTracker::LiveRegSet &LiveOuts =
         DAG.RegionLiveOuts.getLiveRegsForRegionIdx(I);
     FirstRematRegion.push_back(static_cast<unsigned>(RematRegions.size()));
-    MachineInstr *Split = nullptr;
+    std::optional<size_t> SplitPos;
     if (TargetRegions[I] && mayHaveSplitCandidate(Begin, End)) {
       Walk.clear();
       walkRegion(Begin, End, LiveOuts, Walk);
-      Split = findRematSplit(Begin, End, Walk, UnifiedRF, VectorExcess[I]);
-      if (Split &&
-          !hasSplitCandidate(*Split, std::next(Split->getIterator()), End))
-        Split = nullptr;
+      SplitPos = findRematSplit(Walk, UnifiedRF, VectorExcess[I]);
+      if (SplitPos) {
+        MachineInstr &Split = *Walk[*SplitPos].MI;
+        if (!hasSplitCandidate(Split, std::next(Split.getIterator()), End))
+          SplitPos.reset();
+      }
     }
-    if (!Split) {
+    if (!SplitPos) {
       RematRegions.emplace_back(Begin, End);
       RematLiveIns.push_back(DAG.LiveIns[I]);
       RematLiveOuts.push_back(LiveOuts);
@@ -2940,6 +2942,7 @@ void PreRARematStage::buildRematRegions(const BitVector &TargetRegions,
       continue;
     }
 
+    MachineInstr *Split = Walk[*SplitPos].MI;
     LLVM_DEBUG(dbgs() << "Split region " << I << " after " << *Split);
     SplitMIs[I] = Split;
     MachineBasicBlock::iterator SplitEnd = Split->getIterator();
@@ -2948,18 +2951,16 @@ void PreRARematStage::buildRematRegions(const BitVector &TargetRegions,
     // The walk lists the second half from its last instruction, then the split
     // instruction, which belongs to the first half, then the rest of the first
     // half.
-    size_t SplitPos =
-        find_if(Walk, [&](const InstrPressure &E) { return E.MI == Split; }) -
-        Walk.begin();
-    assert(SplitPos < Walk.size() && "split instruction not walked");
-    ArrayRef<InstrPressure> SecondWalk = ArrayRef(Walk).take_front(SplitPos);
-    ArrayRef<InstrPressure> FirstWalk = ArrayRef(Walk).drop_front(SplitPos);
+    ArrayRef<InstrPressure> SecondWalk = ArrayRef(Walk).take_front(*SplitPos);
+    ArrayRef<InstrPressure> FirstWalk = ArrayRef(Walk).drop_front(*SplitPos);
     GCNRematStrategy::RegionPeaks FirstPeaks, SecondPeaks;
     GCNRegPressure FirstMaxRP = summarizeWalk(FirstWalk, UnifiedRF, FirstPeaks);
     GCNRegPressure SecondMaxRP =
         summarizeWalk(SecondWalk, UnifiedRF, SecondPeaks);
-    GCNRPTracker::LiveRegSet SplitLive =
-        getLiveRegsBefore(SplitBegin, End, LiveOuts);
+    GCNUpwardRPTracker RPTracker(*DAG.LIS);
+    RPTracker.reset(DAG.MRI, LiveOuts);
+    RPTracker.recede(SplitBegin, End);
+    GCNRPTracker::LiveRegSet SplitLive = RPTracker.moveLiveRegs();
 
     // The first half's live-outs are the registers live after the split
     // instruction, consistently with the rematerializer, which considers the
@@ -2994,7 +2995,7 @@ SlotIndex PreRARematStage::getRematLastDef(Register Reg) {
     return It->second;
   SlotIndex LastDef;
   for (const MachineInstr &DefMI : DAG.MRI.def_instructions(Reg)) {
-    if (!DAG.TII->isReMaterializable(DefMI)) {
+    if (!Rematerializer::isMIRematerializable(DefMI, *DAG.TII, DAG.MRI)) {
       LastDef = SlotIndex();
       break;
     }
@@ -3079,55 +3080,34 @@ PreRARematStage::summarizeWalk(ArrayRef<InstrPressure> Walk, bool UnifiedRF,
   return MaxRP;
 }
 
-GCNRPTracker::LiveRegSet PreRARematStage::getLiveRegsBefore(
-    MachineBasicBlock::iterator Begin, MachineBasicBlock::iterator End,
-    const GCNRPTracker::LiveRegSet &LiveOuts) const {
-  GCNUpwardRPTracker RPTracker(*DAG.LIS);
-  RPTracker.reset(DAG.MRI, LiveOuts);
-  for (MachineBasicBlock::iterator MI = End; MI != Begin;) {
-    --MI;
-    if (!MI->isDebugInstr())
-      RPTracker.recede(*MI);
-  }
-  return RPTracker.getLiveRegs();
-}
-
-MachineInstr *PreRARematStage::findRematSplit(MachineBasicBlock::iterator Begin,
-                                              MachineBasicBlock::iterator End,
-                                              ArrayRef<InstrPressure> Walk,
-                                              bool UnifiedRF,
-                                              bool VectorExcess) const {
-  MachineBasicBlock::iterator Last =
-      skipDebugInstructionsBackward(std::prev(End), Begin);
-  if (Last == Begin || Walk.empty())
-    return nullptr;
+std::optional<size_t>
+PreRARematStage::findRematSplit(ArrayRef<InstrPressure> Walk, bool UnifiedRF,
+                                bool VectorExcess) const {
+  // Both halves must contain a non-debug instruction, so the split instruction
+  // can be neither the first nor the last one.
+  if (Walk.size() < 3)
+    return std::nullopt;
 
   // Find the earliest instruction with the highest pressure of the register
-  // kind in excess.
-  MachineInstr *Peak = nullptr;
+  // kind in excess. The walk goes upwards, so ties keep the later index.
+  size_t PeakPos = 0;
   unsigned PeakRP = 0;
-  for (const auto &[MI, RP] : Walk) {
+  for (const auto &[Pos, E] : enumerate(Walk)) {
     unsigned NumRegs =
-        VectorExcess ? RP.getVGPRNum(UnifiedRF) : RP.getSGPRNum();
+        VectorExcess ? E.RP.getVGPRNum(UnifiedRF) : E.RP.getSGPRNum();
     if (NumRegs >= PeakRP) {
       PeakRP = NumRegs;
-      Peak = MI;
+      PeakPos = Pos;
     }
   }
 
   // Split after the first instruction at or after the peak that cannot be
-  // deleted, so that the first region's end stays valid. Both regions must
-  // contain a non-debug instruction.
-  for (MachineBasicBlock::iterator MI = Peak->getIterator(); MI != Last; ++MI) {
-    if (!isSplitPoint(*MI))
-      continue;
-    if (skipDebugInstructionsForward(Begin, MI) == MI)
-      continue;
-    if (skipDebugInstructionsForward(std::next(MI), End) == End)
-      return nullptr;
-    return &*MI;
+  // deleted, so that the first region's end stays valid.
+  for (size_t Pos = std::min(PeakPos, Walk.size() - 2); Pos != 0; --Pos) {
+    if (isSplitPoint(*Walk[Pos].MI))
+      return Pos;
   }
-  return nullptr;
+  return std::nullopt;
 }
 
 void PreRARematStage::updateSchedRegions() {

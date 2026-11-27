@@ -225,9 +225,9 @@ private:
     /// guaranteed to reduce RP (i.e., regions in which the register is not
     /// live-through and unused).
     BitVector UnpredictableRPSave;
-    /// Regions in which the register is live and changed by the
-    /// rematerialization, but stays live at the known RP peak, so that the
-    /// rematerialization cannot reduce the peak there. Disjoint from \ref Live.
+    /// Subset of \ref Live regions with a known RP peak at which the
+    /// rematerialization does not save the register, so that it cannot reduce
+    /// RP there.
     BitVector NoPeakSave;
     /// Expected register pressure decrease induced by rematerializing this
     /// candidate.
