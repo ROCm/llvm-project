@@ -1,0 +1,6 @@
+{ "version": 2,
+  "functions": [
+    { "match": "kernel_a",
+      "attrs": { "amdgpu-sched-strategy": "max-ilp", "alwaysinline": "1" } },
+    { "match": "no_such_function",
+      "attrs": { "amdgpu-sched-strategy": "max-ilp" } } ] }

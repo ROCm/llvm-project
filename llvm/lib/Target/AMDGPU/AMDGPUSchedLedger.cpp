@@ -200,8 +200,13 @@ std::vector<FunctionEntry> &getLedger();
 /// offered to every function its name match selects (often all instantiations
 /// of a template) and is expected to be absent from most of them, so whether
 /// it went stale can only be said once all of them have been compiled.
+void reportLastFunction();
+
 struct LedgerSummary {
   ~LedgerSummary() {
+    // The per-function state refers to ledger entries; report it here, while
+    // they still exist, rather than from its own static destructor.
+    reportLastFunction();
     for (FunctionEntry &FE : getLedger())
       for (RegionEntry &R : FE.Regions) {
         // Not offered: this compilation does not contain the code the entry
@@ -297,6 +302,8 @@ FunctionState &state() {
   static FunctionState S;
   return S;
 }
+
+void reportLastFunction() { state().report(); }
 
 uint32_t fnv1a(StringRef S, uint32_t H = 2166136261u) {
   for (unsigned char C : S)

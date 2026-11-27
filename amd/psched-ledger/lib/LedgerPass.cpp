@@ -631,7 +631,7 @@ struct LedgerPass : RequiredPassInfoMixin<LedgerPass> {
         for (unsigned I = 0; I < HintBlocks.size(); ++I)
           if (!HintBlocks[I])
             errs() << "psched: warning: hint #" << I << " of entry '" << Match
-                   << "' matched no instruction (stale ledger, or built without -g?)\n";
+                   << "' matched no instruction (stale ledger?)\n";
     }
     return Changed;
   }

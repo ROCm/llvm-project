@@ -1,0 +1,2 @@
+{ "version": 2,
+  "functions": [ { "match": "mul_", "choose": ["mul24", "no_such_choice"] } ] }

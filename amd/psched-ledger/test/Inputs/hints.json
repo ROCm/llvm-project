@@ -1,0 +1,5 @@
+{ "version": 2,
+  "functions": [ { "match": "kernel",
+    "hints": [ { "intrinsic": "matrix_op", "group_barriers": [[8, 1], [2, 4]], "repeat": 2, "sync": 0 },
+               { "intrinsic": "matrix_op", "sched_barrier": 0 },
+               { "intrinsic": "no_such_callee", "sched_barrier": 0 } ] } ] }

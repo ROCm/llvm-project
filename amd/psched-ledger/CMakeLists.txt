@@ -38,3 +38,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_llvm_pass_plugin(psched-ledger lib/LedgerPass.cpp)
+
+# Tests need lit, opt and FileCheck from the same build: in-tree builds only.
+if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND LLVM_INCLUDE_TESTS)
+  add_subdirectory(test)
+endif()
