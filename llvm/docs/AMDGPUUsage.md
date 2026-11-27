@@ -8858,6 +8858,12 @@ that:
 - `FR` and `FA` have {ref}`inclusive scopes<amdgpu-inclusive-scopes>`.
 - Both fences include *AS* in their sets of synchronized address spaces.
 
+In the {ref}`per-byte AMDGPU memory model<amdgpu-synchronizes-with>`, `FR`
+*synchronizes-with\<B\>* `FA` if the conditions above hold for the address space
+of byte `B`, and both fences include `B` in their candidate sets. A non-av fence
+can participate in this synchronization without performing a *make-available* or
+*make-visible* operation.
+
 A fence that specifies a {ref}`one-as syncscope<amdgpu-one-as>` cannot be
 paired in this manner with a barrier.
 
