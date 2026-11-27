@@ -362,9 +362,9 @@ define amdgpu_gfx_whole_wave i32 @whole_wave_divergent(i1 %active) {
 ; SDAG-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; SDAG-NEXT:    v_and_b32_e32 v0, 1, v0
-; SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v0
+; SDAG-NEXT:    v_cmp_eq_u32_e64 s1, 1, v0
 ; SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s0
-; SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; SDAG-NEXT:    s_xor_b32 exec_lo, s1, exec_lo
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB4_2
 ; SDAG-NEXT:  .LBB4_1: ; %arrive
@@ -372,13 +372,13 @@ define amdgpu_gfx_whole_wave i32 @whole_wave_divergent(i1 %active) {
 ; SDAG-NEXT:    s_wait_alu depctr_vm_vsrc(0)
 ; SDAG-NEXT:    ds_atomic_async_barrier_arrive_b64 v1
 ; SDAG-NEXT:    s_wait_alu depctr_vm_vsrc(0)
-; SDAG-NEXT:    s_mov_b32 s1, exec_lo
+; SDAG-NEXT:    s_mov_b32 s2, exec_lo
 ; SDAG-NEXT:    s_mov_b32 exec_lo, 0
 ; SDAG-NEXT:    global_load_async_to_lds_b8 v0, v[0:1], off
-; SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; SDAG-NEXT:    s_mov_b32 exec_lo, s2
 ; SDAG-NEXT:  .LBB4_2: ; %exit
 ; SDAG-NEXT:    s_wait_xcnt 0x0
-; SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; SDAG-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; SDAG-NEXT:    v_cndmask_b32_e64 v0, 7, 42, vcc_lo
 ; SDAG-NEXT:    s_xor_b32 exec_lo, s0, -1
@@ -403,9 +403,9 @@ define amdgpu_gfx_whole_wave i32 @whole_wave_divergent(i1 %active) {
 ; SDAGOFF-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; SDAGOFF-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; SDAGOFF-NEXT:    v_and_b32_e32 v0, 1, v0
-; SDAGOFF-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v0
+; SDAGOFF-NEXT:    v_cmp_eq_u32_e64 s1, 1, v0
 ; SDAGOFF-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s0
-; SDAGOFF-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; SDAGOFF-NEXT:    s_xor_b32 exec_lo, s1, exec_lo
 ; SDAGOFF-NEXT:    ; divergent control-flow edge
 ; SDAGOFF-NEXT:    s_cbranch_execz .LBB4_2
 ; SDAGOFF-NEXT:  .LBB4_1: ; %arrive
@@ -414,7 +414,7 @@ define amdgpu_gfx_whole_wave i32 @whole_wave_divergent(i1 %active) {
 ; SDAGOFF-NEXT:    ds_atomic_async_barrier_arrive_b64 v1
 ; SDAGOFF-NEXT:    s_wait_alu depctr_vm_vsrc(0)
 ; SDAGOFF-NEXT:  .LBB4_2: ; %exit
-; SDAGOFF-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; SDAGOFF-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; SDAGOFF-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; SDAGOFF-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; SDAGOFF-NEXT:    v_cndmask_b32_e64 v0, 7, 42, vcc_lo
@@ -437,8 +437,8 @@ define amdgpu_gfx_whole_wave i32 @whole_wave_divergent(i1 %active) {
 ; GISEL-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GISEL-NEXT:    v_and_b32_e32 v0, 1, v0
-; GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GISEL-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GISEL-NEXT:    v_cmp_ne_u32_e64 s1, 0, v0
+; GISEL-NEXT:    s_xor_b32 exec_lo, s1, exec_lo
 ; GISEL-NEXT:    ; divergent control-flow edge
 ; GISEL-NEXT:    s_cbranch_execz .LBB4_2
 ; GISEL-NEXT:  .LBB4_1: ; %arrive
@@ -446,13 +446,13 @@ define amdgpu_gfx_whole_wave i32 @whole_wave_divergent(i1 %active) {
 ; GISEL-NEXT:    s_wait_alu depctr_vm_vsrc(0)
 ; GISEL-NEXT:    ds_atomic_async_barrier_arrive_b64 v0
 ; GISEL-NEXT:    s_wait_alu depctr_vm_vsrc(0)
-; GISEL-NEXT:    s_mov_b32 s1, exec_lo
+; GISEL-NEXT:    s_mov_b32 s2, exec_lo
 ; GISEL-NEXT:    s_mov_b32 exec_lo, 0
 ; GISEL-NEXT:    global_load_async_to_lds_b8 v0, v[0:1], off
-; GISEL-NEXT:    s_mov_b32 exec_lo, s1
+; GISEL-NEXT:    s_mov_b32 exec_lo, s2
 ; GISEL-NEXT:  .LBB4_2: ; %exit
 ; GISEL-NEXT:    s_wait_xcnt 0x0
-; GISEL-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GISEL-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GISEL-NEXT:    v_cndmask_b32_e64 v0, 7, 42, s0
 ; GISEL-NEXT:    s_xor_b32 exec_lo, s0, -1
 ; GISEL-NEXT:    scratch_load_b32 v0, off, s32 nv ; 4-byte Folded Reload
@@ -471,8 +471,8 @@ define amdgpu_gfx_whole_wave i32 @whole_wave_divergent(i1 %active) {
 ; GISELOFF-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GISELOFF-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GISELOFF-NEXT:    v_and_b32_e32 v0, 1, v0
-; GISELOFF-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GISELOFF-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GISELOFF-NEXT:    v_cmp_ne_u32_e64 s1, 0, v0
+; GISELOFF-NEXT:    s_xor_b32 exec_lo, s1, exec_lo
 ; GISELOFF-NEXT:    ; divergent control-flow edge
 ; GISELOFF-NEXT:    s_cbranch_execz .LBB4_2
 ; GISELOFF-NEXT:  .LBB4_1: ; %arrive
@@ -481,7 +481,7 @@ define amdgpu_gfx_whole_wave i32 @whole_wave_divergent(i1 %active) {
 ; GISELOFF-NEXT:    ds_atomic_async_barrier_arrive_b64 v0
 ; GISELOFF-NEXT:    s_wait_alu depctr_vm_vsrc(0)
 ; GISELOFF-NEXT:  .LBB4_2: ; %exit
-; GISELOFF-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GISELOFF-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GISELOFF-NEXT:    v_cndmask_b32_e64 v0, 7, 42, s0
 ; GISELOFF-NEXT:    s_xor_b32 exec_lo, s0, -1
 ; GISELOFF-NEXT:    scratch_load_b32 v0, off, s32 nv ; 4-byte Folded Reload

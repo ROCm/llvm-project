@@ -16,9 +16,9 @@ define i32 @dead_i32(i1 %cond, i32 %x, ptr addrspace(1) %ptr1) #0 {
 ; ASM-SDAG-NEXT:    v_mov_b32_e32 v4, v0
 ; ASM-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v0, v1 :: v_dual_and_b32 v1, 1, v4
-; ASM-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v1
-; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; ASM-SDAG-NEXT:    v_cmp_eq_u32_e64 s1, 1, v1
+; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
+; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, s1
 ; ASM-SDAG-NEXT:    ; divergent control-flow edge
 ; ASM-SDAG-NEXT:    s_cbranch_execz .LBB0_2
 ; ASM-SDAG-NEXT:  .LBB0_1: ; %if.then
@@ -104,9 +104,9 @@ define %trivial_types @dead_struct(i1 %cond, %trivial_types %x, ptr addrspace(1)
 ; ASM-SDAG-NEXT:    v_mov_b32_e32 v20, v0
 ; ASM-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v0, v1 :: v_dual_and_b32 v1, 1, v20
-; ASM-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v1
-; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; ASM-SDAG-NEXT:    v_cmp_eq_u32_e64 s1, 1, v1
+; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
+; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, s1
 ; ASM-SDAG-NEXT:    ; divergent control-flow edge
 ; ASM-SDAG-NEXT:    s_cbranch_execz .LBB1_2
 ; ASM-SDAG-NEXT:  .LBB1_1: ; %if.then
@@ -317,9 +317,9 @@ define [32 x i32] @dead_array(i1 %cond, [32 x i32] %x, ptr addrspace(1) %ptr1, i
 ; ASM-SDAG-NEXT:    scratch_load_b32 v1, off, s32 offset:16
 ; ASM-SDAG-NEXT:    v_and_b32_e32 v33, 1, v33
 ; ASM-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; ASM-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v33
-; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; ASM-SDAG-NEXT:    v_cmp_eq_u32_e64 s1, 1, v33
+; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
+; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, s1
 ; ASM-SDAG-NEXT:    ; divergent control-flow edge
 ; ASM-SDAG-NEXT:    s_cbranch_execz .LBB2_2
 ; ASM-SDAG-NEXT:  .LBB2_1: ; %if.then

@@ -4,32 +4,32 @@
 define amdgpu_cs void @if_then(ptr addrspace(8) inreg %input, ptr addrspace(8) inreg %output, <3 x i32> %LocalInvocationId) {
 ; GCN-LABEL: if_then:
 ; GCN:       ; %bb.0: ; %.entry
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
+; GCN-NEXT:    v_cmp_eq_u32_e64 s0, 0, v0
 ; GCN-NEXT:    v_mov_b32_e32 v3, 0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %.bb0
 ; GCN-NEXT:    v_mov_b32_e32 v3, 1
 ; GCN-NEXT:  .LBB0_2: ; %.merge
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
-; GCN-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 4, v0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GCN-NEXT:    v_cmp_gt_u32_e64 s0, 4, v0
+; GCN-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %.then
-; GCN-NEXT:    s_or_saveexec_b32 s0, -1
-; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, v3, s0
+; GCN-NEXT:    s_or_saveexec_b32 s1, -1
+; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, v3, s1
 ; GCN-NEXT:    v_mov_b32_e32 v2, 0
 ; GCN-NEXT:    v_mov_b32_dpp v2, v1 row_shr:1 row_mask:0xf bank_mask:0xf
-; GCN-NEXT:    s_mov_b32 exec_lo, s0
+; GCN-NEXT:    s_mov_b32 exec_lo, s1
 ; GCN-NEXT:    v_mov_b32_e32 v0, v2
 ; GCN-NEXT:    v_mov_b32_e32 v4, -1
 ; GCN-NEXT:    v_mov_b32_e32 v3, 0
 ; GCN-NEXT:    buffer_store_dword v4, v0, s[4:7], 0 offen
 ; GCN-NEXT:  .LBB0_4: ; %.end
 ; GCN-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GCN-NEXT:    v_mov_b32_e32 v0, -1
 ; GCN-NEXT:    buffer_store_dword v0, v3, s[4:7], 0 offen
 ; GCN-NEXT:    s_endpgm
@@ -63,18 +63,18 @@ define amdgpu_cs void @if_then(ptr addrspace(8) inreg %input, ptr addrspace(8) i
 define amdgpu_cs void @if_else_vgpr_opt(ptr addrspace(8) inreg %input, ptr addrspace(8) inreg %output, <3 x i32> %LocalInvocationId) {
 ; GCN-LABEL: if_else_vgpr_opt:
 ; GCN:       ; %bb.0: ; %.entry
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
+; GCN-NEXT:    v_cmp_eq_u32_e64 s0, 0, v0
 ; GCN-NEXT:    v_mov_b32_e32 v3, 0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_2
 ; GCN-NEXT:  .LBB1_1: ; %.bb0
 ; GCN-NEXT:    v_mov_b32_e32 v3, 1
 ; GCN-NEXT:  .LBB1_2: ; %.merge
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
-; GCN-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 3, v0
-; GCN-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GCN-NEXT:    v_cmp_lt_u32_e64 s1, 3, v0
+; GCN-NEXT:    s_xor_b32 s0, s1, exec_lo
+; GCN-NEXT:    s_mov_b32 exec_lo, s1
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_4
 ; GCN-NEXT:  .LBB1_3: ; %.else

@@ -7,9 +7,9 @@ define void @wombat(i1 %cond, ptr addrspace(5) %addr) {
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    buffer_load_ubyte v2, v1, s[0:3], 0 offen
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], 1, v0
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %then

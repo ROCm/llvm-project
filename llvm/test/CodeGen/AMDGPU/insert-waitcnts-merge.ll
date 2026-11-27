@@ -37,25 +37,24 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT:   renamable $vgpr0 = GLOBAL_LOAD_DWORD killed renamable $vgpr6_vgpr7, 0, 0, implicit $exec :: (load (s32) from %ir.getelementptr, align 16, addrspace 1)
   ; CHECK-NEXT:   renamable $sgpr6_sgpr7 = S_MOV_B64 0
   ; CHECK-NEXT:   S_WAITCNT .Vmcnt_0
-  ; CHECK-NEXT:   V_CMP_GT_I32_e32 1, killed $vgpr0, implicit-def $vcc, implicit $exec
-  ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_XOR_B64 renamable $vcc, $exec, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_XOR_B64 $exec, renamable $vcc, implicit-def $scc
-  ; CHECK-NEXT:   $exec = S_MOV_B64 killed $vcc
+  ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = V_CMP_GT_I32_e64 1, killed $vgpr0, implicit $exec
+  ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_XOR_B64 renamable $sgpr8_sgpr9, $exec, implicit-def $scc
+  ; CHECK-NEXT:   $exec = S_MOV_B64 killed $sgpr8_sgpr9
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.13.bb13:
   ; CHECK-NEXT:   successors: %bb.2(0x80000000)
-  ; CHECK-NEXT:   liveins: $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr8_sgpr9, $sgpr10_sgpr11, $vgpr0_vgpr1:0x000000000000000C, $vgpr2_vgpr3, $sgpr20_sgpr21_sgpr22_sgpr23
+  ; CHECK-NEXT:   liveins: $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr10_sgpr11, $vgpr0_vgpr1:0x000000000000000C, $vgpr2_vgpr3, $sgpr20_sgpr21_sgpr22_sgpr23
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   renamable $vgpr4 = GLOBAL_LOAD_DWORD renamable $vgpr2_vgpr3, 0, 0, implicit $exec :: (load (s32) from `ptr addrspace(1) null`, addrspace 1)
   ; CHECK-NEXT:   $sgpr6_sgpr7 = S_MOV_B64 $exec
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2:
   ; CHECK-NEXT:   successors: %bb.3(0x40000000), %bb.11(0x40000000)
-  ; CHECK-NEXT:   liveins: $vgpr4, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9, $sgpr10_sgpr11, $vgpr0_vgpr1:0x000000000000000C, $vgpr2_vgpr3, $sgpr20_sgpr21_sgpr22_sgpr23
+  ; CHECK-NEXT:   liveins: $vgpr4, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr10_sgpr11, $vgpr0_vgpr1:0x000000000000000C, $vgpr2_vgpr3, $sgpr20_sgpr21_sgpr22_sgpr23
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   $exec = S_OR_B64 $exec, killed renamable $sgpr8_sgpr9, implicit-def $scc
+  ; CHECK-NEXT:   $exec = S_OR_B64 $exec, renamable $sgpr10_sgpr11, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_XOR_B64 $exec, renamable $sgpr10_sgpr11, implicit-def $scc
   ; CHECK-NEXT:   $exec = S_MOV_B64 killed $sgpr10_sgpr11
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc

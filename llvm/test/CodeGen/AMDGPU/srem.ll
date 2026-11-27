@@ -1473,10 +1473,10 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
 ; GCN-NEXT:    global_load_dwordx4 v[0:3], v0, s[10:11]
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_or_b32_e32 v4, v1, v3
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v4
+; GCN-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GCN-NEXT:    ; implicit-def: $vgpr4_vgpr5
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB8_2
 ; GCN-NEXT:  .LBB8_1:
@@ -1625,10 +1625,10 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
 ; TAHITI-NEXT:    buffer_load_dwordx4 v[0:3], v[3:4], s[0:3], 0 addr64
 ; TAHITI-NEXT:    s_waitcnt vmcnt(0)
 ; TAHITI-NEXT:    v_or_b32_e32 v5, v1, v3
-; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; TAHITI-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; TAHITI-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v5
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; TAHITI-NEXT:    ; implicit-def: $vgpr5_vgpr6
-; TAHITI-NEXT:    s_mov_b64 exec, vcc
+; TAHITI-NEXT:    s_mov_b64 exec, s[0:1]
 ; TAHITI-NEXT:    ; divergent control-flow edge
 ; TAHITI-NEXT:    s_cbranch_execz .LBB8_2
 ; TAHITI-NEXT:  .LBB8_1:
@@ -1794,10 +1794,10 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
 ; TONGA-NEXT:    flat_load_dwordx4 v[0:3], v[0:1]
 ; TONGA-NEXT:    s_waitcnt vmcnt(0)
 ; TONGA-NEXT:    v_or_b32_e32 v5, v1, v3
-; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; TONGA-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v5
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; TONGA-NEXT:    ; implicit-def: $vgpr5_vgpr6
-; TONGA-NEXT:    s_mov_b64 exec, vcc
+; TONGA-NEXT:    s_mov_b64 exec, s[0:1]
 ; TONGA-NEXT:    ; divergent control-flow edge
 ; TONGA-NEXT:    s_cbranch_execz .LBB8_2
 ; TONGA-NEXT:  .LBB8_1:
@@ -2661,10 +2661,10 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    global_load_dwordx4 v[4:7], v8, s[10:11]
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_or_b32_e32 v8, v5, v1
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v8
+; GCN-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GCN-NEXT:    ; implicit-def: $vgpr8_vgpr9
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB10_2
 ; GCN-NEXT:  .LBB10_1:
@@ -2798,9 +2798,9 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:  .LBB10_4: ; %.split
 ; GCN-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GCN-NEXT:    v_or_b32_e32 v0, v7, v3
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
+; GCN-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB10_6
 ; GCN-NEXT:  .LBB10_5:
@@ -2950,10 +2950,10 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    buffer_load_dwordx4 v[0:3], v[9:10], s[0:3], 0 addr64 offset:16
 ; TAHITI-NEXT:    s_waitcnt vmcnt(0)
 ; TAHITI-NEXT:    v_or_b32_e32 v8, v5, v1
-; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
-; TAHITI-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; TAHITI-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v8
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; TAHITI-NEXT:    ; implicit-def: $vgpr8_vgpr9
-; TAHITI-NEXT:    s_mov_b64 exec, vcc
+; TAHITI-NEXT:    s_mov_b64 exec, s[0:1]
 ; TAHITI-NEXT:    ; divergent control-flow edge
 ; TAHITI-NEXT:    s_cbranch_execz .LBB10_2
 ; TAHITI-NEXT:  .LBB10_1:
@@ -3103,9 +3103,9 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:  .LBB10_4: ; %.split
 ; TAHITI-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; TAHITI-NEXT:    v_or_b32_e32 v0, v7, v3
-; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; TAHITI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; TAHITI-NEXT:    s_mov_b64 exec, vcc
+; TAHITI-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
+; TAHITI-NEXT:    s_mov_b64 exec, s[0:1]
 ; TAHITI-NEXT:    ; divergent control-flow edge
 ; TAHITI-NEXT:    s_cbranch_execz .LBB10_6
 ; TAHITI-NEXT:  .LBB10_5:
@@ -3273,10 +3273,10 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    flat_load_dwordx4 v[4:7], v[4:5]
 ; TONGA-NEXT:    s_waitcnt vmcnt(0)
 ; TONGA-NEXT:    v_or_b32_e32 v8, v5, v1
-; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
-; TONGA-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v8
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; TONGA-NEXT:    ; implicit-def: $vgpr8_vgpr9
-; TONGA-NEXT:    s_mov_b64 exec, vcc
+; TONGA-NEXT:    s_mov_b64 exec, s[0:1]
 ; TONGA-NEXT:    ; divergent control-flow edge
 ; TONGA-NEXT:    s_cbranch_execz .LBB10_2
 ; TONGA-NEXT:  .LBB10_1:
@@ -3414,9 +3414,9 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:  .LBB10_4: ; %.split
 ; TONGA-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; TONGA-NEXT:    v_or_b32_e32 v0, v7, v3
-; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; TONGA-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; TONGA-NEXT:    s_mov_b64 exec, vcc
+; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
+; TONGA-NEXT:    s_mov_b64 exec, s[0:1]
 ; TONGA-NEXT:    ; divergent control-flow edge
 ; TONGA-NEXT:    s_cbranch_execz .LBB10_6
 ; TONGA-NEXT:  .LBB10_5:
@@ -4809,10 +4809,10 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    global_load_dwordx4 v[4:7], v8, s[10:11] offset:16
 ; GCN-NEXT:    s_waitcnt vmcnt(2)
 ; GCN-NEXT:    v_or_b32_e32 v8, v15, v11
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v8
+; GCN-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GCN-NEXT:    ; implicit-def: $vgpr8_vgpr9
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB12_2
 ; GCN-NEXT:  .LBB12_1:
@@ -4946,9 +4946,9 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:  .LBB12_4: ; %.split
 ; GCN-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GCN-NEXT:    v_or_b32_e32 v10, v17, v13
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v10
+; GCN-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB12_6
 ; GCN-NEXT:  .LBB12_5:
@@ -5083,10 +5083,10 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_or_b32_e32 v12, v5, v1
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v12
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v12
+; GCN-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GCN-NEXT:    ; implicit-def: $vgpr12_vgpr13
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB12_10
 ; GCN-NEXT:  .LBB12_9:
@@ -5220,9 +5220,9 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; GCN-NEXT:  .LBB12_12: ; %.split.split.split
 ; GCN-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GCN-NEXT:    v_or_b32_e32 v0, v7, v3
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
+; GCN-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB12_14
 ; GCN-NEXT:  .LBB12_13:
@@ -5375,10 +5375,10 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    buffer_load_dwordx4 v[0:3], v[18:19], s[0:3], 0 addr64 offset:48
 ; TAHITI-NEXT:    s_waitcnt vmcnt(2)
 ; TAHITI-NEXT:    v_or_b32_e32 v8, v15, v11
-; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
-; TAHITI-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; TAHITI-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v8
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; TAHITI-NEXT:    ; implicit-def: $vgpr8_vgpr9
-; TAHITI-NEXT:    s_mov_b64 exec, vcc
+; TAHITI-NEXT:    s_mov_b64 exec, s[0:1]
 ; TAHITI-NEXT:    ; divergent control-flow edge
 ; TAHITI-NEXT:    s_cbranch_execz .LBB12_2
 ; TAHITI-NEXT:  .LBB12_1:
@@ -5528,9 +5528,9 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:  .LBB12_4: ; %.split
 ; TAHITI-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; TAHITI-NEXT:    v_or_b32_e32 v10, v17, v13
-; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
-; TAHITI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; TAHITI-NEXT:    s_mov_b64 exec, vcc
+; TAHITI-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v10
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
+; TAHITI-NEXT:    s_mov_b64 exec, s[0:1]
 ; TAHITI-NEXT:    ; divergent control-flow edge
 ; TAHITI-NEXT:    s_cbranch_execz .LBB12_6
 ; TAHITI-NEXT:  .LBB12_5:
@@ -5680,10 +5680,10 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; TAHITI-NEXT:    s_waitcnt vmcnt(0)
 ; TAHITI-NEXT:    v_or_b32_e32 v12, v5, v1
-; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v12
-; TAHITI-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; TAHITI-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v12
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; TAHITI-NEXT:    ; implicit-def: $vgpr12_vgpr13
-; TAHITI-NEXT:    s_mov_b64 exec, vcc
+; TAHITI-NEXT:    s_mov_b64 exec, s[0:1]
 ; TAHITI-NEXT:    ; divergent control-flow edge
 ; TAHITI-NEXT:    s_cbranch_execz .LBB12_10
 ; TAHITI-NEXT:  .LBB12_9:
@@ -5832,9 +5832,9 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TAHITI-NEXT:  .LBB12_12: ; %.split.split.split
 ; TAHITI-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; TAHITI-NEXT:    v_or_b32_e32 v0, v7, v3
-; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; TAHITI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; TAHITI-NEXT:    s_mov_b64 exec, vcc
+; TAHITI-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
+; TAHITI-NEXT:    s_mov_b64 exec, s[0:1]
 ; TAHITI-NEXT:    ; divergent control-flow edge
 ; TAHITI-NEXT:    s_cbranch_execz .LBB12_14
 ; TAHITI-NEXT:  .LBB12_13:
@@ -6009,10 +6009,10 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    flat_load_dwordx4 v[4:7], v[4:5]
 ; TONGA-NEXT:    s_waitcnt vmcnt(1)
 ; TONGA-NEXT:    v_or_b32_e32 v8, v15, v11
-; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
-; TONGA-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v8
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; TONGA-NEXT:    ; implicit-def: $vgpr8_vgpr9
-; TONGA-NEXT:    s_mov_b64 exec, vcc
+; TONGA-NEXT:    s_mov_b64 exec, s[0:1]
 ; TONGA-NEXT:    ; divergent control-flow edge
 ; TONGA-NEXT:    s_cbranch_execz .LBB12_2
 ; TONGA-NEXT:  .LBB12_1:
@@ -6150,9 +6150,9 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:  .LBB12_4: ; %.split
 ; TONGA-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; TONGA-NEXT:    v_or_b32_e32 v10, v17, v13
-; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
-; TONGA-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; TONGA-NEXT:    s_mov_b64 exec, vcc
+; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v10
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
+; TONGA-NEXT:    s_mov_b64 exec, s[0:1]
 ; TONGA-NEXT:    ; divergent control-flow edge
 ; TONGA-NEXT:    s_cbranch_execz .LBB12_6
 ; TONGA-NEXT:  .LBB12_5:
@@ -6290,10 +6290,10 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; TONGA-NEXT:    s_waitcnt vmcnt(0)
 ; TONGA-NEXT:    v_or_b32_e32 v12, v5, v1
-; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v12
-; TONGA-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v12
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; TONGA-NEXT:    ; implicit-def: $vgpr12_vgpr13
-; TONGA-NEXT:    s_mov_b64 exec, vcc
+; TONGA-NEXT:    s_mov_b64 exec, s[0:1]
 ; TONGA-NEXT:    ; divergent control-flow edge
 ; TONGA-NEXT:    s_cbranch_execz .LBB12_10
 ; TONGA-NEXT:  .LBB12_9:
@@ -6430,9 +6430,9 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:  .LBB12_12: ; %.split.split.split
 ; TONGA-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; TONGA-NEXT:    v_or_b32_e32 v0, v7, v3
-; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; TONGA-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; TONGA-NEXT:    s_mov_b64 exec, vcc
+; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
+; TONGA-NEXT:    s_mov_b64 exec, s[0:1]
 ; TONGA-NEXT:    ; divergent control-flow edge
 ; TONGA-NEXT:    s_cbranch_execz .LBB12_14
 ; TONGA-NEXT:  .LBB12_13:

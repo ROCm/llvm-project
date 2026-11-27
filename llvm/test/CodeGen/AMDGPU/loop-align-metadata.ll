@@ -54,11 +54,11 @@ define void @divergent_loop(ptr addrspace(1) %p, i32 %n) {
 ; GFX942-NEXT:    v_lshl_add_u64 v[4:5], s[2:3], 2, v[0:1]
 ; GFX942-NEXT:    v_mov_b32_e32 v3, s2
 ; GFX942-NEXT:    s_add_i32 s2, s2, 1
-; GFX942-NEXT:    v_cmp_lt_u32_e32 vcc, s2, v2
-; GFX942-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
+; GFX942-NEXT:    v_cmp_lt_u32_e64 s[4:5], s2, v2
+; GFX942-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
 ; GFX942-NEXT:    global_store_dword v[4:5], v3, off
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX942-NEXT:  .LBB1_2: ; %exit
@@ -102,10 +102,8 @@ define amdgpu_kernel void @uniform_loop_divergent_latches(ptr addrspace(1) %p, p
 ; GFX942-NEXT:    s_cbranch_vccnz .LBB2_6
 ; GFX942-NEXT:  ; %bb.2: ; %body
 ; GFX942-NEXT:    ; in Loop: Header=BB2_1 Depth=1
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX942-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX942-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; GFX942-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v0
+; GFX942-NEXT:    s_xor_b64 exec, s[4:5], exec
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB2_4
 ; GFX942-NEXT:  .LBB2_3: ; %b
@@ -114,8 +112,8 @@ define amdgpu_kernel void @uniform_loop_divergent_latches(ptr addrspace(1) %p, p
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:  .LBB2_4: ; in Loop: Header=BB2_1 Depth=1
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX942-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB2_1
 ; GFX942-NEXT:  .LBB2_5: ; %a

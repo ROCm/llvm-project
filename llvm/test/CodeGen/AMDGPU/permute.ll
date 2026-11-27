@@ -432,10 +432,10 @@ define amdgpu_kernel void @dword_from_v16i16_combine_loop(ptr addrspace(1) %out)
 ; GCN-LABEL: dword_from_v16i16_combine_loop:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    v_and_b32_e32 v0, 3, v0
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
+; GCN-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; GCN-NEXT:    ; divergent control-flow edge
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GCN-NEXT:    v_mov_b32_e32 v2, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)

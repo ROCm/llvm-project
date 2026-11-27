@@ -37,8 +37,8 @@
 define amdgpu_cs void @triangle(ptr addrspace(1) %out, i32 %val) {
 ; CHECK-LABEL: triangle:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v2
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s[0:1], 15, v2
+; CHECK-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %then
@@ -81,18 +81,18 @@ exit:
 define amdgpu_cs void @double_triangle(ptr addrspace(1) %out, i32 %val1, i32 %val2) {
 ; CHECK-LABEL: double_triangle:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v2
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s[0:1], 15, v2
+; CHECK-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_2
 ; CHECK-NEXT:  .LBB1_1: ; %then1
 ; CHECK-NEXT:    v_mov_b32_e32 v2, 1
 ; CHECK-NEXT:    global_store_dword v[0:1], v2, off
 ; CHECK-NEXT:  .LBB1_2: ; %mid
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; CHECK-NEXT:    s_movk_i32 s0, 0x65
-; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, s0, v3
-; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
+; CHECK-NEXT:    v_cmp_gt_u32_e64 s[0:1], s0, v3
+; CHECK-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_4
 ; CHECK-NEXT:  .LBB1_3: ; %then2
@@ -136,9 +136,9 @@ exit:
 define amdgpu_cs void @diamond(ptr addrspace(1) %out, i32 %val) {
 ; CHECK-LABEL: diamond:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v2
-; CHECK-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s[2:3], 15, v2
+; CHECK-NEXT:    s_xor_b64 s[0:1], s[2:3], exec
+; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_2
 ; CHECK-NEXT:  .LBB2_1: ; %else
@@ -191,16 +191,16 @@ merge:
 define amdgpu_cs void @nested_if(ptr addrspace(1) %out, i32 %val1, i32 %val2) {
 ; CHECK-LABEL: nested_if:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v2
-; CHECK-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s[4:5], 15, v2
+; CHECK-NEXT:    s_xor_b64 s[0:1], s[4:5], exec
 ; CHECK-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB3_5
 ; CHECK-NEXT:  .LBB3_1: ; %outer_else
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 31, v3
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s[6:7], 31, v3
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB3_3
 ; CHECK-NEXT:  .LBB3_2: ; %inner_else
@@ -208,8 +208,8 @@ define amdgpu_cs void @nested_if(ptr addrspace(1) %out, i32 %val1, i32 %val2) {
 ; CHECK-NEXT:    global_store_dword v[0:1], v2, off
 ; CHECK-NEXT:  .LBB3_3:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
-; CHECK-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
-; CHECK-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB3_5
@@ -268,10 +268,10 @@ merge:
 define amdgpu_cs void @cascaded_if_shared_target(ptr addrspace(1) %out, i32 %val1, i32 %val2) {
 ; CHECK-LABEL: cascaded_if_shared_target:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v2
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s[4:5], 15, v2
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
-; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_xor_b64 s[2:3], s[4:5], exec
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB4_2
 ; CHECK-NEXT:  .LBB4_1: ; %path_b
@@ -419,11 +419,11 @@ define amdgpu_cs void @self_loop(ptr addrspace(1) %out, i32 %val) {
 ; CHECK-NEXT:  .LBB6_1: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    s_add_i32 s2, s2, 1
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, s2, v2
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s[4:5], s2, v2
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; CHECK-NEXT:    v_mov_b32_e32 v3, s2
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB6_1
 ; CHECK-NEXT:  .LBB6_2: ; %exit
@@ -479,8 +479,7 @@ define amdgpu_cs void @loop_two_exits(ptr addrspace(1) %out, i32 %val1, i32 %val
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    v_cmp_ge_u32_e32 vcc, s4, v4
 ; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_4
@@ -490,12 +489,12 @@ define amdgpu_cs void @loop_two_exits(ptr addrspace(1) %out, i32 %val1, i32 %val
 ; CHECK-NEXT:    s_lshl_b64 s[6:7], s[2:3], 2
 ; CHECK-NEXT:    v_mov_b32_e32 v6, s7
 ; CHECK-NEXT:    v_add_co_u32_e32 v5, vcc, s6, v0
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v3
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; CHECK-NEXT:    v_addc_co_u32_e32 v6, vcc, v1, v6, vcc
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
 ; CHECK-NEXT:    global_store_dword v[5:6], v2, off
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_4
 ; CHECK-NEXT:  .LBB7_3: ; %latch

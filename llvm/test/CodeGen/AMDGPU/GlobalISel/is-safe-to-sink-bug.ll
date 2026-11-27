@@ -48,15 +48,12 @@ define amdgpu_ps void @_amdgpu_ps_main(i1 %arg) {
 ; CHECK-NEXT:    s_cbranch_scc0 .LBB0_5
 ; CHECK-NEXT:  .LBB0_3: ; %bb2
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    s_mov_b32 s1, exec_lo
-; CHECK-NEXT:    s_mov_b32 s3, 0
-; CHECK-NEXT:    s_xor_b32 s1, vcc_lo, s1
+; CHECK-NEXT:    s_mov_b32 s1, 0
 ; CHECK-NEXT:    v_cmp_ne_u32_e64 s0, 0, v0
-; CHECK-NEXT:    s_and_b32 s1, exec_lo, s1
-; CHECK-NEXT:    v_mov_b32_e32 v0, s3
-; CHECK-NEXT:    s_xor_b32 s3, s1, exec_lo
-; CHECK-NEXT:    s_xor_b32 s1, exec_lo, s3
-; CHECK-NEXT:    s_mov_b32 exec_lo, s3
+; CHECK-NEXT:    v_mov_b32_e32 v0, s1
+; CHECK-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
+; CHECK-NEXT:    s_and_b32 s1, exec_lo, s3
+; CHECK-NEXT:    s_xor_b32 exec_lo, s1, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_4: ; %bb5

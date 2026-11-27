@@ -11,10 +11,10 @@ define void @temporal_divergent_i32(float %val, ptr %addr) {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s4, s4, 1
 ; GFX10-NEXT:    v_cvt_f32_u32_e32 v3, s4
-; GFX10-NEXT:    v_cmp_ngt_f32_e32 vcc_lo, v3, v0
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s5, s5, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_ngt_f32_e64 s6, v3, v0
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s5, s5, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX10-NEXT:  .LBB0_2: ; %exit
@@ -48,10 +48,10 @@ define void @temporal_divergent_i32_multiple_use(float %val, ptr %addr, ptr %add
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s4, s4, 1
 ; GFX10-NEXT:    v_cvt_f32_u32_e32 v5, s4
-; GFX10-NEXT:    v_cmp_ngt_f32_e32 vcc_lo, v5, v0
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s5, s5, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_ngt_f32_e64 s6, v5, v0
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s5, s5, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX10-NEXT:  .LBB1_2: ; %exit

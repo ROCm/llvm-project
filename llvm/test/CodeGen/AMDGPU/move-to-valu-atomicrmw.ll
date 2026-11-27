@@ -22,8 +22,8 @@ define amdgpu_kernel void @atomic_max_i32(ptr addrspace(1) %out, ptr addrspace(1
 ; GCN-NEXT:    s_mov_b64 s[8:9], s[2:3]
 ; GCN-NEXT:    buffer_load_dwordx2 v[1:2], v[1:2], s[8:11], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e64 s[2:3], 1, v0
+; GCN-NEXT:    s_xor_b64 exec, s[2:3], exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %atomic
@@ -67,8 +67,8 @@ define amdgpu_kernel void @atomic_max_i32_noret(ptr addrspace(1) %out, ptr addrs
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    buffer_load_dwordx2 v[1:2], v[1:2], s[0:3], 0 addr64 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_eq_u32_e64 s[0:1], 1, v0
+; GCN-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_2
 ; GCN-NEXT:  .LBB1_1: ; %atomic

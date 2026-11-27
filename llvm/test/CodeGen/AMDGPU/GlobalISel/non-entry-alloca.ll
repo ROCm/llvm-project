@@ -218,40 +218,40 @@ define void @func_non_entry_block_static_alloca_align64(ptr addrspace(1) %out, i
 ; GCN-LABEL: func_non_entry_block_static_alloca_align64:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    s_mov_b32 s5, s33
+; GCN-NEXT:    s_mov_b32 s7, s33
 ; GCN-NEXT:    s_add_i32 s33, s32, 0xfc0
-; GCN-NEXT:    s_mov_b32 s6, s34
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GCN-NEXT:    s_mov_b32 s8, s34
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v2
 ; GCN-NEXT:    s_and_b32 s33, s33, 0xfffff000
 ; GCN-NEXT:    s_mov_b32 s34, s32
 ; GCN-NEXT:    s_addk_i32 s32, 0x2000
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    s_xor_b64 exec, s[4:5], exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB3_2
 ; GCN-NEXT:  .LBB3_1: ; %bb.0
-; GCN-NEXT:    s_add_u32 s4, s32, 0xfff
-; GCN-NEXT:    s_and_b32 s4, s4, 0xfffff000
+; GCN-NEXT:    s_add_u32 s6, s32, 0xfff
+; GCN-NEXT:    s_and_b32 s6, s6, 0xfffff000
 ; GCN-NEXT:    v_mov_b32_e32 v2, 0
-; GCN-NEXT:    v_mov_b32_e32 v4, s4
+; GCN-NEXT:    v_mov_b32_e32 v4, s6
 ; GCN-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GCN-NEXT:    v_mov_b32_e32 v2, 1
 ; GCN-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen offset:4
 ; GCN-NEXT:    v_lshlrev_b32_e32 v2, 2, v3
-; GCN-NEXT:    v_add_u32_e32 v2, s4, v2
+; GCN-NEXT:    v_add_u32_e32 v2, s6, v2
 ; GCN-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 offen
 ; GCN-NEXT:    v_and_b32_e32 v3, 0x3ff, v31
-; GCN-NEXT:    s_add_u32 s32, s4, 0x1000
+; GCN-NEXT:    s_add_u32 s32, s6, 0x1000
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_add_u32_e32 v2, v2, v3
 ; GCN-NEXT:    global_store_dword v[0:1], v2, off
 ; GCN-NEXT:  .LBB3_2: ; %bb.1
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    global_store_dword v[0:1], v0, off
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    s_mov_b32 s32, s34
-; GCN-NEXT:    s_mov_b32 s34, s6
-; GCN-NEXT:    s_mov_b32 s33, s5
+; GCN-NEXT:    s_mov_b32 s34, s8
+; GCN-NEXT:    s_mov_b32 s33, s7
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 entry:
   %cond = icmp eq i32 %arg.cond, 0

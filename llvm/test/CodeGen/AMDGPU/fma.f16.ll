@@ -1356,10 +1356,10 @@ define half @test_fma_hi_src0_other_block(<2 x half> %x, half %y, half %z, i1 %c
 ; GFX9-SDAG:       ; %bb.0:
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    v_and_b32_e32 v3, 1, v3
-; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v3
+; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e64 s[6:7], 1, v3
 ; GFX9-SDAG-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
-; GFX9-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX9-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX9-SDAG-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX9-SDAG-NEXT:  .LBB12_1: ; %fma
@@ -1391,9 +1391,9 @@ define half @test_fma_hi_src0_other_block(<2 x half> %x, half %y, half %z, i1 %c
 ; GFX10-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-SDAG-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GFX10-SDAG-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
-; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
-; GFX10-SDAG-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-SDAG-NEXT:    v_cmp_eq_u32_e64 s5, 1, v3
+; GFX10-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s5
+; GFX10-SDAG-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX10-SDAG-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX10-SDAG-NEXT:  .LBB12_1: ; %fma
@@ -1427,9 +1427,9 @@ define half @test_fma_hi_src0_other_block(<2 x half> %x, half %y, half %z, i1 %c
 ; GFX11-SDAG-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-SDAG-TRUE16-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GFX11-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-SDAG-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
-; GFX11-SDAG-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX11-SDAG-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-SDAG-TRUE16-NEXT:    v_cmp_eq_u32_e64 s1, 1, v3
+; GFX11-SDAG-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX11-SDAG-TRUE16-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-SDAG-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-TRUE16-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX11-SDAG-TRUE16-NEXT:  .LBB12_1: ; %fma
@@ -1449,9 +1449,9 @@ define half @test_fma_hi_src0_other_block(<2 x half> %x, half %y, half %z, i1 %c
 ; GFX11-SDAG-FAKE16-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GFX11-SDAG-FAKE16-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
 ; GFX11-SDAG-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX11-SDAG-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
-; GFX11-SDAG-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX11-SDAG-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-SDAG-FAKE16-NEXT:    v_cmp_eq_u32_e64 s1, 1, v3
+; GFX11-SDAG-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX11-SDAG-FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-SDAG-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-SDAG-FAKE16-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX11-SDAG-FAKE16-NEXT:  .LBB12_1: ; %fma
@@ -1515,9 +1515,9 @@ define half @test_fma_hi_src0_other_block(<2 x half> %x, half %y, half %z, i1 %c
 ; GFX12-SDAG-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-TRUE16-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GFX12-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-SDAG-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
-; GFX12-SDAG-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX12-SDAG-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-SDAG-TRUE16-NEXT:    v_cmp_eq_u32_e64 s1, 1, v3
+; GFX12-SDAG-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX12-SDAG-TRUE16-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-SDAG-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-TRUE16-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX12-SDAG-TRUE16-NEXT:  .LBB12_1: ; %fma
@@ -1542,9 +1542,9 @@ define half @test_fma_hi_src0_other_block(<2 x half> %x, half %y, half %z, i1 %c
 ; GFX12-SDAG-FAKE16-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GFX12-SDAG-FAKE16-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
 ; GFX12-SDAG-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX12-SDAG-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
-; GFX12-SDAG-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX12-SDAG-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-SDAG-FAKE16-NEXT:    v_cmp_eq_u32_e64 s1, 1, v3
+; GFX12-SDAG-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX12-SDAG-FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-SDAG-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX12-SDAG-FAKE16-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX12-SDAG-FAKE16-NEXT:  .LBB12_1: ; %fma

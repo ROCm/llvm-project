@@ -134,23 +134,23 @@ loop:
 define amdgpu_ps float @return_nonvoid(float %0) #0 {
 ; CHECK-LABEL: return_nonvoid:
 ; CHECK:       ; %bb.0: ; %main_body
-; CHECK-NEXT:    s_mov_b32 s0, 0x41200000
-; CHECK-NEXT:    v_cmp_gt_f32_e64 s[0:1], s0, v0
-; CHECK-NEXT:    s_mov_b64 s[2:3], exec
-; CHECK-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; CHECK-NEXT:    s_mov_b32 s2, 0x41200000
+; CHECK-NEXT:    v_cmp_gt_f32_e64 s[2:3], s2, v0
+; CHECK-NEXT:    s_mov_b64 s[0:1], exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[2:3], exec
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB3_3
 ; CHECK-NEXT:  .LBB3_1: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    s_andn2_b64 s[2:3], s[2:3], exec
+; CHECK-NEXT:    s_andn2_b64 s[0:1], s[0:1], exec
 ; CHECK-NEXT:    s_cbranch_scc0 .LBB3_4
 ; CHECK-NEXT:  ; %bb.2: ; %loop
 ; CHECK-NEXT:    ; in Loop: Header=BB3_1 Depth=1
 ; CHECK-NEXT:    s_mov_b64 exec, 0
 ; CHECK-NEXT:    s_cbranch_execnz .LBB3_1
 ; CHECK-NEXT:  .LBB3_3: ; %UnifiedReturnBlock
-; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0
 ; CHECK-NEXT:    s_branch .LBB3_5
 ; CHECK-NEXT:  .LBB3_4:

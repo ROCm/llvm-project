@@ -22,8 +22,8 @@ define <7 x i32> @multiple_predecessor_unused_lanes(<7 x i32> %ha, i32 %h.sel) {
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_5
 ; CHECK-NEXT:  .LBB0_1: ; %LeafBlock
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v0
-; CHECK-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s2, 1, v0
+; CHECK-NEXT:    s_xor_b32 exec_lo, s2, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
 ; CHECK-NEXT:  .LBB0_2: ; %h.default
@@ -37,11 +37,11 @@ define <7 x i32> @multiple_predecessor_unused_lanes(<7 x i32> %ha, i32 %h.sel) {
 ; CHECK-NEXT:    v_mov_b32_e32 v13, v8
 ; CHECK-NEXT:    v_mov_b32_e32 v12, v7
 ; CHECK-NEXT:  .LBB0_3:
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s2
 ; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; CHECK-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s1, s0, s1
-; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; CHECK-NEXT:    s_xor_b32 s3, exec_lo, s2
+; CHECK-NEXT:    s_or_b32 s1, s1, s3
+; CHECK-NEXT:    s_mov_b32 exec_lo, s2
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_5
 ; CHECK-NEXT:  .LBB0_4: ; %h.shuffle

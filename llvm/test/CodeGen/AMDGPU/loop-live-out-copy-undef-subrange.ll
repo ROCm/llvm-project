@@ -15,7 +15,7 @@ define <3 x float> @liveout_undef_subrange(<3 x float> %arg) {
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    v_cmp_eq_f32_e64 s[6:7], 0, v2
 ; CHECK-NEXT:    s_xor_b64 s[10:11], s[6:7], exec
-; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[10:11]
+; CHECK-NEXT:    s_mov_b64 s[8:9], s[6:7]
 ; CHECK-NEXT:    s_mov_b64 exec, s[10:11]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3

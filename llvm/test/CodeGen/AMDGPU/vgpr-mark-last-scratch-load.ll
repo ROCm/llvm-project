@@ -73,13 +73,14 @@ define amdgpu_cs void @max_11_vgprs_branch(ptr addrspace(1) %p, i32 %tmp) "amdgp
 ; CHECK:       ; %bb.0: ; %.entry
 ; CHECK-NEXT:    global_load_b32 v3, v[0:1], off scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s1, 0, v2
+; CHECK-NEXT:    s_xor_b32 s0, s1, exec_lo
 ; CHECK-NEXT:    v_ashrrev_i32_e32 v4, 31, v3
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; CHECK-NEXT:    v_lshlrev_b64_e32 v[3:4], 2, v[3:4]
 ; CHECK-NEXT:    v_add_co_u32 v5, vcc_lo, v0, v3
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v6, null, v1, v4, vcc_lo
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v2
 ; CHECK-NEXT:    global_load_b32 v3, v[5:6], off offset:336 scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    global_load_b32 v4, v[5:6], off offset:448 scope:SCOPE_SYS
@@ -88,8 +89,7 @@ define amdgpu_cs void @max_11_vgprs_branch(ptr addrspace(1) %p, i32 %tmp) "amdgp
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    global_load_b32 v10, v[5:6], off offset:720 scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
-; CHECK-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; CHECK-NEXT:    s_mov_b32 exec_lo, s1
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_2
 ; CHECK-NEXT:  .LBB1_1: ; %.false

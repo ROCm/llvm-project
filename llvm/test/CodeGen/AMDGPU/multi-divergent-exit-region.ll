@@ -62,11 +62,11 @@
 ; GCN-LABEL: {{^}}multi_divergent_region_exit_ret_ret:
 
 ; First divergent branch
-; GCN-DAG:  v_cmp_lt_i32_e32    vcc, 1,
+; GCN-DAG:  v_cmp_lt_i32_e64    [[CMP:s\[[0-9]+:[0-9]+\]]], 1,
 ; GCN-DAG:  s_mov_b64           [[EXIT0:s\[[0-9]+:[0-9]+\]]], 0
 ; GCN-DAG:  s_mov_b64           [[EXIT1:s\[[0-9]+:[0-9]+\]]], 0
-; GCN:      s_xor_b64           {{s\[[0-9]+:[0-9]+\]}}, vcc, exec
-; GCN:      s_mov_b64           exec, vcc
+; GCN:      s_xor_b64           {{s\[[0-9]+:[0-9]+\]}}, [[CMP]], exec
+; GCN:      s_mov_b64           exec, [[CMP]]
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN-NEXT: s_cbranch_execz
 

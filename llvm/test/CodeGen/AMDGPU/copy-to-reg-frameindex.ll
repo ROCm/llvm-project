@@ -53,12 +53,12 @@ define void @phi_with_alloca_and_divergent_copy_to_reg(ptr addrspace(5) %diverge
 ; CHECK-NEXT:    v_lshl_add_u32 v2, v3, 2, v1
 ; CHECK-NEXT:    buffer_store_dword v3, v2, s[0:3], 0 offen
 ; CHECK-NEXT:    v_add_u32_e32 v2, 1, v3
-; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, 16, v2
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; CHECK-NEXT:    v_cmp_gt_u32_e64 s[6:7], 16, v2
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; CHECK-NEXT:    v_mov_b32_e32 v3, v4
 ; CHECK-NEXT:    v_mov_b32_e32 v2, v0
-; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB1_1
 ; CHECK-NEXT:  .LBB1_2: ; %done

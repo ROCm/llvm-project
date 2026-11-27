@@ -6,14 +6,14 @@ define i32 @test_insert_vcmpx_pattern_lt(i32 %x) {
 ; GCN-LABEL: test_insert_vcmpx_pattern_lt:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 16, v0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    v_cmp_gt_i32_e64 s4, 16, v0
+; GCN-NEXT:    s_xor_b32 exec_lo, s4, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %if
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GCN-NEXT:  .LBB0_2: ; %UnifiedReturnBlock
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 entry:
   %bc = icmp slt i32 %x, 16
@@ -31,14 +31,14 @@ define i32 @test_insert_vcmpx_pattern_gt(i32 %x) {
 ; GCN-LABEL: test_insert_vcmpx_pattern_gt:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_cmp_lt_i32_e32 vcc_lo, 16, v0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    v_cmp_lt_i32_e64 s4, 16, v0
+; GCN-NEXT:    s_xor_b32 exec_lo, s4, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_2
 ; GCN-NEXT:  .LBB1_1: ; %if
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GCN-NEXT:  .LBB1_2: ; %UnifiedReturnBlock
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 entry:
   %bc = icmp sgt i32 %x, 16
@@ -56,14 +56,14 @@ define i32 @test_insert_vcmpx_pattern_eq(i32 %x) {
 ; GCN-LABEL: test_insert_vcmpx_pattern_eq:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 16, v0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    v_cmp_eq_u32_e64 s4, 16, v0
+; GCN-NEXT:    s_xor_b32 exec_lo, s4, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB2_2
 ; GCN-NEXT:  .LBB2_1: ; %if
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GCN-NEXT:  .LBB2_2: ; %UnifiedReturnBlock
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 entry:
   %bc = icmp eq i32 %x, 16
@@ -81,14 +81,14 @@ define i32 @test_insert_vcmpx_pattern_ne(i32 %x) {
 ; GCN-LABEL: test_insert_vcmpx_pattern_ne:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 16, v0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    v_cmp_ne_u32_e64 s4, 16, v0
+; GCN-NEXT:    s_xor_b32 exec_lo, s4, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB3_2
 ; GCN-NEXT:  .LBB3_1: ; %if
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GCN-NEXT:  .LBB3_2: ; %UnifiedReturnBlock
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 entry:
   %bc = icmp ne i32 %x, 16
@@ -106,14 +106,14 @@ define i32 @test_insert_vcmpx_pattern_le(i32 %x) {
 ; GCN-LABEL: test_insert_vcmpx_pattern_le:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 17, v0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    v_cmp_gt_i32_e64 s4, 17, v0
+; GCN-NEXT:    s_xor_b32 exec_lo, s4, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB4_2
 ; GCN-NEXT:  .LBB4_1: ; %if
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GCN-NEXT:  .LBB4_2: ; %UnifiedReturnBlock
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 entry:
   %bc = icmp sle i32 %x, 16
@@ -131,14 +131,14 @@ define i32 @test_insert_vcmpx_pattern_ge(i32 %x) {
 ; GCN-LABEL: test_insert_vcmpx_pattern_ge:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_cmp_lt_i32_e32 vcc_lo, 15, v0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    v_cmp_lt_i32_e64 s4, 15, v0
+; GCN-NEXT:    s_xor_b32 exec_lo, s4, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB5_2
 ; GCN-NEXT:  .LBB5_1: ; %if
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GCN-NEXT:  .LBB5_2: ; %UnifiedReturnBlock
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 entry:
   %bc = icmp sge i32 %x, 16
@@ -164,11 +164,11 @@ define amdgpu_cs void @check_live_outs(i32 %a, i32 %b) {
 ; GCN-NEXT:    s_mov_b32 s10, -1
 ; GCN-NEXT:    s_mov_b32 s11, 0x31c16000
 ; GCN-NEXT:    s_add_u32 s8, s8, s0
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
+; GCN-NEXT:    v_cmp_ne_u32_e64 s1, v0, v1
 ; GCN-NEXT:    v_cmp_eq_u32_e64 s0, v0, v1
 ; GCN-NEXT:    s_addc_u32 s9, s9, 0
 ; GCN-NEXT:    s_mov_b32 s32, 0
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    s_xor_b32 exec_lo, s1, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB6_2
 ; GCN-NEXT:  .LBB6_1: ; %l1

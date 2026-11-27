@@ -29,7 +29,7 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v2
 ; GCN-NEXT:    s_or_b64 s[6:7], s[0:1], vcc
 ; GCN-NEXT:    s_xor_b64 s[0:1], s[6:7], exec
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_3

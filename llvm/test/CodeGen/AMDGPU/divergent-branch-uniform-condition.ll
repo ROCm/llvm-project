@@ -18,60 +18,56 @@ target triple = "amdgpu9.00-mesa-mesa3d"
 define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-LABEL: main:
 ; ISA:       ; %bb.0: ; %start
-; ISA-NEXT:    v_readfirstlane_b32 s6, v0
-; ISA-NEXT:    s_mov_b32 m0, s6
-; ISA-NEXT:    s_mov_b64 s[8:9], -1
+; ISA-NEXT:    v_readfirstlane_b32 s4, v0
+; ISA-NEXT:    s_mov_b32 m0, s4
+; ISA-NEXT:    s_mov_b64 s[6:7], -1
 ; ISA-NEXT:    v_interp_p1_f32_e32 v0, v1, attr0.x
 ; ISA-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v0
-; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[8:9]
-; ISA-NEXT:    s_mov_b64 s[8:9], 0
+; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[6:7]
+; ISA-NEXT:    s_mov_b64 s[6:7], 0
 ; ISA-NEXT:    s_mov_b64 s[2:3], 0
-; ISA-NEXT:    s_mov_b64 s[4:5], 0
 ; ISA-NEXT:    s_mov_b64 s[0:1], 0
-; ISA-NEXT:    s_mov_b32 s6, 0
+; ISA-NEXT:    s_mov_b32 s4, 0
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
-; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[8:9]
+; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[6:7]
 ; ISA-NEXT:    s_branch .LBB0_2
 ; ISA-NEXT:  .LBB0_1: ; %Flow
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; ISA-NEXT:    s_or_b64 exec, exec, s[4:5]
+; ISA-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; ISA-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; ISA-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; ISA-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; ISA-NEXT:    s_mov_b64 s[4:5], 0
-; ISA-NEXT:    s_mov_b64 exec, s[8:9]
+; ISA-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; ISA-NEXT:    s_mov_b64 s[2:3], 0
+; ISA-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
+; ISA-NEXT:    s_mov_b64 exec, s[6:7]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_5
 ; ISA-NEXT:  .LBB0_2: ; %loop
 ; ISA-NEXT:    ; =>This Inner Loop Header: Depth=1
-; ISA-NEXT:    s_cmp_lt_u32 s6, 32
+; ISA-NEXT:    s_cmp_lt_u32 s4, 32
 ; ISA-NEXT:    v_mov_b32_e32 v5, v2
 ; ISA-NEXT:    v_mov_b32_e32 v4, v2
 ; ISA-NEXT:    s_cbranch_scc0 .LBB0_1
 ; ISA-NEXT:  ; %bb.3: ; %endif1
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; ISA-NEXT:    s_or_b64 s[8:9], s[2:3], vcc
+; ISA-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v1
 ; ISA-NEXT:    v_mov_b32_e32 v5, v2
 ; ISA-NEXT:    v_mov_b32_e32 v4, v3
-; ISA-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; ISA-NEXT:    s_mov_b64 s[2:3], 0
-; ISA-NEXT:    s_mov_b64 exec, s[8:9]
+; ISA-NEXT:    s_xor_b64 s[2:3], exec, s[6:7]
+; ISA-NEXT:    s_mov_b64 exec, s[6:7]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_1
 ; ISA-NEXT:  .LBB0_4: ; %endif2
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; ISA-NEXT:    s_add_i32 s6, s6, 1
+; ISA-NEXT:    s_add_i32 s4, s4, 1
 ; ISA-NEXT:    v_mov_b32_e32 v5, v3
 ; ISA-NEXT:    v_mov_b32_e32 v4, v3
 ; ISA-NEXT:    s_branch .LBB0_1
 ; ISA-NEXT:  .LBB0_5: ; %Flow2
 ; ISA-NEXT:    s_or_b64 exec, exec, s[0:1]
-; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+; ISA-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v4
 ; ISA-NEXT:    v_mov_b32_e32 v1, 0
-; ISA-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; ISA-NEXT:    s_mov_b64 exec, vcc
+; ISA-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
+; ISA-NEXT:    s_mov_b64 exec, s[2:3]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_7
 ; ISA-NEXT:  .LBB0_6: ; %if1
@@ -153,9 +149,8 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[2:3]
 ; ISA-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; ISA-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
 ; ISA-NEXT:    s_mov_b32 s4, 1
-; ISA-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; ISA-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; ISA-NEXT:    s_mov_b64 exec, s[2:3]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB1_5

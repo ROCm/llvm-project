@@ -148,8 +148,8 @@ define void @divergent_br_no_metadata(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX9-LABEL: divergent_br_no_metadata:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    v_cmp_gt_i32_e32 vcc, 1, v0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    v_cmp_gt_i32_e64 s[8:9], 1, v0
+; GFX9-NEXT:    s_xor_b64 exec, s[8:9], exec
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX9-NEXT:  .LBB3_1: ; %if.then
@@ -161,15 +161,15 @@ define void @divergent_br_no_metadata(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s21
 ; GFX9-NEXT:    buffer_store_dword v1, v0, s[4:7], 0 offen
 ; GFX9-NEXT:  .LBB3_2: ; %if.end
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1010-LABEL: divergent_br_no_metadata:
 ; GFX1010:       ; %bb.0: ; %entry
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1010-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 1, v0
-; GFX1010-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX1010-NEXT:    v_cmp_gt_i32_e64 s8, 1, v0
+; GFX1010-NEXT:    s_xor_b32 exec_lo, s8, exec_lo
 ; GFX1010-NEXT:    ; divergent control-flow edge
 ; GFX1010-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX1010-NEXT:  .LBB3_1: ; %if.then
@@ -182,15 +182,15 @@ define void @divergent_br_no_metadata(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX1010-NEXT:    buffer_store_dword v0, v1, s[4:7], 0 offen
 ; GFX1010-NEXT:  .LBB3_2: ; %if.end
 ; GFX1010-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX1010-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1010-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1010-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1030-LABEL: divergent_br_no_metadata:
 ; GFX1030:       ; %bb.0: ; %entry
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1030-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 1, v0
-; GFX1030-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX1030-NEXT:    v_cmp_gt_i32_e64 s8, 1, v0
+; GFX1030-NEXT:    s_xor_b32 exec_lo, s8, exec_lo
 ; GFX1030-NEXT:    ; divergent control-flow edge
 ; GFX1030-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX1030-NEXT:  .LBB3_1: ; %if.then
@@ -202,7 +202,7 @@ define void @divergent_br_no_metadata(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX1030-NEXT:    s_mov_b32 s4, s17
 ; GFX1030-NEXT:    buffer_store_dword v0, v1, s[4:7], 0 offen
 ; GFX1030-NEXT:  .LBB3_2: ; %if.end
-; GFX1030-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1030-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1030-NEXT:    s_setpc_b64 s[30:31]
 entry:
@@ -222,8 +222,8 @@ define void @divergent_br_same_weight(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX9-LABEL: divergent_br_same_weight:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    v_cmp_gt_i32_e32 vcc, 1, v0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    v_cmp_gt_i32_e64 s[8:9], 1, v0
+; GFX9-NEXT:    s_xor_b64 exec, s[8:9], exec
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX9-NEXT:  .LBB4_1: ; %if.then
@@ -235,15 +235,15 @@ define void @divergent_br_same_weight(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s21
 ; GFX9-NEXT:    buffer_store_dword v1, v0, s[4:7], 0 offen
 ; GFX9-NEXT:  .LBB4_2: ; %if.end
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1010-LABEL: divergent_br_same_weight:
 ; GFX1010:       ; %bb.0: ; %entry
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1010-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 1, v0
-; GFX1010-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX1010-NEXT:    v_cmp_gt_i32_e64 s8, 1, v0
+; GFX1010-NEXT:    s_xor_b32 exec_lo, s8, exec_lo
 ; GFX1010-NEXT:    ; divergent control-flow edge
 ; GFX1010-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX1010-NEXT:  .LBB4_1: ; %if.then
@@ -256,15 +256,15 @@ define void @divergent_br_same_weight(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX1010-NEXT:    buffer_store_dword v0, v1, s[4:7], 0 offen
 ; GFX1010-NEXT:  .LBB4_2: ; %if.end
 ; GFX1010-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX1010-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1010-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1010-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1030-LABEL: divergent_br_same_weight:
 ; GFX1030:       ; %bb.0: ; %entry
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1030-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 1, v0
-; GFX1030-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX1030-NEXT:    v_cmp_gt_i32_e64 s8, 1, v0
+; GFX1030-NEXT:    s_xor_b32 exec_lo, s8, exec_lo
 ; GFX1030-NEXT:    ; divergent control-flow edge
 ; GFX1030-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX1030-NEXT:  .LBB4_1: ; %if.then
@@ -276,7 +276,7 @@ define void @divergent_br_same_weight(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX1030-NEXT:    s_mov_b32 s4, s17
 ; GFX1030-NEXT:    buffer_store_dword v0, v1, s[4:7], 0 offen
 ; GFX1030-NEXT:  .LBB4_2: ; %if.end
-; GFX1030-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1030-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1030-NEXT:    s_setpc_b64 s[30:31]
 entry:
@@ -296,8 +296,8 @@ define void @divergent_br_then_likely(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX9-LABEL: divergent_br_then_likely:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    v_cmp_gt_i32_e32 vcc, 1, v0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    v_cmp_gt_i32_e64 s[8:9], 1, v0
+; GFX9-NEXT:    s_xor_b64 exec, s[8:9], exec
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX9-NEXT:  .LBB5_1: ; %if.then
@@ -309,15 +309,15 @@ define void @divergent_br_then_likely(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s21
 ; GFX9-NEXT:    buffer_store_dword v1, v0, s[4:7], 0 offen
 ; GFX9-NEXT:  .LBB5_2: ; %if.end
-; GFX9-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1010-LABEL: divergent_br_then_likely:
 ; GFX1010:       ; %bb.0: ; %entry
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1010-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 1, v0
-; GFX1010-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX1010-NEXT:    v_cmp_gt_i32_e64 s8, 1, v0
+; GFX1010-NEXT:    s_xor_b32 exec_lo, s8, exec_lo
 ; GFX1010-NEXT:    ; divergent control-flow edge
 ; GFX1010-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX1010-NEXT:  .LBB5_1: ; %if.then
@@ -330,15 +330,15 @@ define void @divergent_br_then_likely(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX1010-NEXT:    buffer_store_dword v0, v1, s[4:7], 0 offen
 ; GFX1010-NEXT:  .LBB5_2: ; %if.end
 ; GFX1010-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX1010-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1010-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1010-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1030-LABEL: divergent_br_then_likely:
 ; GFX1030:       ; %bb.0: ; %entry
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1030-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 1, v0
-; GFX1030-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX1030-NEXT:    v_cmp_gt_i32_e64 s8, 1, v0
+; GFX1030-NEXT:    s_xor_b32 exec_lo, s8, exec_lo
 ; GFX1030-NEXT:    ; divergent control-flow edge
 ; GFX1030-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX1030-NEXT:  .LBB5_1: ; %if.then
@@ -350,7 +350,7 @@ define void @divergent_br_then_likely(i32 noundef inreg %value, ptr addrspace(8)
 ; GFX1030-NEXT:    s_mov_b32 s4, s17
 ; GFX1030-NEXT:    buffer_store_dword v0, v1, s[4:7], 0 offen
 ; GFX1030-NEXT:  .LBB5_2: ; %if.end
-; GFX1030-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1030-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1030-NEXT:    s_setpc_b64 s[30:31]
 entry:

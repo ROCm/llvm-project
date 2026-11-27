@@ -372,10 +372,10 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_load_dword v55, off, s[0:3], s32 offset:524
 ; CHECK-NEXT:    s_nop 0
 ; CHECK-NEXT:    buffer_load_dword v2, off, s[0:3], s32 offset:456
-; CHECK-NEXT:    v_cmp_gt_i32_e64 s[8:9], 3, v19
-; CHECK-NEXT:    s_mov_b64 s[4:5], 0
-; CHECK-NEXT:    s_xor_b64 s[6:7], s[8:9], exec
-; CHECK-NEXT:    s_mov_b64 s[10:11], s[8:9]
+; CHECK-NEXT:    v_cmp_gt_i32_e64 s[6:7], 3, v19
+; CHECK-NEXT:    s_mov_b64 s[8:9], 0
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
+; CHECK-NEXT:    s_mov_b64 s[10:11], s[6:7]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    buffer_store_dword v2, off, s[0:3], s32 offset:1244 ; 4-byte Folded Spill
 ; CHECK-NEXT:    buffer_load_dword v28, off, s[0:3], s32 offset:8
@@ -479,14 +479,14 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_load_dword v4, off, s[0:3], s32 offset:652
 ; CHECK-NEXT:    s_nop 0
 ; CHECK-NEXT:    buffer_load_dword v2, off, s[0:3], s32 offset:396
-; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
 ; CHECK-NEXT:  .LBB0_1: ; %LeafBlock46
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 3, v19
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_or_b64 s[10:11], s[8:9], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], 3, v19
+; CHECK-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; CHECK-NEXT:    s_or_b64 s[10:11], s[10:11], s[8:9]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
 ; CHECK-NEXT:  .LBB0_2: ; %bb2
@@ -505,7 +505,7 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    v_and_b32_e32 v33, 0x7fffffff, v33
 ; CHECK-NEXT:    v_accvgpr_write_b32 a7, v60
 ; CHECK-NEXT:    v_xor_b32_e32 v60, v48, v47
-; CHECK-NEXT:    s_movk_i32 s6, 0x7c
+; CHECK-NEXT:    s_movk_i32 s4, 0x7c
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_xor_b32_e32 v11, v11, v43
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v32, 17, v11
@@ -560,12 +560,12 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    v_or_b32_e32 v37, v37, v7
 ; CHECK-NEXT:    flat_store_dwordx4 v[42:43], v[36:39] offset:16
 ; CHECK-NEXT:    v_xor_b32_e32 v7, v30, v30
-; CHECK-NEXT:    v_add_co_u32_e32 v36, vcc, s6, v34
+; CHECK-NEXT:    v_add_co_u32_e32 v36, vcc, s4, v34
 ; CHECK-NEXT:    v_addc_co_u32_e32 v37, vcc, 0, v35, vcc
 ; CHECK-NEXT:    v_lshrrev_b32_e32 v9, 15, v7
-; CHECK-NEXT:    s_movk_i32 s6, 0x78
+; CHECK-NEXT:    s_movk_i32 s4, 0x78
 ; CHECK-NEXT:    flat_store_short v[36:37], v9
-; CHECK-NEXT:    v_add_co_u32_e32 v36, vcc, s6, v34
+; CHECK-NEXT:    v_add_co_u32_e32 v36, vcc, s4, v34
 ; CHECK-NEXT:    v_alignbit_b32 v7, v7, v11, 15
 ; CHECK-NEXT:    v_addc_co_u32_e32 v37, vcc, 0, v35, vcc
 ; CHECK-NEXT:    flat_store_dword v[36:37], v7
@@ -637,49 +637,49 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    v_accvgpr_read_b32 v36, a5
 ; CHECK-NEXT:    v_accvgpr_read_b32 v39, a2
 ; CHECK-NEXT:  .LBB0_3:
-; CHECK-NEXT:    s_mov_b64 s[6:7], 0
+; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_5
 ; CHECK-NEXT:  .LBB0_4: ; %LeafBlock
-; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], 2, v19
-; CHECK-NEXT:    s_xor_b64 s[8:9], s[6:7], exec
-; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], 2, v19
+; CHECK-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
+; CHECK-NEXT:    s_or_b64 s[8:9], s[8:9], s[6:7]
 ; CHECK-NEXT:  .LBB0_5:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
+; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_42
 ; CHECK-NEXT:  .LBB0_6: ; %bb0
-; CHECK-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v3
-; CHECK-NEXT:    s_xor_b64 exec, s[4:5], exec
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[8:9], 0, v3
+; CHECK-NEXT:    s_xor_b64 exec, s[8:9], exec
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_40
 ; CHECK-NEXT:  .LBB0_7: ; %bb0b
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v21
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v21
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_9
 ; CHECK-NEXT:  .LBB0_8: ; %cond.load
 ; CHECK-NEXT:    flat_load_dwordx2 v[18:19], v[0:1]
 ; CHECK-NEXT:  .LBB0_9: ; %else
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v45
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v45
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_11
 ; CHECK-NEXT:  .LBB0_10: ; %cond.load1
 ; CHECK-NEXT:    flat_load_dwordx2 v[20:21], v[0:1] offset:8
 ; CHECK-NEXT:  .LBB0_11: ; %else2
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v53
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v53
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_13
 ; CHECK-NEXT:  .LBB0_12: ; %cond.load4
@@ -690,9 +690,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword a3, off, s[0:3], s32 offset:888 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_13: ; %else5
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v51
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v51
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_15
 ; CHECK-NEXT:  .LBB0_14: ; %cond.load7
@@ -703,9 +703,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword a3, off, s[0:3], s32 offset:896 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_15: ; %else8
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v49
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v49
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_17
 ; CHECK-NEXT:  .LBB0_16: ; %cond.load10
@@ -716,9 +716,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword a3, off, s[0:3], s32 offset:904 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_17: ; %else11
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v44
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v44
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_19
 ; CHECK-NEXT:  .LBB0_18: ; %cond.load13
@@ -729,9 +729,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword a3, off, s[0:3], s32 offset:912 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_19: ; %else14
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v30
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v30
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_21
 ; CHECK-NEXT:  .LBB0_20: ; %cond.load16
@@ -742,9 +742,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword v31, off, s[0:3], s32 offset:920 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_21: ; %else17
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v46
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v46
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_23
 ; CHECK-NEXT:  .LBB0_22: ; %cond.load19
@@ -755,9 +755,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword v31, off, s[0:3], s32 offset:928 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_23: ; %else20
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v27
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v27
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_25
 ; CHECK-NEXT:  .LBB0_24: ; %cond.load22
@@ -768,9 +768,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword v31, off, s[0:3], s32 offset:936 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_25: ; %else23
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v25
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v25
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_27
 ; CHECK-NEXT:  .LBB0_26: ; %cond.load25
@@ -781,9 +781,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword v31, off, s[0:3], s32 offset:944 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_27: ; %else26
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v17
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v17
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_29
 ; CHECK-NEXT:  .LBB0_28: ; %cond.load28
@@ -794,9 +794,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword v31, off, s[0:3], s32 offset:952 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_29: ; %else29
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v15
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v15
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_31
 ; CHECK-NEXT:  .LBB0_30: ; %cond.load31
@@ -807,9 +807,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    buffer_store_dword v31, off, s[0:3], s32 offset:960 ; 4-byte Folded Spill
 ; CHECK-NEXT:  .LBB0_31: ; %else32
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v13
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v13
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_33
 ; CHECK-NEXT:  .LBB0_32: ; %cond.load34
@@ -822,9 +822,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
 ; CHECK-NEXT:    buffer_load_dword v5, off, s[0:3], s32 offset:1272 ; 4-byte Folded Reload
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v5
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_35
 ; CHECK-NEXT:  .LBB0_34: ; %cond.load37
@@ -833,9 +833,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
 ; CHECK-NEXT:    buffer_load_dword v5, off, s[0:3], s32 offset:1268 ; 4-byte Folded Reload
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v5
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_37
 ; CHECK-NEXT:  .LBB0_36: ; %cond.load40
@@ -844,9 +844,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
 ; CHECK-NEXT:    buffer_load_dword v5, off, s[0:3], s32 offset:1264 ; 4-byte Folded Reload
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v5
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_39
 ; CHECK-NEXT:  .LBB0_38: ; %cond.load43
@@ -968,10 +968,10 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    v_or_b32_e32 v21, v21, v0
 ; CHECK-NEXT:    flat_store_dwordx4 v[34:35], v[18:21]
 ; CHECK-NEXT:  .LBB0_40:
-; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[4:5]
-; CHECK-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[8:9]
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_42
 ; CHECK-NEXT:  .LBB0_41: ; %bb0a
@@ -1073,9 +1073,9 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    s_nop 0
 ; CHECK-NEXT:    v_mov_b32_e32 v6, v0
 ; CHECK-NEXT:  .LBB0_42:
-; CHECK-NEXT:    s_or_b64 exec, exec, s[8:9]
-; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_47
 ; CHECK-NEXT:  .LBB0_43: ; %bb1
@@ -1222,8 +1222,8 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    flat_store_dwordx4 v[34:35], v[2:5]
 ; CHECK-NEXT:  .LBB0_45:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; CHECK-NEXT:    s_or_b64 s[8:9], s[8:9], s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_47
@@ -1383,7 +1383,7 @@ define void @f(ptr %p, <16 x i1> %m, <16 x i63> %pt, <16 x i1> %sc,
 ; CHECK-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v35, vcc
 ; CHECK-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; CHECK-NEXT:  .LBB0_47: ; %UnifiedReturnBlock
-; CHECK-NEXT:    s_or_b64 exec, exec, s[8:9]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; CHECK-NEXT:    buffer_load_dword v62, off, s[0:3], s32 offset:796 ; 4-byte Folded Reload
 ; CHECK-NEXT:    buffer_load_dword v61, off, s[0:3], s32 offset:800 ; 4-byte Folded Reload
 ; CHECK-NEXT:    buffer_load_dword v60, off, s[0:3], s32 offset:804 ; 4-byte Folded Reload

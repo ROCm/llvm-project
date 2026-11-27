@@ -403,10 +403,10 @@ false:
 define amdgpu_ps void @non_cst_non_compare_input(ptr addrspace(1) %out, i32 %tid, i32 %cond) {
 ; CHECK-LABEL: non_cst_non_compare_input:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; CHECK-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v3
+; CHECK-NEXT:    s_xor_b64 s[0:1], s[2:3], exec
 ; CHECK-NEXT:    ; implicit-def: $vgpr3
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB20_2
 ; CHECK-NEXT:  .LBB20_1: ; %B

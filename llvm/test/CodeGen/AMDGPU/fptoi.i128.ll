@@ -22,11 +22,11 @@ define i128 @fptosi_f64_to_i128(double %x) {
 ; SDAG-NEXT:    s_movk_i32 s4, 0x432
 ; SDAG-NEXT:    v_ashrrev_i32_e32 v6, 31, v5
 ; SDAG-NEXT:    v_and_b32_e32 v5, 0xfffff, v5
-; SDAG-NEXT:    v_cmp_lt_u32_e32 vcc, s4, v7
+; SDAG-NEXT:    v_cmp_lt_u32_e64 s[4:5], s4, v7
 ; SDAG-NEXT:    v_or_b32_e32 v8, 1, v6
 ; SDAG-NEXT:    v_or_b32_e32 v5, 0x100000, v5
-; SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB0_3
 ; SDAG-NEXT:  .LBB0_2: ; %fp-to-i-if-exp.large
@@ -246,10 +246,10 @@ define i128 @fptoui_f64_to_i128(double %x) {
 ; SDAG-NEXT:  .LBB1_1: ; %fp-to-i-if-check.exp.size
 ; SDAG-NEXT:    s_movk_i32 s4, 0x432
 ; SDAG-NEXT:    v_and_b32_e32 v1, 0xfffff, v1
-; SDAG-NEXT:    v_cmp_lt_u32_e32 vcc, s4, v6
+; SDAG-NEXT:    v_cmp_lt_u32_e64 s[4:5], s4, v6
 ; SDAG-NEXT:    v_or_b32_e32 v1, 0x100000, v1
-; SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB1_3
 ; SDAG-NEXT:  .LBB1_2: ; %fp-to-i-if-exp.large
@@ -367,12 +367,12 @@ define i128 @fptosi_f32_to_i128(float %x) {
 ; SDAG-NEXT:    s_movk_i32 s4, 0x95
 ; SDAG-NEXT:    v_ashrrev_i32_e32 v7, 31, v4
 ; SDAG-NEXT:    v_and_b32_e32 v4, 0x7fffff, v4
-; SDAG-NEXT:    v_cmp_lt_u32_e32 vcc, s4, v6
+; SDAG-NEXT:    v_cmp_lt_u32_e64 s[4:5], s4, v6
 ; SDAG-NEXT:    v_ashrrev_i32_e32 v8, 31, v7
 ; SDAG-NEXT:    v_or_b32_e32 v9, 1, v7
 ; SDAG-NEXT:    v_or_b32_e32 v4, 0x800000, v4
-; SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB2_3
 ; SDAG-NEXT:  .LBB2_2: ; %fp-to-i-if-exp.large
@@ -583,10 +583,10 @@ define i128 @fptoui_f32_to_i128(float %x) {
 ; SDAG-NEXT:  .LBB3_1: ; %fp-to-i-if-check.exp.size
 ; SDAG-NEXT:    s_movk_i32 s4, 0x95
 ; SDAG-NEXT:    v_and_b32_e32 v4, 0x7fffff, v4
-; SDAG-NEXT:    v_cmp_lt_u32_e32 vcc, s4, v6
+; SDAG-NEXT:    v_cmp_lt_u32_e64 s[4:5], s4, v6
 ; SDAG-NEXT:    v_or_b32_e32 v4, 0x800000, v4
-; SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB3_3
 ; SDAG-NEXT:  .LBB3_2: ; %fp-to-i-if-exp.large
@@ -730,13 +730,13 @@ define i128 @fptosi_bf16_to_i128(bfloat %x) {
 ; SDAG-NEXT:    s_movk_i32 s5, 0x85
 ; SDAG-NEXT:    v_bfe_i32 v8, v6, 0, 16
 ; SDAG-NEXT:    v_and_b32_e32 v4, 0x7f, v4
-; SDAG-NEXT:    v_cmp_lt_u16_e32 vcc, s5, v5
+; SDAG-NEXT:    v_cmp_lt_u16_e64 s[10:11], s5, v5
 ; SDAG-NEXT:    s_mov_b32 s4, 0
 ; SDAG-NEXT:    v_ashrrev_i32_e32 v7, 31, v8
 ; SDAG-NEXT:    v_or_b32_e32 v6, 1, v8
 ; SDAG-NEXT:    v_or_b32_e32 v4, 0x80, v4
-; SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_xor_b64 s[8:9], s[10:11], exec
+; SDAG-NEXT:    s_mov_b64 exec, s[10:11]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB6_3
 ; SDAG-NEXT:  .LBB6_2: ; %fp-to-i-if-exp.large
@@ -941,10 +941,10 @@ define i128 @fptoui_bf16_to_i128(bfloat %x) {
 ; SDAG-NEXT:  .LBB7_1: ; %fp-to-i-if-check.exp.size
 ; SDAG-NEXT:    s_movk_i32 s4, 0x85
 ; SDAG-NEXT:    v_and_b32_e32 v4, 0x7f, v4
-; SDAG-NEXT:    v_cmp_lt_u16_e32 vcc, s4, v5
+; SDAG-NEXT:    v_cmp_lt_u16_e64 s[4:5], s4, v5
 ; SDAG-NEXT:    v_or_b32_e32 v4, 0x80, v4
-; SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB7_3
 ; SDAG-NEXT:  .LBB7_2: ; %fp-to-i-if-exp.large
