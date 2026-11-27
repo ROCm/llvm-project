@@ -133,17 +133,17 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
   // Initialize the mapping of values to registers.  This is only set up for
   // instruction values that are used outside of the block that defines
   // them.
-  const Align StackAlign = MF->getFrameInfo().getStackAlign();
+  const Align StackAlign = TFI->getStackAlign();
   for (const BasicBlock &BB : *Fn) {
     for (const Instruction &I : BB) {
       if (const AllocaInst *AI = dyn_cast<AllocaInst>(&I)) {
         Align Alignment = AI->getAlign();
 
         // Static allocas can be folded into the initial stack frame
-        // adjustment. If this function can't realign the stack, don't
+        // adjustment. For targets that don't realign the stack, don't
         // do this if there is an extra alignment requirement.
-        if (AI->isStaticAlloca() && (MF->getFrameInfo().isStackRealignable() ||
-                                     Alignment <= StackAlign)) {
+        if (AI->isStaticAlloca() &&
+            (TFI->isStackRealignable() || (Alignment <= StackAlign))) {
           TypeSize AllocaSize = AI->getAllocationSize(MF->getDataLayout())
                                     .value_or(TypeSize::getZero());
           uint64_t TySize = AllocaSize.getKnownMinValue();
