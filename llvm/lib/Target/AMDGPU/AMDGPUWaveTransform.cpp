@@ -84,6 +84,7 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineCycleAnalysis.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -1314,6 +1315,239 @@ void ReconvergeCFGHelper::verifyNodes() {
 
 namespace {
 
+struct ResetUpdaterContext {
+  static constexpr unsigned NotInRegion = ~0u;
+
+  // Block number -> position in reverse post-order (~0u if unreachable).
+  SmallVector<unsigned> RPONumber;
+  // Block number -> index in the active region (NotInRegion when idle).
+  SmallVector<unsigned> RegionIdx;
+
+  explicit ResetUpdaterContext(MachineFunction &MF) {
+    RPONumber.assign(MF.getNumBlockIDs(), ~0u);
+    RegionIdx.assign(MF.getNumBlockIDs(), NotInRegion);
+    unsigned N = 0;
+    for (MachineBasicBlock *MBB :
+         ReversePostOrderTraversal<MachineFunction *>(&MF))
+      RPONumber[MBB->getNumber()] = N++;
+  }
+};
+
+class ResetUpdater {
+public:
+  ResetUpdater(MachineDominatorTree &DomTree, ResetUpdaterContext &Ctx)
+      : DomTree(DomTree), Ctx(Ctx) {}
+
+  // Region root: only blocks dominated by BB are analyzed.
+  void addDomBB(MachineBasicBlock *BB) { DomBB = BB; }
+
+  // BB sets the accumulator to zero at its start.
+  void addResetInMid(MachineBasicBlock *BB) { addDef(BB, Mid); }
+
+  // BB writes a possibly non-zero value to the accumulator.
+  void addNonZeroWrite(MachineBasicBlock *BB) { addDef(BB, NonZero); }
+
+  // BB sets the accumulator to zero at its end.
+  void addResetAtEnd(MachineBasicBlock *BB) { addDef(BB, End); }
+
+  // Register BB for a later isReachingDefZeroAtStartOf query.
+  void addQuery(MachineBasicBlock *BB) { QueryBlocks.insert(BB); }
+
+  // True if no non-zero def reaches BB's start; records live resets when false.
+  bool isReachingDefZeroAtStartOf(MachineBasicBlock *BB);
+
+  // True if BB's mid reset reaches a failed query.
+  bool liveResetInMidContains(MachineBasicBlock *BB) const {
+    return isDef(BB) && LiveMid.test(defIndex(BB));
+  }
+
+  // True if BB's end reset reaches a failed query.
+  bool liveResetAtEndContains(MachineBasicBlock *BB) const {
+    return isDef(BB) && LiveEnd.test(defIndex(BB));
+  }
+
+  // All mid-reset blocks that reach a failed query, in def order.
+  SmallVector<MachineBasicBlock *> getLiveResetInMidBlocks() const;
+
+  // All end-reset blocks that reach a failed query, in def order.
+  SmallVector<MachineBasicBlock *> getLiveResetAtEndBlocks() const;
+
+private:
+  enum DefKind : unsigned { Mid = 1, NonZero = 2, End = 3 }; // higher = later
+
+  MachineDominatorTree &DomTree;
+  ResetUpdaterContext &Ctx;
+
+  // Inputs, filled before the first query.
+  MachineBasicBlock *DomBB = nullptr;
+  MapVector<MachineBasicBlock *, DefKind> Defs; // insertion order = def index
+  SmallPtrSet<MachineBasicBlock *, 8> QueryBlocks;
+
+  // Derived by compute().
+  bool Computed = false;
+  bool HasBackEdge = false;
+  unsigned K = 0;                                   // number of defs
+  SmallBitVector EndMask, NonZMask, MidMask;        // K bits, pairwise disjoint
+  SmallVector<MachineBasicBlock *, 16> RegionOrder; // sorted by RPO
+  SmallVector<SmallBitVector> Out;                  // by local index
+  SmallDenseMap<MachineBasicBlock *, SmallBitVector> QueryIn;
+
+  // Outputs, by def index.
+  SmallBitVector LiveMid, LiveEnd;
+
+  bool isDef(MachineBasicBlock *B) const { return Defs.contains(B); }
+  unsigned defIndex(MachineBasicBlock *B) const {
+    return Defs.find(B) - Defs.begin();
+  }
+  bool inRegion(MachineBasicBlock *B) const {
+    return Ctx.RegionIdx[B->getNumber()] != ResetUpdaterContext::NotInRegion;
+  }
+  unsigned rpo(MachineBasicBlock *B) const {
+    return Ctx.RPONumber[B->getNumber()];
+  }
+  unsigned localIdx(MachineBasicBlock *B) const {
+    return Ctx.RegionIdx[B->getNumber()];
+  }
+  void mark(MachineBasicBlock *B) { Ctx.RegionIdx[B->getNumber()] = 0; }
+
+  void addDef(MachineBasicBlock *B, DefKind Kind) {
+    DefKind &D = Defs[B];
+    D = std::max(D, Kind);
+  }
+
+  void initDefs();
+  void buildRegion();
+  void compute();
+};
+
+void ResetUpdater::initDefs() {
+  K = Defs.size();
+  EndMask = NonZMask = MidMask = LiveMid = LiveEnd = SmallBitVector(K);
+  unsigned I = 0;
+  for (const auto &[B, Kind] : Defs) {
+    if (Kind == Mid)
+      MidMask.set(I);
+    else if (Kind == NonZero)
+      NonZMask.set(I);
+    else
+      EndMask.set(I);
+    ++I;
+  }
+}
+
+void ResetUpdater::buildRegion() {
+  SmallVector<MachineBasicBlock *> WL;
+  RegionOrder.clear();
+
+  // Upward walk from the queries; stop at non-query defs.
+  for (MachineBasicBlock *Q : QueryBlocks) {
+    if (inRegion(Q))
+      continue;
+    mark(Q);
+    RegionOrder.push_back(Q);
+    WL.push_back(Q);
+  }
+  while (!WL.empty()) {
+    MachineBasicBlock *B = WL.pop_back_val();
+    if (isDef(B) && !QueryBlocks.contains(B))
+      continue; // Out[B] = {B}; preds not walked
+    for (MachineBasicBlock *P : B->predecessors()) {
+      if (!DomTree.dominates(DomBB, P) || inRegion(P))
+        continue;
+      mark(P);
+      RegionOrder.push_back(P);
+      WL.push_back(P);
+    }
+  }
+
+  // Order by global RPO, then assign local indices.
+  llvm::sort(RegionOrder, [&](MachineBasicBlock *A, MachineBasicBlock *B) {
+    return rpo(A) < rpo(B);
+  });
+  for (auto [I, B] : llvm::enumerate(RegionOrder))
+    Ctx.RegionIdx[B->getNumber()] = I;
+  assert((!inRegion(DomBB) || RegionOrder[0] == DomBB) &&
+         "DomBB must be the region entry");
+
+  // Retreating edge into a non-def block from a non-def pred.
+  HasBackEdge = false;
+  for (MachineBasicBlock *B : RegionOrder) {
+    if (isDef(B))
+      continue;
+    for (MachineBasicBlock *P : B->predecessors())
+      if (inRegion(P) && !isDef(P) && localIdx(P) >= localIdx(B))
+        HasBackEdge = true;
+  }
+}
+
+void ResetUpdater::compute() {
+  initDefs();
+  buildRegion();
+
+  Out.assign(RegionOrder.size(), SmallBitVector(K));
+  for (auto [I, B] : llvm::enumerate(RegionOrder))
+    if (isDef(B))
+      Out[I].set(defIndex(B)); // a def kills everything else
+
+  bool Changed;
+  do { // fixpoint over non-def blocks
+    Changed = false;
+    for (auto [I, B] : llvm::enumerate(RegionOrder)) {
+      if (isDef(B))
+        continue;
+      unsigned Before = Out[I].count();
+      for (MachineBasicBlock *P : B->predecessors())
+        if (inRegion(P))
+          Out[I] |= Out[localIdx(P)];
+      if (Out[I].count() != Before)
+        Changed = true;
+    }
+  } while (Changed && HasBackEdge); // DAG region: one pass
+
+  for (MachineBasicBlock *Q : QueryBlocks) { // In[Q] = union of preds' Out
+    SmallBitVector In(K);
+    for (MachineBasicBlock *P : Q->predecessors())
+      if (inRegion(P))
+        In |= Out[localIdx(P)];
+    QueryIn[Q] = In;
+  }
+
+  for (MachineBasicBlock *B : RegionOrder) // release shared marker array
+    Ctx.RegionIdx[B->getNumber()] = ResetUpdaterContext::NotInRegion;
+  Computed = true;
+}
+
+bool ResetUpdater::isReachingDefZeroAtStartOf(MachineBasicBlock *BB) {
+  assert(QueryBlocks.contains(BB) && "block was not registered with addQuery");
+  if (!Computed)
+    compute();
+  const SmallBitVector &D = QueryIn.find(BB)->second;
+  bool Zero = !D.anyCommon(NonZMask);
+  if (!Zero) {
+    SmallBitVector T = D;
+    T &= MidMask;
+    LiveMid |= T;
+    T = D;
+    T &= EndMask;
+    LiveEnd |= T;
+  }
+  return Zero;
+}
+
+SmallVector<MachineBasicBlock *> ResetUpdater::getLiveResetInMidBlocks() const {
+  SmallVector<MachineBasicBlock *> Blocks;
+  for (unsigned I : LiveMid.set_bits())
+    Blocks.push_back((Defs.begin() + I)->first);
+  return Blocks;
+}
+
+SmallVector<MachineBasicBlock *> ResetUpdater::getLiveResetAtEndBlocks() const {
+  SmallVector<MachineBasicBlock *> Blocks;
+  for (unsigned I : LiveEnd.set_bits())
+    Blocks.push_back((Defs.begin() + I)->first);
+  return Blocks;
+}
+
 /// Helper class for rewriting control-flow instruction after translation into
 /// a wave CFG.
 class ControlFlowRewriter {
@@ -1426,6 +1660,7 @@ private:
   struct ExecTerm {
     MachineBasicBlock *Block;
     Register PrimaryAcc;
+    bool Acc;
     MachineBasicBlock *Succ0;
     MachineBasicBlock *Succ1;
   };
@@ -1442,10 +1677,9 @@ private:
   SmallVector<ExecTerm, 4> SetExecZeroSectionList;
   SmallVector<AccReset, 4> RestoreExecSectionList;
   SmallVector<AccReset, 4> ResetRejoinAccSectionList;
-  SmallVector<AccReset, 4> ResetPrimAccSectionList;
-  SmallVector<AccReset, 8> InitAccSectionList;
+  SmallVector<AccReset, 8> ResetInMidSection;
+  DenseSet<std::pair<MachineBasicBlock *, Register>> LiveAccResetAtEndBlocks;
 
-  SmallPtrSet<MachineBasicBlock *, 16> WTBlocks;
   DenseMap<WaveNode *, Register> PrimAccMap;
   DenseMap<MachineBasicBlock *, MachineBasicBlock::iterator> TopInsertionPoint;
   AccRegSet SectionTempRegs;
@@ -1470,8 +1704,7 @@ private:
                            Register Dst);
   void createSections();
   void createRestoreExecSection();
-  void createResetPrimAccSection();
-  void createInitAccSection();
+  void createResetInMidSection();
   void createImplicitContribSection();
   void createExplicitContribSection(AMDGPULaneMaskAnalysis &LMA);
   void createRejoinContribSection();
@@ -1754,8 +1987,12 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
   if (!ZeroReg)
     ZeroReg = LMU.createLaneMaskReg();
 
-  WTBlocks.clear();
   PrimAccMap.clear();
+  LiveAccResetAtEndBlocks.clear();
+
+  MachineDominatorTree &DomTree = ReconvergeCfg.getDomTree();
+
+  ResetUpdaterContext Ctx(Function);
 
   for (WaveNode *LaneTarget : NodeOrder) {
     CFGNodeInfo &LaneTargetInfo = NodeInfo.find(LaneTarget)->second;
@@ -1767,32 +2004,66 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
             }))
       continue;
 
-    const bool HasSingleDomOrigin = LaneTargetInfo.origins.size() == 1 &&
-                                    !LaneTargetInfo.origins[0].Node->Cycle;
+    const bool HasSingleDomOrigin =
+        LaneTargetInfo.origins.size() == 1 &&
+        !LaneTargetInfo.origins[0].Node->Cycle &&
+        llvm::all_of(LaneTargetInfo.OriginBranch,
+                     [&](const PointerIntPair<WaveNode *, 1, bool> &OB) {
+                       return DomTree.dominates(
+                           LaneTargetInfo.origins[0].Node->Block,
+                           OB.getPointer()->Block);
+                     });
 
-    SmallVector<MachineBasicBlock *, 8> InitBlocks;
-    InitBlocks.push_back(LaneTarget->Block);
-    for (const LaneOriginInfo &Origin : LaneTargetInfo.origins)
-      InitBlocks.push_back(Origin.Node->Block);
-    for (const PointerIntPair<WaveNode *, 1, bool> &OB :
-         LaneTargetInfo.OriginBranch) {
-      InitBlocks.push_back(OB.getPointer()->Block);
-    }
-
-    MachineBasicBlock *PrimAccInitBB = getInitBlock(InitBlocks);
     Register PrimAcc = LMU.createLaneMaskReg();
     AccumulatorRegs.insert(PrimAcc);
 
-    WTBlocks.insert(PrimAccInitBB);
-    WTBlocks.insert(LaneTarget->Block);
-    InitAccSectionList.push_back({PrimAccInitBB, PrimAcc});
-    ResetPrimAccSectionList.push_back({LaneTarget->Block, PrimAcc});
+    MachineBasicBlock *PrimAccInitBB = nullptr;
+    ResetUpdater Upd(DomTree, Ctx);
+    if (!HasSingleDomOrigin) {
+      SmallVector<MachineBasicBlock *, 8> InitBlocks;
+      InitBlocks.push_back(LaneTarget->Block);
+      for (const LaneOriginInfo &Origin : LaneTargetInfo.origins)
+        InitBlocks.push_back(Origin.Node->Block);
+      for (const PointerIntPair<WaveNode *, 1, bool> &OB :
+           LaneTargetInfo.OriginBranch)
+        InitBlocks.push_back(OB.getPointer()->Block);
+
+      PrimAccInitBB = getInitBlock(InitBlocks);
+      assert(PrimAccInitBB);
+
+      Upd.addDomBB(PrimAccInitBB);
+      Upd.addResetInMid(PrimAccInitBB);
+      Upd.addResetInMid(LaneTarget->Block);
+      for (const LaneOriginInfo &Origin : LaneTargetInfo.origins)
+        Upd.addNonZeroWrite(Origin.Node->Block);
+      for (const PointerIntPair<WaveNode *, 1, bool> &OB :
+           LaneTargetInfo.OriginBranch) {
+        if (OB.getInt())
+          Upd.addResetAtEnd(OB.getPointer()->Block);
+      }
+
+      for (const LaneOriginInfo &Origin : LaneTargetInfo.origins)
+        if (Origin.Node->Block != LaneTarget->Block &&
+            Origin.Node->Block != PrimAccInitBB)
+          Upd.addQuery(Origin.Node->Block);
+      for (const PointerIntPair<WaveNode *, 1, bool> &OB :
+           LaneTargetInfo.OriginBranch) {
+        WaveNode *N = OB.getPointer();
+        if (!OB.getInt() || N == LaneTarget)
+          continue;
+        if (llvm::none_of(
+                LaneTargetInfo.origins,
+                [&](const LaneOriginInfo &Origin) { return Origin.Node == N; }))
+          Upd.addQuery(N->Block);
+      }
+    }
 
     for (const LaneOriginInfo &Origin : LaneTargetInfo.origins) {
       WaveNode *O = Origin.Node;
-      WTBlocks.insert(O->Block);
-      const bool Accumulate = !HasSingleDomOrigin && O != LaneTarget &&
-                              O->Block != PrimAccInitBB;
+      const bool Accumulate = !HasSingleDomOrigin &&
+                              O->Block != LaneTarget->Block &&
+                              O->Block != PrimAccInitBB &&
+                              !Upd.isReachingDefZeroAtStartOf(O->Block);
       OriginContrib Rec{O->Block, PrimAcc, Accumulate, Origin};
       if (!Origin.CondReg || Origin.CondReg == AMDGPU::SCC)
         ImplicitContribSectionList.push_back(Rec);
@@ -1806,19 +2077,29 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
         continue;
 
       WaveNode *OB = OBPair.getPointer();
-      WTBlocks.insert(OB->Block);
-      ExecTerm Term{OB->Block, PrimAcc, OB->Successors[0]->Block,
-                    OB->Successors[1]->Block};
       const bool InOrigins = llvm::any_of(
           LaneTargetInfo.origins,
           [&](const LaneOriginInfo &Origin) { return Origin.Node == OB; });
-      if (OB == LaneTarget && !InOrigins) {
+      const bool ExecIsZero =
+          !InOrigins &&
+          (OB == LaneTarget ||
+           (!HasSingleDomOrigin && Upd.isReachingDefZeroAtStartOf(OB->Block)));
+      ExecTerm Term{OB->Block, PrimAcc, !HasSingleDomOrigin,
+                    OB->Successors[0]->Block, OB->Successors[1]->Block};
+      if (ExecIsZero) {
         SetExecZeroSectionList.push_back(Term);
         PrimAccMap[OB] = ZeroReg;
       } else {
         SetExecSectionList.push_back(Term);
         PrimAccMap[OB] = PrimAcc;
       }
+    }
+
+    if (!HasSingleDomOrigin) {
+      for (MachineBasicBlock *B : Upd.getLiveResetInMidBlocks())
+        ResetInMidSection.push_back({B, PrimAcc});
+      for (MachineBasicBlock *B : Upd.getLiveResetAtEndBlocks())
+        LiveAccResetAtEndBlocks.insert({B, PrimAcc});
     }
   }
 
@@ -1837,33 +2118,54 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
     }
 
     const bool HasSingleDivergentPred =
-        DivPreds.size() == 1 && !DivPreds[0]->Cycle && !Node->Cycle;
+        DivPreds.size() == 1 && !DivPreds[0]->Cycle && !Node->Cycle &&
+        DomTree.dominates(DivPreds[0]->Block, Node->Block);
 
-    SmallVector<MachineBasicBlock *, 8> InitBlocks;
-    InitBlocks.push_back(Node->Block);
-    for (WaveNode *Pred : DivPreds)
-      InitBlocks.push_back(Pred->Block);
-
-    MachineBasicBlock *RejoinAccInitBB = getInitBlock(InitBlocks);
     Register RejoinAcc = LMU.createLaneMaskReg();
     AccumulatorRegs.insert(RejoinAcc);
 
-    WTBlocks.insert(RejoinAccInitBB);
-    WTBlocks.insert(Node->Block);
-    InitAccSectionList.push_back({RejoinAccInitBB, RejoinAcc});
+    MachineBasicBlock *RejoinAccInitBB = nullptr;
+    ResetUpdater Upd(DomTree, Ctx);
+    if (!HasSingleDivergentPred) {
+      SmallVector<MachineBasicBlock *, 8> InitBlocks;
+      InitBlocks.push_back(Node->Block);
+      for (WaveNode *Pred : DivPreds)
+        InitBlocks.push_back(Pred->Block);
+
+      RejoinAccInitBB = getInitBlock(InitBlocks);
+      assert(RejoinAccInitBB);
+
+      Upd.addDomBB(RejoinAccInitBB);
+      Upd.addResetInMid(RejoinAccInitBB);
+      Upd.addResetInMid(Node->Block);
+      for (WaveNode *Pred : DivPreds)
+        Upd.addNonZeroWrite(Pred->Block);
+
+      for (WaveNode *Pred : DivPreds)
+        if (Pred->Block != RejoinAccInitBB)
+          Upd.addQuery(Pred->Block);
+      Upd.addQuery(Node->Block);
+    }
 
     for (WaveNode *Pred : DivPreds) {
-      WTBlocks.insert(Pred->Block);
       assert(PrimAccMap.contains(Pred) && "rejoin pred missing PrimAcc");
       Register PrimaryExec = PrimAccMap.lookup(Pred);
-      const bool Accumulate =
-          !HasSingleDivergentPred && Pred->Block != RejoinAccInitBB;
+      const bool Accumulate = !HasSingleDivergentPred &&
+                              Pred->Block != RejoinAccInitBB &&
+                              !Upd.isReachingDefZeroAtStartOf(Pred->Block);
       RejoinContribSectionList.push_back(
           {Pred->Block, RejoinAcc, Accumulate, PrimaryExec});
     }
 
-    RestoreExecSectionList.push_back({Node->Block, RejoinAcc});
-    ResetRejoinAccSectionList.push_back({Node->Block, RejoinAcc});
+    if (HasSingleDivergentPred || !Upd.isReachingDefZeroAtStartOf(Node->Block))
+      RestoreExecSectionList.push_back({Node->Block, RejoinAcc});
+
+    if (!HasSingleDivergentPred) {
+      if (Upd.liveResetInMidContains(RejoinAccInitBB))
+        ResetInMidSection.push_back({RejoinAccInitBB, RejoinAcc});
+      if (Upd.liveResetInMidContains(Node->Block))
+        ResetRejoinAccSectionList.push_back({Node->Block, RejoinAcc});
+    }
   }
 
   createSections();
@@ -1898,31 +2200,26 @@ saluInsertionAtEnd(MachineBasicBlock &Block) {
 // Emit every recorded lane-mask section.
 void ControlFlowRewriter::createSections() {
   AMDGPULaneMaskAnalysis LMA(Function);
-  for (MachineBasicBlock *Block : WTBlocks)
-    TopInsertionPoint[Block] = Block->getFirstNonPHI();
-  createInitAccSection();
-  createResetPrimAccSection();
+  TopInsertionPoint.clear();
+  for (const AccReset &Rec : ResetInMidSection)
+    TopInsertionPoint[Rec.Block] = Rec.Block->getFirstNonPHI();
+  for (const AccReset &Rec : RestoreExecSectionList)
+    TopInsertionPoint[Rec.Block] = Rec.Block->getFirstNonPHI();
+  for (const AccReset &Rec : ResetRejoinAccSectionList)
+    TopInsertionPoint[Rec.Block] = Rec.Block->getFirstNonPHI();
+  createResetInMidSection();
   createRestoreExecSection();
+  createResetRejoinAccSection();
   createImplicitContribSection();
   createExplicitContribSection(LMA);
   createRejoinContribSection();
-  createResetRejoinAccSection();
   createSetExecSection();
   createSetExecZeroSection();
 }
 
-// Move zero into each accumulator at its init block.
-void ControlFlowRewriter::createInitAccSection() {
+void ControlFlowRewriter::createResetInMidSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
-  for (const AccReset &Rec : InitAccSectionList)
-    emit(*Rec.Block, TopInsertionPoint.at(Rec.Block), LMC.MovOpc, Rec.Acc)
-        .addImm(0);
-}
-
-// Move zero into each primary accumulator at the lane target.
-void ControlFlowRewriter::createResetPrimAccSection() {
-  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
-  for (const AccReset &Rec : ResetPrimAccSectionList)
+  for (const AccReset &Rec : ResetInMidSection)
     emit(*Rec.Block, TopInsertionPoint.at(Rec.Block), LMC.MovOpc, Rec.Acc)
         .addImm(0);
 }
@@ -2173,7 +2470,7 @@ void ControlFlowRewriter::createRejoinContribSection() {
 void ControlFlowRewriter::createResetRejoinAccSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const AccReset &Rec : ResetRejoinAccSectionList)
-    emit(*Rec.Block, Rec.Block->getFirstTerminator(), LMC.MovOpc, Rec.Acc)
+    emit(*Rec.Block, TopInsertionPoint.at(Rec.Block), LMC.MovOpc, Rec.Acc)
         .addImm(0);
 }
 
@@ -2182,10 +2479,15 @@ void ControlFlowRewriter::createSetExecSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const ExecTerm &Rec : SetExecSectionList) {
     MachineBasicBlock::iterator I = Rec.Block->end();
-    Register Staged = freshTemp();
-    emit(*Rec.Block, I, AMDGPU::COPY, Staged).addReg(Rec.PrimaryAcc);
-    emit(*Rec.Block, I, LMC.MovOpc, Rec.PrimaryAcc).addImm(0);
-    emit(*Rec.Block, I, LMC.MovTermOpc, LMC.ExecReg).addReg(Staged);
+    if (Rec.Acc &&
+        LiveAccResetAtEndBlocks.contains({Rec.Block, Rec.PrimaryAcc})) {
+      Register Staged = freshTemp();
+      emit(*Rec.Block, I, AMDGPU::COPY, Staged).addReg(Rec.PrimaryAcc);
+      emit(*Rec.Block, I, LMC.MovOpc, Rec.PrimaryAcc).addImm(0);
+      emit(*Rec.Block, I, LMC.MovTermOpc, LMC.ExecReg).addReg(Staged);
+    } else {
+      emit(*Rec.Block, I, LMC.MovTermOpc, LMC.ExecReg).addReg(Rec.PrimaryAcc);
+    }
     BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::SI_WAVE_CF_EDGE));
     BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::S_CBRANCH_EXECZ))
         .addMBB(Rec.Succ1);
@@ -2198,7 +2500,9 @@ void ControlFlowRewriter::createSetExecZeroSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const ExecTerm &Rec : SetExecZeroSectionList) {
     MachineBasicBlock::iterator I = Rec.Block->end();
-    emit(*Rec.Block, I, LMC.MovOpc, Rec.PrimaryAcc).addImm(0);
+    if (Rec.Acc &&
+        LiveAccResetAtEndBlocks.contains({Rec.Block, Rec.PrimaryAcc}))
+      emit(*Rec.Block, I, LMC.MovOpc, Rec.PrimaryAcc).addImm(0);
     emit(*Rec.Block, I, LMC.MovTermOpc, LMC.ExecReg).addImm(0);
     BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::SI_WAVE_CF_EDGE));
     BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::S_CBRANCH_EXECZ))
