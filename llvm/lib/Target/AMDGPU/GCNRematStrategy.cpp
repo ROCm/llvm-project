@@ -14,7 +14,6 @@
 #include "GCNRematStrategy.h"
 #include "GCNRegPressure.h"
 #include "SIMachineFunctionInfo.h"
-#include "SIRegisterInfo.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
@@ -34,12 +33,12 @@ GCNRematStrategy::RematRegions::RematRegions(
     MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns,
     MutableArrayRef<GCNRPTracker::LiveRegSet> LiveOuts, LiveIntervals &LIS,
     const MachineBlockFrequencyInfo &MBFI, const MachineRegisterInfo &MRI,
-    ArrayRef<RegionPeaks> Peaks)
-    : Bounds(Regions), LiveIns(LiveIns), LiveOuts(LiveOuts), Peaks(Peaks),
+    ArrayRef<RegionRPInfo> RPInfo)
+    : Bounds(Regions), LiveIns(LiveIns), LiveOuts(LiveOuts), RPInfo(RPInfo),
       Frequencies(Regions.size(), 0), LIS(LIS), MRI(MRI) {
   assert(LiveIns.size() == Regions.size());
   assert(LiveOuts.size() == Regions.size());
-  assert(Peaks.empty() || Peaks.size() == Regions.size());
+  assert(RPInfo.empty() || RPInfo.size() == Regions.size());
 
   // Derive frequency of each region. Frequencies are scaled down if they are
   // high to avoid overflow/underflow when combining them.
@@ -69,7 +68,13 @@ GCNRematStrategy::RematRegions::RematRegions(
 GCNRegPressure GCNRematStrategy::RematRegions::computeMaxRegPressure(
     unsigned RegionIdx) const {
   assert(RegionIdx < Bounds.size() && "out of bounds");
-  const auto &[Begin, End] = Bounds[RegionIdx];
+  auto [Begin, End] = Bounds[RegionIdx];
+  if (!RPInfo.empty() && RPInfo[RegionIdx].IncludeEnd) {
+    MachineBasicBlock::iterator MBBEnd = End->getParent()->end();
+    End = std::next(End);
+    while (End != MBBEnd && End->isDebugOrPseudoInstr())
+      ++End;
+  }
   if (Begin == End)
     return llvm::getRegPressure(MRI, LiveIns[RegionIdx]);
   GCNDownwardRPTracker RPTracker(LIS);
@@ -164,9 +169,9 @@ void GCNRematStrategy::RematCandidate::init(const RematRegions &RF,
   // rematerialization unless all uses are before the peak and the register is
   // not live-out. The peaks are those of the initial schedule and are not
   // updated after rematerializations.
-  const bool IsSGPR = SIRegisterInfo::isSGPRClass(MRI.getRegClass(DefReg));
+  const GCNRegPressure::RegKind Kind = GCNRegPressure::getRegKind(DefReg, MRI);
   for (unsigned I : Live.set_bits()) {
-    const SlotIndex Peak = RF.getPeak(I, IsSGPR);
+    const SlotIndex Peak = RF.getPeak(I, Kind);
     if (!Peak.isValid())
       continue;
     bool NoSaveAtPeak = false;

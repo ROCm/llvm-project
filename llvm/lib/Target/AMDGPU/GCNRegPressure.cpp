@@ -647,8 +647,11 @@ void GCNUpwardRPTracker::recede(const MachineInstr &MI) {
 
 void GCNUpwardRPTracker::recede(MachineBasicBlock::const_iterator Begin,
                                 MachineBasicBlock::const_iterator End) {
-  while (End != Begin)
-    recede(*--End);
+  while (End != Begin) {
+    const MachineInstr &MI = *--End;
+    if (!MI.isDebugOrPseudoInstr())
+      recede(MI);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -44,23 +44,28 @@ class GCNRematStrategy {
   using RegisterIdx = Rematerializer::RegisterIdx;
 
 public:
-  /// Slots of the instructions at the VGPR and SGPR pressure peaks of a region.
-  /// A slot is invalid when the peak is unknown.
-  struct RegionPeaks {
-    SlotIndex VGPR, SGPR;
+  /// Pressure information on a region that its bounds do not give.
+  struct RegionRPInfo {
+    /// Slots of the instructions at the SGPR, ArchVGPR and AGPR pressure peaks,
+    /// taken separately because the RP targets use the maximum of each kind,
+    /// also with a unified VGPR file. A slot is invalid when the peak is
+    /// unknown.
+    SlotIndex SGPRPeak, ArchVGPRPeak, AGPRPeak;
+    /// Whether the region's pressure includes the instruction at its end.
+    bool IncludeEnd = false;
   };
 
   /// Creates a strategy that can rematerialize across \p Regions whose live-ins
   /// \p LiveIns and live-outs \p LiveOuts are provided. When not empty, \p
-  /// Peaks gives the RP peaks of each region. The underlying rematerializer is
-  /// created and initialized.
+  /// RPInfo gives more pressure information on each region. The underlying
+  /// rematerializer is created and initialized.
   GCNRematStrategy(MachineFunction &MF,
                    MutableArrayRef<RegionBoundaries> Regions,
                    MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns,
                    MutableArrayRef<GCNRPTracker::LiveRegSet> LiveOuts,
                    LiveIntervals &LIS, const MachineBlockFrequencyInfo &MBFI,
-                   ArrayRef<RegionPeaks> Peaks = {})
-      : Regions(Regions, LiveIns, LiveOuts, LIS, MBFI, MF.getRegInfo(), Peaks),
+                   ArrayRef<RegionRPInfo> RPInfo = {})
+      : Regions(Regions, LiveIns, LiveOuts, LIS, MBFI, MF.getRegInfo(), RPInfo),
         Remater(MF, Regions, LIS), MF(MF), MRI(MF.getRegInfo()), LIS(LIS) {}
 
   /// Rematerializes with the goal of reducing the maximum pressure in all \ref
@@ -103,18 +108,26 @@ private:
                  MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns,
                  MutableArrayRef<GCNRPTracker::LiveRegSet> LiveOuts,
                  LiveIntervals &LIS, const MachineBlockFrequencyInfo &MBFI,
-                 const MachineRegisterInfo &MRI, ArrayRef<RegionPeaks> Peaks);
+                 const MachineRegisterInfo &MRI, ArrayRef<RegionRPInfo> RPInfo);
 
     /// Returns the number of rematerialization regions.
     unsigned size() const { return Bounds.size(); }
 
-    /// Returns the slot of the instruction at the SGPR (\p SGPR) or VGPR
-    /// pressure peak of region \p RegionIdx, or an invalid slot when it is
+    /// Returns the slot of the instruction at the pressure peak of region \p
+    /// RegionIdx for registers of kind \p Kind, or an invalid slot when it is
     /// unknown.
-    SlotIndex getPeak(unsigned RegionIdx, bool SGPR) const {
-      if (Peaks.empty())
+    SlotIndex getPeak(unsigned RegionIdx, GCNRegPressure::RegKind Kind) const {
+      if (RPInfo.empty())
         return SlotIndex();
-      return SGPR ? Peaks[RegionIdx].SGPR : Peaks[RegionIdx].VGPR;
+      const RegionRPInfo &Info = RPInfo[RegionIdx];
+      switch (Kind) {
+      case GCNRegPressure::SGPR:
+        return Info.SGPRPeak;
+      case GCNRegPressure::AGPR:
+        return Info.AGPRPeak;
+      default:
+        return Info.ArchVGPRPeak;
+      }
     }
 
     uint64_t getFrequency(unsigned RegionIdx) const {
@@ -165,7 +178,7 @@ private:
     /// Current live-ins and live-outs for each region.
     MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns, LiveOuts;
     /// RP peaks of each region. Empty when unknown.
-    ArrayRef<RegionPeaks> Peaks;
+    ArrayRef<RegionRPInfo> RPInfo;
     /// Scaled per-region execution frequencies. 0 when unknown.
     SmallVector<uint64_t> Frequencies;
     /// Scaled minimum and maximum observed frequencies.

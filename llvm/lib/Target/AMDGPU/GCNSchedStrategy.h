@@ -567,7 +567,7 @@ private:
   /// of each region in \ref RematRegions.
   SmallVector<GCNRPTracker::LiveRegSet> RematLiveIns, RematLiveOuts;
   SmallVector<GCNRegPressure> RematPressure;
-  SmallVector<GCNRematStrategy::RegionPeaks> RematPeaks;
+  SmallVector<GCNRematStrategy::RegionRPInfo> RematRPInfo;
   /// Cache for \ref getRematLastDef.
   DenseMap<Register, SlotIndex> RematLastDef;
   /// Scheduling region of each region in \ref RematRegions.
@@ -634,10 +634,10 @@ private:
                   const GCNRPTracker::LiveRegSet &LiveOuts,
                   SmallVectorImpl<InstrPressure> &Walk) const;
 
-  /// Returns the maximum pressure in \p Walk and sets \p Peaks to the
-  /// earliest instructions with the highest VGPR and SGPR pressure.
-  GCNRegPressure summarizeWalk(ArrayRef<InstrPressure> Walk, bool UnifiedRF,
-                               GCNRematStrategy::RegionPeaks &Peaks) const;
+  /// Returns the maximum pressure in \p Walk and sets the peaks in \p Info to
+  /// the earliest instructions with the highest pressure of each kind.
+  GCNRegPressure summarizeWalk(ArrayRef<InstrPressure> Walk,
+                               GCNRematStrategy::RegionRPInfo &Info) const;
 
   /// Returns the index in \p Walk of the instruction after which the region is
   /// split, if it is split. \p Walk is the region's pressure from \ref

@@ -415,7 +415,7 @@ public:
   void recede(const MachineInstr &MI);
 
   /// Move to the state of RP just before \p Begin, from the state just before
-  /// \p End.
+  /// \p End. Debug and pseudo instructions are skipped.
   void recede(MachineBasicBlock::const_iterator Begin,
               MachineBasicBlock::const_iterator End);
 
