@@ -37,6 +37,7 @@
 /// Inputs (command line option, else environment variable):
 ///   -amdgpu-sched-ledger / PSCHED_LEDGER         colon-separated files or dirs
 ///   -amdgpu-sched-ledger-dump / PSCHED_DUMP_DIR  directory for <function>.jsonl
+///   PSCHED_DUMP_FILTER                           dump only functions whose name contains this
 //
 //===----------------------------------------------------------------------===//
 
@@ -109,6 +110,13 @@ struct FunctionEntry {
   std::string Source;
   std::vector<RegionEntry> Regions;
 };
+
+/// PSCHED_DUMP_FILTER=<substring>: dump only functions whose name contains it.
+/// A dump of every function of a large library is gigabytes.
+bool dumpWanted(StringRef FnName) {
+  static const char *Filter = std::getenv("PSCHED_DUMP_FILTER");
+  return !Filter || !*Filter || FnName.contains(Filter);
+}
 
 std::string envOr(const cl::opt<std::string> &Opt, const char *Env) {
   if (!Opt.empty())
@@ -680,7 +688,8 @@ void SchedLedger::dump(ScheduleDAGMI &DAG, FunctionState &S, const IdMap &Ids,
   // Post-RA regions are dumped too (marked "post_ra"): the post-RA scheduler
   // has additional dependencies, and an ordering edge must be legal there as
   // well. Ids are below 2^31, so the top bit separates the two key spaces.
-  if (Dir.empty() || !S.Dumped.insert(Key | (PostRA ? 0x80000000u : 0)).second)
+  if (Dir.empty() || !dumpWanted(S.Name) ||
+      !S.Dumped.insert(Key | (PostRA ? 0x80000000u : 0)).second)
     return;
   auto Bypass = sys::sandbox::scopedDisable();
   sys::fs::create_directories(Dir);
@@ -968,7 +977,7 @@ void llvm::AMDGPU::reportRegionPressure(MachineFunction &MF,
                                         unsigned SGPRBefore, unsigned SGPRAfter,
                                         unsigned SGPRKept) {
   std::string Dir = envOr(DumpDirOpt, "PSCHED_DUMP_DIR");
-  if (Dir.empty() || !FirstMI)
+  if (Dir.empty() || !FirstMI || !dumpWanted(MF.getName()))
     return;
   FunctionState &S = enterFunction(MF);
   unsigned Key = ~0u, Num = 0;
