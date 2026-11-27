@@ -36,3 +36,29 @@ scan:
     - dist
     - node_modules
     - __pycache__
+
+  # Files owned by upstream llvm/llvm-project that this fork does not
+  # edit, so Trivy findings in them are skipped here (not fixed).
+  skip-files:
+    # Python and npm dependency pins
+    - llvm/docs/requirements.txt
+    - llvm/utils/git/requirements.txt
+    - mlir/utils/vscode/package-lock.json
+    - openmp/docs/sphinx/requirements.txt
+    # Dockerfiles (DS-0002, DS-0010, DS-0029)
+    - .ci/metrics/Dockerfile
+    - .github/workflows/containers/github-action-ci-tooling/Dockerfile
+    - .github/workflows/containers/github-action-ci-windows/Dockerfile
+    - .github/workflows/containers/github-action-ci/Dockerfile
+    - .github/workflows/containers/libc/Dockerfile
+    - bolt/utils/docker-tests/Dockerfile
+    - bolt/utils/docker/Dockerfile
+    - clang/utils/analyzer/Dockerfile
+    - libc/utils/buildbot/Dockerfile
+    - libcxx/utils/ci/docker/android-builder.dockerfile
+    - libcxx/utils/ci/docker/linux-builder.dockerfile
+    - libcxx/utils/ci/vendor/android/Dockerfile.emulator
+    - llvm/utils/docker/debian12/Dockerfile
+    - llvm/utils/docker/example/Dockerfile
+    - llvm/utils/docker/nvidia-cuda/Dockerfile
+    - polly/lib/External/isl/imath/tests/linux/Dockerfile
