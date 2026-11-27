@@ -246,7 +246,7 @@ public:
            "Should have previously determined this as a possible VOPD\n");
 
     auto VOPDInst =
-        BuildMI(*MIX->getParent(), MIX, MIX->getDebugLoc(), SII->get(NewOpcode))
+        BuildMI(*MIX->getParent(), MIX, MIMetadata(*MIX), SII->get(NewOpcode))
             .setMIFlags(MIX->getFlags() | MIY->getFlags());
 
     namespace VOPD = AMDGPU::VOPD;

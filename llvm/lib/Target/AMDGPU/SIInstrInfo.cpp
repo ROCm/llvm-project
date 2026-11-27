@@ -5520,7 +5520,7 @@ MachineInstr *SIInstrInfo::buildShrunkInst(MachineInstr &MI,
 
   const MCInstrDesc &Op32Desc = get(Op32);
   MachineInstrBuilder Inst32 =
-    BuildMI(*MBB, MI, MI.getDebugLoc(), Op32Desc)
+    BuildMI(*MBB, MI, MIMetadata(MI), Op32Desc)
     .setMIFlags(MI.getFlags());
 
   // Add the dst operand if the 32-bit encoding also has an explicit $vdst.

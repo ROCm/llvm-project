@@ -19,6 +19,7 @@
 #include "AMDGPUAliasAnalysis.h"
 #include "AMDGPUAsmPrinter.h"
 #include "AMDGPUBarrierLatency.h"
+#include "AMDGPUSchedLedger.h"
 #include "AMDGPUCoExecSchedStrategy.h"
 #include "AMDGPUCtorDtorLowering.h"
 #include "AMDGPUExportClustering.h"
@@ -1243,6 +1244,13 @@ Error GCNTargetMachine::buildCodeGenPipeline(
 
 ScheduleDAGInstrs *
 GCNTargetMachine::createMachineScheduler(MachineSchedContext *C) const {
+  ScheduleDAGInstrs *DAG = createGCNMachineScheduler(C);
+  AMDGPU::addSchedLedgerDAGMutation(static_cast<ScheduleDAGMI *>(DAG), C->MF);
+  return DAG;
+}
+
+ScheduleDAGInstrs *
+GCNTargetMachine::createGCNMachineScheduler(MachineSchedContext *C) const {
   const GCNSubtarget &ST = C->MF->getSubtarget<GCNSubtarget>();
   if (ST.enableSIScheduler())
     return createSIMachineScheduler(C);
@@ -1291,6 +1299,7 @@ GCNTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
   DAG->addMutation(createAMDGPUExportClusteringDAGMutation());
   DAG->addMutation(createAMDGPUBarrierLatencyDAGMutation(C->MF));
   DAG->addMutation(createAMDGPUHazardLatencyDAGMutation(C->MF));
+  AMDGPU::addSchedLedgerDAGMutation(DAG, C->MF);
   return DAG;
 }
 //===----------------------------------------------------------------------===//

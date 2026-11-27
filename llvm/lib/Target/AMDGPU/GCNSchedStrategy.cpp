@@ -25,6 +25,7 @@
 
 #include "GCNSchedStrategy.h"
 #include "AMDGPUIGroupLP.h"
+#include "AMDGPUSchedLedger.h"
 #include "GCNHazardRecognizer.h"
 #include "GCNRegPressure.h"
 #include "GCNRematStrategy.h"
@@ -1436,6 +1437,7 @@ bool UnclusteredHighRPStage::initGCNSchedStage() {
   SavedMutations.swap(DAG.Mutations);
   DAG.addMutation(
       createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::PreRAReentry));
+  AMDGPU::addSchedLedgerDAGMutation(&DAG, &DAG.MF);
 
   InitialOccupancy = DAG.MinOccupancy;
   // Aggressively try to reduce register pressure in the unclustered high RP
@@ -1657,6 +1659,7 @@ bool GCNSchedStage::initGCNRegion() {
     DAG.addMutation(createIGroupLPDAGMutation(
         IsInitialStage ? AMDGPU::SchedulingPhase::Initial
                        : AMDGPU::SchedulingPhase::PreRAReentry));
+    AMDGPU::addSchedLedgerDAGMutation(&DAG, &DAG.MF);
   }
 
   return true;
@@ -1728,6 +1731,18 @@ void GCNSchedStage::finalizeGCNRegion() {
   // Revert scheduling if we have dropped occupancy or there is some other
   // reason that the original schedule is better.
   checkScheduling();
+
+  {
+    std::string StageName;
+    raw_string_ostream(StageName) << StageID;
+    const GCNRegPressure &Kept = DAG.Pressure[RegionIdx];
+    AMDGPU::reportRegionPressure(
+        MF, DAG.RegionBegin == DAG.RegionEnd ? nullptr : &*DAG.RegionBegin,
+        DAG.RegionEnd == DAG.BB->end() ? nullptr : &*DAG.RegionEnd, StageName,
+        PressureBefore.getArchVGPRNum(), PressureAfter.getArchVGPRNum(),
+        Kept.getArchVGPRNum(), PressureBefore.getSGPRNum(),
+        PressureAfter.getSGPRNum(), Kept.getSGPRNum());
+  }
 
   if (DAG.RegionsWithIGLPInstrs[RegionIdx] &&
       StageID != GCNSchedStageID::UnclusteredHighRPReschedule)
@@ -2954,6 +2969,7 @@ void GCNPostScheduleDAGMILive::schedule() {
     SavedMutations.clear();
     SavedMutations.swap(Mutations);
     addMutation(createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::PostRA));
+    AMDGPU::addSchedLedgerDAGMutation(this, &MF);
   }
 
   ScheduleDAGMI::schedule();

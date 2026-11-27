@@ -150,6 +150,8 @@ public:
   createMachineScheduler(MachineSchedContext *C) const override;
   ScheduleDAGInstrs *
   createPostMachineScheduler(MachineSchedContext *C) const override;
+  /// Scheduler selection without the ledger mutation.
+  ScheduleDAGInstrs *createGCNMachineScheduler(MachineSchedContext *C) const;
 };
 
 //===----------------------------------------------------------------------===//
