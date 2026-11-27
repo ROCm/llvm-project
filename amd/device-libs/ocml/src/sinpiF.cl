@@ -1,0 +1,26 @@
+/*===--------------------------------------------------------------------------
+ *                   ROCm Device Libraries
+ *
+ * This file is distributed under the University of Illinois Open Source
+ * License. See LICENSE.TXT for details.
+ *===------------------------------------------------------------------------*/
+
+#include "mathF.h"
+#include "trigpiredF.h"
+
+CONSTATTR float
+MATH_MANGLE(sinpi)(float x)
+{
+    if (!FINITE_ONLY_OPT())
+        x = BUILTIN_ISINF_F32(x) ? QNAN_F32 : x;
+
+    float ax = BUILTIN_ABS_F32(x);
+    struct redret r = MATH_PRIVATE(trigpired)(ax);
+    struct scret sc = MATH_PRIVATE(sincospired)(r.hi);
+
+    float s = (r.i & 1) == 0 ? sc.s : sc.c;
+    s = AS_FLOAT(AS_INT(s) ^ (r.i > 1 ? SIGNBIT_SP32 : 0) ^ (AS_INT(x) ^ AS_INT(ax)));
+
+    return s == 0.0f ? BUILTIN_COPYSIGN_F32(0.0f, x) : s;
+}
+
