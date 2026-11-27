@@ -1,16 +1,16 @@
 ; RUN: llc -O0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -verify-machineinstrs -filetype=obj < %s | llvm-dwarfdump - | FileCheck %s
-; XFAIL: *
+
+; Both pointer arguments are spilled right after their definition, and the
+; spill slot is moved to AGPRs. Every DBG_VALUE below the spill is described
+; by the slot, so each argument's only location is its AGPR pair.
 
 ; CHECK:      DW_TAG_formal_parameter
 ; CHECK-NEXT:   DW_AT_location (
-; CHECK-NEXT:    [0x{{.*}}, 0x{{.*}}): DW_OP_regx VGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_regx VGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_LLVM_user DW_OP_LLVM_piece_end, DW_OP_deref_size 0x8, DW_OP_lit1, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address
 ; CHECK-NEXT:    [0x{{.*}}, 0x{{.*}}): DW_OP_regx AGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_regx AGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_LLVM_user DW_OP_LLVM_piece_end, DW_OP_deref_size 0x8, DW_OP_lit1, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 ; CHECK-NEXT:   DW_AT_name ("a")
 
 ; CHECK:      DW_TAG_formal_parameter
-; CHECK-NEXT:   DW_AT_location (
-; CHECK-NEXT:    [0x{{.*}}, 0x{{.*}}): DW_OP_regx VGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_regx VGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_LLVM_user DW_OP_LLVM_piece_end, DW_OP_deref_size 0x8, DW_OP_lit1, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address
-; CHECK-NEXT:    [0x{{.*}}, 0x{{.*}}): DW_OP_regx AGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_regx AGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_LLVM_user DW_OP_LLVM_piece_end, DW_OP_deref_size 0x8, DW_OP_lit1, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+; CHECK-NEXT:   DW_AT_location (DW_OP_regx AGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_regx AGPR{{[0-9]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset, DW_OP_piece 0x4, DW_OP_LLVM_user DW_OP_LLVM_piece_end, DW_OP_deref_size 0x8, DW_OP_lit1, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 ; CHECK-NEXT:   DW_AT_name ("b")
 
 define void @_QFPadd(ptr %0, ptr %1) #0 !dbg !8 {

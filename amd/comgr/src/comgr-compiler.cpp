@@ -2037,7 +2037,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       for (const std::pair<std::string, std::string> &Entry :
            ActionInfo->PackageEntryIDs) {
         llvm::object::OffloadFile::TargetID EntryTarget =
-            std::make_pair(StringRef(Entry.first), StringRef(Entry.second));
+            {StringRef(Entry.first), StringRef(Entry.second)};
         // Select files whose target matches the requested entry exactly, or is
         // compatible with it. areTargetsCompatible() reports false for an exact
         // match, so the equality check handles the common case.

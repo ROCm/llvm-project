@@ -64,6 +64,10 @@ jobs:
       id-token: write
     env:
       ARTIFACT_RUN_ID: "${{ inputs.artifact_run_id != '' && inputs.artifact_run_id || github.run_id }}"
+      ARTIFACT_GITHUB_REPO: ${{ inputs.artifact_github_repo }}
+      DIST_AMDGPU_FAMILIES: ${{ inputs.dist_amdgpu_families }}
+      PLATFORM: ${{ inputs.platform }}
+      PACKAGE_VERSION: ${{ inputs.package_version }}
       RELEASE_TYPE: ${{ inputs.release_type }}
 
     steps:
@@ -81,11 +85,11 @@ jobs:
       - name: Build tarballs
         run: |
           python build_tools/build_tarballs.py \
-            --run-id="${{ env.ARTIFACT_RUN_ID }}" \
-            --run-github-repo="${{ inputs.artifact_github_repo }}" \
-            --dist-amdgpu-families="${{ inputs.dist_amdgpu_families }}" \
-            --platform="${{ inputs.platform }}" \
-            --package-version="${{ inputs.package_version }}" \
+            --run-id="${ARTIFACT_RUN_ID}" \
+            --run-github-repo="${ARTIFACT_GITHUB_REPO}" \
+            --dist-amdgpu-families="${DIST_AMDGPU_FAMILIES}" \
+            --platform="${PLATFORM}" \
+            --package-version="${PACKAGE_VERSION}" \
             --output-dir="${{ github.workspace }}/tarballs"
 
       - name: Configure AWS Credentials
@@ -99,5 +103,5 @@ jobs:
           python build_tools/github_actions/upload_tarballs.py \
             --input-tarballs-dir="${{ github.workspace }}/tarballs" \
             --run-id="${{ github.run_id }}" \
-            --platform="${{ inputs.platform }}" \
-            --release-type="${{ inputs.release_type }}"
+            --platform="${PLATFORM}" \
+            --release-type="${RELEASE_TYPE}"

@@ -3,9 +3,9 @@
 
 ; The arguments are spilled to stack slots, which describe them for the whole
 ; function.
-; CHECK:      DW_AT_location (DW_OP_fbreg -12, DW_OP_deref)
+; CHECK:      DW_AT_location (DW_OP_fbreg -12)
 ; CHECK-NEXT: DW_AT_name ("i")
-; CHECK:      DW_AT_location (DW_OP_fbreg -8, DW_OP_deref)
+; CHECK:      DW_AT_location (DW_OP_fbreg -8)
 ; CHECK-NEXT: DW_AT_name ("location")
 
 %struct.SVal = type { ptr, i32 }

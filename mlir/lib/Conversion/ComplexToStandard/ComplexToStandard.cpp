@@ -452,7 +452,7 @@ private:
                   ImplicitLocOpBuilder &b) const {
     auto argType = mlir::cast<FloatType>(arg.getType());
     auto negHalf = arith::ConstantOp::create(b, b.getFloatAttr(argType, -0.5));
-    auto negOne = arith::ConstantOp::create(b, b.getFloatAttr(argType, -1.0));
+    auto one = arith::ConstantOp::create(b, b.getFloatAttr(argType, 1.0));
 
     // Algorithm copied from cephes cosm1.
     SmallVector<double, 7> kCoeffs{
@@ -462,7 +462,7 @@ private:
         4.1666666666666666609054E-2,
     };
     Value cos = math::CosOp::create(b, arg, fmf);
-    Value forLargeArg = arith::AddFOp::create(b, cos, negOne, fmf);
+    Value forLargeArg = arith::SubFOp::create(b, cos, one, fmf);
 
     Value argPow2 = arith::MulFOp::create(b, arg, arg, fmf);
     Value argPow4 = arith::MulFOp::create(b, argPow2, argPow2, fmf);
@@ -784,13 +784,11 @@ struct TanTanhOpConversion : public OpConversionPattern<Op> {
         complex::ReOp::create(b, loc, elementType, adaptor.getComplex());
     Value imag =
         complex::ImOp::create(b, loc, elementType, adaptor.getComplex());
-    Value negOne = arith::ConstantOp::create(b, elementType,
-                                             b.getFloatAttr(elementType, -1.0));
 
     if constexpr (std::is_same_v<Op, complex::TanOp>) {
       // tan(x+yi) = -i*tanh(-y + xi)
       std::swap(real, imag);
-      real = arith::MulFOp::create(b, real, negOne, fmf);
+      real = arith::NegFOp::create(b, real, fmf);
     }
 
     auto cst = [&](APFloat v) {
@@ -800,15 +798,19 @@ struct TanTanhOpConversion : public OpConversionPattern<Op> {
     Value inf = cst(APFloat::getInf(floatSemantics));
     Value four = arith::ConstantOp::create(b, elementType,
                                            b.getFloatAttr(elementType, 4.0));
-    Value twoReal = arith::AddFOp::create(b, real, real, fmf);
-    Value negTwoReal = arith::MulFOp::create(b, negOne, twoReal, fmf);
-    Value expTwoRealMinusOne = math::ExpM1Op::create(b, twoReal, fmf);
-    Value expNegTwoRealMinusOne = math::ExpM1Op::create(b, negTwoReal, fmf);
+    // Intermediate sums and expm1s may overflow.
+    arith::FastMathFlags fmfWithInf =
+        arith::bitEnumClear(fmf, arith::FastMathFlags::ninf);
+    Value twoReal = arith::AddFOp::create(b, real, real, fmfWithInf);
+    Value negTwoReal = arith::NegFOp::create(b, twoReal, fmfWithInf);
+    Value expTwoRealMinusOne = math::ExpM1Op::create(b, twoReal, fmfWithInf);
+    Value expNegTwoRealMinusOne =
+        math::ExpM1Op::create(b, negTwoReal, fmfWithInf);
     Value realNum = arith::SubFOp::create(b, expTwoRealMinusOne,
                                           expNegTwoRealMinusOne, fmf);
     Value expProduct = arith::MulFOp::create(b, expTwoRealMinusOne,
-                                             expNegTwoRealMinusOne, fmf);
-    Value expSumMinusTwo = arith::MulFOp::create(b, negOne, expProduct, fmf);
+                                             expNegTwoRealMinusOne, fmfWithInf);
+    Value expSumMinusTwo = arith::NegFOp::create(b, expProduct, fmfWithInf);
 
     Value cosImag = math::CosOp::create(b, imag, fmf);
     Value cosImagSq = arith::MulFOp::create(b, cosImag, cosImag, fmf);
@@ -818,37 +820,52 @@ struct TanTanhOpConversion : public OpConversionPattern<Op> {
     Value imagNum = arith::MulFOp::create(
         b, four, arith::MulFOp::create(b, cosImag, sinImag, fmf), fmf);
 
-    Value denom =
-        arith::AddFOp::create(b, expSumMinusTwo, twoCosTwoImagPlusOne, fmf);
+    Value denom = arith::AddFOp::create(b, expSumMinusTwo, twoCosTwoImagPlusOne,
+                                        fmfWithInf);
 
     Value isInf = arith::CmpFOp::create(b, arith::CmpFPredicate::OEQ,
-                                        expSumMinusTwo, inf, fmf);
+                                        expSumMinusTwo, inf, fmfWithInf);
+    Value negOne = arith::ConstantOp::create(b, elementType,
+                                             b.getFloatAttr(elementType, -1.0));
     Value realLimit = math::CopySignOp::create(b, negOne, real, fmf);
 
     Value resultReal = arith::SelectOp::create(
         b, isInf, realLimit, arith::DivFOp::create(b, realNum, denom, fmf));
-    Value resultImag = arith::DivFOp::create(b, imagNum, denom, fmf);
+    Value resultImag = arith::DivFOp::create(b, imagNum, denom, fmfWithInf);
 
     if (!arith::bitEnumContainsAll(fmf, arith::FastMathFlags::nnan |
                                             arith::FastMathFlags::ninf)) {
-      Value absReal = math::AbsFOp::create(b, real, fmf);
       Value zero = arith::ConstantOp::create(b, elementType,
                                              b.getFloatAttr(elementType, 0.0));
       Value nan = cst(APFloat::getNaN(floatSemantics));
-
-      Value absRealIsInf = arith::CmpFOp::create(b, arith::CmpFPredicate::OEQ,
-                                                 absReal, inf, fmf);
+      bool noInfs = arith::bitEnumContainsAll(fmf, arith::FastMathFlags::ninf);
+      Value imagIsNotFinite;
+      if (noInfs) {
+        imagIsNotFinite =
+            arith::CmpFOp::create(b, arith::CmpFPredicate::UNO, imag, imag);
+      } else {
+        Value absImag = math::AbsFOp::create(b, imag, fmf);
+        imagIsNotFinite =
+            arith::CmpFOp::create(b, arith::CmpFPredicate::UGE, absImag, inf);
+      }
       Value imagIsZero =
-          arith::CmpFOp::create(b, arith::CmpFPredicate::OEQ, imag, zero, fmf);
-      Value absRealIsNotInf = arith::XOrIOp::create(
-          b, absRealIsInf, arith::ConstantIntOp::create(b, true, /*width=*/1));
+          arith::CmpFOp::create(b, arith::CmpFPredicate::OEQ, imag, zero);
 
-      Value imagNumIsNaN = arith::CmpFOp::create(b, arith::CmpFPredicate::UNO,
-                                                 imagNum, imagNum, fmf);
-      Value resultRealIsNaN =
-          arith::AndIOp::create(b, imagNumIsNaN, absRealIsNotInf);
-      Value resultImagIsZero = arith::OrIOp::create(
-          b, imagIsZero, arith::AndIOp::create(b, absRealIsInf, imagNumIsNaN));
+      Value resultRealIsNaN = imagIsNotFinite;
+      Value resultImagIsZero = imagIsZero;
+      if (!noInfs) {
+        Value absReal = math::AbsFOp::create(b, real, fmf);
+        Value absRealIsInf =
+            arith::CmpFOp::create(b, arith::CmpFPredicate::OEQ, absReal, inf);
+        Value absRealIsNotInf = arith::XOrIOp::create(
+            b, absRealIsInf,
+            arith::ConstantIntOp::create(b, true, /*width=*/1));
+        resultRealIsNaN =
+            arith::AndIOp::create(b, imagIsNotFinite, absRealIsNotInf);
+        resultImagIsZero = arith::OrIOp::create(
+            b, imagIsZero,
+            arith::AndIOp::create(b, absRealIsInf, imagIsNotFinite));
+      }
 
       resultReal = arith::SelectOp::create(b, resultRealIsNaN, nan, resultReal);
       resultImag =
@@ -858,7 +875,7 @@ struct TanTanhOpConversion : public OpConversionPattern<Op> {
     if constexpr (std::is_same_v<Op, complex::TanOp>) {
       // tan(x+yi) = -i*tanh(-y + xi)
       std::swap(resultReal, resultImag);
-      resultImag = arith::MulFOp::create(b, resultImag, negOne, fmf);
+      resultImag = arith::NegFOp::create(b, resultImag, fmf);
     }
 
     rewriter.replaceOpWithNewOp<complex::CreateOp>(op, type, resultReal,
@@ -1077,13 +1094,9 @@ struct RsqrtOpConversion : public OpConversionPattern<complex::RsqrtOp> {
 
     if (!arith::bitEnumContainsAll(fmf, arith::FastMathFlags::nnan |
                                             arith::FastMathFlags::ninf)) {
-      Value negOne = arith::ConstantOp::create(b, elementType,
-                                               b.getFloatAttr(elementType, -1));
-
       Value realSignedZero = math::CopySignOp::create(b, zero, real, fmf);
       Value imagSignedZero = math::CopySignOp::create(b, zero, imag, fmf);
-      Value negImagSignedZero =
-          arith::MulFOp::create(b, negOne, imagSignedZero, fmf);
+      Value negImagSignedZero = arith::NegFOp::create(b, imagSignedZero, fmf);
 
       Value absReal = math::AbsFOp::create(b, real, fmf);
       Value absImag = math::AbsFOp::create(b, imag, fmf);

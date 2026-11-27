@@ -133,7 +133,10 @@ void* GetHsaRuntimeHandle() {
     hsa_runtime_handle = dlopen(path, RTLD_LAZY | RTLD_NOLOAD);
 
   if (!hsa_runtime_handle) {
-    char loaded_path[kMaxPathLength] = {};
+    // Static to keep this function's stack frame small. It is only used while
+    // hsa_runtime_handle_mu is held.
+    static char loaded_path[kMaxPathLength];
+    internal_memset(loaded_path, 0, sizeof(loaded_path));
     if (dl_iterate_phdr(FindLoadedHsaRuntime, loaded_path)) {
       hsa_runtime_handle = dlopen(loaded_path, RTLD_LAZY | RTLD_NOLOAD);
       VReport(2, "AmdHsa: loaded ROCr %s, handle %p\n", loaded_path,
