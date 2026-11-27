@@ -16,7 +16,19 @@
 /// Both only constrain or re-weight the existing dependency graph; an edge that
 /// would create a cycle is rejected, so every resulting schedule is legal.
 ///
-/// Instructions are named by a per-function id assigned in program order
+/// A region entry names its region by content: a signature of the region's
+/// instructions (opcodes, immediates, physical registers and the position of
+/// each use's definition inside the region), and names instructions by their
+/// offset in the region. Code added elsewhere in the function therefore does
+/// not invalidate or shift an entry, and an entry is applied to every region
+/// with its signature in every function its (possibly broad) name match
+/// selects, so one entry serves all instantiations that contain the same code.
+/// Nothing here reads debug info: a build without it gets the same schedule. With
+/// PSCHED_SALVAGE set, an entry whose region changed is carried over to the
+/// most similar region by aligning the two opcode sequences (reported).
+/// Version 1 entries (absolute ids, opcode hash) are still accepted.
+///
+/// Internally instructions carry a per-function id assigned in program order
 /// before the first scheduling region is built. The id is carried on the
 /// instruction as !pcsections metadata, which makes AsmPrinter emit an
 /// (address, function hash, id) table in section "psched_ids". The same
@@ -46,10 +58,13 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/IOSandbox.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstdlib>
+#include <list>
 
 using namespace llvm;
 
@@ -68,8 +83,19 @@ namespace {
 constexpr StringLiteral IdSection = "psched_ids";
 
 struct RegionEntry {
-  std::string Hash;
+  std::string Hash; // v1: opcode hash of the region; v2: content signature
   std::string Origin;
+  // v2: Latency/Order hold offsets within the region instead of ids, and the
+  // entry is a template that is bound to every region with this signature.
+  bool Relative = false;
+  unsigned NumInsts = 0;
+  std::vector<std::string> Ops; // opcode per offset, for salvage (optional)
+  unsigned Bound = 0;           // regions bound in the current function
+  bool NearMiss = false;        // reported as changed in the current function
+  unsigned BoundTotal = 0;      // regions bound in this compilation
+  unsigned Offered = 0;         // functions it was selected for in this compilation
+  unsigned BestSim = 0;         // best alignment seen where it did not bind
+  std::string BestFn;
   std::vector<std::pair<unsigned, unsigned>> Latency;
   std::vector<std::vector<unsigned>> Order;
   bool Validated = false;
@@ -122,10 +148,25 @@ void parseLedgerFile(StringRef Path, std::vector<FunctionEntry> &Out) {
       RegionEntry RE;
       RE.Hash = R->getString("hash").value_or("").str();
       RE.Origin = Path.str();
+      if (auto Sig = R->getString("sig")) {
+        RE.Relative = true;
+        RE.Hash = Sig->str();
+        RE.NumInsts = R->getInteger("n").value_or(0);
+        const json::Array *Tab = R->getArray("optab");
+        const json::Array *Ops = R->getArray("ops");
+        if (Tab && Ops)
+          for (const json::Value &OV : *Ops) {
+            auto Idx = OV.getAsInteger();
+            auto Name = Idx && *Idx >= 0 && size_t(*Idx) < Tab->size()
+                            ? (*Tab)[*Idx].getAsString()
+                            : std::nullopt;
+            RE.Ops.push_back(Name ? Name->str() : "?");
+          }
+      }
       if (const json::Array *L = R->getArray("latency"))
         for (const json::Value &LV : *L)
           if (const json::Object *LO = LV.getAsObject())
-            if (auto Id = LO->getInteger("id"))
+            if (auto Id = LO->getInteger(RE.Relative ? "at" : "id"))
               RE.Latency.emplace_back(*Id, LO->getInteger("lat").value_or(0));
       if (const json::Array *O = R->getArray("order"))
         for (const json::Value &CV : *O)
@@ -145,6 +186,31 @@ void parseLedgerFile(StringRef Path, std::vector<FunctionEntry> &Out) {
   }
 }
 
+std::vector<FunctionEntry> &getLedger();
+
+/// End-of-compilation report (runs from llvm_shutdown). A version 2 entry is
+/// offered to every function its name match selects (often all instantiations
+/// of a template) and is expected to be absent from most of them, so whether
+/// it went stale can only be said once all of them have been compiled.
+struct LedgerSummary {
+  ~LedgerSummary() {
+    for (FunctionEntry &FE : getLedger())
+      for (RegionEntry &R : FE.Regions) {
+        // Not offered: this compilation does not contain the code the entry
+        // is for (device code is generated per translation unit).
+        if (!R.Relative || R.BoundTotal || !R.Offered)
+          continue;
+        errs() << "psched: warning: region " << R.Hash << " (" << R.Origin
+               << ") matched no code in this compilation (stale ledger?)";
+        if (R.BestSim)
+          errs() << "; the closest region aligned " << R.BestSim << "%, in "
+                 << R.BestFn << " (PSCHED_SALVAGE=1 carries the entry over)";
+        errs() << "\n";
+      }
+  }
+};
+ManagedStatic<LedgerSummary> Summary;
+
 /// All region-level ledger entries, loaded once per process.
 std::vector<FunctionEntry> &getLedger() {
   static std::vector<FunctionEntry> Ledger;
@@ -152,6 +218,7 @@ std::vector<FunctionEntry> &getLedger() {
   if (Loaded)
     return Ledger;
   Loaded = true;
+  (void)*Summary;
   auto Bypass = sys::sandbox::scopedDisable();
   std::string Spec = envOr(LedgerPathsOpt, "PSCHED_LEDGER");
   SmallVector<StringRef, 4> Paths;
@@ -184,13 +251,36 @@ struct FunctionState {
   bool PressureStarted = false;
   std::vector<RegionEntry *> Regions;
   DenseSet<unsigned> Dumped;
+  // Version 2: templates selected for this function, the regions they were
+  // bound to (with absolute ids), and the function's region table.
+  std::vector<RegionEntry *> Templates;
+  std::list<RegionEntry> BoundStore;
+  struct RegionInfo {
+    std::string Sig;
+    unsigned NumInsts = 0;
+  };
+  std::vector<RegionInfo> Table;
+  DenseMap<unsigned, std::pair<unsigned, unsigned>> IdPos; // id -> (region, offset)
+  bool TableBuilt = false;
 
   void report() {
     for (RegionEntry *R : Regions)
       if (!R->Validated && !R->Stale)
         errs() << "psched: warning: region " << R->Hash << " (" << R->Origin
                << ") matched nothing in " << Name << " (stale ledger?)\n";
+    // Whether a version 2 entry is stale is decided at the end of the
+    // compilation (LedgerSummary); per function its absence is only a note.
+    if (TableBuilt && std::getenv("PSCHED_VERBOSE"))
+      for (RegionEntry *T : Templates)
+        if (!T->Bound && !T->NearMiss)
+          errs() << "psched: region " << T->Hash << " (" << T->Origin
+                 << ") is not in " << Name << "\n";
     Regions.clear();
+    Templates.clear();
+    BoundStore.clear();
+    Table.clear();
+    IdPos.clear();
+    TableBuilt = false;
   }
   ~FunctionState() { report(); }
 };
@@ -229,7 +319,13 @@ FunctionState &enterFunction(MachineFunction &MF) {
       continue;
     for (RegionEntry &R : FE.Regions) {
       R.Validated = R.Stale = R.CycleWarned = false;
-      S.Regions.push_back(&R);
+      if (R.Relative) {
+        R.Bound = 0;
+        R.NearMiss = false;
+        S.Templates.push_back(&R);
+      } else {
+        S.Regions.push_back(&R);
+      }
     }
   }
   return S;
@@ -254,7 +350,10 @@ void assignIds(MachineFunction &MF, FunctionState &S) {
   Type *I32 = Type::getInt32Ty(Ctx);
   Metadata *Sec = MDString::get(Ctx, IdSection);
   Metadata *Hash = ConstantAsMetadata::get(ConstantInt::get(I32, S.NameHash));
-  unsigned Id = 0;
+  // PSCHED_TEST_ID_SKEW=N starts the ids at N, which is what N instructions
+  // added in front of everything else in the function would do (test only).
+  const char *Skew = std::getenv("PSCHED_TEST_ID_SKEW");
+  unsigned Id = Skew ? std::atoi(Skew) : 0;
   for (MachineBasicBlock &MBB : MF)
     for (MachineInstr &MI : MBB) {
       if (MI.isDebugInstr() || MI.isPHI() || MI.getPCSections())
@@ -263,6 +362,258 @@ void assignIds(MachineFunction &MF, FunctionState &S) {
           Ctx, {Hash, ConstantAsMetadata::get(ConstantInt::get(I32, Id++))});
       MI.setPCSections(MF, MDNode::get(Ctx, {Sec, Aux}));
     }
+}
+
+/// Content signature of a region: its instructions in id (original program)
+/// order, with opcode names, immediates, physical registers, subregister
+/// indices and, for every use of a virtual register, the offset inside the
+/// region of the instruction that defines it (or "in" for a value that enters
+/// the region). Virtual register numbers and instruction ids do not enter it,
+/// so code elsewhere in the function leaves the signature unchanged, while two
+/// regions with the same opcodes but different dataflow or constants differ.
+std::string regionSig(ArrayRef<const MachineInstr *> Insts,
+                      const TargetInstrInfo &TII, const TargetRegisterInfo &TRI) {
+  uint32_t H = 2166136261u;
+  DenseMap<Register, unsigned> LastDef;
+  for (unsigned R = 0; R < Insts.size(); ++R) {
+    const MachineInstr &MI = *Insts[R];
+    H = fnv1a(TII.getName(MI.getOpcode()), H);
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isReg()) {
+        Register Reg = MO.getReg();
+        if (!Reg) {
+          H = fnv1a("_", H);
+        } else if (Reg.isPhysical()) {
+          H = fnv1a(MO.isDef() ? "D" : "U", H);
+          H = fnv1a(TRI.getName(Reg), H);
+        } else if (MO.isDef()) {
+          H = fnv1a("d", H);
+        } else {
+          auto It = LastDef.find(Reg);
+          H = fnv1a(It == LastDef.end() ? std::string("in")
+                                        : "u" + utostr(It->second),
+                    H);
+        }
+        if (MO.getSubReg())
+          H = fnv1a(TRI.getSubRegIndexName(MO.getSubReg()), H);
+      } else if (MO.isImm()) {
+        H = fnv1a("i" + itostr(MO.getImm()), H);
+      } else if (MO.isGlobal()) {
+        H = fnv1a(MO.getGlobal()->getName(), H);
+      } else {
+        H = fnv1a("t" + utostr(unsigned(MO.getType())), H);
+      }
+      H = fnv1a(",", H);
+    }
+    for (const MachineOperand &MO : MI.all_defs())
+      if (MO.getReg().isVirtual())
+        LastDef[MO.getReg()] = R;
+    H = fnv1a(";", H);
+  }
+  return utohexstr(H, /*LowerCase=*/true, 8);
+}
+
+/// Longest common subsequence of two opcode sequences. Returns its length and
+/// fills Map[i] with the position in B aligned to position i of A, or ~0u.
+unsigned alignOps(ArrayRef<unsigned> A, ArrayRef<unsigned> B,
+                  std::vector<unsigned> &Map) {
+  size_t N = A.size(), M = B.size();
+  std::vector<uint16_t> T((N + 1) * (M + 1), 0);
+  auto At = [&](size_t I, size_t J) -> uint16_t & { return T[I * (M + 1) + J]; };
+  for (size_t I = N; I-- > 0;)
+    for (size_t J = M; J-- > 0;)
+      At(I, J) = A[I] == B[J] ? At(I + 1, J + 1) + 1
+                              : std::max(At(I + 1, J), At(I, J + 1));
+  Map.assign(N, ~0u);
+  for (size_t I = 0, J = 0; I < N && J < M;) {
+    if (A[I] == B[J]) {
+      Map[I] = J;
+      ++I, ++J;
+    } else if (At(I + 1, J) >= At(I, J + 1)) {
+      ++I;
+    } else {
+      ++J;
+    }
+  }
+  return At(0, 0);
+}
+
+/// Splits the function into scheduling regions the way the machine scheduler
+/// does, records each region's signature and every instruction's (region,
+/// offset), and binds the version 2 ledger templates selected for this
+/// function: to every region with the template's signature, or, when there is
+/// none and salvage is on, to the most similar region.
+void buildTableAndBind(MachineFunction &MF, FunctionState &S) {
+  if (S.TableBuilt)
+    return;
+  S.TableBuilt = true;
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
+
+  std::vector<std::vector<const MachineInstr *>> Regions;
+  for (MachineBasicBlock &MBB : MF) {
+    std::vector<const MachineInstr *> Cur;
+    auto Flush = [&] {
+      if (Cur.size() > 1)
+        Regions.push_back(std::move(Cur));
+      Cur.clear();
+    };
+    for (MachineInstr &MI : MBB) {
+      if (MI.isDebugOrPseudoInstr())
+        continue;
+      if (MI.isCall() || MI.isFakeUse() || MI.isPHI() ||
+          TII.isSchedulingBoundary(MI, &MBB, MF))
+        Flush();
+      else if (getId(MI))
+        Cur.push_back(&MI);
+    }
+    Flush();
+  }
+  for (unsigned RI = 0; RI < Regions.size(); ++RI) {
+    S.Table.push_back({regionSig(Regions[RI], TII, TRI),
+                       unsigned(Regions[RI].size())});
+    for (unsigned Off = 0; Off < Regions[RI].size(); ++Off)
+      S.IdPos[*getId(*Regions[RI][Off])] = {RI, Off};
+  }
+  if (S.Templates.empty())
+    return;
+
+  for (RegionEntry *T : S.Templates)
+    ++T->Offered;
+
+  static const bool Verbose = std::getenv("PSCHED_VERBOSE") != nullptr;
+  static const bool Salvage = std::getenv("PSCHED_SALVAGE") != nullptr;
+  static const unsigned MinSim = [] {
+    const char *V = std::getenv("PSCHED_SALVAGE_MIN");
+    return V ? unsigned(std::atoi(V)) : 75u;
+  }();
+
+  // Binds T to region RI. Map translates a template offset to an offset in the
+  // region (identity for an exact match).
+  auto Bind = [&](RegionEntry &T, unsigned RI, const std::vector<unsigned> *Map,
+                  unsigned &Edges, unsigned &Kept) {
+    auto Id = [&](unsigned Off) -> std::optional<unsigned> {
+      if (Map)
+        Off = Off < Map->size() ? (*Map)[Off] : ~0u;
+      if (Off >= Regions[RI].size())
+        return std::nullopt;
+      return getId(*Regions[RI][Off]);
+    };
+    RegionEntry B;
+    B.Hash = T.Hash;
+    B.Origin = T.Origin;
+    B.Validated = true;
+    for (auto &[Off, Lat] : T.Latency)
+      if (auto I = Id(Off))
+        B.Latency.emplace_back(*I, Lat);
+    Edges = Kept = 0;
+    for (const std::vector<unsigned> &Chain : T.Order)
+      for (unsigned I = 0; I + 1 < Chain.size(); ++I) {
+        ++Edges;
+        auto A = Id(Chain[I]), Z = Id(Chain[I + 1]);
+        if (A && Z) {
+          ++Kept;
+          B.Order.push_back({*A, *Z});
+        }
+      }
+    S.BoundStore.push_back(std::move(B));
+    S.Regions.push_back(&S.BoundStore.back());
+    ++T.Bound;
+    ++T.BoundTotal;
+  };
+
+  StringMap<unsigned> OpIds;
+  auto OpId = [&](StringRef Name) {
+    return OpIds.try_emplace(Name, OpIds.size()).first->second;
+  };
+  for (RegionEntry *T : S.Templates) {
+    unsigned Edges = 0, Kept = 0;
+    for (unsigned RI = 0; RI < Regions.size(); ++RI)
+      if (S.Table[RI].Sig == T->Hash &&
+          (!T->NumInsts || T->NumInsts == S.Table[RI].NumInsts)) {
+        Bind(*T, RI, nullptr, Edges, Kept);
+        if (Verbose)
+          errs() << "psched: " << MF.getName() << " <- region " << T->Hash
+                 << " (" << S.Table[RI].NumInsts << " instructions): "
+                 << T->Latency.size() << " latency override(s), " << Kept
+                 << " order edge(s) (" << T->Origin << ")\n";
+      }
+  }
+
+  // Templates whose signature is in no region: find the region each most
+  // likely was, by aligning opcode sequences. A region is given to at most one
+  // such template (the best alignment first), so two templates derived from
+  // two similar regions do not both land on the same one.
+  struct Cand {
+    unsigned Sim, RI, TI;
+    std::vector<unsigned> Map;
+  };
+  std::vector<Cand> Cands;
+  DenseSet<unsigned> Taken;
+  for (RegionEntry &B : S.BoundStore)
+    for (auto &Chain : B.Order)
+      if (auto It = S.IdPos.find(Chain[0]); It != S.IdPos.end())
+        Taken.insert(It->second.first);
+  for (unsigned TI = 0; TI < S.Templates.size(); ++TI) {
+    RegionEntry *T = S.Templates[TI];
+    if (T->Bound || T->Ops.empty())
+      continue;
+    std::vector<unsigned> A;
+    for (const std::string &Op : T->Ops)
+      A.push_back(OpId(Op));
+    for (unsigned RI = 0; RI < Regions.size(); ++RI) {
+      size_t M = Regions[RI].size();
+      if (Taken.count(RI) || M * 4 < A.size() * 3 || M * 3 > A.size() * 4 ||
+          M > 60000 || A.size() > 60000)
+        continue;
+      std::vector<unsigned> B, Map;
+      for (const MachineInstr *MI : Regions[RI])
+        B.push_back(OpId(TII.getName(MI->getOpcode())));
+      unsigned Sim = 200 * alignOps(A, B, Map) / (A.size() + B.size());
+      Cands.push_back({Sim, RI, TI, std::move(Map)});
+    }
+  }
+  llvm::stable_sort(Cands, [](const Cand &X, const Cand &Y) {
+    return std::tie(Y.Sim, X.RI, X.TI) < std::tie(X.Sim, Y.RI, Y.TI);
+  });
+  for (Cand &C : Cands) {
+    RegionEntry *T = S.Templates[C.TI];
+    if (T->Bound || T->NearMiss || Taken.count(C.RI))
+      continue;
+    if (C.Sim > T->BestSim) {
+      T->BestSim = C.Sim;
+      T->BestFn = MF.getName().str();
+    }
+    if (C.Sim < MinSim) {
+      if (Verbose)
+        errs() << "psched: region " << T->Hash << " (" << T->Origin << ", "
+               << T->Ops.size() << " instructions): closest region in "
+               << MF.getName() << " is " << S.Table[C.RI].Sig << " ("
+               << S.Table[C.RI].NumInsts << " instructions), aligned " << C.Sim
+               << "%, below the salvage threshold of " << MinSim << "%\n";
+      T->NearMiss = true;
+      continue;
+    }
+    T->NearMiss = true;
+    Taken.insert(C.RI);
+    unsigned Edges = 0, Kept = 0;
+    if (Salvage) {
+      Bind(*T, C.RI, &C.Map, Edges, Kept);
+      errs() << "psched: warning: region " << T->Hash << " (" << T->Origin
+             << ") has changed in " << MF.getName() << ": " << C.Sim
+             << "% of its instructions align with region " << S.Table[C.RI].Sig
+             << "; salvaged " << Kept << " of " << Edges
+             << " order edge(s). Measure again and re-derive the entry.\n";
+    } else if (Verbose) {
+      // Expected in most functions the entry is offered to (another
+      // instantiation of the same code); LedgerSummary warns if it bound
+      // nowhere at all.
+      errs() << "psched: region " << T->Hash << " (" << T->Origin << ") is not in "
+             << MF.getName() << ": the closest region (" << S.Table[C.RI].Sig
+             << ") aligns " << C.Sim
+             << "%; not applied here (PSCHED_SALVAGE=1 carries it over)\n";
+    }
+  }
 }
 
 StringRef classify(const MachineInstr &MI) {
@@ -370,6 +721,10 @@ void SchedLedger::dump(ScheduleDAGMI &DAG, FunctionState &S, const IdMap &Ids,
             SIRegisterInfo::isVGPRClass(RC))
           VDef += TRI->getRegSizeInBits(*RC) / 32;
     json::Object N{{"id", *Id},
+                   {"off", [&]() -> int64_t {
+                      auto It = S.IdPos.find(*Id);
+                      return It == S.IdPos.end() ? -1 : int64_t(It->second.second);
+                    }()},
                    {"op", DAG.TII->getName(MI.getOpcode())},
                    {"class", classify(MI)},
                    {"lat", SU.Latency},
@@ -421,8 +776,18 @@ void SchedLedger::dump(ScheduleDAGMI &DAG, FunctionState &S, const IdMap &Ids,
       if (LIS->hasInterval(R) && LIS->getInterval(R).liveAt(EndIdx))
         LiveOut.push_back(R.virtRegIndex());
   }
+  // Signature and size of the region as the ledger names it: the one from the
+  // function's region table that holds this DAG's first instruction.
+  std::string Sig;
+  unsigned SigN = 0;
+  if (auto It = S.IdPos.find(Key); It != S.IdPos.end()) {
+    Sig = S.Table[It->second.first].Sig;
+    SigN = S.Table[It->second.first].NumInsts;
+  }
   json::Object Rec{{"fn", S.Name},
                    {"fn_hash", S.NameHash},
+                   {"sig", Sig},
+                   {"n", SigN},
                    {"block", DAG.begin()->getParent()->getNumber()},
                    {"key", Key},
                    {"hash", Hash},
@@ -558,8 +923,11 @@ void SchedLedger::apply(ScheduleDAGInstrs *DAGInstrs) {
   auto &DAG = *static_cast<ScheduleDAGMI *>(DAGInstrs);
   FunctionState &S = enterFunction(DAG.MF);
   bool PostRA = DAG.MF.getProperties().hasNoVRegs();
-  if (!PostRA)
+  if (!PostRA) {
     assignIds(DAG.MF, S);
+    if (!S.Templates.empty() || !envOr(DumpDirOpt, "PSCHED_DUMP_DIR").empty())
+      buildTableAndBind(DAG.MF, S);
+  }
 
   IdMap Ids;
   std::vector<std::pair<unsigned, unsigned>> Opcodes;
@@ -586,7 +954,8 @@ void SchedLedger::apply(ScheduleDAGInstrs *DAGInstrs) {
 void llvm::AMDGPU::addSchedLedgerDAGMutation(ScheduleDAGMI *DAG,
                                              MachineFunction *MF) {
   FunctionState &S = enterFunction(*MF);
-  if (S.Regions.empty() && envOr(DumpDirOpt, "PSCHED_DUMP_DIR").empty())
+  if (S.Regions.empty() && S.Templates.empty() &&
+      envOr(DumpDirOpt, "PSCHED_DUMP_DIR").empty())
     return;
   DAG->addMutation(std::make_unique<SchedLedger>());
 }
