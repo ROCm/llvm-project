@@ -5,7 +5,6 @@ define amdgpu_cs void @should_not_hoist_set_inactive(<4 x i32> inreg %i14, i32 i
 ; GCN-LABEL: should_not_hoist_set_inactive:
 ; GCN:       ; %bb.0: ; %.entry
 ; GCN-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 3, v1
-; GCN-NEXT:    s_mov_b32 s6, 0
 ; GCN-NEXT:    s_mov_b32 s5, 0
 ; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc_lo
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
@@ -16,37 +15,32 @@ define amdgpu_cs void @should_not_hoist_set_inactive(<4 x i32> inreg %i14, i32 i
 ; GCN-NEXT:  .LBB0_1: ; %bb4
 ; GCN-NEXT:    ; in Loop: Header=BB0_2 Depth=1
 ; GCN-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s7
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GCN-NEXT:    s_xor_b32 s7, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s6
+; GCN-NEXT:    v_cmp_ne_u32_e64 s6, 0, v2
+; GCN-NEXT:    s_xor_b32 s7, exec_lo, s6
 ; GCN-NEXT:    s_or_b32 s5, s5, s7
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_mov_b32 exec_lo, s6
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_5
 ; GCN-NEXT:  .LBB0_2: ; %bb
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
-; GCN-NEXT:    s_xor_b32 s7, exec_lo, vcc_lo
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    v_cmp_ne_u32_e64 s7, 0, v1
+; GCN-NEXT:    s_xor_b32 s6, exec_lo, s7
+; GCN-NEXT:    s_mov_b32 exec_lo, s7
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_1
 ; GCN-NEXT:  .LBB0_3: ; %bb1
 ; GCN-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; GCN-NEXT:    s_or_saveexec_b32 s8, -1
-; GCN-NEXT:    v_cndmask_b32_e64 v3, 0, s4, s8
+; GCN-NEXT:    s_or_saveexec_b32 s7, -1
+; GCN-NEXT:    v_cndmask_b32_e64 v3, 0, s4, s7
 ; GCN-NEXT:    v_mov_b32_e32 v4, 0
-; GCN-NEXT:    s_mov_b32 exec_lo, s8
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GCN-NEXT:    s_or_saveexec_b32 s8, -1
 ; GCN-NEXT:    v_mov_b32_dpp v4, v3 row_xmask:1 row_mask:0xf bank_mask:0xf
-; GCN-NEXT:    s_mov_b32 exec_lo, s8
-; GCN-NEXT:    s_or_b32 s6, s6, vcc_lo
+; GCN-NEXT:    s_mov_b32 exec_lo, s7
+; GCN-NEXT:    v_cmp_ne_u32_e64 s7, 0, v0
 ; GCN-NEXT:    v_mov_b32_e32 v5, v4
-; GCN-NEXT:    s_xor_b32 s8, exec_lo, s6
-; GCN-NEXT:    s_or_b32 s7, s7, s8
-; GCN-NEXT:    s_mov_b32 s8, s6
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_mov_b32 exec_lo, s8
+; GCN-NEXT:    s_xor_b32 s8, exec_lo, s7
+; GCN-NEXT:    s_or_b32 s6, s6, s8
+; GCN-NEXT:    s_mov_b32 exec_lo, s7
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_1
 ; GCN-NEXT:  .LBB0_4: ; %bb2

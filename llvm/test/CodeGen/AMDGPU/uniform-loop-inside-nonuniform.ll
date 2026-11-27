@@ -3,7 +3,7 @@
 ; Test a simple uniform loop that lives inside non-uniform control flow.
 
 ; CHECK-LABEL: {{^}}test1:
-; CHECK: v_cmp_eq_u32_e32 vcc, 0
+; CHECK: v_cmp_eq_u32_e64 s[{{[0-9]+:[0-9]+}}], 0
 ; CHECK: s_xor_b64
 ; CHECK: s_cbranch_execz
 

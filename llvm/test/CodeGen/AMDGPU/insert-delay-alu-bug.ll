@@ -94,7 +94,7 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_and_b32 vcc_lo, exec_lo, s9
 ; GFX11-NEXT:    s_cbranch_vccnz .LBB2_3
 ; GFX11-NEXT:  ; %bb.4:
-; GFX11-NEXT:    s_or_b32 s23, s22, exec_lo
+; GFX11-NEXT:    s_or_b32 s22, s22, exec_lo
 ; GFX11-NEXT:    s_branch .LBB2_8
 ; GFX11-NEXT:  .LBB2_5: ; %bb15
 ; GFX11-NEXT:    s_add_u32 s8, s4, 0x58
@@ -167,10 +167,10 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_or_b32 s16, s17, s16
 ; GFX11-NEXT:    s_cbranch_vccnz .LBB2_7
 ; GFX11-NEXT:  .LBB2_8:
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s22
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s23
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s17, exec_lo, s23
-; GFX11-NEXT:    s_mov_b32 exec_lo, s23
+; GFX11-NEXT:    s_xor_b32 s17, exec_lo, s22
+; GFX11-NEXT:    s_mov_b32 exec_lo, s22
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB2_10
 ; GFX11-NEXT:  .LBB2_9: ; %bb43

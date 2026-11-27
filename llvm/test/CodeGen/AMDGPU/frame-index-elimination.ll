@@ -157,7 +157,7 @@ define void @void_func_byval_struct_i8_i32_ptr_value(ptr addrspace(5) byval({ i8
 
 ; GCN-LABEL: {{^}}void_func_byval_struct_i8_i32_ptr_nonentry_block:
 
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_xor_b64 exec, s[{{[0-9]+:[0-9]+}}], exec
 ; GCN: ; divergent control-flow edge
 
 ; CI: buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32 offset:4 glc{{$}}
@@ -269,7 +269,7 @@ bb5:
 }
 
 ; GCN-LABEL: {{^}}alloca_ptr_nonentry_block:
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: s_xor_b64 exec, s[{{[0-9]+:[0-9]+}}], exec
 ; GCN: ; divergent control-flow edge
 ; MUBUF:   buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32 offset:4
 ; FLATSCR: scratch_load_dword v{{[0-9]+}}, off, s32 offset:4

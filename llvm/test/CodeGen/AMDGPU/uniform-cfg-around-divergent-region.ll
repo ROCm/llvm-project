@@ -68,14 +68,13 @@ define amdgpu_cs void @uniform_loop_around_nonuniform_subregion(i32 inreg %n, i3
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    v_mov_b32_e32 v3, 3
 ; CHECK-NEXT:    s_mov_b32 s3, 0
-; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:    s_mov_b32 s2, 0
 ; CHECK-NEXT:    s_branch .LBB1_3
 ; CHECK-NEXT:    .p2align 6
 ; CHECK-NEXT:  .LBB1_1: ; %div.end
 ; CHECK-NEXT:    ; in Loop: Header=BB1_3 Depth=1
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s4
-; CHECK-NEXT:    s_mov_b32 s4, 0
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s3
+; CHECK-NEXT:    s_mov_b32 s3, 0
 ; CHECK-NEXT:    global_store_b32 v[1:2], v3, off
 ; CHECK-NEXT:  .LBB1_2: ; %latch
 ; CHECK-NEXT:    ; in Loop: Header=BB1_3 Depth=1
@@ -89,13 +88,8 @@ define amdgpu_cs void @uniform_loop_around_nonuniform_subregion(i32 inreg %n, i3
 ; CHECK-NEXT:    s_cbranch_scc1 .LBB1_6
 ; CHECK-NEXT:  ; %bb.4: ; %div
 ; CHECK-NEXT:    ; in Loop: Header=BB1_3 Depth=1
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, s2, v0
-; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-NEXT:    s_or_b32 s5, s3, s4
-; CHECK-NEXT:    s_mov_b32 s3, 0
-; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s5
-; CHECK-NEXT:    s_mov_b32 exec_lo, s5
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s3, s2, v0
+; CHECK-NEXT:    s_xor_b32 exec_lo, s3, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_1
 ; CHECK-NEXT:  .LBB1_5: ; %div.then
@@ -166,11 +160,11 @@ define amdgpu_cs void @uniform_around_nonuniform_loop(i32 inreg %u1, i32 inreg %
 ; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_4) | instid1(SALU_CYCLE_1)
 ; CHECK-NEXT:    s_add_i32 s2, s1, 2
 ; CHECK-NEXT:    s_add_i32 s1, s1, 1
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc_lo, s2, v0
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s2, s2, v0
 ; CHECK-NEXT:    v_mov_b32_e32 v3, s1
-; CHECK-NEXT:    s_xor_b32 s2, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s0, s0, s2
-; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; CHECK-NEXT:    s_xor_b32 s3, exec_lo, s2
+; CHECK-NEXT:    s_or_b32 s0, s0, s3
+; CHECK-NEXT:    s_mov_b32 exec_lo, s2
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB2_4
 ; CHECK-NEXT:  .LBB2_5: ; %L.end.loopexit
@@ -223,9 +217,9 @@ define amdgpu_cs void @uniform_around_nonuniform_if_else(i32 inreg %u1, i32 inre
 ; CHECK-NEXT:    global_store_b32 v[1:2], v0, off
 ; CHECK-NEXT:    s_endpgm
 ; CHECK-NEXT:  .LBB3_3: ; %A
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; CHECK-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s0, 0, v0
+; CHECK-NEXT:    s_xor_b32 s1, s0, exec_lo
+; CHECK-NEXT:    s_mov_b32 exec_lo, s0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB3_5
 ; CHECK-NEXT:  .LBB3_4: ; %A.else
@@ -292,15 +286,15 @@ define amdgpu_cs void @nonuniform_subregion_exit_is_uniform_loop_header(i32 inre
 ; CHECK-NEXT:  .LBB4_2: ; %exit
 ; CHECK-NEXT:    s_endpgm
 ; CHECK-NEXT:  .LBB4_3: ; %D
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; CHECK-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s0, 0, v0
+; CHECK-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB4_5
 ; CHECK-NEXT:  .LBB4_4: ; %D.then
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 1
 ; CHECK-NEXT:    global_store_b32 v[1:2], v0, off
 ; CHECK-NEXT:  .LBB4_5: ; %H.preheader
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; CHECK-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v3, 3
 ; CHECK-NEXT:  .LBB4_6: ; %H
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1

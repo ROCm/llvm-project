@@ -379,8 +379,8 @@ define void @flat_atomic_cmpxchg_i64_ret_av_av__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v6, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v7, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v7
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v7
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[2:3]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -399,9 +399,9 @@ define void @flat_atomic_cmpxchg_i64_ret_av_av__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB12_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB12_4
 ; CHECK-NEXT:  .LBB12_3: ; %atomicrmw.private
@@ -438,8 +438,8 @@ define void @flat_atomic_cmpxchg_i64_ret_av_av__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v6, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v7, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v7
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v7
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[2:3]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -458,9 +458,9 @@ define void @flat_atomic_cmpxchg_i64_ret_av_av__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB13_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB13_4
 ; CHECK-NEXT:  .LBB13_3: ; %atomicrmw.private
@@ -497,8 +497,8 @@ define void @flat_atomic_cmpxchg_i64_ret_av_av__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v4, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v5
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[2:3]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -519,9 +519,9 @@ define void @flat_atomic_cmpxchg_i64_ret_av_av__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_accvgpr_write_b32 a0, v6
 ; CHECK-NEXT:    v_accvgpr_write_b32 a1, v7
 ; CHECK-NEXT:  .LBB14_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB14_4
 ; CHECK-NEXT:  .LBB14_3: ; %atomicrmw.private
@@ -560,7 +560,7 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v2, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v3
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v3
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[2:3]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -569,11 +569,11 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[4:5]
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; CHECK-NEXT:    v_accvgpr_read_b32 v4, a4
 ; CHECK-NEXT:    v_accvgpr_read_b32 v5, a5
 ; CHECK-NEXT:    ; implicit-def: $agpr0_agpr1
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB15_2
 ; CHECK-NEXT:  .LBB15_1: ; %atomicrmw.global
@@ -590,9 +590,9 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_accvgpr_write_b32 a0, v6
 ; CHECK-NEXT:    v_accvgpr_write_b32 a1, v7
 ; CHECK-NEXT:  .LBB15_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB15_4
 ; CHECK-NEXT:  .LBB15_3: ; %atomicrmw.private
@@ -609,7 +609,7 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen offset:4
 ; CHECK-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen
 ; CHECK-NEXT:  .LBB15_4: ; %atomicrmw.phi
-; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; use a[0:1]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -631,7 +631,7 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v2, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v3
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v3
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[0:1]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -640,11 +640,11 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[2:3]
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; CHECK-NEXT:    v_accvgpr_read_b32 v5, a3
 ; CHECK-NEXT:    v_accvgpr_read_b32 v4, a2
 ; CHECK-NEXT:    ; implicit-def: $vgpr6_vgpr7
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB16_2
 ; CHECK-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -659,9 +659,9 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB16_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB16_4
 ; CHECK-NEXT:  .LBB16_3: ; %atomicrmw.private
@@ -676,7 +676,7 @@ define void @flat_atomic_cmpxchg_i64_ret_a_a__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_store_dword v1, v2, s[0:3], 0 offen
 ; CHECK-NEXT:    buffer_store_dword v0, v2, s[0:3], 0 offen offset:4
 ; CHECK-NEXT:  .LBB16_4: ; %atomicrmw.phi
-; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; use v[6:7]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -698,11 +698,11 @@ define void @flat_atomic_cmpxchg_i64_ret_v_a__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v4, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v5
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[0:1]
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    v_accvgpr_read_b32 v7, a1
 ; CHECK-NEXT:    v_accvgpr_read_b32 v6, a0
 ; CHECK-NEXT:    ;;#ASMSTART
@@ -722,9 +722,9 @@ define void @flat_atomic_cmpxchg_i64_ret_v_a__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB17_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB17_4
 ; CHECK-NEXT:  .LBB17_3: ; %atomicrmw.private
@@ -761,13 +761,13 @@ define void @flat_atomic_cmpxchg_i64_ret_a_v__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v6, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v7, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v7
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v7
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[0:1]
 ; CHECK-NEXT:    ;;#ASMEND
 ; CHECK-NEXT:    v_accvgpr_read_b32 v5, a1
 ; CHECK-NEXT:    v_accvgpr_read_b32 v4, a0
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[0:1]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -785,9 +785,9 @@ define void @flat_atomic_cmpxchg_i64_ret_a_v__v(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB18_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB18_4
 ; CHECK-NEXT:  .LBB18_3: ; %atomicrmw.private
@@ -824,8 +824,8 @@ define void @flat_atomic_cmpxchg_i64_ret_v_v__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v4, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v5
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[2:3]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -846,9 +846,9 @@ define void @flat_atomic_cmpxchg_i64_ret_v_v__a(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_accvgpr_write_b32 a0, v6
 ; CHECK-NEXT:    v_accvgpr_write_b32 a1, v7
 ; CHECK-NEXT:  .LBB19_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB19_4
 ; CHECK-NEXT:  .LBB19_3: ; %atomicrmw.private
@@ -887,8 +887,8 @@ define void @flat_atomic_cmpxchg_i64_ret_av_v__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v6, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v7, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v7
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v7
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[2:3]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -907,9 +907,9 @@ define void @flat_atomic_cmpxchg_i64_ret_av_v__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB20_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB20_4
 ; CHECK-NEXT:  .LBB20_3: ; %atomicrmw.private
@@ -946,8 +946,8 @@ define void @flat_atomic_cmpxchg_i64_ret_v_av__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v6, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v7, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v7
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v7
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[2:3]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -966,9 +966,9 @@ define void @flat_atomic_cmpxchg_i64_ret_v_av__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB21_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB21_4
 ; CHECK-NEXT:  .LBB21_3: ; %atomicrmw.private
@@ -1005,11 +1005,11 @@ define void @flat_atomic_cmpxchg_i64_ret_av_a__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v4, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v5
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[0:1]
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    v_accvgpr_read_b32 v7, a1
 ; CHECK-NEXT:    v_accvgpr_read_b32 v6, a0
 ; CHECK-NEXT:    ;;#ASMSTART
@@ -1029,9 +1029,9 @@ define void @flat_atomic_cmpxchg_i64_ret_av_a__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB22_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB22_4
 ; CHECK-NEXT:  .LBB22_3: ; %atomicrmw.private
@@ -1068,13 +1068,13 @@ define void @flat_atomic_cmpxchg_i64_ret_a_av__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    v_add_co_u32_e32 v6, vcc, 0x50, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_addc_co_u32_e32 v7, vcc, 0, v1, vcc
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v7
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[6:7], s5, v7
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[0:1]
 ; CHECK-NEXT:    ;;#ASMEND
 ; CHECK-NEXT:    v_accvgpr_read_b32 v5, a1
 ; CHECK-NEXT:    v_accvgpr_read_b32 v4, a0
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def v[0:1]
 ; CHECK-NEXT:    ;;#ASMEND
@@ -1092,9 +1092,9 @@ define void @flat_atomic_cmpxchg_i64_ret_a_av__av(ptr %ptr) #0 {
 ; CHECK-NEXT:    buffer_invl2
 ; CHECK-NEXT:    buffer_wbinvl1_vol
 ; CHECK-NEXT:  .LBB23_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB23_4
 ; CHECK-NEXT:  .LBB23_3: ; %atomicrmw.private

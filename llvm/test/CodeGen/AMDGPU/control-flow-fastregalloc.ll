@@ -185,6 +185,9 @@ end:
 ; GCN: s_mov_b32 [[ZERO:s[0-9]+]], 0
 ; GCN: v_cmp_eq_u32_e64 [[CMP0:s\[[0-9]+:[0-9]+\]]], v{{[0-9]+}}, [[ZERO]]
 
+; Compute xor of cmp result and exec (else-first lanes)
+; GCN: s_xor_b64 [[XOR:s\[[0-9]+:[0-9]+\]]], [[CMP0]], exec
+
 ; Spill cmp result
 ; VGPR: v_writelane_b32 [[SPILL_VGPR:v[0-9]+]], s{{[0-9]+}}, [[CMP0_LO_LANE:[0-9]+]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR]], s{{[0-9]+}}, [[CMP0_HI_LANE:[0-9]+]]
@@ -195,47 +198,49 @@ end:
 ; VMEM: v_writelane_b32 v[[V_CMP]], s{{[0-9]+}}, 1
 ; VMEM: buffer_store_dword v[[V_CMP]], off, s[0:3], 0 ; 4-byte Folded Spill
 
-; Compute xor of cmp result and exec (else-first lanes)
-; GCN: s_xor_b64 [[CMP0]], [[CMP0]], exec
-
 ; Set exec to xor result
-; GCN: s_mov_b64 exec, [[CMP0]]
+; GCN: s_mov_b64 exec, [[XOR]]
 
 ; GCN: s_cbranch_execz [[FLOW:.LBB[0-9]+_[0-9]+]]
 ; GCN: s_branch [[ELSE:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: [[FLOW]]:
-
 ; Reload cmp result at flow block
 ; VGPR: s_or_saveexec_b64 s[{{[0-9]+:[0-9]+}}], -1
 ; VGPR: buffer_load_dword [[SPILL_VGPR:v[0-9]+]], off, s[0:3], 0 ; 4-byte Folded Reload
 ; VGPR: s_mov_b64 exec, s[{{[0-9]+:[0-9]+}}]
 ; VGPR: s_waitcnt vmcnt(0)
-; VGPR: v_readlane_b32 s[[FLOW_S_RELOAD_CMP_LO:[0-9]+]], [[SPILL_VGPR]], [[CMP0_LO_LANE]]
-; VGPR: v_readlane_b32 s[[FLOW_S_RELOAD_CMP_HI:[0-9]+]], [[SPILL_VGPR]], [[CMP0_HI_LANE]]
+; VGPR: v_readlane_b32 s[[FLOW_S_RELOAD_CMP_LO:[0-9]+]], [[SPILL_VGPR]], {{[0-9]+}}
+; VGPR: v_readlane_b32 s[[FLOW_S_RELOAD_CMP_HI:[0-9]+]], [[SPILL_VGPR]], {{[0-9]+}}
+; VGPR: s_or_b64 exec, exec, s[[[FLOW_S_RELOAD_CMP_LO]]:[[FLOW_S_RELOAD_CMP_HI]]]
+; VGPR: v_readlane_b32 s[[FLOW_XOR_IN_LO:[0-9]+]], [[SPILL_VGPR]], {{[0-9]+}}
+; VGPR: v_readlane_b32 s[[FLOW_XOR_IN_HI:[0-9]+]], [[SPILL_VGPR]], {{[0-9]+}}
+; VGPR: s_xor_b64 s[[[FLOW_XOR2_LO:[0-9]+]]:[[FLOW_XOR2_HI:[0-9]+]]], exec, s[[[FLOW_XOR_IN_LO]]:[[FLOW_XOR_IN_HI]]]
 
 ; VMEM: buffer_load_dword v[[FLOW_V_RELOAD_CMP:[0-9]+]], off, s[0:3], 0
 ; VMEM: s_waitcnt vmcnt(0)
 ; VMEM: v_readlane_b32 s[[FLOW_S_RELOAD_CMP_LO:[0-9]+]], v[[FLOW_V_RELOAD_CMP]], 0
 ; VMEM: v_readlane_b32 s[[FLOW_S_RELOAD_CMP_HI:[0-9]+]], v[[FLOW_V_RELOAD_CMP]], 1
-
-; Restore exec and compute lanes for if-block
-; GCN: s_or_b64 exec, exec, s[[[FLOW_S_RELOAD_CMP_LO]]:[[FLOW_S_RELOAD_CMP_HI]]]
-; GCN: s_xor_b64 s[[[FLOW_XOR2_LO:[0-9]+]]:[[FLOW_XOR2_HI:[0-9]+]]], exec, s[[[FLOW_S_RELOAD_CMP_LO]]:[[FLOW_S_RELOAD_CMP_HI]]]
+; VMEM: s_or_b64 exec, exec, s[[[FLOW_S_RELOAD_CMP_LO]]:[[FLOW_S_RELOAD_CMP_HI]]]
+; VMEM: v_readlane_b32 s[[FLOW_XOR_IN_LO:[0-9]+]], v{{[0-9]+}}, 0
+; VMEM: v_readlane_b32 s[[FLOW_XOR_IN_HI:[0-9]+]], v{{[0-9]+}}, 1
+; VMEM: s_mov_b64 exec, s[{{[0-9]+:[0-9]+}}]
+; VMEM: s_xor_b64 s[[[FLOW_XOR2_LO:[0-9]+]]:[[FLOW_XOR2_HI:[0-9]+]]], exec, s[[[FLOW_XOR_IN_LO]]:[[FLOW_XOR_IN_HI]]]
 
 ; Spill flow xor result (lanes to reactivate at endif)
 ; VGPR: v_writelane_b32 [[SPILL_VGPR]], s[[FLOW_XOR2_LO]], [[FLOW_XOR2_LO_LANE:[0-9]+]]
 ; VGPR: v_writelane_b32 [[SPILL_VGPR]], s[[FLOW_XOR2_HI]], [[FLOW_XOR2_HI_LANE:[0-9]+]]
 ; VGPR: s_or_saveexec_b64 s[{{[0-9]+:[0-9]+}}], -1
 ; VGPR: buffer_store_dword [[SPILL_VGPR]], off, s[0:3], 0 ; 4-byte Folded Spill
+; VGPR: s_mov_b64 exec, s[{{[0-9]+:[0-9]+}}]
+; VGPR: s_mov_b64 exec, s[[[FLOW_XOR_IN_LO]]:[[FLOW_XOR_IN_HI]]]
+; VGPR: s_cbranch_execz [[ENDIF:.LBB[0-9]+_[0-9]+]]
 
 ; VMEM: v_writelane_b32 v[[FLOW_V_XOR2:[0-9]+]], s[[FLOW_XOR2_LO]], 0
 ; VMEM: v_writelane_b32 v[[FLOW_V_XOR2]], s[[FLOW_XOR2_HI]], 1
 ; VMEM: buffer_store_dword v[[FLOW_V_XOR2]], off, s[0:3], 0 offset:[[FLOW_SAVEEXEC_OFFSET:[0-9]+]] ; 4-byte Folded Spill
-
-; Set exec to if-block lanes (cmp result reloaded)
-; GCN: s_mov_b64 exec, s[[[FLOW_S_RELOAD_CMP_LO]]:[[FLOW_S_RELOAD_CMP_HI]]]
-; GCN: s_cbranch_execz [[ENDIF:.LBB[0-9]+_[0-9]+]]
+; VMEM: s_mov_b64 exec, s[[[FLOW_XOR_IN_LO]]:[[FLOW_XOR_IN_HI]]]
+; VMEM: s_cbranch_execz [[ENDIF:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: {{.LBB[0-9]+_[0-9]+}}: ; %if
 ; GCN: buffer_load_dword v[[LOAD0_RELOAD:[0-9]+]], off, s[0:3], 0 offset:[[LOAD0_OFFSET]] ; 4-byte Folded Reload
@@ -253,22 +258,39 @@ end:
 ; GCN: [[ENDIF]]:
 ; Reload flow xor result and restore exec
 ; VGPR: s_or_saveexec_b64 s[{{[0-9]+:[0-9]+}}], -1
-; VGPR: buffer_load_dword [[SPILL_VGPR:v[0-9]+]], off, s[0:3], 0 ; 4-byte Folded Reload
+; VGPR: buffer_load_dword [[SPILL_VGPR]], off, s[0:3], 0 ; 4-byte Folded Reload
 ; VGPR: s_mov_b64 exec, s[{{[0-9]+:[0-9]+}}]
 ; VGPR: s_waitcnt vmcnt(0)
 ; VGPR: v_readlane_b32 s[[S_RELOAD_FLOW_XOR2_LO:[0-9]+]], [[SPILL_VGPR]], [[FLOW_XOR2_LO_LANE]]
 ; VGPR: v_readlane_b32 s[[S_RELOAD_FLOW_XOR2_HI:[0-9]+]], [[SPILL_VGPR]], [[FLOW_XOR2_HI_LANE]]
+; VGPR: s_or_b64 exec, exec, s[[[S_RELOAD_FLOW_XOR2_LO]]:[[S_RELOAD_FLOW_XOR2_HI]]]
+; VGPR: v_readlane_b32 s[[PTR_LO:[0-9]+]], [[SPILL_VGPR]], {{[0-9]+}}
+; VGPR: v_readlane_b32 s[[PTR_HI:[0-9]+]], [[SPILL_VGPR]], {{[0-9]+}}
+; VGPR: buffer_load_dword v2, off, s[0:3], 0 offset:[[RESULT_OFFSET]] ; 4-byte Folded Reload
+; VGPR: v_mov_b32_e32 v0, s[[PTR_LO]]
+; VGPR: v_mov_b32_e32 v1, s[[PTR_HI]]
+; VGPR: flat_store_dword v[0:1], v2
 
+; VMEM: s_mov_b64 s[{{[0-9]+:[0-9]+}}], exec
+; VMEM: s_mov_b64 exec, 3
+; VMEM: buffer_store_dword v0, off, s[0:3], 0 offset:40
 ; VMEM: buffer_load_dword v[[V_RELOAD_FLOW_XOR2:[0-9]+]], off, s[0:3], 0 offset:[[FLOW_SAVEEXEC_OFFSET]] ; 4-byte Folded Reload
 ; VMEM: s_waitcnt vmcnt(0)
 ; VMEM: v_readlane_b32 s[[S_RELOAD_FLOW_XOR2_LO:[0-9]+]], v[[V_RELOAD_FLOW_XOR2]], 0
 ; VMEM: v_readlane_b32 s[[S_RELOAD_FLOW_XOR2_HI:[0-9]+]], v[[V_RELOAD_FLOW_XOR2]], 1
+; VMEM: s_mov_b64 exec, s[{{[0-9]+:[0-9]+}}]
+; VMEM: s_or_b64 exec, exec, s[[[S_RELOAD_FLOW_XOR2_LO]]:[[S_RELOAD_FLOW_XOR2_HI]]]
+; VMEM: s_mov_b64 s[{{[0-9]+:[0-9]+}}], exec
+; VMEM: buffer_load_dword v[[V_PTR:[0-9]+]], off, s[0:3], 0 offset:[[PTR_OFFSET:[0-9]+]] ; 4-byte Folded Reload
+; VMEM: s_waitcnt vmcnt(0)
+; VMEM: v_readlane_b32 s[[PTR_LO:[0-9]+]], v[[V_PTR]], 0
+; VMEM: v_readlane_b32 s[[PTR_HI:[0-9]+]], v[[V_PTR]], 1
+; VMEM: buffer_load_dword v2, off, s[0:3], 0 offset:[[RESULT_OFFSET]] ; 4-byte Folded Reload
+; VMEM: v_mov_b32_e32 v0, s[[PTR_LO]]
+; VMEM: v_mov_b32_e32 v1, s[[PTR_HI]]
+; VMEM: s_waitcnt vmcnt(0)
+; VMEM: flat_store_dword v[0:1], v2
 
-; GCN: s_or_b64 exec, exec, s[[[S_RELOAD_FLOW_XOR2_LO]]:[[S_RELOAD_FLOW_XOR2_HI]]]
-
-; GCN: buffer_load_dword v[[RESULT:[0-9]+]], off, s[0:3], 0 offset:[[RESULT_OFFSET]] ; 4-byte Folded Reload
-
-; GCN: flat_store_dword v{{\[[0-9]+:[0-9]+\]}}, v[[RESULT]]
 define amdgpu_kernel void @divergent_if_else_endif(ptr addrspace(1) %out) #0 {
 entry:
   %tid = call i32 @llvm.amdgcn.workitem.id.x()

@@ -661,9 +661,9 @@ define void @test_indirect_call_vgpr_ptr_in_branch(ptr %fptr, i1 %cond) #0 {
 ; GCN-NEXT:    v_writelane_b32 v40, s30, 4
 ; GCN-NEXT:    v_writelane_b32 v40, s31, 5
 ; GCN-NEXT:    v_and_b32_e32 v2, 1, v2
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v2
-; GCN-NEXT:    s_xor_b64 s[16:17], exec, vcc
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    v_cmp_eq_u32_e64 s[18:19], 1, v2
+; GCN-NEXT:    s_xor_b64 s[16:17], exec, s[18:19]
+; GCN-NEXT:    s_mov_b64 exec, s[18:19]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB5_4
 ; GCN-NEXT:  .LBB5_1: ; %bb1

@@ -1,7 +1,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}setcc_sgt_true_sext:
-; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_{{and|xor}}_b64
 ; GCN-NOT:  v_cndmask_
 
@@ -23,7 +23,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_sgt_true_sext_swap:
-; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64
 ; GCN-NOT:  v_cndmask_
 
@@ -45,7 +45,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_ne_true_sext:
-; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64
 ; GCN-NOT:  v_cndmask_
 
@@ -67,7 +67,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_ult_true_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_{{and|xor}}_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -89,7 +89,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_eq_true_sext:
-; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -111,7 +111,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_sle_true_sext:
-; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -133,7 +133,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_uge_true_sext:
-; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -155,7 +155,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_eq_false_sext:
-; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -177,7 +177,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_sge_false_sext:
-; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -199,7 +199,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_ule_false_sext:
-; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -221,7 +221,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_ne_false_sext:
-; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -242,7 +242,7 @@ endif:
   ret void
 }
 ; GCN-LABEL: {{^}}setcc_ugt_false_sext:
-; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
@@ -263,7 +263,7 @@ endif:
   ret void
 }
 ; GCN-LABEL: {{^}}setcc_slt_false_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, v{{[0-9]+}}, v{{[0-9]+}}
 ; GCN: s_{{and|xor}}_b64
 ; GCN-NOT:  v_cndmask_
 

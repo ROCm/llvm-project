@@ -1570,8 +1570,8 @@ define amdgpu_kernel void @v_exclusive_scan_sum_u32_branch(ptr addrspace(1) %out
 ; GFX13-NEXT:    v_exclusive_scan_sum_u32 v0, 1, -1
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX13-NEXT:    v_cmp_le_u32_e32 vcc_lo, s0, v0
-; GFX13-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX13-NEXT:    v_cmp_le_u32_e64 s0, s0, v0
+; GFX13-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; GFX13-NEXT:    ; divergent control-flow edge
 ; GFX13-NEXT:    s_cbranch_execz .LBB52_2
 ; GFX13-NEXT:  .LBB52_1: ; %then

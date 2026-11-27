@@ -175,12 +175,13 @@ main_body:
 define amdgpu_ps float @test_control_flow_0(<8 x i32> inreg %rsrc, <4 x i32> inreg %sampler, i32 inreg %idx0, i32 inreg %idx1, i32 %c, i32 %z, float %data) {
 ; CHECK-LABEL: test_control_flow_0:
 ; CHECK:       ; %bb.0: ; %main_body
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v1
+; CHECK-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
+; CHECK-NEXT:    s_mov_b64 exec, s[0:1]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_2
 ; CHECK-NEXT:  .LBB6_1: ; %ELSE
+; CHECK-NEXT:    s_nop 1
 ; CHECK-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
 ; CHECK-NEXT:  .LBB6_2:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
@@ -228,9 +229,9 @@ define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; CHECK:       ; %bb.0: ; %main_body
 ; CHECK-NEXT:    s_mov_b64 s[14:15], exec
 ; CHECK-NEXT:    s_wqm_b64 exec, exec
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; CHECK-NEXT:    s_xor_b64 s[16:17], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[18:19], 0, v1
+; CHECK-NEXT:    s_xor_b64 s[16:17], s[18:19], exec
+; CHECK-NEXT:    s_mov_b64 exec, s[18:19]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_2
 ; CHECK-NEXT:  .LBB7_1: ; %ELSE

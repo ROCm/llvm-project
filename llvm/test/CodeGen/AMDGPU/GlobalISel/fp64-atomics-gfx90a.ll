@@ -1579,9 +1579,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat(ptr addrspace(1) %pt
 ; GFX90A-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX90A-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX90A-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX90A-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX90A-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX90A-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX90A-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -1608,9 +1608,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat(ptr addrspace(1) %pt
 ; GFX942-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX942-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX942-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX942-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX942-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
@@ -1639,13 +1639,12 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat(ptr addrspace(1) %pt
 ; GFX1250-NEXT:    s_bcnt1_i32_b32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
-; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1250-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX1250-NEXT:    v_cmp_ne_u32_e64 s2, 0, v2
+; GFX1250-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_mul_f64_e32 v[0:1], 4.0, v[0:1]
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1676,9 +1675,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_agent(ptr addrspace(
 ; GFX90A-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX90A-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX90A-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX90A-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX90A-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX90A-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX90A-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -1703,9 +1702,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_agent(ptr addrspace(
 ; GFX942-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX942-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX942-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX942-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX942-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
@@ -1734,13 +1733,12 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_agent(ptr addrspace(
 ; GFX1250-NEXT:    s_bcnt1_i32_b32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
-; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1250-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX1250-NEXT:    v_cmp_ne_u32_e64 s2, 0, v2
+; GFX1250-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_mul_f64_e32 v[0:1], 4.0, v[0:1]
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1771,9 +1769,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_system(ptr addrspace
 ; GFX90A-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX90A-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX90A-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX90A-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX90A-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX90A-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX90A-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -1800,9 +1798,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_system(ptr addrspace
 ; GFX942-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX942-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX942-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX942-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX942-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
@@ -1831,13 +1829,12 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_system(ptr addrspace
 ; GFX1250-NEXT:    s_bcnt1_i32_b32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
-; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1250-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX1250-NEXT:    v_cmp_ne_u32_e64 s2, 0, v2
+; GFX1250-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_mul_f64_e32 v[0:1], 4.0, v[0:1]
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1868,9 +1865,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_flush(ptr addrspace(
 ; GFX90A-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX90A-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX90A-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX90A-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX90A-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX90A-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX90A-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -1895,9 +1892,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_flush(ptr addrspace(
 ; GFX942-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX942-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX942-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX942-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX942-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
@@ -1926,13 +1923,12 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_flush(ptr addrspace(
 ; GFX1250-NEXT:    s_bcnt1_i32_b32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
-; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1250-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX1250-NEXT:    v_cmp_ne_u32_e64 s2, 0, v2
+; GFX1250-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_mul_f64_e32 v[0:1], 4.0, v[0:1]
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -2083,9 +2079,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_agent_safe(ptr addrs
 ; GFX90A-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX90A-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX90A-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX90A-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX90A-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX90A-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX90A-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -2110,9 +2106,9 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_agent_safe(ptr addrs
 ; GFX942-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX942-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX942-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX942-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX942-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
@@ -2141,13 +2137,12 @@ define amdgpu_kernel void @global_atomic_fadd_f64_noret_pat_agent_safe(ptr addrs
 ; GFX1250-NEXT:    s_bcnt1_i32_b32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
-; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1250-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX1250-NEXT:    v_cmp_ne_u32_e64 s2, 0, v2
+; GFX1250-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_mul_f64_e32 v[0:1], 4.0, v[0:1]
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -2490,9 +2485,9 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat(ptr addrspace(3) %ptr
 ; GFX90A-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX90A-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX90A-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX90A-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX90A-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX90A-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX90A-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -2516,9 +2511,9 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat(ptr addrspace(3) %ptr
 ; GFX942-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX942-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX942-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX942-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX942-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
@@ -2545,13 +2540,12 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat(ptr addrspace(3) %ptr
 ; GFX1250-NEXT:    s_bcnt1_i32_b32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
-; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1250-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX1250-NEXT:    v_cmp_ne_u32_e64 s2, 0, v2
+; GFX1250-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_mul_f64_e32 v[0:1], 4.0, v[0:1]
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -2580,9 +2574,9 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat_flush(ptr addrspace(3
 ; GFX90A-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX90A-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX90A-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX90A-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX90A-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX90A-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX90A-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -2606,9 +2600,9 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat_flush(ptr addrspace(3
 ; GFX942-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX942-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX942-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX942-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX942-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
@@ -2635,13 +2629,12 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat_flush(ptr addrspace(3
 ; GFX1250-NEXT:    s_bcnt1_i32_b32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
-; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1250-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX1250-NEXT:    v_cmp_ne_u32_e64 s2, 0, v2
+; GFX1250-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_mul_f64_e32 v[0:1], 4.0, v[0:1]
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -2670,9 +2663,9 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat_flush_safe(ptr addrsp
 ; GFX90A-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX90A-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX90A-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX90A-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX90A-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX90A-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX90A-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX90A-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -2696,9 +2689,9 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat_flush_safe(ptr addrsp
 ; GFX942-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v0
 ; GFX942-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
 ; GFX942-NEXT:    v_mul_f64 v[0:1], 4.0, v[0:1]
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v2
 ; GFX942-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[2:3], exec
 ; GFX942-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
@@ -2725,13 +2718,12 @@ define amdgpu_kernel void @local_atomic_fadd_f64_noret_pat_flush_safe(ptr addrsp
 ; GFX1250-NEXT:    s_bcnt1_i32_b32 s0, s0
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_cvt_f64_i32_e32 v[0:1], s0
-; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1250-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX1250-NEXT:    v_cmp_ne_u32_e64 s2, 0, v2
+; GFX1250-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 2, 2), 0 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_mul_f64_e32 v[0:1], 4.0, v[0:1]
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1250-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX1250-NEXT:    ; divergent control-flow edge

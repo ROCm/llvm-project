@@ -5,10 +5,10 @@
 define amdgpu_ps float @else1(i32 %z, float %v) #0 {
 ; SI-LABEL: else1:
 ; SI:       ; %bb.0: ; %main_body
-; SI-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 6, v0
+; SI-NEXT:    v_cmp_gt_i32_e64 s1, 6, v0
 ; SI-NEXT:    ; implicit-def: $vgpr0
-; SI-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; SI-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; SI-NEXT:    s_xor_b32 s0, s1, exec_lo
+; SI-NEXT:    s_mov_b32 exec_lo, s1
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB0_2
 ; SI-NEXT:  .LBB0_1: ; %else
@@ -46,10 +46,10 @@ end:
 define amdgpu_ps float @else2(i32 %z, float %v) #0 {
 ; SI-LABEL: else2:
 ; SI:       ; %bb.0: ; %main_body
-; SI-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 6, v0
+; SI-NEXT:    v_cmp_gt_i32_e64 s1, 6, v0
 ; SI-NEXT:    ; implicit-def: $vgpr0
-; SI-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; SI-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; SI-NEXT:    s_xor_b32 s0, s1, exec_lo
+; SI-NEXT:    s_mov_b32 exec_lo, s1
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB1_2
 ; SI-NEXT:  .LBB1_1: ; %else
@@ -96,18 +96,17 @@ define amdgpu_ps float @else3(i32 %z, float %v, i32 inreg %bound, i32 %x0) #0 {
 ; SI-NEXT:    s_branch .LBB2_2
 ; SI-NEXT:  .LBB2_1: ; %if.end
 ; SI-NEXT:    ; in Loop: Header=BB2_2 Depth=1
-; SI-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; SI-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; SI-NEXT:    v_add_nc_u32_e32 v2, 1, v4
 ; SI-NEXT:    s_add_i32 s1, s1, 1
 ; SI-NEXT:    s_cmp_lt_i32 s1, s0
 ; SI-NEXT:    s_cbranch_scc0 .LBB2_6
 ; SI-NEXT:  .LBB2_2: ; %for.body
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; SI-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
+; SI-NEXT:    v_cmp_ne_u32_e64 s2, 0, v0
 ; SI-NEXT:    ; implicit-def: $vgpr3
 ; SI-NEXT:    ; implicit-def: $vgpr4
-; SI-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; SI-NEXT:    s_xor_b32 s2, exec_lo, s3
+; SI-NEXT:    s_xor_b32 s3, s2, exec_lo
 ; SI-NEXT:    s_mov_b32 exec_lo, s3
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_4
@@ -117,8 +116,8 @@ define amdgpu_ps float @else3(i32 %z, float %v, i32 inreg %bound, i32 %x0) #0 {
 ; SI-NEXT:    v_lshl_add_u32 v4, v2, 1, v2
 ; SI-NEXT:  .LBB2_4: ; in Loop: Header=BB2_2 Depth=1
 ; SI-NEXT:    s_or_b32 exec_lo, exec_lo, s2
-; SI-NEXT:    s_xor_b32 s2, exec_lo, vcc_lo
-; SI-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; SI-NEXT:    s_xor_b32 s3, exec_lo, s2
+; SI-NEXT:    s_mov_b32 exec_lo, s2
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_1
 ; SI-NEXT:  .LBB2_5: ; %if
@@ -173,7 +172,7 @@ define amdgpu_ps float @loop(i32 %z, float %v, i32 inreg %bound, ptr %extern_fun
 ; SI:       ; %bb.0: ; %main_body
 ; SI-NEXT:    s_mov_b32 s12, SCRATCH_RSRC_DWORD0
 ; SI-NEXT:    s_mov_b32 s13, SCRATCH_RSRC_DWORD1
-; SI-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 6, v0
+; SI-NEXT:    v_cmp_gt_i32_e64 s0, 6, v0
 ; SI-NEXT:    s_mov_b32 s14, -1
 ; SI-NEXT:    s_mov_b32 s15, 0x31c16000
 ; SI-NEXT:    v_mov_b32_e32 v41, v3
@@ -181,10 +180,10 @@ define amdgpu_ps float @loop(i32 %z, float %v, i32 inreg %bound, ptr %extern_fun
 ; SI-NEXT:    v_mov_b32_e32 v42, v1
 ; SI-NEXT:    s_add_u32 s12, s12, s1
 ; SI-NEXT:    s_addc_u32 s13, s13, 0
-; SI-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; SI-NEXT:    s_xor_b32 s6, s0, exec_lo
 ; SI-NEXT:    s_mov_b32 s32, 0
 ; SI-NEXT:    ; implicit-def: $vgpr0
-; SI-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; SI-NEXT:    s_mov_b32 exec_lo, s0
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB3_4
 ; SI-NEXT:  .LBB3_1: ; %else
@@ -254,7 +253,7 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
 ; SI:       ; %bb.0: ; %main_body
 ; SI-NEXT:    s_mov_b32 s12, SCRATCH_RSRC_DWORD0
 ; SI-NEXT:    s_mov_b32 s13, SCRATCH_RSRC_DWORD1
-; SI-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 6, v0
+; SI-NEXT:    v_cmp_gt_i32_e64 s0, 6, v0
 ; SI-NEXT:    s_mov_b32 s14, -1
 ; SI-NEXT:    s_mov_b32 s15, 0x31c16000
 ; SI-NEXT:    v_mov_b32_e32 v41, v3
@@ -262,10 +261,10 @@ define amdgpu_ps float @loop_with_use(i32 %z, float %v, i32 inreg %bound, ptr %e
 ; SI-NEXT:    v_mov_b32_e32 v42, v1
 ; SI-NEXT:    s_add_u32 s12, s12, s1
 ; SI-NEXT:    s_addc_u32 s13, s13, 0
-; SI-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; SI-NEXT:    s_xor_b32 s6, s0, exec_lo
 ; SI-NEXT:    s_mov_b32 s32, 0
 ; SI-NEXT:    ; implicit-def: $vgpr0
-; SI-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; SI-NEXT:    s_mov_b32 exec_lo, s0
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB4_4
 ; SI-NEXT:  .LBB4_1: ; %else

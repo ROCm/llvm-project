@@ -408,10 +408,10 @@ false:
 define amdgpu_ps void @non_cst_non_compare_input(ptr addrspace(1) %out, i32 %tid, i32 %cond) {
 ; GFX10-LABEL: non_cst_non_compare_input:
 ; GFX10:       ; %bb.0: ; %entry
-; GFX10-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
+; GFX10-NEXT:    v_cmp_ne_u32_e64 s1, 0, v3
 ; GFX10-NEXT:    ; implicit-def: $vgpr3
-; GFX10-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    s_xor_b32 s0, s1, exec_lo
+; GFX10-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB19_2
 ; GFX10-NEXT:  .LBB19_1: ; %B
@@ -435,10 +435,10 @@ define amdgpu_ps void @non_cst_non_compare_input(ptr addrspace(1) %out, i32 %tid
 ;
 ; GFX11-LABEL: non_cst_non_compare_input:
 ; GFX11:       ; %bb.0: ; %entry
-; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
+; GFX11-NEXT:    v_cmp_ne_u32_e64 s1, 0, v3
 ; GFX11-NEXT:    ; implicit-def: $vgpr3
-; GFX11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-NEXT:    s_xor_b32 s0, s1, exec_lo
+; GFX11-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB19_2
 ; GFX11-NEXT:  .LBB19_1: ; %B

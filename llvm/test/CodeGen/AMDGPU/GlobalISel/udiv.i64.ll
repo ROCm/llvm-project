@@ -11,11 +11,11 @@ define i64 @v_udiv_i64(i64 %num, i64 %den) {
 ; CHECK-NEXT:    v_mov_b32_e32 v5, v1
 ; CHECK-NEXT:    v_or_b32_e32 v7, v5, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v6, 0
-; CHECK-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[6:7]
+; CHECK-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[6:7]
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v0
-; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; CHECK-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1:
@@ -598,11 +598,11 @@ define <2 x i64> @v_udiv_v2i64(<2 x i64> %num, <2 x i64> %den) {
 ; CGP-NEXT:    v_mov_b32_e32 v9, v3
 ; CGP-NEXT:    v_or_b32_e32 v3, v11, v5
 ; CGP-NEXT:    v_mov_b32_e32 v2, 0
-; CGP-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[2:3]
+; CGP-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[2:3]
 ; CGP-NEXT:    v_mov_b32_e32 v10, v0
-; CGP-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CGP-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; CGP-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; CGP-NEXT:    s_mov_b64 exec, vcc
+; CGP-NEXT:    s_mov_b64 exec, s[4:5]
 ; CGP-NEXT:    ; divergent control-flow edge
 ; CGP-NEXT:    s_cbranch_execz .LBB2_2
 ; CGP-NEXT:  .LBB2_1:
@@ -749,10 +749,10 @@ define <2 x i64> @v_udiv_v2i64(<2 x i64> %num, <2 x i64> %den) {
 ; CGP-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; CGP-NEXT:    v_or_b32_e32 v5, v9, v7
 ; CGP-NEXT:    v_mov_b32_e32 v4, 0
-; CGP-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; CGP-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
 ; CGP-NEXT:    ; implicit-def: $vgpr2_vgpr3
-; CGP-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; CGP-NEXT:    s_mov_b64 exec, vcc
+; CGP-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
+; CGP-NEXT:    s_mov_b64 exec, s[4:5]
 ; CGP-NEXT:    ; divergent control-flow edge
 ; CGP-NEXT:    s_cbranch_execz .LBB2_6
 ; CGP-NEXT:  .LBB2_5:
@@ -1051,10 +1051,10 @@ define i64 @v_udiv_i64_pow2_shl_denom(i64 %x, i64 %y) {
 ; CHECK-NEXT:    v_lshl_b64 v[7:8], v[3:4], v2
 ; CHECK-NEXT:    v_mov_b32_e32 v5, 0
 ; CHECK-NEXT:    v_or_b32_e32 v6, v1, v8
-; CHECK-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[5:6]
+; CHECK-NEXT:    v_cmp_ne_u64_e64 s[6:7], 0, v[5:6]
 ; CHECK-NEXT:    ; implicit-def: $vgpr3_vgpr4
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_2
 ; CHECK-NEXT:  .LBB7_1:
@@ -1118,11 +1118,11 @@ define <2 x i64> @v_udiv_v2i64_pow2_shl_denom(<2 x i64> %x, <2 x i64> %y) {
 ; CGP-NEXT:    v_mov_b32_e32 v7, v3
 ; CGP-NEXT:    v_or_b32_e32 v3, v9, v13
 ; CGP-NEXT:    v_mov_b32_e32 v2, 0
-; CGP-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[2:3]
+; CGP-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[2:3]
 ; CGP-NEXT:    v_lshl_b64 v[10:11], v[0:1], v6
-; CGP-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CGP-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; CGP-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; CGP-NEXT:    s_mov_b64 exec, vcc
+; CGP-NEXT:    s_mov_b64 exec, s[4:5]
 ; CGP-NEXT:    ; divergent control-flow edge
 ; CGP-NEXT:    s_cbranch_execz .LBB8_2
 ; CGP-NEXT:  .LBB8_1:
@@ -1269,10 +1269,10 @@ define <2 x i64> @v_udiv_v2i64_pow2_shl_denom(<2 x i64> %x, <2 x i64> %y) {
 ; CGP-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; CGP-NEXT:    v_or_b32_e32 v9, v7, v11
 ; CGP-NEXT:    v_mov_b32_e32 v8, 0
-; CGP-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[8:9]
+; CGP-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[8:9]
 ; CGP-NEXT:    ; implicit-def: $vgpr2_vgpr3
-; CGP-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; CGP-NEXT:    s_mov_b64 exec, vcc
+; CGP-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
+; CGP-NEXT:    s_mov_b64 exec, s[4:5]
 ; CGP-NEXT:    ; divergent control-flow edge
 ; CGP-NEXT:    s_cbranch_execz .LBB8_6
 ; CGP-NEXT:  .LBB8_5:

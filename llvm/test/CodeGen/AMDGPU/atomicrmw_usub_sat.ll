@@ -22,10 +22,10 @@ define i32 @global_atomic_usub_sat(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX9-GISEL-NEXT:  .LBB0_2: ; %atomicrmw.end
@@ -142,10 +142,10 @@ define i32 @global_atomic_usub_sat_offset(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v0, v[3:4], v[0:1], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v1
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v0, v1
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX9-GISEL-NEXT:  .LBB1_2: ; %atomicrmw.end
@@ -270,11 +270,11 @@ define void @global_atomic_usub_sat_nortn(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB2_1
 ; GFX9-GISEL-NEXT:  .LBB2_2: ; %atomicrmw.end
@@ -388,11 +388,11 @@ define void @global_atomic_usub_sat_offset_nortn(ptr addrspace(1) %ptr, i32 %dat
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB3_1
 ; GFX9-GISEL-NEXT:  .LBB3_2: ; %atomicrmw.end
@@ -522,10 +522,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset(ptr addrspace
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v0, v1, v[2:3], s[0:1] glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v3
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v0, v3
+; GFX9-GISEL-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[10:11]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB4_1
 ; GFX9-GISEL-NEXT:  .LBB4_2: ; %atomicrmw.end
@@ -683,11 +683,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn(ptr add
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v0, v2, v[0:1], s[0:1] glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v1
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v0, v1
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB5_1
 ; GFX9-GISEL-NEXT:  .LBB5_2: ; %atomicrmw.end
@@ -815,10 +815,10 @@ define i16 @global_atomic_usub_sat_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[5:6], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v6
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v6
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX9-GISEL-NEXT:  .LBB6_2: ; %atomicrmw.end
@@ -843,10 +843,10 @@ define i16 @global_atomic_usub_sat_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v4
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX10-GISEL-NEXT:  .LBB6_2: ; %atomicrmw.end
@@ -873,11 +873,11 @@ define i16 @global_atomic_usub_sat_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX11-GISEL-NEXT:  .LBB6_2: ; %atomicrmw.end
@@ -907,11 +907,11 @@ define i16 @global_atomic_usub_sat_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[3:4], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX12-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX12-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX12-GISEL-NEXT:  .LBB6_2: ; %atomicrmw.end
@@ -1058,10 +1058,10 @@ define i16 @global_atomic_usub_sat_offset_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[5:6], off offset:2048 glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v6
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v6
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX9-GISEL-NEXT:  .LBB7_2: ; %atomicrmw.end
@@ -1088,10 +1088,10 @@ define i16 @global_atomic_usub_sat_offset_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v0, v1
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX10-GISEL-NEXT:  .LBB7_2: ; %atomicrmw.end
@@ -1117,11 +1117,11 @@ define i16 @global_atomic_usub_sat_offset_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX11-GISEL-NEXT:  .LBB7_2: ; %atomicrmw.end
@@ -1151,11 +1151,11 @@ define i16 @global_atomic_usub_sat_offset_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[3:4], off offset:2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX12-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX12-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX12-GISEL-NEXT:  .LBB7_2: ; %atomicrmw.end
@@ -1303,11 +1303,11 @@ define void @global_atomic_usub_sat_nortn_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX9-GISEL-NEXT:  .LBB8_2: ; %atomicrmw.end
@@ -1330,11 +1330,11 @@ define void @global_atomic_usub_sat_nortn_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v4
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX10-GISEL-NEXT:  .LBB8_2: ; %atomicrmw.end
@@ -1358,12 +1358,12 @@ define void @global_atomic_usub_sat_nortn_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX11-GISEL-NEXT:  .LBB8_2: ; %atomicrmw.end
@@ -1390,12 +1390,12 @@ define void @global_atomic_usub_sat_nortn_16(ptr addrspace(1) %ptr, i16 %data) {
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[3:4], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX12-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX12-GISEL-NEXT:  .LBB8_2: ; %atomicrmw.end
@@ -1534,11 +1534,11 @@ define void @global_atomic_usub_sat_offset_nortn_16(ptr addrspace(1) %ptr, i16 %
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off offset:2048 glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX9-GISEL-NEXT:  .LBB9_2: ; %atomicrmw.end
@@ -1563,11 +1563,11 @@ define void @global_atomic_usub_sat_offset_nortn_16(ptr addrspace(1) %ptr, i16 %
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v4
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX10-GISEL-NEXT:  .LBB9_2: ; %atomicrmw.end
@@ -1591,12 +1591,12 @@ define void @global_atomic_usub_sat_offset_nortn_16(ptr addrspace(1) %ptr, i16 %
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX11-GISEL-NEXT:  .LBB9_2: ; %atomicrmw.end
@@ -1623,12 +1623,12 @@ define void @global_atomic_usub_sat_offset_nortn_16(ptr addrspace(1) %ptr, i16 %
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[3:4], off offset:2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX12-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX12-GISEL-NEXT:  .LBB9_2: ; %atomicrmw.end
@@ -1775,10 +1775,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_16(ptr addrsp
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v1, v2, v[3:4], s[0:1] offset:2048 glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v1, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v1, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[10:11]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX9-GISEL-NEXT:  .LBB10_2: ; %atomicrmw.end
@@ -1810,10 +1810,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_16(ptr addrsp
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v1, v2
-; GFX10-GISEL-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s3, s3, s4
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s4, v1, v2
+; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-GISEL-NEXT:    s_or_b32 s3, s3, s5
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX10-GISEL-NEXT:  .LBB10_2: ; %atomicrmw.end
@@ -1846,11 +1846,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_16(ptr addrsp
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v1, v2
-; GFX11-GISEL-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s6, v1, v2
+; GFX11-GISEL-NEXT:    s_xor_b32 s7, exec_lo, s6
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s3, s3, s6
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s3, s3, s7
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX11-GISEL-NEXT:  .LBB10_2: ; %atomicrmw.end
@@ -1881,11 +1881,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_16(ptr addrsp
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v1, v0, v[1:2], s[0:1] offset:2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v1, v2
-; GFX12-GISEL-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s6, v1, v2
+; GFX12-GISEL-NEXT:    s_xor_b32 s7, exec_lo, s6
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s3, s3, s6
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s3, s3, s7
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX12-GISEL-NEXT:  .LBB10_2: ; %atomicrmw.end
@@ -2065,11 +2065,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_16(ptr 
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v0, v3, v[0:1], s[0:1] offset:2048 glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v1
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v0, v1
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB11_1
 ; GFX9-GISEL-NEXT:  .LBB11_2: ; %atomicrmw.end
@@ -2095,11 +2095,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_16(ptr 
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s4, v0, v1
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX10-GISEL-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s3, s3, s4
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-GISEL-NEXT:    s_or_b32 s3, s3, s5
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB11_1
 ; GFX10-GISEL-NEXT:  .LBB11_2: ; %atomicrmw.end
@@ -2126,12 +2126,12 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_16(ptr 
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s4, v0, v1
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX11-GISEL-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s5, exec_lo, s4
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s3, s3, s4
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s3, s3, s5
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB11_1
 ; GFX11-GISEL-NEXT:  .LBB11_2: ; %atomicrmw.end
@@ -2156,12 +2156,12 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_16(ptr 
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v0, v2, v[0:1], s[0:1] offset:2048 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s4, v0, v1
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX12-GISEL-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_xor_b32 s5, exec_lo, s4
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s3, s3, s4
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s3, s3, s5
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB11_1
 ; GFX12-GISEL-NEXT:  .LBB11_2: ; %atomicrmw.end
@@ -2315,10 +2315,10 @@ define i8 @global_atomic_usub_sat_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[6:7], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v7
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v7
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX9-GISEL-NEXT:  .LBB12_2: ; %atomicrmw.end
@@ -2347,10 +2347,10 @@ define i8 @global_atomic_usub_sat_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v6
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v6
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX10-GISEL-NEXT:  .LBB12_2: ; %atomicrmw.end
@@ -2382,11 +2382,11 @@ define i8 @global_atomic_usub_sat_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX11-GISEL-NEXT:  .LBB12_2: ; %atomicrmw.end
@@ -2420,11 +2420,11 @@ define i8 @global_atomic_usub_sat_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[3:4], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX12-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX12-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX12-GISEL-NEXT:  .LBB12_2: ; %atomicrmw.end
@@ -2583,10 +2583,10 @@ define i8 @global_atomic_usub_sat_offset_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[6:7], off offset:1024 glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v7
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v7
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB13_1
 ; GFX9-GISEL-NEXT:  .LBB13_2: ; %atomicrmw.end
@@ -2615,10 +2615,10 @@ define i8 @global_atomic_usub_sat_offset_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v6
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v6
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB13_1
 ; GFX10-GISEL-NEXT:  .LBB13_2: ; %atomicrmw.end
@@ -2650,11 +2650,11 @@ define i8 @global_atomic_usub_sat_offset_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB13_1
 ; GFX11-GISEL-NEXT:  .LBB13_2: ; %atomicrmw.end
@@ -2688,11 +2688,11 @@ define i8 @global_atomic_usub_sat_offset_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[3:4], off offset:1024 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX12-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX12-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB13_1
 ; GFX12-GISEL-NEXT:  .LBB13_2: ; %atomicrmw.end
@@ -2851,11 +2851,11 @@ define void @global_atomic_usub_sat_nortn_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v2, v3
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v2, v3
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v3, v2
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB14_1
 ; GFX9-GISEL-NEXT:  .LBB14_2: ; %atomicrmw.end
@@ -2882,11 +2882,11 @@ define void @global_atomic_usub_sat_nortn_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v2, v3
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v2, v3
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v3, v2
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB14_1
 ; GFX10-GISEL-NEXT:  .LBB14_2: ; %atomicrmw.end
@@ -2915,12 +2915,12 @@ define void @global_atomic_usub_sat_nortn_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB14_1
 ; GFX11-GISEL-NEXT:  .LBB14_2: ; %atomicrmw.end
@@ -2951,12 +2951,12 @@ define void @global_atomic_usub_sat_nortn_8(ptr addrspace(1) %ptr, i8 %data) {
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[3:4], off th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX12-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB14_1
 ; GFX12-GISEL-NEXT:  .LBB14_2: ; %atomicrmw.end
@@ -3109,11 +3109,11 @@ define void @global_atomic_usub_sat_offset_nortn_8(ptr addrspace(1) %ptr, i8 %da
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v2, v[0:1], v[2:3], off offset:1024 glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v2, v3
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v2, v3
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v3, v2
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB15_1
 ; GFX9-GISEL-NEXT:  .LBB15_2: ; %atomicrmw.end
@@ -3140,11 +3140,11 @@ define void @global_atomic_usub_sat_offset_nortn_8(ptr addrspace(1) %ptr, i8 %da
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v2, v3
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v2, v3
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v3, v2
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB15_1
 ; GFX10-GISEL-NEXT:  .LBB15_2: ; %atomicrmw.end
@@ -3173,12 +3173,12 @@ define void @global_atomic_usub_sat_offset_nortn_8(ptr addrspace(1) %ptr, i8 %da
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB15_1
 ; GFX11-GISEL-NEXT:  .LBB15_2: ; %atomicrmw.end
@@ -3209,12 +3209,12 @@ define void @global_atomic_usub_sat_offset_nortn_8(ptr addrspace(1) %ptr, i8 %da
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v3, v[0:1], v[3:4], off offset:1024 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX12-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB15_1
 ; GFX12-GISEL-NEXT:  .LBB15_2: ; %atomicrmw.end
@@ -3373,10 +3373,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_8(ptr addrspa
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v2, v[3:4], s[0:1] offset:1024 glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[10:11]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB16_1
 ; GFX9-GISEL-NEXT:  .LBB16_2: ; %atomicrmw.end
@@ -3412,10 +3412,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_8(ptr addrspa
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v2, v3
-; GFX10-GISEL-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s2, s2, s4
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s4, v2, v3
+; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-GISEL-NEXT:    s_or_b32 s2, s2, s5
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB16_1
 ; GFX10-GISEL-NEXT:  .LBB16_2: ; %atomicrmw.end
@@ -3454,11 +3454,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_8(ptr addrspa
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v1, v2
-; GFX11-GISEL-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s6, v1, v2
+; GFX11-GISEL-NEXT:    s_xor_b32 s7, exec_lo, s6
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s2, s2, s6
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s2, s2, s7
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB16_1
 ; GFX11-GISEL-NEXT:  .LBB16_2: ; %atomicrmw.end
@@ -3494,11 +3494,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_8(ptr addrspa
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v1, v0, v[1:2], s[0:1] offset:1024 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v1, v2
-; GFX12-GISEL-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s6, v1, v2
+; GFX12-GISEL-NEXT:    s_xor_b32 s7, exec_lo, s6
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s3, s3, s6
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s3, s3, s7
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB16_1
 ; GFX12-GISEL-NEXT:  .LBB16_2: ; %atomicrmw.end
@@ -3691,11 +3691,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_8(ptr a
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v0, v4, v[0:1], s[0:1] offset:1024 glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v1
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v0, v1
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB17_1
 ; GFX9-GISEL-NEXT:  .LBB17_2: ; %atomicrmw.end
@@ -3725,11 +3725,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_8(ptr a
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s4, v0, v1
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX10-GISEL-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s2, s2, s4
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-GISEL-NEXT:    s_or_b32 s2, s2, s5
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB17_1
 ; GFX10-GISEL-NEXT:  .LBB17_2: ; %atomicrmw.end
@@ -3762,12 +3762,12 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_8(ptr a
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s4, v0, v1
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX11-GISEL-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s5, exec_lo, s4
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s2, s2, s4
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s2, s2, s5
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB17_1
 ; GFX11-GISEL-NEXT:  .LBB17_2: ; %atomicrmw.end
@@ -3797,12 +3797,12 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn_8(ptr a
 ; GFX12-GISEL-NEXT:    global_atomic_cmpswap_b32 v0, v2, v[0:1], s[0:1] offset:1024 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
+; GFX12-GISEL-NEXT:    v_cmp_ne_u32_e64 s4, v0, v1
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX12-GISEL-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_xor_b32 s5, exec_lo, s4
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-GISEL-NEXT:    s_or_b32 s3, s3, s4
-; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-GISEL-NEXT:    s_or_b32 s3, s3, s5
+; GFX12-GISEL-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX12-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX12-GISEL-NEXT:    s_cbranch_execnz .LBB17_1
 ; GFX12-GISEL-NEXT:  .LBB17_2: ; %atomicrmw.end
@@ -3956,10 +3956,10 @@ define i32 @global_atomic_usub_sat__amdgpu_no_remote_memory(ptr addrspace(1) %pt
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB18_1
 ; GFX9-GISEL-NEXT:  .LBB18_2: ; %atomicrmw.end
@@ -4074,10 +4074,10 @@ define i32 @global_atomic_usub_sat__amdgpu_no_fine_grained_memory(ptr addrspace(
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB19_1
 ; GFX9-GISEL-NEXT:  .LBB19_2: ; %atomicrmw.end
@@ -4192,10 +4192,10 @@ define i32 @global_atomic_usub_sat__amdgpu_no_fine_grained_memory__amdgpu_no_rem
 ; GFX9-GISEL-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB20_1
 ; GFX9-GISEL-NEXT:  .LBB20_2: ; %atomicrmw.end
@@ -4310,10 +4310,10 @@ define i32 @flat_atomic_usub_sat(ptr %ptr, i32 %data) {
 ; GFX9-GISEL-NEXT:    flat_atomic_cmpswap v3, v[0:1], v[3:4] glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB21_1
 ; GFX9-GISEL-NEXT:  .LBB21_2: ; %atomicrmw.end
@@ -4336,10 +4336,10 @@ define i32 @flat_atomic_usub_sat(ptr %ptr, i32 %data) {
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v4
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB21_1
 ; GFX10-GISEL-NEXT:  .LBB21_2: ; %atomicrmw.end
@@ -4363,11 +4363,11 @@ define i32 @flat_atomic_usub_sat(ptr %ptr, i32 %data) {
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB21_1
 ; GFX11-GISEL-NEXT:  .LBB21_2: ; %atomicrmw.end
@@ -4494,11 +4494,11 @@ define void @flat_atomic_usub_sat_nortn(ptr %ptr, i32 %data) {
 ; GFX9-GISEL-NEXT:    flat_atomic_cmpswap v3, v[0:1], v[3:4] glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB22_1
 ; GFX9-GISEL-NEXT:  .LBB22_2: ; %atomicrmw.end
@@ -4519,11 +4519,11 @@ define void @flat_atomic_usub_sat_nortn(ptr %ptr, i32 %data) {
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v4
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB22_1
 ; GFX10-GISEL-NEXT:  .LBB22_2: ; %atomicrmw.end
@@ -4544,12 +4544,12 @@ define void @flat_atomic_usub_sat_nortn(ptr %ptr, i32 %data) {
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB22_1
 ; GFX11-GISEL-NEXT:  .LBB22_2: ; %atomicrmw.end
@@ -4672,10 +4672,10 @@ define i32 @flat_atomic_usub_sat__amdgpu_no_fine_grained_memory(ptr %ptr, i32 %d
 ; GFX9-GISEL-NEXT:    flat_atomic_cmpswap v3, v[0:1], v[3:4] glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB23_1
 ; GFX9-GISEL-NEXT:  .LBB23_2: ; %atomicrmw.end
@@ -4698,10 +4698,10 @@ define i32 @flat_atomic_usub_sat__amdgpu_no_fine_grained_memory(ptr %ptr, i32 %d
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v4
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB23_1
 ; GFX10-GISEL-NEXT:  .LBB23_2: ; %atomicrmw.end
@@ -4725,11 +4725,11 @@ define i32 @flat_atomic_usub_sat__amdgpu_no_fine_grained_memory(ptr %ptr, i32 %d
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB23_1
 ; GFX11-GISEL-NEXT:  .LBB23_2: ; %atomicrmw.end
@@ -4856,11 +4856,11 @@ define void @flat_atomic_usub_sat_nortn__amdgpu_no_fine_grained_memory(ptr %ptr,
 ; GFX9-GISEL-NEXT:    flat_atomic_cmpswap v3, v[0:1], v[3:4] glc
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX9-GISEL-NEXT:    buffer_wbinvl1_vol
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v4
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v4
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB24_1
 ; GFX9-GISEL-NEXT:  .LBB24_2: ; %atomicrmw.end
@@ -4881,11 +4881,11 @@ define void @flat_atomic_usub_sat_nortn__amdgpu_no_fine_grained_memory(ptr %ptr,
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v4
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB24_1
 ; GFX10-GISEL-NEXT:  .LBB24_2: ; %atomicrmw.end
@@ -4906,12 +4906,12 @@ define void @flat_atomic_usub_sat_nortn__amdgpu_no_fine_grained_memory(ptr %ptr,
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v4
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v4
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v4, v3
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB24_1
 ; GFX11-GISEL-NEXT:  .LBB24_2: ; %atomicrmw.end
@@ -5033,10 +5033,10 @@ define i32 @local_atomic_usub_sat(ptr addrspace(3) %ptr, i32 %data) {
 ; GFX9-GISEL-NEXT:    v_sub_u32_e64 v2, v3, v1 clamp
 ; GFX9-GISEL-NEXT:    ds_cmpst_rtn_b32 v2, v0, v3, v2
 ; GFX9-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v2, v3
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v2, v3
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB25_1
 ; GFX9-GISEL-NEXT:  .LBB25_2: ; %atomicrmw.end
@@ -5058,10 +5058,10 @@ define i32 @local_atomic_usub_sat(ptr addrspace(3) %ptr, i32 %data) {
 ; GFX10-GISEL-NEXT:    ds_cmpst_rtn_b32 v2, v0, v3, v2
 ; GFX10-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v2, v3
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v2, v3
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB25_1
 ; GFX10-GISEL-NEXT:  .LBB25_2: ; %atomicrmw.end
@@ -5084,11 +5084,11 @@ define i32 @local_atomic_usub_sat(ptr addrspace(3) %ptr, i32 %data) {
 ; GFX11-GISEL-NEXT:    ds_cmpstore_rtn_b32 v2, v0, v2, v3
 ; GFX11-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v2, v3
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v2, v3
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB25_1
 ; GFX11-GISEL-NEXT:  .LBB25_2: ; %atomicrmw.end
@@ -5211,11 +5211,11 @@ define void @local_atomic_usub_sat_nortn(ptr addrspace(3) %ptr, i32 %data) {
 ; GFX9-GISEL-NEXT:    v_sub_u32_e64 v3, v2, v1 clamp
 ; GFX9-GISEL-NEXT:    ds_cmpst_rtn_b32 v3, v0, v2, v3
 ; GFX9-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v3, v2
-; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e64 s[6:7], v3, v2
+; GFX9-GISEL-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v2, v3
-; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-GISEL-NEXT:    s_mov_b64 exec, vcc
+; GFX9-GISEL-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execnz .LBB26_1
 ; GFX9-GISEL-NEXT:  .LBB26_2: ; %atomicrmw.end
@@ -5235,11 +5235,11 @@ define void @local_atomic_usub_sat_nortn(ptr addrspace(3) %ptr, i32 %data) {
 ; GFX10-GISEL-NEXT:    ds_cmpst_rtn_b32 v3, v0, v2, v3
 ; GFX10-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
-; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v2
+; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e64 s5, v3, v2
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v2, v3
-; GFX10-GISEL-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-GISEL-NEXT:    s_xor_b32 s6, exec_lo, s5
+; GFX10-GISEL-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-GISEL-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX10-GISEL-NEXT:    s_cbranch_execnz .LBB26_1
 ; GFX10-GISEL-NEXT:  .LBB26_2: ; %atomicrmw.end
@@ -5259,12 +5259,12 @@ define void @local_atomic_usub_sat_nortn(ptr addrspace(3) %ptr, i32 %data) {
 ; GFX11-GISEL-NEXT:    ds_cmpstore_rtn_b32 v3, v0, v3, v2
 ; GFX11-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
-; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v3, v2
+; GFX11-GISEL-NEXT:    v_cmp_ne_u32_e64 s1, v3, v2
 ; GFX11-GISEL-NEXT:    v_mov_b32_e32 v2, v3
-; GFX11-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX11-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s1
-; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-GISEL-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX11-GISEL-NEXT:    s_cbranch_execnz .LBB26_1
 ; GFX11-GISEL-NEXT:  .LBB26_2: ; %atomicrmw.end

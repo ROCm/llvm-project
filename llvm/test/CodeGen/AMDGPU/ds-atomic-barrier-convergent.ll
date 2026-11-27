@@ -15,8 +15,8 @@ define void @taildup_ds_atomic_barrier_arrive(ptr addrspace(1) %a, ptr addrspace
 ; GCN-NEXT:    v_dual_mov_b32 v7, v4 :: v_dual_mov_b32 v6, v3
 ; GCN-NEXT:    v_and_b32_e32 v3, 1, v5
 ; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    v_cmp_eq_u32_e64 s0, 1, v3
+; GCN-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %bb2
@@ -24,10 +24,10 @@ define void @taildup_ds_atomic_barrier_arrive(ptr addrspace(1) %a, ptr addrspace
 ; GCN-NEXT:    global_store_b32 v[0:1], v3, off
 ; GCN-NEXT:  .LBB0_2:
 ; GCN-NEXT:    s_wait_xcnt 0x0
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GCN-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GCN-NEXT:    s_mov_b32 exec_lo, s0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %bb1
@@ -35,7 +35,7 @@ define void @taildup_ds_atomic_barrier_arrive(ptr addrspace(1) %a, ptr addrspace
 ; GCN-NEXT:    global_store_b32 v[0:1], v3, off
 ; GCN-NEXT:  .LBB0_4: ; %call
 ; GCN-NEXT:    s_wait_xcnt 0x0
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GCN-NEXT:    ds_atomic_barrier_arrive_rtn_b64 v[2:3], v2, v[6:7]
 ; GCN-NEXT:    s_wait_dscnt 0x0
 ; GCN-NEXT:    global_store_b64 v[0:1], v[2:3], off
@@ -68,8 +68,8 @@ define void @taildup_ds_atomic_async_barrier_arrive(ptr addrspace(1) %a, ptr add
 ; GCN-NEXT:    s_wait_kmcnt 0x0
 ; GCN-NEXT:    v_and_b32_e32 v3, 1, v5
 ; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
-; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GCN-NEXT:    v_cmp_eq_u32_e64 s0, 1, v3
+; GCN-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_2
 ; GCN-NEXT:  .LBB1_1: ; %bb2
@@ -77,10 +77,10 @@ define void @taildup_ds_atomic_async_barrier_arrive(ptr addrspace(1) %a, ptr add
 ; GCN-NEXT:    global_store_b32 v[0:1], v3, off
 ; GCN-NEXT:  .LBB1_2:
 ; GCN-NEXT:    s_wait_xcnt 0x0
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GCN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GCN-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GCN-NEXT:    s_mov_b32 exec_lo, s0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_4
 ; GCN-NEXT:  .LBB1_3: ; %bb1
@@ -88,14 +88,14 @@ define void @taildup_ds_atomic_async_barrier_arrive(ptr addrspace(1) %a, ptr add
 ; GCN-NEXT:    global_store_b32 v[0:1], v3, off
 ; GCN-NEXT:  .LBB1_4: ; %call
 ; GCN-NEXT:    s_wait_xcnt 0x0
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GCN-NEXT:    s_wait_alu depctr_vm_vsrc(0)
 ; GCN-NEXT:    ds_atomic_async_barrier_arrive_b64 v2
 ; GCN-NEXT:    s_wait_alu depctr_vm_vsrc(0)
-; GCN-NEXT:    s_mov_b32 s1, exec_lo
+; GCN-NEXT:    s_mov_b32 s2, exec_lo
 ; GCN-NEXT:    s_mov_b32 exec_lo, 0
 ; GCN-NEXT:    global_load_async_to_lds_b8 v0, v[0:1], off
-; GCN-NEXT:    s_mov_b32 exec_lo, s1
+; GCN-NEXT:    s_mov_b32 exec_lo, s2
 ; GCN-NEXT:    s_set_pc_i64 s[30:31]
 entry:
   br i1 %cond, label %bb1, label %bb2

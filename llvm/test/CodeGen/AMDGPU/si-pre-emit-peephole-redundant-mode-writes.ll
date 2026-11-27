@@ -306,9 +306,9 @@ define void @round_write_live_out(ptr addrspace(1) %out, float %a, float %b, i1 
 ; CHECK-NEXT:    s_wait_kmcnt 0x0
 ; CHECK-NEXT:    v_and_b32_e32 v4, 1, v4
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
-; CHECK-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s1, 1, v4
+; CHECK-NEXT:    s_xor_b32 s0, exec_lo, s1
+; CHECK-NEXT:    s_mov_b32 exec_lo, s1
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB13_2
 ; CHECK-NEXT:  .LBB13_1: ; %then

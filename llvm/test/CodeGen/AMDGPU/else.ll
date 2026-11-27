@@ -2,8 +2,8 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 < %s | FileCheck %s
 
 ; CHECK-LABEL: {{^}}else_no_execfix:
-; CHECK: s_xor_b64 [[SAVE:s\[[0-9]+:[0-9]+\]]], vcc, exec
-; CHECK: s_mov_b64 exec, vcc
+; CHECK: s_xor_b64 [[SAVE:s\[[0-9]+:[0-9]+\]]], [[CMP:s\[[0-9]+:[0-9]+\]]], exec
+; CHECK: s_mov_b64 exec, [[CMP]]
 ; CHECK: s_cbranch_execz
 ; CHECK: s_or_b64 exec, exec, [[SAVE]]
 define amdgpu_ps float @else_no_execfix(i32 %z, float %v) #0 {

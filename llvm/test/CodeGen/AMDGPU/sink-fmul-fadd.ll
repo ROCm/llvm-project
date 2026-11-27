@@ -32,11 +32,11 @@ define float @fma_in_loop_f32(float %a, float %b, i32 %n) {
 ; GFX8-NEXT:  .LBB0_1: ; %loop
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_add_f32_e32 v0, v0, v1
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX8-NEXT:  .LBB0_2: ; %exit
@@ -52,11 +52,11 @@ define float @fma_in_loop_f32(float %a, float %b, i32 %n) {
 ; GFX9-NEXT:  .LBB0_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_fma_f32 v3, v0, v1, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX9-NEXT:  .LBB0_2: ; %exit
@@ -75,10 +75,10 @@ define float @fma_in_loop_f32(float %a, float %b, i32 %n) {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_fmac_f32_e32 v0, v3, v1
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX10-NEXT:  .LBB0_2: ; %exit
@@ -129,11 +129,11 @@ define float @fsub_in_loop_f32(float %a, float %b, i32 %n) {
 ; GFX8-NEXT:  .LBB1_1: ; %loop
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_sub_f32_e32 v0, v0, v1
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX8-NEXT:  .LBB1_2: ; %exit
@@ -149,11 +149,11 @@ define float @fsub_in_loop_f32(float %a, float %b, i32 %n) {
 ; GFX9-NEXT:  .LBB1_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_fma_f32 v3, -v0, v1, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX9-NEXT:  .LBB1_2: ; %exit
@@ -172,10 +172,10 @@ define float @fsub_in_loop_f32(float %a, float %b, i32 %n) {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_fma_f32 v0, -v3, v1, v0
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX10-NEXT:  .LBB1_2: ; %exit
@@ -225,11 +225,11 @@ define half @fma_in_loop_f16(half %a, half %b, i32 %n) {
 ; GFX8-NEXT:  .LBB2_1: ; %loop
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_fma_f16 v3, v0, v1, v3
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB2_1
 ; GFX8-NEXT:  .LBB2_2: ; %exit
@@ -246,11 +246,11 @@ define half @fma_in_loop_f16(half %a, half %b, i32 %n) {
 ; GFX9-NEXT:  .LBB2_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_fma_f16 v3, v0, v1, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB2_1
 ; GFX9-NEXT:  .LBB2_2: ; %exit
@@ -269,10 +269,10 @@ define half @fma_in_loop_f16(half %a, half %b, i32 %n) {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_fmac_f16_e32 v0, v3, v1
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB2_1
 ; GFX10-NEXT:  .LBB2_2: ; %exit
@@ -328,10 +328,10 @@ define double @fma_in_loop_f64(double %a, double %b, i32 %n) {
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    v_fma_f64 v[0:1], v[5:6], v[2:3], v[0:1]
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v4
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v4
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB3_1
 ; GFX8-NEXT:  .LBB3_2: ; %exit
@@ -351,10 +351,10 @@ define double @fma_in_loop_f64(double %a, double %b, i32 %n) {
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_fma_f64 v[0:1], v[5:6], v[2:3], v[0:1]
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v4
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v4
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB3_1
 ; GFX9-NEXT:  .LBB3_2: ; %exit
@@ -374,10 +374,10 @@ define double @fma_in_loop_f64(double %a, double %b, i32 %n) {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    v_fma_f64 v[0:1], v[5:6], v[2:3], v[0:1]
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v4
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v4
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB3_1
 ; GFX10-NEXT:  .LBB3_2: ; %exit
@@ -428,11 +428,11 @@ define float @mad_in_loop_f32(float %a, float %b, i32 %n) #0 {
 ; GFX8-NEXT:  .LBB4_1: ; %loop
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_mac_f32_e32 v3, v0, v1
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB4_1
 ; GFX8-NEXT:  .LBB4_2: ; %exit
@@ -449,11 +449,11 @@ define float @mad_in_loop_f32(float %a, float %b, i32 %n) #0 {
 ; GFX9-NEXT:  .LBB4_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_mac_f32_e32 v3, v0, v1
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB4_1
 ; GFX9-NEXT:  .LBB4_2: ; %exit
@@ -472,10 +472,10 @@ define float @mad_in_loop_f32(float %a, float %b, i32 %n) #0 {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_add_f32_e32 v0, v0, v1
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB4_1
 ; GFX10-NEXT:  .LBB4_2: ; %exit
@@ -527,11 +527,11 @@ define float @no_sink_in_loop_no_contract(float %a, float %b, i32 %n) {
 ; GFX8-NEXT:  .LBB5_1: ; %loop
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_add_f32_e32 v0, v0, v1
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB5_1
 ; GFX8-NEXT:  .LBB5_2: ; %exit
@@ -548,11 +548,11 @@ define float @no_sink_in_loop_no_contract(float %a, float %b, i32 %n) {
 ; GFX9-NEXT:  .LBB5_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_add_f32_e32 v0, v0, v1
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB5_1
 ; GFX9-NEXT:  .LBB5_2: ; %exit
@@ -570,10 +570,10 @@ define float @no_sink_in_loop_no_contract(float %a, float %b, i32 %n) {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_add_f32_e32 v0, v0, v1
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB5_1
 ; GFX10-NEXT:  .LBB5_2: ; %exit
@@ -626,11 +626,11 @@ define float @no_sink_in_loop_multi_use(float %a, float %b, i32 %n) {
 ; GFX8-NEXT:  .LBB6_1: ; %loop
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_add_f32_e32 v1, v1, v0
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX8-NEXT:  .LBB6_2: ; %exit
@@ -648,11 +648,11 @@ define float @no_sink_in_loop_multi_use(float %a, float %b, i32 %n) {
 ; GFX9-NEXT:  .LBB6_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_add_f32_e32 v1, v1, v0
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX9-NEXT:  .LBB6_2: ; %exit
@@ -671,10 +671,10 @@ define float @no_sink_in_loop_multi_use(float %a, float %b, i32 %n) {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_add_f32_e32 v1, v1, v0
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX10-NEXT:  .LBB6_2: ; %exit
@@ -709,11 +709,11 @@ define half @mad_in_loop_f16(half %a, half %b, i32 %n) #0 {
 ; GFX8-NEXT:  .LBB7_1: ; %loop
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_mac_f16_e32 v3, v0, v1
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX8-NEXT:  .LBB7_2: ; %exit
@@ -730,11 +730,11 @@ define half @mad_in_loop_f16(half %a, half %b, i32 %n) #0 {
 ; GFX9-NEXT:  .LBB7_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_mac_f16_e32 v3, v0, v1
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX9-NEXT:  .LBB7_2: ; %exit
@@ -753,10 +753,10 @@ define half @mad_in_loop_f16(half %a, half %b, i32 %n) #0 {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_add_f16_e32 v0, v0, v1
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB7_1
 ; GFX10-NEXT:  .LBB7_2: ; %exit
@@ -791,13 +791,13 @@ define <2 x half> @no_fma_in_loop_v2f16(<2 x half> %a, <2 x half> %b, i32 %n) #0
 ; GFX8-NEXT:    v_lshrrev_b32_e32 v4, 16, v3
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
 ; GFX8-NEXT:    v_mac_f16_sdwa v4, v0, v1 dst_sel:DWORD dst_unused:UNUSED_PAD src0_sel:WORD_1 src1_sel:WORD_1
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
 ; GFX8-NEXT:    v_lshlrev_b32_e32 v4, 16, v4
 ; GFX8-NEXT:    v_mac_f16_e32 v3, v0, v1
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_or_b32_e32 v3, v3, v4
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX8-NEXT:  .LBB8_2: ; %exit
@@ -816,11 +816,11 @@ define <2 x half> @no_fma_in_loop_v2f16(<2 x half> %a, <2 x half> %b, i32 %n) #0
 ; GFX9-NEXT:  .LBB8_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_pk_add_f16 v0, v0, v1
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX9-NEXT:  .LBB8_2: ; %exit
@@ -838,10 +838,10 @@ define <2 x half> @no_fma_in_loop_v2f16(<2 x half> %a, <2 x half> %b, i32 %n) #0
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_pk_add_f16 v0, v0, v1
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB8_1
 ; GFX10-NEXT:  .LBB8_2: ; %exit
@@ -877,13 +877,13 @@ define <2 x half> @fma_in_loop_v2f16_denormals(<2 x half> %a, <2 x half> %b, i32
 ; GFX8-NEXT:    v_lshrrev_b32_e32 v6, 16, v3
 ; GFX8-NEXT:    s_add_i32 s6, s6, 1
 ; GFX8-NEXT:    v_fma_f16 v6, v5, v4, v6
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
 ; GFX8-NEXT:    v_lshlrev_b32_e32 v6, 16, v6
 ; GFX8-NEXT:    v_fma_f16 v3, v0, v1, v3
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_or_b32_e32 v3, v3, v6
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX8-NEXT:  .LBB9_2: ; %exit
@@ -900,11 +900,11 @@ define <2 x half> @fma_in_loop_v2f16_denormals(<2 x half> %a, <2 x half> %b, i32
 ; GFX9-NEXT:  .LBB9_1: ; %loop
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_add_i32 s6, s6, 1
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_pk_fma_f16 v3, v0, v1, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX9-NEXT:  .LBB9_2: ; %exit
@@ -923,10 +923,10 @@ define <2 x half> @fma_in_loop_v2f16_denormals(<2 x half> %a, <2 x half> %b, i32
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
 ; GFX10-NEXT:    v_pk_fma_f16 v0, v3, v1, v0
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX10-NEXT:  .LBB9_2: ; %exit
@@ -966,15 +966,15 @@ define bfloat @fma_in_loop_bf16(bfloat %a, bfloat %b, i32 %n) {
 ; GFX8-NEXT:    v_bfe_u32 v4, v0, 16, 1
 ; GFX8-NEXT:    v_add_u32_e32 v4, vcc, v4, v0
 ; GFX8-NEXT:    v_add_u32_e32 v4, vcc, 0x7fff, v4
+; GFX8-NEXT:    s_add_i32 s6, s6, 1
 ; GFX8-NEXT:    v_or_b32_e32 v5, 0x400000, v0
 ; GFX8-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
-; GFX8-NEXT:    s_add_i32 s6, s6, 1
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
 ; GFX8-NEXT:    v_cndmask_b32_e32 v0, v4, v5, vcc
-; GFX8-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
-; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX8-NEXT:  .LBB10_2: ; %exit
@@ -996,16 +996,16 @@ define bfloat @fma_in_loop_bf16(bfloat %a, bfloat %b, i32 %n) {
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v0, 16, v0
 ; GFX9-NEXT:    v_fma_f32 v0, v3, v1, v0
 ; GFX9-NEXT:    v_bfe_u32 v4, v0, 16, 1
+; GFX9-NEXT:    s_add_i32 s6, s6, 1
 ; GFX9-NEXT:    v_add3_u32 v4, v4, v0, s7
 ; GFX9-NEXT:    v_or_b32_e32 v5, 0x400000, v0
 ; GFX9-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
-; GFX9-NEXT:    s_add_i32 s6, s6, 1
+; GFX9-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v2
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v4, v5, vcc
-; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v2
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX9-NEXT:  .LBB10_2: ; %exit
@@ -1026,17 +1026,17 @@ define bfloat @fma_in_loop_bf16(bfloat %a, bfloat %b, i32 %n) {
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    v_lshlrev_b32_e32 v0, 16, v0
 ; GFX10-NEXT:    s_add_i32 s5, s5, 1
+; GFX10-NEXT:    v_cmp_lt_i32_e64 s6, s5, v2
 ; GFX10-NEXT:    v_fmac_f32_e32 v0, v3, v1
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, s7
 ; GFX10-NEXT:    v_bfe_u32 v4, v0, 16, 1
 ; GFX10-NEXT:    v_or_b32_e32 v5, 0x400000, v0
 ; GFX10-NEXT:    v_cmp_u_f32_e32 vcc_lo, v0, v0
 ; GFX10-NEXT:    v_add3_u32 v4, v4, v0, 0x7fff
 ; GFX10-NEXT:    v_cndmask_b32_e32 v0, v4, v5, vcc_lo
-; GFX10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s5, v2
 ; GFX10-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, vcc_lo
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB10_1
 ; GFX10-NEXT:  .LBB10_2: ; %exit

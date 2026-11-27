@@ -28,14 +28,14 @@ define void @f(i32 %arg, ptr %ptr) {
 ; ISA-NEXT:  .LBB0_1: ; %bb14
 ; ISA-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; ISA-NEXT:    v_mov_b32_e32 v7, v8
-; ISA-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
+; ISA-NEXT:    v_cmp_ne_u32_e64 s5, 0, v0
 ; ISA-NEXT:    v_add_f32_e32 v8, v7, v3
-; ISA-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; ISA-NEXT:    s_or_b32 s4, s4, s5
+; ISA-NEXT:    s_xor_b32 s6, exec_lo, s5
+; ISA-NEXT:    s_or_b32 s4, s4, s6
 ; ISA-NEXT:    v_add_f32_e32 v8, v8, v4
 ; ISA-NEXT:    v_add_f32_e32 v8, v8, v5
 ; ISA-NEXT:    v_add_f32_e32 v8, v8, v6
-; ISA-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; ISA-NEXT:    s_mov_b32 exec_lo, s5
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execnz .LBB0_1
 ; ISA-NEXT:  .LBB0_2: ; %bb21

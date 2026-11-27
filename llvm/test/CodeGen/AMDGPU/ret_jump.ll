@@ -57,8 +57,8 @@ ret.bb:                                          ; preds = %else, %main_body
 ; GCN-LABEL: {{^}}uniform_br_nontrivial_ret_divergent_br_nontrivial_unreachable:
 ; GCN: s_cbranch_scc{{(0|1)}} [[RET_BB2:.LBB[0-9]+_[0-9]+]]
 
-; GCN: v_cmp_gt_f32_e32 vcc
-; GCN: s_xor_b64 exec, vcc, exec
+; GCN: v_cmp_gt_f32_e64 [[CMP:s\[[0-9]+:[0-9]+\]]], 0, v{{[0-9]+}}
+; GCN: s_xor_b64 exec, [[CMP]], exec
 ; GCN: s_cbranch_execz [[FLOW:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: .LBB{{[0-9]+}}_{{[0-9]+}}: ; %unreachable.bb
@@ -66,9 +66,9 @@ ret.bb:                                          ; preds = %else, %main_body
 ; GCN: ; divergent unreachable
 
 ; GCN: [[FLOW]]:
-; GCN: s_or_b64 exec, exec, vcc
-; GCN: s_xor_b64 [[SAVE:s\[[0-9]+:[0-9]+\]]], exec, vcc
-; GCN: s_mov_b64 exec, vcc
+; GCN: s_or_b64 exec, exec, [[CMP]]
+; GCN: s_xor_b64 [[SAVE:s\[[0-9]+:[0-9]+\]]], exec, [[CMP]]
+; GCN: s_mov_b64 exec, [[CMP]]
 ; GCN: s_cbranch_execz [[UNIFIED_RET:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: [[RET_BB2]]: ; %ret.bb

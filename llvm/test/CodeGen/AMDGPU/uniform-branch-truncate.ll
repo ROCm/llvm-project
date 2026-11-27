@@ -218,8 +218,8 @@ define amdgpu_kernel void @divergent_i32(ptr addrspace(1) %out) {
 ; GFX950-LABEL: divergent_i32:
 ; GFX950:       ; %bb.0: ; %entry
 ; GFX950-NEXT:    v_and_b32_e32 v1, 1, v0
-; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v1
-; GFX950-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX950-NEXT:    v_cmp_eq_u32_e64 s[0:1], 1, v1
+; GFX950-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX950-NEXT:  .LBB5_1: ; %store
@@ -235,8 +235,8 @@ define amdgpu_kernel void @divergent_i32(ptr addrspace(1) %out) {
 ; GFX1030-LABEL: divergent_i32:
 ; GFX1030:       ; %bb.0: ; %entry
 ; GFX1030-NEXT:    v_and_b32_e32 v1, 1, v0
-; GFX1030-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v1
-; GFX1030-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX1030-NEXT:    v_cmp_eq_u32_e64 s0, 1, v1
+; GFX1030-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; GFX1030-NEXT:    ; divergent control-flow edge
 ; GFX1030-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX1030-NEXT:  .LBB5_1: ; %store
@@ -263,8 +263,8 @@ define amdgpu_kernel void @uniform_in_divergent_i32(ptr addrspace(1) %out, i32 %
 ; GFX950-LABEL: uniform_in_divergent_i32:
 ; GFX950:       ; %bb.0: ; %entry
 ; GFX950-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; GFX950-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
-; GFX950-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX950-NEXT:    v_cmp_lt_u32_e64 s[0:1], 15, v0
+; GFX950-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execz .LBB6_3
 ; GFX950-NEXT:  .LBB6_1: ; %inner
@@ -285,8 +285,8 @@ define amdgpu_kernel void @uniform_in_divergent_i32(ptr addrspace(1) %out, i32 %
 ;
 ; GFX1030-LABEL: uniform_in_divergent_i32:
 ; GFX1030:       ; %bb.0: ; %entry
-; GFX1030-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
-; GFX1030-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX1030-NEXT:    v_cmp_lt_u32_e64 s0, 15, v0
+; GFX1030-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; GFX1030-NEXT:    ; divergent control-flow edge
 ; GFX1030-NEXT:    s_cbranch_execz .LBB6_3
 ; GFX1030-NEXT:  .LBB6_1: ; %inner

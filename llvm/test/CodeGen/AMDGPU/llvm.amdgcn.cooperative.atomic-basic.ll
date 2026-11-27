@@ -151,10 +151,10 @@ define void @test_load_8x16B_live_out(ptr addrspace(1) noundef readonly %addr, p
 ; GFX1250-SDAG-NEXT:    global_load_b128 v[6:9], v[0:1], off scope:SCOPE_SYS
 ; GFX1250-SDAG-NEXT:    v_and_b32_e32 v4, 1, v4
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
-; GFX1250-SDAG-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e64 s1, 1, v4
+; GFX1250-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
 ; GFX1250-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execz .LBB9_2
 ; GFX1250-SDAG-NEXT:  .LBB9_1: ; %use
@@ -173,10 +173,10 @@ define void @test_load_8x16B_live_out(ptr addrspace(1) noundef readonly %addr, p
 ; GFX1251-SDAG-NEXT:    global_load_b128 v[6:9], v[0:1], off scope:SCOPE_SYS
 ; GFX1251-SDAG-NEXT:    v_and_b32_e32 v4, 1, v4
 ; GFX1251-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1251-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
-; GFX1251-SDAG-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX1251-SDAG-NEXT:    v_cmp_eq_u32_e64 s1, 1, v4
+; GFX1251-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
 ; GFX1251-SDAG-NEXT:    s_wait_xcnt 0x0
-; GFX1251-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX1251-SDAG-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX1251-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1251-SDAG-NEXT:    s_cbranch_execz .LBB9_2
 ; GFX1251-SDAG-NEXT:  .LBB9_1: ; %use

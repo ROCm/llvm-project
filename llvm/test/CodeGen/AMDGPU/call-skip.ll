@@ -16,7 +16,7 @@ define void @if_call(i32 %flag) #0 {
 ; GCN-LABEL: if_call:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    s_mov_b32 s18, s33
+; GCN-NEXT:    s_mov_b32 s20, s33
 ; GCN-NEXT:    s_mov_b32 s33, s32
 ; GCN-NEXT:    s_xor_saveexec_b64 s[16:17], -1
 ; GCN-NEXT:    buffer_store_dword v1, off, s[0:3], s33 ; 4-byte Folded Spill
@@ -24,24 +24,24 @@ define void @if_call(i32 %flag) #0 {
 ; GCN-NEXT:    v_writelane_b32 v1, s30, 0
 ; GCN-NEXT:    s_addk_i32 s32, 0x400
 ; GCN-NEXT:    v_writelane_b32 v1, s31, 1
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[16:17], 0, v0
+; GCN-NEXT:    s_xor_b64 exec, s[16:17], exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_2
 ; GCN-NEXT:  .LBB1_1: ; %call
-; GCN-NEXT:    s_getpc_b64 s[16:17]
-; GCN-NEXT:    s_add_u32 s16, s16, func@rel32@lo+4
-; GCN-NEXT:    s_addc_u32 s17, s17, func@rel32@hi+12
-; GCN-NEXT:    s_swappc_b64 s[30:31], s[16:17]
+; GCN-NEXT:    s_getpc_b64 s[18:19]
+; GCN-NEXT:    s_add_u32 s18, s18, func@rel32@lo+4
+; GCN-NEXT:    s_addc_u32 s19, s19, func@rel32@hi+12
+; GCN-NEXT:    s_swappc_b64 s[30:31], s[18:19]
 ; GCN-NEXT:  .LBB1_2: ; %end
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[16:17]
 ; GCN-NEXT:    v_readlane_b32 s30, v1, 0
 ; GCN-NEXT:    v_readlane_b32 s31, v1, 1
 ; GCN-NEXT:    s_mov_b32 s32, s33
 ; GCN-NEXT:    s_xor_saveexec_b64 s[4:5], -1
 ; GCN-NEXT:    buffer_load_dword v1, off, s[0:3], s33 ; 4-byte Folded Reload
 ; GCN-NEXT:    s_mov_b64 exec, s[4:5]
-; GCN-NEXT:    s_mov_b32 s33, s18
+; GCN-NEXT:    s_mov_b32 s33, s20
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
   %cc = icmp eq i32 %flag, 0
@@ -59,18 +59,18 @@ define void @if_asm(i32 %flag) #0 {
 ; GCN-LABEL: if_asm:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v0
+; GCN-NEXT:    s_xor_b64 exec, s[4:5], exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB2_2
 ; GCN-NEXT:  .LBB2_1: ; %end
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ; GCN-NEXT:  .LBB2_2: ; %call
 ; GCN-NEXT:    ;;#ASMSTART
 ; GCN-NEXT:    ; sample asm
 ; GCN-NEXT:    ;;#ASMEND
-; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
   %cc = icmp eq i32 %flag, 0
   br i1 %cc, label %call, label %end
@@ -89,11 +89,11 @@ define amdgpu_kernel void @if_call_kernel() #0 {
 ; SDAG-NEXT:    s_add_i32 s12, s12, s17
 ; SDAG-NEXT:    s_lshr_b32 flat_scratch_hi, s12, 8
 ; SDAG-NEXT:    s_add_u32 s0, s0, s17
-; SDAG-NEXT:    s_addc_u32 s1, s1, 0
-; SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; SDAG-NEXT:    s_mov_b32 s32, 0
 ; SDAG-NEXT:    s_mov_b32 flat_scratch_lo, s13
-; SDAG-NEXT:    s_xor_b64 exec, vcc, exec
+; SDAG-NEXT:    s_addc_u32 s1, s1, 0
+; SDAG-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v0
+; SDAG-NEXT:    s_mov_b32 s32, 0
+; SDAG-NEXT:    s_xor_b64 exec, s[12:13], exec
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB3_2
 ; SDAG-NEXT:  .LBB3_1: ; %end
@@ -117,11 +117,11 @@ define amdgpu_kernel void @if_call_kernel() #0 {
 ; GISEL-NEXT:    s_add_i32 s12, s12, s17
 ; GISEL-NEXT:    s_lshr_b32 flat_scratch_hi, s12, 8
 ; GISEL-NEXT:    s_add_u32 s0, s0, s17
-; GISEL-NEXT:    s_addc_u32 s1, s1, 0
-; GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GISEL-NEXT:    s_mov_b32 s32, 0
 ; GISEL-NEXT:    s_mov_b32 flat_scratch_lo, s13
-; GISEL-NEXT:    s_xor_b64 exec, vcc, exec
+; GISEL-NEXT:    s_addc_u32 s1, s1, 0
+; GISEL-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v0
+; GISEL-NEXT:    s_mov_b32 s32, 0
+; GISEL-NEXT:    s_xor_b64 exec, s[12:13], exec
 ; GISEL-NEXT:    ; divergent control-flow edge
 ; GISEL-NEXT:    s_cbranch_execnz .LBB3_2
 ; GISEL-NEXT:  .LBB3_1: ; %end

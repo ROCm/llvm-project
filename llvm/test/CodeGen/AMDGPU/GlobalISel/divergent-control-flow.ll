@@ -7,19 +7,19 @@ define i32 @divergent_if_swap_brtarget_order0(i32 %value) {
 ; CHECK-LABEL: divergent_if_swap_brtarget_order0:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; CHECK-NEXT:    ; implicit-def: $sgpr4
-; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], 0, v0
+; CHECK-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; CHECK-NEXT:    ; implicit-def: $sgpr6
+; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %if.true
 ; CHECK-NEXT:    global_load_dword v0, v[0:1], off glc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_readfirstlane_b32 s4, v0
+; CHECK-NEXT:    v_readfirstlane_b32 s6, v0
 ; CHECK-NEXT:  .LBB0_2: ; %endif
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    v_mov_b32_e32 v0, s4
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    v_mov_b32_e32 v0, s6
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 entry:
   %c = icmp ne i32 %value, 0
@@ -38,10 +38,10 @@ define i32 @divergent_if_swap_brtarget_order1(i32 %value) {
 ; CHECK-LABEL: divergent_if_swap_brtarget_order1:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[8:9], 0, v0
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
 ; CHECK-NEXT:    ; implicit-def: $sgpr6
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_2
 ; CHECK-NEXT:  .LBB1_1: ; %if.true
@@ -163,7 +163,7 @@ define void @constrained_if_register_class() {
 ; CHECK-NEXT:    s_add_u32 s4, s4, const.ptr@gotpcrel32@lo+4
 ; CHECK-NEXT:    s_addc_u32 s5, s5, const.ptr@gotpcrel32@hi+12
 ; CHECK-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x0
-; CHECK-NEXT:    s_mov_b32 s6, -1
+; CHECK-NEXT:    s_mov_b32 s8, -1
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
@@ -171,17 +171,17 @@ define void @constrained_if_register_class() {
 ; CHECK-NEXT:    v_mov_b32_e32 v1, s5
 ; CHECK-NEXT:    flat_load_dword v0, v[0:1]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    v_cmp_gt_f32_e32 vcc, 1.0, v0
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    v_mov_b32_e32 v0, s6
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    v_cmp_gt_f32_e64 s[4:5], 1.0, v0
+; CHECK-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
+; CHECK-NEXT:    v_mov_b32_e32 v0, s8
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB4_4
 ; CHECK-NEXT:  .LBB4_3: ; %bb7
-; CHECK-NEXT:    s_mov_b32 s4, 0
-; CHECK-NEXT:    v_mov_b32_e32 v0, s4
+; CHECK-NEXT:    s_mov_b32 s6, 0
+; CHECK-NEXT:    v_mov_b32_e32 v0, s6
 ; CHECK-NEXT:  .LBB4_4: ; %bb8
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; CHECK-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v0
 ; CHECK-NEXT:    s_xor_b64 exec, s[4:5], exec
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -237,10 +237,10 @@ define amdgpu_kernel void @break_loop(i32 %arg) {
 ; CHECK-NEXT:    ; in Loop: Header=BB5_1 Depth=1
 ; CHECK-NEXT:    global_load_dword v1, v[0:1], off glc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_cmp_lt_i32_e32 vcc, v0, v1
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_lt_i32_e64 s[4:5], v0, v1
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB5_1
 ; CHECK-NEXT:  .LBB5_3: ; %bb9

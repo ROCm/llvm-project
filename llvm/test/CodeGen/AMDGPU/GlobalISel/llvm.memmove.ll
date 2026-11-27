@@ -7,9 +7,9 @@ declare void @llvm.memmove.p1.p1.i32(ptr addrspace(1), ptr addrspace(1), i32, i1
 define amdgpu_cs void @memmove_p1i8(ptr addrspace(1) %dst, ptr addrspace(1) %src) {
 ; LOOP-LABEL: memmove_p1i8:
 ; LOOP:       ; %bb.0:
-; LOOP-NEXT:    v_cmp_ge_u64_e32 vcc, v[2:3], v[0:1]
-; LOOP-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; LOOP-NEXT:    s_mov_b64 exec, vcc
+; LOOP-NEXT:    v_cmp_ge_u64_e64 s[2:3], v[2:3], v[0:1]
+; LOOP-NEXT:    s_xor_b64 s[0:1], s[2:3], exec
+; LOOP-NEXT:    s_mov_b64 exec, s[2:3]
 ; LOOP-NEXT:    ; divergent control-flow edge
 ; LOOP-NEXT:    s_cbranch_execz .LBB0_2
 ; LOOP-NEXT:  .LBB0_1:

@@ -6,9 +6,9 @@ define void @and_vgpr_s32(i32 %lane.bit) {
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v31
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v0
+; CHECK-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
+; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]

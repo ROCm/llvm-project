@@ -340,23 +340,23 @@ define amdgpu_kernel void @global_atomicrmw_cfs_128B(ptr addrspace(1) %out, ptr 
 ; GFX13-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX13-NEXT:    s_load_b32 s4, s[4:5], 0x34 nv
 ; GFX13-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
-; GFX13-NEXT:    s_mov_b32 s5, exec_lo
+; GFX13-NEXT:    s_mov_b32 s6, exec_lo
 ; GFX13-NEXT:    ; implicit-def: $vgpr1
 ; GFX13-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX13-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX13-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX13-NEXT:    s_mov_b32 exec_lo, s6
+; GFX13-NEXT:    v_cmp_ne_u32_e64 s5, 0, v0
+; GFX13-NEXT:    s_xor_b32 s7, s5, exec_lo
+; GFX13-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX13-NEXT:    ; divergent control-flow edge
 ; GFX13-NEXT:    s_cbranch_execz .LBB15_2
 ; GFX13-NEXT:  .LBB15_1:
-; GFX13-NEXT:    s_bcnt1_i32_b32 s5, s5
+; GFX13-NEXT:    s_bcnt1_i32_b32 s6, s6
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    s_mul_i32 s5, s4, s5
+; GFX13-NEXT:    s_mul_i32 s6, s4, s6
 ; GFX13-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX13-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, s5
+; GFX13-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, s6
 ; GFX13-NEXT:    global_atomic_add_u32 v1, v1, v2, s[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_128B
 ; GFX13-NEXT:  .LBB15_2:
-; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX13-NEXT:    s_wait_loadcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_readfirstlane_b32 s2, v1
@@ -378,23 +378,23 @@ define amdgpu_kernel void @global_atomicrmw_cfs_64B(ptr addrspace(1) %out, ptr a
 ; GFX13-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX13-NEXT:    s_load_b32 s4, s[4:5], 0x34 nv
 ; GFX13-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
-; GFX13-NEXT:    s_mov_b32 s5, exec_lo
+; GFX13-NEXT:    s_mov_b32 s6, exec_lo
 ; GFX13-NEXT:    ; implicit-def: $vgpr1
 ; GFX13-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX13-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX13-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX13-NEXT:    s_mov_b32 exec_lo, s6
+; GFX13-NEXT:    v_cmp_ne_u32_e64 s5, 0, v0
+; GFX13-NEXT:    s_xor_b32 s7, s5, exec_lo
+; GFX13-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX13-NEXT:    ; divergent control-flow edge
 ; GFX13-NEXT:    s_cbranch_execz .LBB16_2
 ; GFX13-NEXT:  .LBB16_1:
-; GFX13-NEXT:    s_bcnt1_i32_b32 s5, s5
+; GFX13-NEXT:    s_bcnt1_i32_b32 s6, s6
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    s_mul_i32 s5, s4, s5
+; GFX13-NEXT:    s_mul_i32 s6, s4, s6
 ; GFX13-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX13-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, s5
+; GFX13-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, s6
 ; GFX13-NEXT:    global_atomic_add_u32 v1, v1, v2, s[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_64B
 ; GFX13-NEXT:  .LBB16_2:
-; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX13-NEXT:    s_wait_loadcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_readfirstlane_b32 s2, v1
@@ -416,23 +416,23 @@ define amdgpu_kernel void @global_atomicrmw_cfs_32B(ptr addrspace(1) %out, ptr a
 ; GFX13-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24 nv
 ; GFX13-NEXT:    s_load_b32 s4, s[4:5], 0x34 nv
 ; GFX13-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
-; GFX13-NEXT:    s_mov_b32 s5, exec_lo
+; GFX13-NEXT:    s_mov_b32 s6, exec_lo
 ; GFX13-NEXT:    ; implicit-def: $vgpr1
 ; GFX13-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX13-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GFX13-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX13-NEXT:    s_mov_b32 exec_lo, s6
+; GFX13-NEXT:    v_cmp_ne_u32_e64 s5, 0, v0
+; GFX13-NEXT:    s_xor_b32 s7, s5, exec_lo
+; GFX13-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX13-NEXT:    ; divergent control-flow edge
 ; GFX13-NEXT:    s_cbranch_execz .LBB17_2
 ; GFX13-NEXT:  .LBB17_1:
-; GFX13-NEXT:    s_bcnt1_i32_b32 s5, s5
+; GFX13-NEXT:    s_bcnt1_i32_b32 s6, s6
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    s_mul_i32 s5, s4, s5
+; GFX13-NEXT:    s_mul_i32 s6, s4, s6
 ; GFX13-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX13-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, s5
+; GFX13-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, s6
 ; GFX13-NEXT:    global_atomic_add_u32 v1, v1, v2, s[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_32B
 ; GFX13-NEXT:  .LBB17_2:
-; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX13-NEXT:    s_wait_loadcnt 0x0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_readfirstlane_b32 s2, v1

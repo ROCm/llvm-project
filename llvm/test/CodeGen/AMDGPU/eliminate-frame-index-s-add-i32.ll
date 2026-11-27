@@ -14,10 +14,10 @@ define amdgpu_kernel void @kernel() {
 ; CHECK-NEXT:    s_addc_u32 s1, s1, 0
 ; CHECK-NEXT:    s_mov_b32 s4, 4
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    v_cmp_ne_u16_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CHECK-NEXT:    v_cmp_ne_u16_e64 s[8:9], 0, v0
+; CHECK-NEXT:    s_xor_b64 s[6:7], s[8:9], exec
 ; CHECK-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %then
