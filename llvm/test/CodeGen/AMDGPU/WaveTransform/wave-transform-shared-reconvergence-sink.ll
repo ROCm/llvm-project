@@ -28,36 +28,38 @@ define amdgpu_kernel void @shared_sink(ptr addrspace(1) %out, i32 %guard_limit, 
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_bitcmp1_b32 s5, 0
 ; CHECK-NEXT:    v_add_u32_e32 v2, -2, v2
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v1
 ; CHECK-NEXT:    s_barrier
 ; CHECK-NEXT:    ; implicit-def: $vgpr3
 ; CHECK-NEXT:    ; implicit-def: $vgpr3
 ; CHECK-NEXT:    s_cbranch_scc0 .LBB0_4
 ; CHECK-NEXT:  ; %bb.1: ; %armA
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 11
-; CHECK-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_xor_b64 s[2:3], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
 ; CHECK-NEXT:  .LBB0_2: ; %ldsA
 ; CHECK-NEXT:    ds_read_u16 v1, v2
 ; CHECK-NEXT:  .LBB0_3: ; %joinA
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
-; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, s4, v0
+; CHECK-NEXT:    v_cmp_gt_u32_e64 s[4:5], s4, v0
 ; CHECK-NEXT:    v_mov_b32_e32 v2, 0
-; CHECK-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_6
 ; CHECK-NEXT:    s_branch .LBB0_7
 ; CHECK-NEXT:  .LBB0_4: ; %armB
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 22
-; CHECK-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 s[0:1], s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_6
 ; CHECK-NEXT:  .LBB0_5: ; %bodyB
 ; CHECK-NEXT:    ds_read_u16 v1, v2
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:  .LBB0_6: ; %sink
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)

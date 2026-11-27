@@ -32,7 +32,7 @@ define amdgpu_kernel void @test(ptr addrspace(1) %out, ptr addrspace(1) %aux, i3
 ; CHECK-NEXT:    v_and_b32_e32 v1, 1, v0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v1
 ; CHECK-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; CHECK-NEXT:    s_or_b64 s[6:7], s[4:5], vcc
+; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_5
