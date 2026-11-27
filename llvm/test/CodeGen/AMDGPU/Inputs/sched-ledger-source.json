@@ -1,0 +1,37 @@
+{
+ "version": 2,
+ "functions": [
+  {
+   "match": "test",
+   "regions": [
+    {
+     "sig": "45dd1065",
+     "n": 8,
+     "order": [
+      [
+       4,
+       2
+      ]
+     ],
+     "optab": [
+      "COPY",
+      "V_AND_B32_e32",
+      "V_OR_B32_e32",
+      "V_XOR_B32_e32"
+     ],
+     "ops": [
+      0,
+      0,
+      1,
+      2,
+      3,
+      2,
+      2,
+      0
+     ]
+    }
+   ],
+   "source": "an-unrelated-tu.cpp"
+  }
+ ]
+}

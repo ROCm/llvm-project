@@ -501,6 +501,13 @@ struct LedgerPass : RequiredPassInfoMixin<LedgerPass> {
     if (!Spec || !*Spec)
       return PreservedAnalyses::all();
     bool Verbose = std::getenv("PSCHED_VERBOSE") != nullptr;
+    // Record the translation unit on every function: device code is generated
+    // at link time, where the module no longer identifies it, and the backend
+    // needs it to evaluate a region entry's "source" selector without relying
+    // on debug info.
+    for (Function &F : M)
+      if (!F.isDeclaration() && !F.hasFnAttribute("amdgpu-sched-ledger-tu"))
+        F.addFnAttr("amdgpu-sched-ledger-tu", sys::path::filename(M.getSourceFileName()));
     // PSCHED_LEDGER is a colon-separated list of files or directories of .json files.
     // Plain C++ file access is used on purpose: assertion builds of LLVM forbid its own file
     // API inside the pass pipeline (IO sandbox).

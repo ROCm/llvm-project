@@ -330,8 +330,28 @@ FunctionState &enterFunction(MachineFunction &MF) {
   for (FunctionEntry &FE : getLedger()) {
     if (FE.Match != "*" && !MF.getName().contains(FE.Match))
       continue;
-    if (!FE.Source.empty() && SP && !SP->getFilename().contains(FE.Source))
-      continue;
+    if (!FE.Source.empty()) {
+      // Which source file is this function from? The plugin records it on the
+      // function; debug info is the fallback. If neither is there the selector
+      // cannot be evaluated, and the entry is NOT applied: it must never reach
+      // more code in a build without debug info than in one with it.
+      StringRef TU =
+          MF.getFunction().getFnAttribute("amdgpu-sched-ledger-tu").getValueAsString();
+      if (TU.empty() && SP)
+        TU = SP->getFilename();
+      if (TU.empty()) {
+        static bool Warned = false;
+        if (!Warned)
+          errs() << "psched: warning: cannot evaluate \"source\": \"" << FE.Source
+                 << "\" for " << MF.getName()
+                 << " (no translation-unit attribute from the plugin and no debug info); "
+                    "entries with a source selector are not applied to such functions\n";
+        Warned = true;
+        continue;
+      }
+      if (!TU.contains(FE.Source))
+        continue;
+    }
     for (RegionEntry &R : FE.Regions) {
       R.Validated = R.Stale = R.CycleWarned = false;
       if (R.Relative) {

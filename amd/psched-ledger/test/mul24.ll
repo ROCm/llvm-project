@@ -30,8 +30,9 @@
 ; The function a choice changed is marked, so the backend can warn if it spills; an
 ; unchanged one is not.
 ; MARK: define i32 @mul_proven(i8 %p, i16 %q) #[[M:[0-9]+]]
-; MARK: define i32 @mul_unknown(i32 %x, i32 %y) {
-; MARK: attributes #[[M]] = { "amdgpu-sched-ledger-changed"="mul24" }
+; MARK: define i32 @mul_unknown(i32 %x, i32 %y) #[[U:[0-9]+]]
+; MARK: attributes #[[M]] = { "amdgpu-sched-ledger-changed"="mul24" "amdgpu-sched-ledger-tu"="mul24.ll" }
+; MARK: attributes #[[U]] = { "amdgpu-sched-ledger-tu"="mul24.ll" }
 
 target triple = "amdgcn-amd-amdhsa"
 
