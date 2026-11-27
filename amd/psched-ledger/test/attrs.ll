@@ -10,7 +10,7 @@
 
 ; ATTR: define amdgpu_kernel void @kernel_a() #[[A:[0-9]+]]
 ; ATTR: define amdgpu_kernel void @kernel_b() {{[{]$}}
-; ATTR: attributes #[[A]] = { "amdgpu-sched-strategy"="max-ilp" }
+; ATTR: attributes #[[A]] = { "amdgpu-sched-ledger-changed"="attrs" "amdgpu-sched-strategy"="max-ilp" }
 ; ATTR-NOT: alwaysinline
 
 ; MSG-DAG: psched: warning: attribute 'alwaysinline' is not a scheduling attribute; ignored

@@ -967,6 +967,29 @@ void SchedLedger::apply(ScheduleDAGInstrs *DAGInstrs) {
 
 } // namespace
 
+void llvm::AMDGPU::reportLedgerSpills(const MachineFunction &MF,
+                                      unsigned VGPRSpill, unsigned SGPRSpill) {
+  if (!VGPRSpill && !SGPRSpill)
+    return;
+  const Function &F = MF.getFunction();
+  std::string What =
+      F.getFnAttribute("amdgpu-sched-ledger-changed").getValueAsString().str();
+  FunctionState &S = state();
+  if (S.Name == MF.getName() && S.Number == MF.getFunctionNumber())
+    for (RegionEntry *R : S.Regions)
+      if (R->Validated && !R->Stale) {
+        What += (What.empty() ? "" : ",") + ("region " + R->Hash);
+        break;
+      }
+  if (What.empty())
+    return;
+  errs() << "psched: warning: " << MF.getName() << " spills " << VGPRSpill
+         << " VGPR(s) and " << SGPRSpill
+         << " SGPR(s), and the ledger changed it (" << What
+         << "). Check whether the entry caused it: compare with a build "
+            "without it (tools/kinfo.py --diff)\n";
+}
+
 void llvm::AMDGPU::addSchedLedgerDAGMutation(ScheduleDAGMI *DAG,
                                              MachineFunction *MF) {
   FunctionState &S = enterFunction(*MF);

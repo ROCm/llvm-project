@@ -16,6 +16,7 @@
 //
 
 #include "AMDGPUAsmPrinter.h"
+#include "AMDGPUSchedLedger.h"
 #include "AMDGPU.h"
 #include "AMDGPUHSAMetadataStreamer.h"
 #include "AMDGPUMCResourceInfo.h"
@@ -999,6 +1000,8 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
 
   emitResourceUsageRemarks(MF, CurrentProgramInfo, MFI->isModuleEntryFunction(),
                            STM.hasMAIInsts());
+  AMDGPU::reportLedgerSpills(MF, CurrentProgramInfo.VGPRSpill,
+                             CurrentProgramInfo.SGPRSpill);
 
   {
     using RIK = MCResourceInfo::ResourceInfoKind;

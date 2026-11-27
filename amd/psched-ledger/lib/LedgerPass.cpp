@@ -33,6 +33,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PatternMatch.h"
@@ -85,6 +86,17 @@ bool callsNamed(const Instruction &I, StringRef Name) {
   const auto *CB = dyn_cast<CallBase>(&I);
   const Function *Callee = CB ? CB->getCalledFunction() : nullptr;
   return Callee && Callee->getName().contains(Name);
+}
+
+/// Records on F what the ledger changed in it ("attrs", a choice name,
+/// "hints"). The backend reads it to warn when such a function spills.
+void markChanged(Function &F, StringRef What) {
+  constexpr StringLiteral Key = "amdgpu-sched-ledger-changed";
+  std::string V = F.getFnAttribute(Key).getValueAsString().str();
+  for (StringRef Part : split(V, ','))
+    if (Part == What)
+      return;
+  F.addFnAttr(Key, V.empty() ? What.str() : V + "," + What.str());
 }
 
 void emit(IRBuilder<> &B, Intrinsic::ID ID, ArrayRef<uint32_t> Args) {
@@ -586,6 +598,7 @@ struct LedgerPass : RequiredPassInfoMixin<LedgerPass> {
                 continue;
               }
               F.addFnAttr(Name, *Val);
+              markChanged(F, "attrs");
               Changed = true;
               if (Verbose)
                 errs() << "psched: " << F.getName() << " <- " << StringRef(KV.first) << "=" << *Val << "\n";
@@ -608,6 +621,8 @@ struct LedgerPass : RequiredPassInfoMixin<LedgerPass> {
               continue;
             }
             Changed |= R.first != 0;
+            if (R.first)
+              markChanged(F, *What);
             if (Verbose || (!R.first && R.second))
               errs() << "psched: " << F.getName() << " <- choose " << *What << ": " << R.first << " applied, "
                      << R.second << " not provable (left unchanged)\n";
@@ -618,6 +633,8 @@ struct LedgerPass : RequiredPassInfoMixin<LedgerPass> {
               unsigned N = applyHint(F, *H);
               HintBlocks[I] += N;
               Changed |= N != 0;
+              if (N)
+                markChanged(F, "hints");
               if (Verbose && N)
                 errs() << "psched: " << F.getName() << " <- hint #" << I << " at "
                        << (H->getInteger("line") ? "line " + std::to_string(*H->getInteger("line"))

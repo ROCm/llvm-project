@@ -25,6 +25,12 @@ class StringRef;
 
 namespace AMDGPU {
 
+/// Warns when \p MF spills and a ledger changed it (an IR-level entry, marked
+/// by the plugin with the "amdgpu-sched-ledger-changed" attribute, or a region
+/// entry bound in it). Called once the register counts are final.
+void reportLedgerSpills(const MachineFunction &MF, unsigned VGPRSpill,
+                        unsigned SGPRSpill);
+
 /// Adds the ledger mutation to \p DAG when a ledger applies to \p MF or a DAG
 /// dump was requested. Does nothing otherwise, so default codegen is unchanged.
 void addSchedLedgerDAGMutation(ScheduleDAGMI *DAG, MachineFunction *MF);

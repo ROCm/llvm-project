@@ -3,6 +3,7 @@
 ; and counted, so a ledger cannot change a result.
 
 ; RUN: env PSCHED_LEDGER=%S/Inputs/mul24.json %opt -load-pass-plugin=%psched-plugin -passes='default<O0>' -S %s -o - 2>/dev/null | %FileCheck %s
+; RUN: env PSCHED_LEDGER=%S/Inputs/mul24.json %opt -load-pass-plugin=%psched-plugin -passes='default<O0>' -S %s -o - 2>/dev/null | %FileCheck %s --check-prefix=MARK
 ; RUN: env PSCHED_LEDGER=%S/Inputs/mul24.json PSCHED_VERBOSE=1 %opt -load-pass-plugin=%psched-plugin -passes='default<O0>' -S %s -o - 2>&1 >/dev/null | %FileCheck %s --check-prefix=MSG
 ; RUN: %opt -load-pass-plugin=%psched-plugin -passes='default<O0>' -S %s -o - | %FileCheck %s --check-prefix=NONE
 
@@ -25,6 +26,12 @@
 ; MSG-DAG: psched: warning: unknown choice 'no_such_choice'; ignored
 
 ; NONE-NOT: amdgcn.mul.i24
+
+; The function a choice changed is marked, so the backend can warn if it spills; an
+; unchanged one is not.
+; MARK: define i32 @mul_proven(i8 %p, i16 %q) #[[M:[0-9]+]]
+; MARK: define i32 @mul_unknown(i32 %x, i32 %y) {
+; MARK: attributes #[[M]] = { "amdgpu-sched-ledger-changed"="mul24" }
 
 target triple = "amdgcn-amd-amdhsa"
 
