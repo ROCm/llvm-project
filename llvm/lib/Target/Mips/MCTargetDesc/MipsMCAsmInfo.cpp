@@ -24,7 +24,7 @@ void MipsELFMCAsmInfo::anchor() {}
 
 MipsELFMCAsmInfo::MipsELFMCAsmInfo(const Triple &TheTriple,
                                    const MCTargetOptions &Options)
-    : MCAsmInfoELF(Options) {
+    : MCAsmInfoELF(TheTriple, Options) {
   IsLittleEndian = TheTriple.isLittleEndian();
 
   MipsABIInfo ABI =
@@ -47,6 +47,9 @@ MipsELFMCAsmInfo::MipsELFMCAsmInfo(const Triple &TheTriple,
   UseAssignmentForEHBegin = true;
   SupportsDebugInformation = true;
   DwarfRegNumForCFI = true;
+
+  // .bss is supported without .section.
+  SectionDirectives.insert(".bss");
 }
 
 void MipsCOFFMCAsmInfo::anchor() {}
