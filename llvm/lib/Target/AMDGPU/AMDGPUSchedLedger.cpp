@@ -986,8 +986,9 @@ void llvm::AMDGPU::reportLedgerSpills(const MachineFunction &MF,
   errs() << "psched: warning: " << MF.getName() << " spills " << VGPRSpill
          << " VGPR(s) and " << SGPRSpill
          << " SGPR(s), and the ledger changed it (" << What
-         << "). Check whether the entry caused it: compare with a build "
-            "without it (tools/kinfo.py --diff)\n";
+         << "). Check whether the entry caused it (compare with a build "
+            "without it) and whether the reloads execute in a hot loop: the "
+            "cost follows the reloads executed, not the spill count\n";
 }
 
 void llvm::AMDGPU::addSchedLedgerDAGMutation(ScheduleDAGMI *DAG,
