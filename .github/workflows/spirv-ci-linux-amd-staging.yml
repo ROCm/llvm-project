@@ -146,6 +146,13 @@ jobs:
           path: rocm-cmake
           persist-credentials: false
 
+      # The source checkout lacks the generated package version file.
+      - name: Configure and install rocm-cmake
+        run: |
+          cmake -G Ninja -S rocm-cmake -B build-rocm-cmake \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING
+          cmake --install build-rocm-cmake --prefix $PWD/$STAGING
+
       - name: Configure ROCR-Runtime
         run: |
           cmake -G Ninja -S rocm-systems/projects/rocr-runtime -B "$ROCR_BUILD" \
@@ -165,14 +172,17 @@ jobs:
 
       # CLR configure imports Python packages listed in TheRock requirements.txt
       # (cxxheaderparser today). The manylinux image does not install that file,
-      # so take the list from TheRock main and install it here.
-      - name: Checkout TheRock Python requirements
+      # so take the list from TheRock main and install it here. Also use
+      # TheRock's ROCm version when generating the rocm-core headers.
+      - name: Checkout TheRock build inputs
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/TheRock
           ref: main
           path: TheRock
-          sparse-checkout: requirements.txt
+          sparse-checkout: |
+            requirements.txt
+            version.json
           sparse-checkout-cone-mode: false
           fetch-depth: 1
           persist-credentials: false
@@ -180,31 +190,24 @@ jobs:
       - name: Install TheRock Python requirements
         run: python3 -m pip install -r TheRock/requirements.txt
 
-      - name: Configure CLR (HIP runtime)
+      # libhipcxx's HIP headers include rocm-core/rocm_version.h.
+      - name: Configure, build and install rocm-core
         run: |
-          cmake -G Ninja -S rocm-systems/projects/clr -B "$CLR_BUILD" \
+          ROCM_VERSION=$(python3 -c \
+            'import json; print(json.load(open("TheRock/version.json"))["rocm-version"])')
+          cmake -G Ninja -S rocm-systems/projects/rocm-core -B build-rocm-core \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
-            -DBUILD_SHARED_LIBS=ON \
-            -DCMAKE_INSTALL_LIBDIR=lib \
             -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
-            -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD;$PWD/rocm-cmake/share/rocm" \
-            -DHIP_PLATFORM=amd \
-            -DHIP_COMMON_DIR=$PWD/rocm-systems/projects/hip \
-            -DCLR_BUILD_HIP=ON \
-            -DROCM_KPACK_ENABLED=OFF \
-            -DHIP_ENABLE_ROCPROFILER_REGISTER=OFF
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DBUILD_SHARED_LIBS=ON \
+            -DDISABLE_CPACK=ON \
+            -DROCM_VERSION="$ROCM_VERSION"
+          cmake --build build-rocm-core
+          cmake --install build-rocm-core --prefix $PWD/$STAGING
 
-      - name: Build CLR
-        run: ninja -C "$CLR_BUILD" install
-
-      - name: Stage translator binary for runtime SPIRV JIT
-        run: |
-          mkdir -p "$STAGING/bin"
-          cp -a "$LLVM_BUILD/bin/amd-llvm-spirv" "$STAGING/bin/"
-
-      # test_hecbench compiles with hipcc.
+      # CLR installs hipcc and hipconfig whenever their bin directory exists.
+      # Stage both before configuring CLR; rocm-core creates staging/bin.
       - name: Build and stage hipcc
         run: |
           cmake -G Ninja -S llvm-project/amd/hipcc -B build-hipcc \
@@ -228,6 +231,52 @@ jobs:
           esac
           EOF
           chmod +x "$STAGING/bin/hipconfig"
+
+      - name: Configure CLR (HIP runtime)
+        run: |
+          cmake -G Ninja -S rocm-systems/projects/clr -B "$CLR_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
+            -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
+            -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD" \
+            -DHIP_PLATFORM=amd \
+            -DHIP_COMMON_DIR=$PWD/rocm-systems/projects/hip \
+            -DCLR_BUILD_HIP=ON \
+            -DROCM_KPACK_ENABLED=OFF \
+            -DHIP_ENABLE_ROCPROFILER_REGISTER=OFF
+
+      - name: Build CLR
+        run: ninja -C "$CLR_BUILD" install
+
+      - name: Stage translator binary for runtime SPIRV JIT
+        run: |
+          mkdir -p "$STAGING/bin"
+          cp -a "$LLVM_BUILD/bin/amd-llvm-spirv" "$STAGING/bin/"
+
+      # hipCUB's installed CMake package requires libhipcxx. Stage its headers
+      # and package config so both runtime artifacts carry the dependency.
+      - name: Checkout libhipcxx
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/libhipcxx
+          ref: amd-develop
+          path: libhipcxx
+          persist-credentials: false
+
+      - name: Configure and install libhipcxx
+        run: |
+          cmake -G Ninja -S libhipcxx -B build-libhipcxx \
+            -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DCMAKE_PREFIX_PATH="$PWD/$STAGING" \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DLIBCUDACXX_ENABLE_HIP=OFF \
+            -DLIBCUDACXX_ENABLE_LIBCUDACXX_TESTS=OFF \
+            -Dlibhipcxx_ENABLE_CMAKE_TESTS=OFF
+          cmake --install build-libhipcxx --prefix $PWD/$STAGING
 
       # Build rocPRIM.
       - name: Checkout rocPRIM
@@ -736,7 +785,6 @@ jobs:
             -DCMAKE_HIP_COMPILER=$LLVM_PATH/bin/clang++                        \
             -DCMAKE_HIP_COMPILER_ROCM_ROOT=$STAGING                            \
             -DCMAKE_PREFIX_PATH=$STAGING                                       \
-            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY                     \
             -DHIP_PLATFORM=amd                                                 \
             -DROCM_PATH=$STAGING                                               \
             -DCMAKE_HIP_ARCHITECTURES=amdgcnspirv                              \
