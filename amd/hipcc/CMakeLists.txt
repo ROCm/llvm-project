@@ -41,18 +41,36 @@ set(HIPCONFIG_SOURCES
   src/utils.cpp
 )
 
+set(HIPCC_DEFAULT_ROCM_PATH "/opt/rocm" CACHE STRING "Default ROCm root path")
+set(HIPCC_DEFAULT_HIP_PATH "/opt/rocm" CACHE STRING "Default HIP SDK root path")
+set(HIPCC_DEFAULT_HIP_CLANG_PATH "/opt/rocm/llvm/bin" CACHE STRING "Default HIP-Clang binary path")
+
 add_executable(${HIPCC_BIN} ${HIPCC_SOURCES})
 if(NOT WIN32)
   # C++17 does not require std lib linking.
   target_link_libraries(${HIPCC_BIN} ${ADDITIONAL_SHARED_LIBRARIES_TO_LINK})
 endif()
+target_compile_definitions(
+    ${HIPCC_BIN}
+    PRIVATE
+    HIPCC_DEFAULT_ROCM_PATH="${HIPCC_DEFAULT_ROCM_PATH}"
+    HIPCC_DEFAULT_HIP_PATH="${HIPCC_DEFAULT_HIP_PATH}"
+    HIPCC_DEFAULT_HIP_CLANG_PATH="${HIPCC_DEFAULT_HIP_CLANG_PATH}"
+)
 
 add_executable(${HIPCONFIG_BIN} ${HIPCONFIG_SOURCES})
 if(NOT WIN32)
   # C++17 does not require std lib linking.
   target_link_libraries(${HIPCONFIG_BIN} ${ADDITIONAL_SHARED_LIBRARIES_TO_LINK})
 endif()
-
+target_compile_definitions(
+    ${HIPCONFIG_BIN}
+    PRIVATE
+    HIPCC_DEFAULT_ROCM_PATH="${HIPCC_DEFAULT_ROCM_PATH}"
+    HIPCC_DEFAULT_HIP_PATH="${HIPCC_DEFAULT_HIP_PATH}"
+    HIPCC_DEFAULT_HIP_CLANG_PATH="${HIPCC_DEFAULT_HIP_CLANG_PATH}"
+)
+  
 # Copy scripts and batch files to build directory.
 file(COPY ${PROJECT_SOURCE_DIR}/bin/ DESTINATION ${PROJECT_BINARY_DIR})
 
