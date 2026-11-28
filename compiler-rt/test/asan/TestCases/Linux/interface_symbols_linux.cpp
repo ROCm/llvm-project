@@ -2,7 +2,7 @@
 // If you're changing this file, please also change
 // ../Darwin/interface_symbols_darwin.cpp
 
-// RUN: %clangxx -x c++-header -o - -E %p/../../../../lib/asan/asan_interface.inc  \
+// RUN: %clangxx -x c++-header -o - -E %amdhsa_defines %p/../../../../lib/asan/asan_interface.inc  \
 // RUN:  | sed "s/INTERFACE_FUNCTION/\nINTERFACE_FUNCTION/g" >  %t.asan_interface.inc
 // RUN: %clangxx_asan -O2 %s -o %t.exe
 // RUN: nm -D %t.exe | grep " [TWw] "                                          \

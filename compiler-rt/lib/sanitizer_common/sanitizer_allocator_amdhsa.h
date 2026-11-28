@@ -19,14 +19,38 @@
 static const DeviceAllocationType DAT_AMDHSA =
     static_cast<DeviceAllocationType>(1);
 
-// dlopen handle for the loaded ROCr (libhsa-runtime64), or null.
-void* GetHsaRuntimeHandle();
+// dlopen handle for the loaded ROCr (libhsa-runtime64), or null. Unless
+// allow_dlopen, only a ROCr that is already loaded is found.
+void* GetHsaRuntimeHandle(bool allow_dlopen = true);
 
 class AmdHsaDeviceAllocator {
  public:
   static constexpr bool kEnableDeviceBackend = true;
 
+  // The ROCr functions the device allocator uses.
+  struct HsaFunctions {
+    hsa_status_t (*memory_pool_allocate)(hsa_amd_memory_pool_t memory_pool,
+                                         size_t size, uint32_t flags,
+                                         void** ptr);
+    hsa_status_t (*memory_pool_free)(void* ptr);
+    hsa_status_t (*pointer_info)(const void* ptr, hsa_amd_pointer_info_t* info,
+                                 void* (*alloc)(size_t),
+                                 uint32_t* num_agents_accessible,
+                                 hsa_agent_t** accessible);
+    hsa_status_t (*vmem_address_reserve_align)(void** ptr, size_t size,
+                                               uint64_t address,
+                                               uint64_t alignment,
+                                               uint64_t flags);
+    hsa_status_t (*vmem_address_free)(void* ptr, size_t size);
+    hsa_status_t (*register_system_event_handler)(
+        hsa_amd_system_event_callback_t callback, void* data);
+  };
+
   static bool Init(bool allow_dlopen = false);
+  // Uses these functions instead of the ROCr's found by name, which Init then
+  // no longer looks for. Only while the device allocator holds no chunk and no
+  // thread can be in Allocate, Deallocate or GetPointerInfo.
+  static void SetFunctions(const HsaFunctions& fns);
   static void* Allocate(uptr size, uptr alignment,
                         DeviceAllocationInfo* da_info);
   static void Deallocate(void* p);
