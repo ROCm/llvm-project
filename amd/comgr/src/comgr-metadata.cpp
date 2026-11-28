@@ -23,8 +23,10 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include "llvm/BinaryFormat/Magic.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ELFObjectFile.h"
+#include "llvm/Object/OffloadBinary.h"
 #include "llvm/Support/AMDGPUMetadata.h"
 #include "llvm/Support/BinaryStreamReader.h"
 #include "llvm/Support/MathExtras.h"
@@ -32,6 +34,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
+#include "llvm/TargetParser/Triple.h"
 #include <cstddef>
 #include <iostream>
 #include <optional>
@@ -767,6 +770,63 @@ lookUpCodeObjectInSharedObject(DataObject *DataP,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
+// Same rewrite as clang::normalizeForBundler, the runtime uses a fixed string
+// format for reporting the ISA.
+static std::string isaFromOffloadEntry(StringRef TripleStr, StringRef Arch) {
+  Triple T(TripleStr);
+  std::string Prefix;
+  if (!Arch.empty() && T.isAMDGPU())
+    Prefix = ("amdgcn-" + T.getVendorName() + "-" + T.getOSName() + "-" +
+              T.getEnvironmentName())
+                 .str();
+  else if (!Arch.empty())
+    Prefix = (T.getArchName() + "-" + T.getVendorName() + "-" + T.getOSName() +
+              "-" + T.getEnvironmentName())
+                 .str();
+  else
+    return T.normalize(Triple::CanonicalForm::FOUR_IDENT);
+
+  return (Prefix + "-" + Arch).str();
+}
+
+static amd_comgr_status_t
+lookUpOffloadBinary(DataObject *DataP, amd_comgr_code_object_info_t *QueryList,
+                    size_t QueryListSize) {
+  for (size_t I = 0; I < QueryListSize; ++I) {
+    QueryList[I].offset = 0;
+    QueryList[I].size = 0;
+  }
+
+  StringRef Bytes(DataP->Data, DataP->Size);
+  Expected<SmallVector<std::unique_ptr<OffloadBinary>>> BinariesOrErr =
+      OffloadBinary::create(MemoryBufferRef(Bytes, ""));
+  if (!BinariesOrErr) {
+    consumeError(BinariesOrErr.takeError());
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  for (const std::unique_ptr<OffloadBinary> &Binary : *BinariesOrErr) {
+    StringRef Image = Binary->getImage();
+    if (Image.empty())
+      continue;
+
+    std::string CodeObjectIsa =
+        isaFromOffloadEntry(Binary->getTriple(), Binary->getArch());
+    StringRef Owned = Binary->getMemoryBufferRef().getBuffer();
+    uint64_t Offset = static_cast<uint64_t>(Image.data() - Owned.data());
+    for (size_t J = 0; J < QueryListSize; ++J) {
+      if (QueryList[J].size != 0)
+        continue;
+      if (!isCompatibleIsaName(QueryList[J].isa, CodeObjectIsa))
+        continue;
+      QueryList[J].offset = Offset;
+      QueryList[J].size = Image.size();
+    }
+  }
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
 amd_comgr_status_t lookUpCodeObject(DataObject *DataP,
                                     amd_comgr_code_object_info_t *QueryList,
                                     size_t QueryListSize) {
@@ -774,6 +834,10 @@ amd_comgr_status_t lookUpCodeObject(DataObject *DataP,
   if (DataP->DataKind == AMD_COMGR_DATA_KIND_EXECUTABLE) {
     return lookUpCodeObjectInSharedObject(DataP, QueryList, QueryListSize);
   }
+
+  if (identify_magic(StringRef(DataP->Data, DataP->Size)) ==
+      file_magic::offload_binary)
+    return lookUpOffloadBinary(DataP, QueryList, QueryListSize);
 
   int Seen = 0;
   BinaryStreamReader Reader(StringRef(DataP->Data, DataP->Size),
