@@ -29,6 +29,12 @@ on:
         default: false
       extra_cmake_options:
         type: string
+      llvm_ref:
+        # Optional: branch of ROCm/llvm-project to build instead of the
+        # compiler/amd-llvm pointer from TheRock. Used for memory baseline runs.
+        description: "Optional ROCm/llvm-project branch to build (empty = default pointer)"
+        type: string
+        default: ""
 
   workflow_call:
     inputs:
@@ -181,6 +187,26 @@ jobs:
           git submodule status
           git submodule
  
+      # Optional llvm_ref input (workflow_dispatch only): pin compiler/amd-llvm to
+      # the head of the given ROCm/llvm-project branch, as the PR-param step does.
+      - name: Pin compiler/amd-llvm to llvm_ref
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.llvm_ref != '' }}
+        env:
+          LLVM_REF: ${{ inputs.llvm_ref }}
+        run: |
+          git config --global --add safe.directory "$PWD"
+          LLVM_SHA="$(git ls-remote https://github.com/ROCm/llvm-project.git "refs/heads/${LLVM_REF}" | awk '{print $1}')"
+          if [ -z "${LLVM_SHA}" ]; then
+            echo "::error::llvm_ref '${LLVM_REF}' not found as a branch in ROCm/llvm-project"
+            exit 1
+          fi
+          echo "Pinning compiler/amd-llvm to ${LLVM_REF} @ ${LLVM_SHA}"
+          git update-index --cacheinfo 160000,"${LLVM_SHA}","compiler/amd-llvm"
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
+          git commit -m "Pin compiler/amd-llvm to ${LLVM_REF} for memory baseline run"
+          git submodule status
+
       - name: Install python deps
         run: |
           pip install -r requirements.txt
