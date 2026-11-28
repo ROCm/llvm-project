@@ -1,0 +1,64 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+#
+# trivy configuration
+# Reference: https://trivy.dev/latest/docs/references/configuration/config-file/
+# Local scan: trivy fs --config .github/scan_tools_configs/trivy.yml .
+#
+# Trivy configuration for this repository's security scans.
+#
+# This file defines the complete scanner policy;
+# Keep repository-specific suppressions and tuning here.
+#
+# Ways to suppress a finding, narrowest first:
+#
+#   1. `.trivyignore` -- one vulnerability, misconfiguration or secret rule
+#      ID per line. Add `exp:YYYY-MM-DD` for a temporary suppression:
+#          CVE-2019-14697 exp:2027-01-01
+#      Reference: https://trivy.dev/latest/docs/configuration/filtering/#trivyignore
+#      Keep it beside this file (`.github/scan_tools_configs/.trivyignore`)
+#      or at the repository root. The file beside this config takes
+#      precedence; the two are never merged. The `.trivyignore` here is
+#      a commented placeholder.
+#
+#   2. `scan.skip-dirs` / `scan.skip-files` below -- paths trivy never
+#      reads, for vendored trees and generated output. Anything found only
+#      there is not scanned at all, so keep entries narrow.
+
+# Environment and generated-output exclusions support local scans; these
+# paths are absent from clean CI checkouts.
+scan:
+  skip-dirs:
+    - .git
+    - .venv*
+    - venv*
+    - build
+    - dist
+    - node_modules
+    - __pycache__
+
+  # Files owned by upstream llvm/llvm-project that this fork does not
+  # edit, so Trivy findings in them are skipped here (not fixed).
+  skip-files:
+    # Python and npm dependency pins
+    - llvm/docs/requirements.txt
+    - llvm/utils/git/requirements.txt
+    - mlir/utils/vscode/package-lock.json
+    - openmp/docs/sphinx/requirements.txt
+    # Dockerfiles (DS-0002, DS-0010, DS-0029)
+    - .ci/metrics/Dockerfile
+    - .github/workflows/containers/github-action-ci-tooling/Dockerfile
+    - .github/workflows/containers/github-action-ci-windows/Dockerfile
+    - .github/workflows/containers/github-action-ci/Dockerfile
+    - .github/workflows/containers/libc/Dockerfile
+    - bolt/utils/docker-tests/Dockerfile
+    - bolt/utils/docker/Dockerfile
+    - clang/utils/analyzer/Dockerfile
+    - libc/utils/buildbot/Dockerfile
+    - libcxx/utils/ci/docker/android-builder.dockerfile
+    - libcxx/utils/ci/docker/linux-builder.dockerfile
+    - libcxx/utils/ci/vendor/android/Dockerfile.emulator
+    - llvm/utils/docker/debian12/Dockerfile
+    - llvm/utils/docker/example/Dockerfile
+    - llvm/utils/docker/nvidia-cuda/Dockerfile
+    - polly/lib/External/isl/imath/tests/linux/Dockerfile

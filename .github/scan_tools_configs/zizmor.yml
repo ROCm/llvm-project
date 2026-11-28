@@ -1,0 +1,73 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+#
+# zizmor configuration
+# Reference: https://docs.zizmor.sh/configuration/
+# Local scan: zizmor --config .github/scan_tools_configs/zizmor.yml .
+#
+# Zizmor configuration for this repository's security scans.
+#
+# This file defines the complete scanner policy;
+# Keep repository-specific suppressions and tuning here.
+#
+# Zizmor has no ignore file. Suppress a finding with:
+#
+#   1. An inline comment naming the rule:
+#          run: | # zizmor: ignore[template-injection] input is validated
+#
+#   2. `rules.<rule-id>.ignore` with `<file>[:<line>[:<col>]]`:
+#          rules:
+#            template-injection:
+#              ignore:
+#                - safe.yml
+#
+#   3. `rules.<rule-id>.disable: true` to disable a rule repository-wide.
+#
+# Add rule-specific settings and suppressions under `rules:`.
+
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # ROCm security baseline, shared across ROCm repos. Exempt from the
+        # commit-SHA pin requirement.
+        ROCm/rocm-security-gh/.github/workflows/security-baseline.yml: ref-pin
+        # LLVM trunk verifier calls these on amd-compiler-ci so the build
+        # workflows move with that branch. A branch pin is the intended ref.
+        ROCm/llvm-project/.github/workflows/setup_multi_arch.yml: ref-pin
+        ROCm/llvm-project/.github/workflows/multi_arch_ci_linux.yml: ref-pin
+        ROCm/llvm-project/.github/workflows/multi_arch_ci_windows.yml: ref-pin
+  dangerous-triggers:
+    ignore:
+      # LLVM release-backport workflow (/cherry-pick via issue_comment).
+      # Skipped outside llvm/llvm-project.
+      - issue-release-workflow.yml
+      # Posts CI results on LLVM PRs. Skipped outside llvm/llvm-project.
+      - issue-write.yml
+      # Posts buildbot results after LLVM merges. Skipped outside llvm/llvm-project.
+      - merged-prs.yml
+      # Notifies LLVM issue subscribers. Skipped outside llvm/llvm-project.
+      - subscriber.yml
+  github-app:
+    ignore:
+      # LLVM issue labeler, maintained upstream. Skipped outside llvm/llvm-project.
+      - new-issues.yml
+  unpinned-images:
+    ignore:
+      # LLVM MLIR SPIR-V CI. Skipped unless repository owner is llvm.
+      - mlir-spirv-tests.yml
+      # LLVM compiler-rt and LLVM-libc builtins CI. Skipped unless repository owner is llvm.
+      - compiler-rt-libc-builtins-tests.yml
+      # LLVM-libc overlay CI. Skipped unless repository owner is llvm.
+      # Images are digest-pinned, but zizmor cannot see through
+      # `container: ${{ matrix.container || null }}`.
+      - libc-overlay-tests.yml
+      # libc++ benchmarks. The container and runner come from
+      # libcxx/utils/ci/lnt/machines.json: llvm-premerge-linux-4-runners,
+      # and the self-hosted macOS, ARM64, apple-runners set. Those are LLVM
+      # community runners, not ROCm runners, and ROCm CI does not call these
+      # workflows. zizmor cannot see a digest through
+      # `container: ${{ fromJSON(inputs.setup).container || null }}`.
+      - libcxx-run-benchmarks.yml
+      - libcxx-run-ab-benchmarks.yml
+      - libcxx-run-libstdcxx-benchmarks.yml
