@@ -29,6 +29,19 @@ def MapInfoFinalizationPass
                       "regions and target data regions">];
 }
 
+def FlattenMultiDimensionalArraysPass
+    : Pass<"flatten-multi-dimensional-arrays", "mlir::ModuleOp"> {
+  let summary = "expands OpenMP MapInfo operations containing descriptors";
+  let description = [{
+    Expands MapInfo operations containing descriptor types into multiple
+    MapInfo's for each pointer element in the descriptor that requires
+    explicit individual mapping by the OpenMP runtime.
+  }];
+  let dependentDialects = ["mlir::omp::OpenMPDialect"];
+
+}
+
+
 def MapsForPrivatizedSymbolsPass
     : Pass<"omp-maps-for-privatized-symbols", "mlir::func::FuncOp"> {
   let summary = "Creates MapInfoOp instances for privatized symbols when needed";
