@@ -1481,7 +1481,7 @@ bool PreRARematStage::initGCNSchedStage() {
   // fixed if there is another pass after this pass.
   assert(!S.hasNextStage());
 
-  if (!GCNSchedStage::initGCNSchedStage() || DAG.Regions.size() <= 1)
+  if (!GCNSchedStage::initGCNSchedStage())
     return false;
 
   // Set up "spilling targets" for all regions.
@@ -1521,13 +1521,27 @@ bool PreRARematStage::initGCNSchedStage() {
     }
   });
 
-  LiveOuts.reserve(DAG.Regions.size());
-  DAG.RegionLiveOuts.buildLiveRegMap();
-  for (unsigned RegionIdx : seq(DAG.Regions.size()))
-    LiveOuts.push_back(DAG.RegionLiveOuts.getLiveRegsForRegionIdx(RegionIdx));
+  BitVector TargetRegions(DAG.Regions.size());
+  BitVector VectorExcess(DAG.Regions.size());
+  for (auto [RegionIdx, RP] : enumerate(DAG.Pressure)) {
+    GCNRPTarget Target(MaxSGPRs, MaxVGPRs, MF, RP);
+    if (Target.satisfied())
+      continue;
+    TargetRegions.set(static_cast<unsigned>(RegionIdx));
+    if (Target.hasVectorRegisterExcess())
+      VectorExcess.set(static_cast<unsigned>(RegionIdx));
+  }
+  if (TargetRegions.none())
+    return false;
 
-  Strategy = std::make_unique<GCNRematStrategy>(MF, DAG.Regions, DAG.LiveIns,
-                                                LiveOuts, *DAG.LIS, *DAG.MBFI);
+  DAG.RegionLiveOuts.buildLiveRegMap();
+  buildRematRegions(TargetRegions, VectorExcess);
+  if (RematRegions.size() <= 1)
+    return false;
+
+  Strategy = std::make_unique<GCNRematStrategy>(MF, RematRegions, RematLiveIns,
+                                                RematLiveOuts, *DAG.LIS,
+                                                *DAG.MBFI, RematRPInfo);
   if (TargetOcc.has_value()) {
     // Rematerialization is likely to move instructions into higher frequency
     // regions, increasing their total sum latency. This is acceptable if we are
@@ -1538,18 +1552,26 @@ bool PreRARematStage::initGCNSchedStage() {
     Strategy->startRecordingRemats();
   }
 
-  RescheduleRegions.resize(DAG.Regions.size());
-  MutableArrayRef<GCNRegPressure> MaxPressure = DAG.Pressure;
+  BitVector AffectedRematRegions(RematRegions.size());
+  MutableArrayRef<GCNRegPressure> MaxPressure = RematPressure;
   Strategy->rematerializeFor(MaxSGPRs, MaxVGPRs,
                              /*ReduceSpill=*/!TargetOcc.has_value(),
-                             RescheduleRegions, &MaxPressure);
+                             AffectedRematRegions, &MaxPressure);
+  updateSchedRegions();
+  RescheduleRegions.resize(DAG.Regions.size());
+  for (unsigned RematIdx : AffectedRematRegions.set_bits())
+    RescheduleRegions.set(RematToSchedRegion[RematIdx]);
   if (RescheduleRegions.none())
     return false;
 
   // Reflect changes in the DAG and compute achieved occupancy.
   LLVM_DEBUG(dbgs() << "==== REMAT RESULTS ====\n");
   for (unsigned RegionIdx : RescheduleRegions.set_bits()) {
-    DAG.RegionLiveOuts.getLiveRegsForRegionIdx(RegionIdx) = LiveOuts[RegionIdx];
+    updateSchedLiveMaps(RegionIdx);
+    if (SplitMIs[RegionIdx])
+      DAG.Pressure[RegionIdx] = DAG.getRealRegPressure(RegionIdx);
+    else
+      DAG.Pressure[RegionIdx] = RematPressure[FirstRematRegion[RegionIdx]];
     LLVM_DEBUG(dbgs() << '[' << RegionIdx << "] Achieved occupancy "
                       << DAG.Pressure[RegionIdx].getOccupancy(ST, VGPRBlockSize)
                       << '\n');
@@ -2915,6 +2937,263 @@ unsigned PreRARematStage::getStageTargetOccupancy() const {
   return TargetOcc ? *TargetOcc : MFI.getMinWavesPerEU();
 }
 
+/// Returns the first instruction of the second half of a region split after \p
+/// Split and ending at \p End. The rematerializer does not handle a region that
+/// starts with a debug or pseudo instruction correctly.
+static MachineBasicBlock::iterator
+getSplitBegin(MachineInstr &Split, MachineBasicBlock::iterator End) {
+  MachineBasicBlock::iterator MI = std::next(Split.getIterator());
+  while (MI != End && MI->isDebugOrPseudoInstr())
+    ++MI;
+  return MI;
+}
+
+void PreRARematStage::buildRematRegions(const BitVector &TargetRegions,
+                                        const BitVector &VectorExcess) {
+  const unsigned NumRegions = static_cast<unsigned>(DAG.Regions.size());
+  const bool UnifiedRF = ST.hasGFX90AInsts();
+  RematRegions.clear();
+  RematLiveIns.clear();
+  RematLiveOuts.clear();
+  RematPressure.clear();
+  RematRPInfo.clear();
+  RematToSchedRegion.clear();
+  FirstRematRegion.clear();
+  RematLastDef.clear();
+  SplitMIs.assign(NumRegions, nullptr);
+  SmallVector<InstrPressure> Walk;
+  for (unsigned I = 0; I != NumRegions; ++I) {
+    auto [Begin, End] = DAG.Regions[I];
+    const GCNRPTracker::LiveRegSet &LiveOuts =
+        DAG.RegionLiveOuts.getLiveRegsForRegionIdx(I);
+    FirstRematRegion.push_back(static_cast<unsigned>(RematRegions.size()));
+    std::optional<size_t> SplitPos;
+    if (TargetRegions[I] && mayHaveSplitCandidate(Begin, End)) {
+      Walk.clear();
+      walkRegion(Begin, End, LiveOuts, Walk);
+      SplitPos = findRematSplit(Walk, UnifiedRF, VectorExcess[I]);
+      if (SplitPos) {
+        MachineInstr &Split = *Walk[*SplitPos].MI;
+        if (!hasSplitCandidate(Split, std::next(Split.getIterator()), End))
+          SplitPos.reset();
+      }
+    }
+    if (!SplitPos) {
+      RematRegions.emplace_back(Begin, End);
+      RematLiveIns.push_back(DAG.LiveIns[I]);
+      RematLiveOuts.push_back(LiveOuts);
+      RematPressure.push_back(DAG.Pressure[I]);
+      RematRPInfo.emplace_back();
+      RematToSchedRegion.push_back(I);
+      continue;
+    }
+
+    MachineInstr *Split = Walk[*SplitPos].MI;
+    LLVM_DEBUG(dbgs() << "Split region " << I << " after " << *Split);
+    SplitMIs[I] = Split;
+    MachineBasicBlock::iterator SplitEnd = Split->getIterator();
+    MachineBasicBlock::iterator SplitBegin = getSplitBegin(*Split, End);
+
+    // The walk lists the second half from its last instruction, then the split
+    // instruction, which belongs to the first half, then the rest of the first
+    // half.
+    ArrayRef<InstrPressure> SecondWalk = ArrayRef(Walk).take_front(*SplitPos);
+    ArrayRef<InstrPressure> FirstWalk = ArrayRef(Walk).drop_front(*SplitPos);
+    GCNRematStrategy::RegionRPInfo FirstInfo, SecondInfo;
+    GCNRegPressure FirstMaxRP = summarizeWalk(FirstWalk, FirstInfo);
+    GCNRegPressure SecondMaxRP = summarizeWalk(SecondWalk, SecondInfo);
+    GCNUpwardRPTracker RPTracker(*DAG.LIS);
+    RPTracker.reset(DAG.MRI, LiveOuts);
+    RPTracker.recede(SplitBegin, End);
+    GCNRPTracker::LiveRegSet SplitLive = RPTracker.moveLiveRegs();
+
+    // The first half's live-outs are the registers live after the split
+    // instruction, consistently with the rematerializer, which considers the
+    // instruction at the end of a region to be part of that region.
+    RematRegions.emplace_back(Begin, SplitEnd);
+    RematLiveIns.push_back(DAG.LiveIns[I]);
+    RematLiveOuts.push_back(SplitLive);
+    RematPressure.push_back(FirstMaxRP);
+    FirstInfo.IncludeEnd = true;
+    RematRPInfo.push_back(FirstInfo);
+    RematToSchedRegion.push_back(I);
+
+    RematRegions.emplace_back(SplitBegin, End);
+    RematLiveIns.push_back(std::move(SplitLive));
+    RematLiveOuts.push_back(LiveOuts);
+    RematPressure.push_back(SecondMaxRP);
+    RematRPInfo.push_back(SecondInfo);
+    RematToSchedRegion.push_back(I);
+  }
+}
+
+/// Returns whether \p MI can end the first half of a split region.
+static bool isSplitPoint(const MachineInstr &MI) {
+  return !MI.isDebugOrPseudoInstr() && !MI.isBundled() &&
+         (MI.mayStore() || MI.hasUnmodeledSideEffects());
+}
+
+SlotIndex PreRARematStage::getRematLastDef(Register Reg) {
+  if (!Reg.isVirtual())
+    return SlotIndex();
+  auto [It, Inserted] = RematLastDef.try_emplace(Reg);
+  if (!Inserted)
+    return It->second;
+  SlotIndex LastDef;
+  for (const MachineInstr &DefMI : DAG.MRI.def_instructions(Reg)) {
+    if (!Rematerializer::isMIRematerializable(DefMI, *DAG.TII, DAG.MRI)) {
+      LastDef = SlotIndex();
+      break;
+    }
+    SlotIndex DefIdx = DAG.LIS->getInstructionIndex(DefMI);
+    if (!LastDef.isValid() || LastDef < DefIdx)
+      LastDef = DefIdx;
+  }
+  return It->second = LastDef;
+}
+
+bool PreRARematStage::mayHaveSplitCandidate(MachineBasicBlock::iterator Begin,
+                                            MachineBasicBlock::iterator End) {
+  SlotIndex LastSplitIdx;
+  for (const MachineInstr &MI : make_range(Begin, End)) {
+    if (MI.isDebugOrPseudoInstr())
+      continue;
+    if (LastSplitIdx.isValid()) {
+      for (const MachineOperand &MO : MI.all_uses()) {
+        SlotIndex LastDef = getRematLastDef(MO.getReg());
+        if (LastDef.isValid() && LastDef < LastSplitIdx)
+          return true;
+      }
+    }
+    if (isSplitPoint(MI))
+      LastSplitIdx = DAG.LIS->getInstructionIndex(MI);
+  }
+  return false;
+}
+
+bool PreRARematStage::hasSplitCandidate(const MachineInstr &Split,
+                                        MachineBasicBlock::iterator Begin,
+                                        MachineBasicBlock::iterator End) {
+  const SlotIndex SplitIdx = DAG.LIS->getInstructionIndex(Split);
+  for (const MachineInstr &MI : make_range(Begin, End)) {
+    if (MI.isDebugOrPseudoInstr())
+      continue;
+    for (const MachineOperand &MO : MI.all_uses()) {
+      SlotIndex LastDef = getRematLastDef(MO.getReg());
+      if (LastDef.isValid() && LastDef < SplitIdx)
+        return true;
+    }
+  }
+  return false;
+}
+
+void PreRARematStage::walkRegion(MachineBasicBlock::iterator Begin,
+                                 MachineBasicBlock::iterator End,
+                                 const GCNRPTracker::LiveRegSet &LiveOuts,
+                                 SmallVectorImpl<InstrPressure> &Walk) const {
+  GCNUpwardRPTracker RPTracker(*DAG.LIS);
+  RPTracker.reset(DAG.MRI, LiveOuts);
+  for (MachineBasicBlock::iterator MI = End; MI != Begin;) {
+    --MI;
+    if (MI->isDebugOrPseudoInstr())
+      continue;
+    RPTracker.resetMaxPressure();
+    RPTracker.recede(*MI);
+    Walk.push_back({&*MI, RPTracker.getMaxPressure()});
+  }
+}
+
+GCNRegPressure
+PreRARematStage::summarizeWalk(ArrayRef<InstrPressure> Walk,
+                               GCNRematStrategy::RegionRPInfo &Info) const {
+  GCNRegPressure MaxRP;
+  unsigned MaxSGPRs = 0, MaxArchVGPRs = 0, MaxAGPRs = 0;
+  const MachineInstr *SGPRPeak = nullptr, *ArchVGPRPeak = nullptr,
+                     *AGPRPeak = nullptr;
+  // The walk goes upwards, so ties keep the earliest instruction.
+  for (const auto &[MI, RP] : Walk) {
+    MaxRP = maxPerRegFile(MaxRP, RP);
+    if (RP.getSGPRNum() >= MaxSGPRs) {
+      MaxSGPRs = RP.getSGPRNum();
+      SGPRPeak = MI;
+    }
+    if (RP.getArchVGPRNum() >= MaxArchVGPRs) {
+      MaxArchVGPRs = RP.getArchVGPRNum();
+      ArchVGPRPeak = MI;
+    }
+    if (RP.getAGPRNum() >= MaxAGPRs) {
+      MaxAGPRs = RP.getAGPRNum();
+      AGPRPeak = MI;
+    }
+  }
+  auto GetSlot = [&](const MachineInstr *MI) {
+    return MI ? DAG.LIS->getInstructionIndex(*MI) : SlotIndex();
+  };
+  Info.SGPRPeak = GetSlot(SGPRPeak);
+  Info.ArchVGPRPeak = GetSlot(ArchVGPRPeak);
+  Info.AGPRPeak = GetSlot(AGPRPeak);
+  return MaxRP;
+}
+
+std::optional<size_t>
+PreRARematStage::findRematSplit(ArrayRef<InstrPressure> Walk, bool UnifiedRF,
+                                bool VectorExcess) const {
+  // Both halves must contain a non-debug instruction, so the split instruction
+  // can be neither the first nor the last one.
+  if (Walk.size() < 3)
+    return std::nullopt;
+
+  // Find the earliest instruction with the highest pressure of the register
+  // kind in excess. The walk goes upwards, so ties keep the later index.
+  size_t PeakPos = 0;
+  unsigned PeakRP = 0;
+  for (const auto &[Pos, E] : enumerate(Walk)) {
+    unsigned NumRegs =
+        VectorExcess ? E.RP.getVGPRNum(UnifiedRF) : E.RP.getSGPRNum();
+    if (NumRegs >= PeakRP) {
+      PeakRP = NumRegs;
+      PeakPos = Pos;
+    }
+  }
+
+  // Split after the first instruction at or after the peak that cannot be
+  // deleted, so that the first region's end stays valid.
+  for (size_t Pos = std::min(PeakPos, Walk.size() - 2); Pos != 0; --Pos) {
+    if (isSplitPoint(*Walk[Pos].MI))
+      return Pos;
+  }
+  return std::nullopt;
+}
+
+void PreRARematStage::updateSchedRegions() {
+  for (auto [I, Region] : enumerate(DAG.Regions)) {
+    unsigned First = FirstRematRegion[I];
+    Region.first = RematRegions[First].first;
+    Region.second = RematRegions[SplitMIs[I] ? First + 1 : First].second;
+  }
+}
+
+void PreRARematStage::updateRematRegions() {
+  for (auto [I, Region] : enumerate(DAG.Regions)) {
+    unsigned First = FirstRematRegion[I];
+    if (!SplitMIs[I]) {
+      RematRegions[First] = Region;
+      continue;
+    }
+    MachineBasicBlock::iterator Split = SplitMIs[I]->getIterator();
+    RematRegions[First] = {Region.first, Split};
+    RematRegions[First + 1] = {getSplitBegin(*SplitMIs[I], Region.second),
+                               Region.second};
+  }
+}
+
+void PreRARematStage::updateSchedLiveMaps(unsigned RegionIdx) {
+  unsigned First = FirstRematRegion[RegionIdx];
+  DAG.LiveIns[RegionIdx] = RematLiveIns[First];
+  DAG.RegionLiveOuts.getLiveRegsForRegionIdx(RegionIdx) =
+      RematLiveOuts[SplitMIs[RegionIdx] ? First + 1 : First];
+}
+
 void PreRARematStage::finalizeGCNSchedStage() {
   // We consider that reducing spilling is always beneficial so we never
   // rollback rematerializations or revert scheduling in such cases.
@@ -2945,9 +3224,11 @@ void PreRARematStage::finalizeGCNSchedStage() {
 
   // Reset the target occupancy to what it was pre-rematerialization.
   DAG.setTargetOccupancy(*TargetOcc - 1);
+  updateRematRegions();
   Strategy->rollbackRecordedRemats();
+  updateSchedRegions();
   for (unsigned RegionIdx : RescheduleRegions.set_bits()) {
-    DAG.RegionLiveOuts.getLiveRegsForRegionIdx(RegionIdx) = LiveOuts[RegionIdx];
+    updateSchedLiveMaps(RegionIdx);
     DAG.Pressure[RegionIdx] = DAG.getRealRegPressure(RegionIdx);
   }
 

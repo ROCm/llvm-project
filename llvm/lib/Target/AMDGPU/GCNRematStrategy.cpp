@@ -32,11 +32,13 @@ GCNRematStrategy::RematRegions::RematRegions(
     ArrayRef<RegionBoundaries> Regions,
     MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns,
     MutableArrayRef<GCNRPTracker::LiveRegSet> LiveOuts, LiveIntervals &LIS,
-    const MachineBlockFrequencyInfo &MBFI, const MachineRegisterInfo &MRI)
-    : Bounds(Regions), LiveIns(LiveIns), LiveOuts(LiveOuts),
+    const MachineBlockFrequencyInfo &MBFI, const MachineRegisterInfo &MRI,
+    ArrayRef<RegionRPInfo> RPInfo)
+    : Bounds(Regions), LiveIns(LiveIns), LiveOuts(LiveOuts), RPInfo(RPInfo),
       Frequencies(Regions.size(), 0), LIS(LIS), MRI(MRI) {
   assert(LiveIns.size() == Regions.size());
   assert(LiveOuts.size() == Regions.size());
+  assert(RPInfo.empty() || RPInfo.size() == Regions.size());
 
   // Derive frequency of each region. Frequencies are scaled down if they are
   // high to avoid overflow/underflow when combining them.
@@ -66,7 +68,13 @@ GCNRematStrategy::RematRegions::RematRegions(
 GCNRegPressure GCNRematStrategy::RematRegions::computeMaxRegPressure(
     unsigned RegionIdx) const {
   assert(RegionIdx < Bounds.size() && "out of bounds");
-  const auto &[Begin, End] = Bounds[RegionIdx];
+  auto [Begin, End] = Bounds[RegionIdx];
+  if (!RPInfo.empty() && RPInfo[RegionIdx].IncludeEnd) {
+    MachineBasicBlock::iterator MBBEnd = End->getParent()->end();
+    End = std::next(End);
+    while (End != MBBEnd && End->isDebugOrPseudoInstr())
+      ++End;
+  }
   if (Begin == End)
     return llvm::getRegPressure(MRI, LiveIns[RegionIdx]);
   GCNDownwardRPTracker RPTracker(LIS);
@@ -144,12 +152,49 @@ bool GCNRematStrategy::RematTargets::updateAndVerifyRPTargets(
 
 void GCNRematStrategy::RematCandidate::init(const RematRegions &RF,
                                             const Rematerializer &Remater,
-                                            const MachineRegisterInfo &MRI) {
+                                            const MachineRegisterInfo &MRI,
+                                            const LiveIntervals &LIS) {
   const Rematerializer::Reg &Reg = Remater.getReg(RegIdx);
   Register DefReg = Reg.getDefReg();
 
   Live |= LiveIn;
   Live |= LiveOut;
+
+  // In a region whose RP peak is known, the rematerialization saves the
+  // register at the peak only if the register is live there before the
+  // rematerialization and dead there after it. In the defining region, the
+  // original register stays when it has users there. In a using region, the
+  // rematerialized register lives from the first to the last use in the
+  // region, and the original register is live at the peak before the
+  // rematerialization unless all uses are before the peak and the register is
+  // not live-out. The peaks are those of the initial schedule and are not
+  // updated after rematerializations.
+  const GCNRegPressure::RegKind Kind = GCNRegPressure::getRegKind(DefReg, MRI);
+  for (unsigned I : Live.set_bits()) {
+    const SlotIndex Peak = RF.getPeak(I, Kind);
+    if (!Peak.isValid())
+      continue;
+    bool NoSaveAtPeak = false;
+    auto RegionUsers = Reg.Uses.find(I);
+    if (I == Reg.DefRegion) {
+      NoSaveAtPeak = !(LIS.getInstructionIndex(*Reg.getLastDef()) < Peak);
+      if (RegionUsers != Reg.Uses.end()) {
+        NoSaveAtPeak |= any_of(RegionUsers->second, [&](MachineInstr *MI) {
+          return !(LIS.getInstructionIndex(*MI) < Peak);
+        });
+      }
+    } else if (RegionUsers != Reg.Uses.end()) {
+      bool UseAtOrBefore = false, UseAtOrAfter = false;
+      for (MachineInstr *MI : RegionUsers->second) {
+        SlotIndex UseIdx = LIS.getInstructionIndex(*MI);
+        UseAtOrBefore |= !(Peak < UseIdx);
+        UseAtOrAfter |= !(UseIdx < Peak);
+      }
+      NoSaveAtPeak = UseAtOrBefore && (UseAtOrAfter || !LiveOut[I]);
+    }
+    if (NoSaveAtPeak)
+      NoPeakSave.set(I);
+  }
 
   for (unsigned I : Live.set_bits()) {
     // If the register is both unused and live-through in the region, the
@@ -179,7 +224,7 @@ void GCNRematStrategy::RematCandidate::init(const RematRegions &RF,
 void GCNRematStrategy::RematCandidate::update(const RematTargets &Targets) {
   MaxFreq = RegionImpact = 0;
   for (unsigned RegionIdx : Targets.ExcessRP.set_bits()) {
-    if (!Live[RegionIdx])
+    if (!Live[RegionIdx] || NoPeakSave[RegionIdx])
       continue;
 
     // The rematerialization must contribute positively in at least one
@@ -208,7 +253,8 @@ void GCNRematStrategy::RematCandidate::update(const RematTargets &Targets) {
 bool GCNRematStrategy::RematCandidate::maybeBeneficial(
     const RematTargets &Targets) const {
   for (unsigned I : Targets.ExcessRP.set_bits()) {
-    if (Live[I] && Targets.RPTargets[I].isSaveBeneficial(RPSave))
+    if (Live[I] && !NoPeakSave[I] &&
+        Targets.RPTargets[I].isSaveBeneficial(RPSave))
       return true;
   }
   return false;
@@ -366,8 +412,11 @@ void GCNRematStrategy::rematerializeFor(
       // Adjust RP targets. The save is guaranteed in regions in which the
       // register is live-through and unused but optimistic in all other regions
       // where the register is live.
-      Targets.updateRPTargets(Cand.Live, Cand.RPSave);
+      BitVector SaveRegions(Cand.Live);
+      SaveRegions.reset(Cand.NoPeakSave);
+      Targets.updateRPTargets(SaveRegions, Cand.RPSave);
       RecomputeRP |= Cand.UnpredictableRPSave;
+      RecomputeRP |= Cand.NoPeakSave;
       AffectedRegions |= Cand.Live;
       if (Targets.allAchieved()) {
         LLVM_DEBUG(dbgs() << "All targets cleared, verifying...\n");
@@ -481,7 +530,7 @@ void GCNRematStrategy::createCandidates() {
   }
 
   for (RematCandidate &Cand : Candidates)
-    Cand.init(Regions, Remater, MRI);
+    Cand.init(Regions, Remater, MRI, LIS);
 }
 
 bool GCNRematStrategy::candidateHasValidUsers(

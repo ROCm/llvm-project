@@ -1,0 +1,38 @@
+# REQUIRES: asserts
+# RUN: llc -mtriple=amdgpu9.08 -run-pass=machine-scheduler -debug-only=gcn-rematerialization-strategy %s -o /dev/null 2>&1 | FileCheck %s
+
+# The region is split after the first INLINEASM, which a pseudo probe follows.
+# The verified pressure of the first half must end right after the split
+# instruction, so only the second half, which keeps its peak, stays above the
+# target.
+
+# CHECK: All targets cleared, verifying...
+# CHECK-NOT: [0] Incorrect RP estimation
+# CHECK: [1] Incorrect RP estimation
+
+--- |
+  define amdgpu_kernel void @probe_verification() #0 { ret void }
+  attributes #0 = { "amdgpu-waves-per-eu"="8,8" }
+...
+---
+name:            probe_verification
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+body:             |
+  bb.0:
+    %r:vgpr_32 = V_MOV_B32_e32 100, implicit $exec
+    %0:vreg_256 = IMPLICIT_DEF
+    %1:vreg_256 = IMPLICIT_DEF
+    %2:vreg_256 = IMPLICIT_DEF
+    %3:vreg_256 = IMPLICIT_DEF
+    S_NOP 0, implicit %r, implicit-def $m0
+    INLINEASM &"; first peak", 1, implicit %0, implicit %1, implicit %2, implicit %3, implicit $m0, implicit-def $m0
+    PSEUDO_PROBE 1, 1, 0, 0
+    %4:vreg_256 = IMPLICIT_DEF
+    %5:vreg_256 = IMPLICIT_DEF
+    %6:vreg_256 = IMPLICIT_DEF
+    %7:vreg_256 = IMPLICIT_DEF
+    INLINEASM &"; second peak", 1, implicit %4, implicit %5, implicit %6, implicit %7, implicit %r, implicit $m0
+    S_ENDPGM 0
+...

@@ -537,7 +537,7 @@ void Rematerializer::addRegIfRematerializable(
 
     // The defining MI must be rematerializable and in the same region as all
     // other defining MIs.
-    if (!isMIRematerializable(DefMI))
+    if (!isMIRematerializable(DefMI, TII, MRI))
       return;
     auto DefRegion = MIRegion.find(&DefMI);
     if (DefRegion == MIRegion.end())
@@ -645,11 +645,15 @@ void Rematerializer::addRegIfRematerializable(
   UnrematableDeps.push_back(UnrematDeps.takeVector());
 }
 
-bool Rematerializer::isMIRematerializable(const MachineInstr &MI) const {
+bool Rematerializer::isMIRematerializable(const MachineInstr &MI,
+                                          const TargetInstrInfo &TII,
+                                          const MachineRegisterInfo &MRI) {
   if (!TII.isReMaterializable(MI))
     return false;
 
-  assert(MI.getOperand(0).getReg().isVirtual() && "should be virtual");
+  if (!MI.getNumOperands() || !MI.getOperand(0).isReg() ||
+      !MI.getOperand(0).isDef() || !MI.getOperand(0).getReg().isVirtual())
+    return false;
 
   for (const MachineOperand &MO : MI.all_uses()) {
     // We can't remat physreg uses, unless it is a constant or an ignorable

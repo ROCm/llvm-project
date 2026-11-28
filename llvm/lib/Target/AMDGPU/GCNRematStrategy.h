@@ -44,15 +44,28 @@ class GCNRematStrategy {
   using RegisterIdx = Rematerializer::RegisterIdx;
 
 public:
+  /// Pressure information on a region that its bounds do not give.
+  struct RegionRPInfo {
+    /// Slots of the instructions at the SGPR, ArchVGPR and AGPR pressure peaks,
+    /// taken separately because the RP targets use the maximum of each kind,
+    /// also with a unified VGPR file. A slot is invalid when the peak is
+    /// unknown.
+    SlotIndex SGPRPeak, ArchVGPRPeak, AGPRPeak;
+    /// Whether the region's pressure includes the instruction at its end.
+    bool IncludeEnd = false;
+  };
+
   /// Creates a strategy that can rematerialize across \p Regions whose live-ins
-  /// \p LiveIns and live-outs \p LiveOuts are provided. The underlying
+  /// \p LiveIns and live-outs \p LiveOuts are provided. When not empty, \p
+  /// RPInfo gives more pressure information on each region. The underlying
   /// rematerializer is created and initialized.
   GCNRematStrategy(MachineFunction &MF,
                    MutableArrayRef<RegionBoundaries> Regions,
                    MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns,
                    MutableArrayRef<GCNRPTracker::LiveRegSet> LiveOuts,
-                   LiveIntervals &LIS, const MachineBlockFrequencyInfo &MBFI)
-      : Regions(Regions, LiveIns, LiveOuts, LIS, MBFI, MF.getRegInfo()),
+                   LiveIntervals &LIS, const MachineBlockFrequencyInfo &MBFI,
+                   ArrayRef<RegionRPInfo> RPInfo = {})
+      : Regions(Regions, LiveIns, LiveOuts, LIS, MBFI, MF.getRegInfo(), RPInfo),
         Remater(MF, Regions, LIS), MF(MF), MRI(MF.getRegInfo()), LIS(LIS) {}
 
   /// Rematerializes with the goal of reducing the maximum pressure in all \ref
@@ -95,10 +108,27 @@ private:
                  MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns,
                  MutableArrayRef<GCNRPTracker::LiveRegSet> LiveOuts,
                  LiveIntervals &LIS, const MachineBlockFrequencyInfo &MBFI,
-                 const MachineRegisterInfo &MRI);
+                 const MachineRegisterInfo &MRI, ArrayRef<RegionRPInfo> RPInfo);
 
     /// Returns the number of rematerialization regions.
     unsigned size() const { return Bounds.size(); }
+
+    /// Returns the slot of the instruction at the pressure peak of region \p
+    /// RegionIdx for registers of kind \p Kind, or an invalid slot when it is
+    /// unknown.
+    SlotIndex getPeak(unsigned RegionIdx, GCNRegPressure::RegKind Kind) const {
+      if (RPInfo.empty())
+        return SlotIndex();
+      const RegionRPInfo &Info = RPInfo[RegionIdx];
+      switch (Kind) {
+      case GCNRegPressure::SGPR:
+        return Info.SGPRPeak;
+      case GCNRegPressure::AGPR:
+        return Info.AGPRPeak;
+      default:
+        return Info.ArchVGPRPeak;
+      }
+    }
 
     uint64_t getFrequency(unsigned RegionIdx) const {
       return Frequencies[RegionIdx];
@@ -147,6 +177,8 @@ private:
 
     /// Current live-ins and live-outs for each region.
     MutableArrayRef<GCNRPTracker::LiveRegSet> LiveIns, LiveOuts;
+    /// RP peaks of each region. Empty when unknown.
+    ArrayRef<RegionRPInfo> RPInfo;
     /// Scaled per-region execution frequencies. 0 when unknown.
     SmallVector<uint64_t> Frequencies;
     /// Scaled minimum and maximum observed frequencies.
@@ -206,19 +238,24 @@ private:
     /// guaranteed to reduce RP (i.e., regions in which the register is not
     /// live-through and unused).
     BitVector UnpredictableRPSave;
+    /// Subset of \ref Live regions with a known RP peak at which the
+    /// rematerialization does not save the register, so that it cannot reduce
+    /// RP there.
+    BitVector NoPeakSave;
     /// Expected register pressure decrease induced by rematerializing this
     /// candidate.
     GCNRegPressure RPSave;
 
     RematCandidate(RegisterIdx RegIdx, unsigned NumRegions)
         : RegIdx(RegIdx), LiveIn(NumRegions), LiveOut(NumRegions),
-          Live(NumRegions), UnpredictableRPSave(NumRegions) {}
+          Live(NumRegions), UnpredictableRPSave(NumRegions),
+          NoPeakSave(NumRegions) {}
 
     /// Initializes the candidate with state-independent characteristics.
     /// This doesn't update the actual score (call \ref update for this).
     /// Note: LiveIn/LiveOut must be pre-populated before calling this.
     void init(const RematRegions &RF, const Rematerializer &Remater,
-              const MachineRegisterInfo &MRI);
+              const MachineRegisterInfo &MRI, const LiveIntervals &LIS);
 
     /// Updates the rematerialization's score w.r.t. the current \p Targets.
     void update(const RematTargets &Targets);
