@@ -95,6 +95,15 @@ jobs:
       TEATIME_FORCE_INTERACTIVE: 0
       RELEASE_TYPE: ${{ inputs.release_type }}
       EXTERNAL_FETCH_SOURCES_ARGS: ${{ inputs.external_repo_config != '' && fromJSON(inputs.external_repo_config).fetch_sources_args || '' }}
+      # Build memory tracking (see the "Memory tracking" steps below).
+      # Directory (relative to the workspace) collecting all memory data; it is
+      # uploaded as a workflow artifact at the end of the build.
+      MEM_TRACK_DIR: ${{ github.workspace }}/build-memory-tracking
+      # Seconds between time-series samples (CSV).
+      MEM_SAMPLE_INTERVAL_SEC: 5
+      # Seconds between detailed "top memory consumers" snapshots taken while
+      # the build is running (mid-build phase snapshots).
+      MEM_SNAPSHOT_INTERVAL_SEC: 600
 
     steps:
       - name: Checkout Repository
@@ -223,9 +232,166 @@ jobs:
           ccache --zero-stats
           echo "ccache remote_only: $(ccache --get-config remote_only)"
 
+      # Memory tracking 1/4: start background sampling and take the
+      # "pre-build" snapshot. Build only; no tests are involved.
+      # The helper script is written to RUNNER_TEMP (not into the repo) and is
+      # used for (a) a background time-series sampler writing a CSV and
+      # (b) one-shot snapshots (free, cgroup usage, top RSS processes).
+      - name: Memory tracking - start sampler and pre-build snapshot
+        run: |
+          mkdir -p "${MEM_TRACK_DIR}"
+          cat > "${RUNNER_TEMP}/mem_tracker.sh" <<'EOF'
+          #!/usr/bin/env bash
+          # Usage: mem_tracker.sh snapshot <label> | loop
+          OUT="${MEM_TRACK_DIR}"
+
+          # Container (cgroup) memory in bytes; v2 first, then v1. Empty if n/a.
+          cgroup_bytes() {
+            if [ -r /sys/fs/cgroup/memory.current ]; then
+              cat /sys/fs/cgroup/memory.current
+            elif [ -r /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
+              cat /sys/fs/cgroup/memory/memory.usage_in_bytes
+            fi
+          }
+
+          snapshot() {
+            {
+              echo "=== $1 @ $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+              free -m
+              echo "--- cgroup memory bytes: $(cgroup_bytes)"
+              echo "--- top 15 processes by RSS (pid rss_kb elapsed command)"
+              ps -eo pid,rss,etime,args --sort=-rss | head -n 16
+              echo
+            } >> "${OUT}/snapshots.log" 2>&1
+          }
+
+          loop() {
+            local interval="${MEM_SAMPLE_INTERVAL_SEC:-5}"
+            local snap_every="${MEM_SNAPSHOT_INTERVAL_SEC:-600}"
+            local next_snap="${snap_every}" n=0
+            echo "timestamp_utc,elapsed_s,mem_total_kb,mem_available_kb,mem_used_kb,swap_used_kb,cgroup_bytes,rss_sum_kb" > "${OUT}/memory_timeseries.csv"
+            SECONDS=0
+            while true; do
+              # /proc/meminfo: system-wide view (mem_used = total - available).
+              read -r total avail swap_total swap_free < <(awk '
+                /^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2}
+                /^SwapTotal:/ {st=$2} /^SwapFree:/ {sf=$2}
+                END {print t, a, st, sf}' /proc/meminfo)
+              # Sum of per-process RSS (shared pages are counted per process, so
+              # this is an upper bound on real usage; mem_used is the accurate one).
+              rss_sum=$(ps -eo rss= | awk '{s+=$1} END {print s+0}')
+              echo "$(date -u +%Y-%m-%dT%H:%M:%SZ),${SECONDS},${total},${avail},$((total-avail)),$((swap_total-swap_free)),$(cgroup_bytes),${rss_sum}" >> "${OUT}/memory_timeseries.csv"
+              # Periodic detailed snapshot = "mid-build" phase snapshots.
+              if [ "${SECONDS}" -ge "${next_snap}" ]; then
+                n=$((n+1)); snapshot "mid-build-${n}"; next_snap=$((next_snap+snap_every))
+              fi
+              sleep "${interval}"
+            done
+          }
+
+          case "$1" in
+            snapshot) snapshot "${2:-unlabeled}" ;;
+            loop) loop ;;
+            *) echo "usage: $0 snapshot <label> | loop" >&2; exit 2 ;;
+          esac
+          EOF
+          chmod +x "${RUNNER_TEMP}/mem_tracker.sh"
+          "${RUNNER_TEMP}/mem_tracker.sh" snapshot pre-build
+          # Run the sampler detached so it survives until the stop step.
+          nohup "${RUNNER_TEMP}/mem_tracker.sh" loop > "${MEM_TRACK_DIR}/sampler.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/mem_sampler.pid"
+          echo "Memory sampler started (pid $(cat "${RUNNER_TEMP}/mem_sampler.pid"))"
+
+      # Memory tracking 2/4: the build command itself is unchanged; it is only
+      # wrapped with `/usr/bin/time -v` to record the peak RSS of the largest
+      # single process (and wall time, page faults, ...) in time_v_build.txt.
+      # Exit status of the build is preserved, so failures still fail the step.
       - name: Build stage
         run: |
-          cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+          if [ -x /usr/bin/time ]; then
+            TIME_CMD=(/usr/bin/time -v -o "${MEM_TRACK_DIR}/time_v_build.txt")
+          else
+            echo "::warning::/usr/bin/time not found; peak-RSS-by-time -v is skipped (time-series sampler still active)"
+            TIME_CMD=()
+          fi
+          "${TIME_CMD[@]}" cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+
+      # Memory tracking 3/4: runs on success, failure and cancellation. Stops
+      # the sampler, takes the end-of-build (or failure) snapshot, and builds
+      # a summary (peak/min values from the CSV + time -v data) and an
+      # optional plot (best-effort; skipped if matplotlib is unavailable).
+      - name: Memory tracking - stop sampler, final snapshot and summary
+        if: always()
+        env:
+          BUILD_JOB_STATUS: ${{ job.status }}
+        run: |
+          [ -d "${MEM_TRACK_DIR}" ] || { echo "No memory tracking data; skipping."; exit 0; }
+          if [ -f "${RUNNER_TEMP}/mem_sampler.pid" ]; then
+            kill "$(cat "${RUNNER_TEMP}/mem_sampler.pid")" 2>/dev/null || true
+          fi
+          # job.status is "success" or "failure" (build outcome so far).
+          "${RUNNER_TEMP}/mem_tracker.sh" snapshot "post-build-${BUILD_JOB_STATUS}" || true
+
+          CSV="${MEM_TRACK_DIR}/memory_timeseries.csv"
+          SUMMARY="${MEM_TRACK_DIR}/summary.md"
+          {
+            echo "### Build memory summary (job status: ${BUILD_JOB_STATUS})"
+            echo
+            if [ -s "${CSV}" ]; then
+              awk -F, 'NR>1 {
+                used=$5; avail=$4; rss=$8; cg=$7
+                if (used>pu) {pu=used; tu=$1}
+                if (min=="" || avail<min) {min=avail; ta=$1}
+                if (rss>pr) {pr=rss; tr=$1}
+                if (cg!="" && cg>pc) {pc=cg; tc=$1}
+                n++
+              } END {
+                printf "- Samples: %d\n", n
+                printf "- Peak system memory used: %.1f GiB at %s\n", pu/1048576, tu
+                printf "- Min MemAvailable: %.1f GiB at %s\n", min/1048576, ta
+                printf "- Peak sum of process RSS: %.1f GiB at %s\n", pr/1048576, tr
+                if (pc>0) printf "- Peak cgroup memory: %.1f GiB at %s\n", pc/1073741824, tc
+              }' "${CSV}"
+            else
+              echo "- No time-series samples were collected."
+            fi
+            if [ -f "${MEM_TRACK_DIR}/time_v_build.txt" ]; then
+              echo "- \`time -v\` (largest single process / wall time):"
+              grep -E 'Maximum resident set size|Elapsed \(wall clock\)|Exit status' "${MEM_TRACK_DIR}/time_v_build.txt" | sed 's/^\s*/  - /'
+            fi
+          } > "${SUMMARY}"
+          cat "${SUMMARY}"
+          cat "${SUMMARY}" >> "${GITHUB_STEP_SUMMARY}"
+
+          # Optional plot; never fails the job.
+          python3 - <<'PY' || echo "Plot skipped."
+          import csv, os
+          import matplotlib
+          matplotlib.use("Agg")
+          import matplotlib.pyplot as plt
+          d = os.environ["MEM_TRACK_DIR"]
+          rows = list(csv.DictReader(open(os.path.join(d, "memory_timeseries.csv"))))
+          t = [int(r["elapsed_s"]) / 60 for r in rows]
+          gib = lambda k: [int(r[k]) / 1048576 for r in rows]
+          plt.figure(figsize=(10, 4))
+          plt.plot(t, gib("mem_used_kb"), label="system used")
+          plt.plot(t, gib("rss_sum_kb"), label="sum of process RSS")
+          plt.plot(t, gib("mem_available_kb"), label="MemAvailable")
+          plt.xlabel("minutes since sampler start"); plt.ylabel("GiB")
+          plt.legend(); plt.grid(True); plt.tight_layout()
+          plt.savefig(os.path.join(d, "memory_timeseries.png"), dpi=100)
+          PY
+
+      # Memory tracking 4/4: upload the CSV, snapshots, time -v output,
+      # summary (and plot if produced) as a workflow artifact.
+      - name: Memory tracking - upload artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-memory-tracking-${{ inputs.stage_name }}
+          path: build-memory-tracking/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Show ccache stats for build
         if: always()
