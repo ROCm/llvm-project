@@ -855,13 +855,14 @@ enum AttributeKindCodes {
   ATTR_KIND_NOFREEOBJ = 110,
   ATTR_KIND_SANITIZE_CONCURRENCY = 111,
   ATTR_KIND_LIKELY_MODULE_LOCAL = 112,
-  ATTR_KIND_SANITIZE_DEVICE_ADDRESS = 113,
+  ATTR_KIND_ALWAYS_UNIFORM = 113,
 
   // TODO: Get rid of this.
   // There really shouldn't be incompatible bitcode changes specific to AMD
   // branches because that is prone to break compiler developer's workflows. In
   // the meantime, try to reduce the blast radius by using bitcode values that
   // are extremely unlikely to be used upstream.
+  ATTR_KIND_SANITIZE_DEVICE_ADDRESS = 9998,
   ATTR_KIND_SANITIZED_PADDED_GLOBAL = 9999,
 };
 
