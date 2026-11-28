@@ -57,7 +57,7 @@ macro(add_test_input_bitcode_bundle name input output)
     --gpu-bundle-output ${ARGN} "${CMAKE_CURRENT_SOURCE_DIR}/${input}" -nogpulib -nogpuinc
     --offload-device-only -o "${output}"
     VERBATIM
-    DEPENDS clang lld "${input}")
+    DEPENDS clang lld clang-offload-bundler "${input}")
   add_custom_target("${name}"
     DEPENDS "${output}"
     SOURCES "${input}")
@@ -74,7 +74,7 @@ macro(add_test_input_object_file_bundle name input output)
     --offload-device-only ${ARGN} "${CMAKE_CURRENT_SOURCE_DIR}/${input}" -nogpulib -nogpuinc
     -o "${output}"
     VERBATIM
-    DEPENDS clang lld "${input}")
+    DEPENDS clang lld clang-offload-bundler "${input}")
   add_custom_target("${name}"
     DEPENDS "${output}"
     SOURCES "${input}")
@@ -90,7 +90,7 @@ macro(add_test_archive name target input output)
     OUTPUT "${output}"
     COMMAND "$<TARGET_FILE:llvm-ar>" rc "${output}" "${input}"
     VERBATIM
-    DEPENDS clang lld ${target})
+    DEPENDS llvm-ar ${target} "${input}")
   add_custom_target("${name}"
     DEPENDS "${output}"
     SOURCES "${input}")
